@@ -1,0 +1,171 @@
+import uuid
+
+import pytest
+import sqlalchemy.exc
+from sqlmodel import select
+
+from app.models.tenant import Tenant
+from app.models.user import User, UserRole
+
+
+FIXTURE_TENANT = Tenant(
+    id="test-tenant-01",
+    name="テストテナント",
+    owner="owner01",
+)
+
+FIXTURE_USER = User(
+    login_id="test-user",
+    tenant_id="test-tenant-01",
+    name="テストユーザー",
+    password="hashed_password",
+    role=UserRole.USER,
+)
+
+
+class TestTenantModel:
+    class TestInsert:
+        @pytest.mark.asyncio
+        async def test_Tenantをインサートできること(self, session):
+            tenant = Tenant(id="t1", name="テナント1", owner="owner1")
+            session.add(tenant)
+            await session.commit()
+            result = await session.get(Tenant, "t1")
+            assert result is not None
+            assert result.name == "テナント1"
+
+        @pytest.mark.asyncio
+        async def test_デフォルト値が正しく設定されること(self, session):
+            tenant = Tenant(id="t2", name="テナント2", owner="owner2")
+            session.add(tenant)
+            await session.commit()
+            result = await session.get(Tenant, "t2")
+            assert result.is_deleted is False
+            assert result.pw_policy_min_length == 12
+            assert result.pw_policy_use_uppercase is True
+            assert result.pw_histories_limit == 1
+            assert result.max_usage_based_credits_per_month == 0
+
+    class TestConstraints:
+        @pytest.mark.asyncio
+        async def test_pw_histories_limitが0でCHECK制約違反になること(self, session):
+            tenant = Tenant(id="t3", name="テナント3", owner="owner3", pw_histories_limit=0)
+            session.add(tenant)
+            with pytest.raises(sqlalchemy.exc.IntegrityError):
+                await session.commit()
+
+        @pytest.mark.asyncio
+        async def test_idが重複するとPK制約違反になること(self, session):
+            t1 = Tenant(id="dup", name="テナントA", owner="owner")
+            t2 = Tenant(id="dup", name="テナントB", owner="owner")
+            session.add(t1)
+            await session.commit()
+            session.add(t2)
+            with pytest.raises(sqlalchemy.exc.IntegrityError):
+                await session.commit()
+
+
+class TestUserModel:
+    class TestInsert:
+        @pytest.mark.asyncio
+        async def test_Userをインサートできること(self, session):
+            tenant = Tenant(id="ut1", name="テナント", owner="owner")
+            session.add(tenant)
+            await session.commit()
+
+            user = User(
+                login_id="user01",
+                tenant_id="ut1",
+                name="ユーザー1",
+                password="hashed",
+                role=UserRole.USER,
+            )
+            session.add(user)
+            await session.commit()
+
+            result = await session.get(User, user.id)
+            assert result is not None
+            assert result.login_id == "user01"
+
+        @pytest.mark.asyncio
+        async def test_idがUUIDとして自動生成されること(self, session):
+            tenant = Tenant(id="ut2", name="テナント", owner="owner")
+            session.add(tenant)
+            await session.commit()
+
+            user = User(
+                login_id="user02",
+                tenant_id="ut2",
+                name="ユーザー2",
+                password="hashed",
+                role=UserRole.ADMIN,
+            )
+            session.add(user)
+            await session.commit()
+
+            assert isinstance(user.id, uuid.UUID)
+
+        @pytest.mark.asyncio
+        async def test_is_required_password_resetのデフォルトがtrueであること(self, session):
+            tenant = Tenant(id="ut3", name="テナント", owner="owner")
+            session.add(tenant)
+            await session.commit()
+
+            user = User(
+                login_id="user03",
+                tenant_id="ut3",
+                name="ユーザー3",
+                password="hashed",
+                role=UserRole.USER,
+            )
+            session.add(user)
+            await session.commit()
+
+            result = await session.get(User, user.id)
+            assert result.is_required_password_reset is True
+
+    class TestConstraints:
+        @pytest.mark.asyncio
+        async def test_login_idとtenant_idの重複でUNIQUE制約違反になること(self, session):
+            tenant = Tenant(id="uc1", name="テナント", owner="owner")
+            session.add(tenant)
+            await session.commit()
+
+            u1 = User(login_id="dup", tenant_id="uc1", name="U1", password="p", role=UserRole.USER)
+            u2 = User(login_id="dup", tenant_id="uc1", name="U2", password="p", role=UserRole.USER)
+            session.add(u1)
+            await session.commit()
+            session.add(u2)
+            with pytest.raises(sqlalchemy.exc.IntegrityError):
+                await session.commit()
+
+        @pytest.mark.asyncio
+        async def test_存在しないtenant_idでFK制約違反になること(self, session):
+            user = User(
+                login_id="orphan",
+                tenant_id="nonexistent",
+                name="孤立ユーザー",
+                password="p",
+                role=UserRole.USER,
+            )
+            session.add(user)
+            with pytest.raises(sqlalchemy.exc.IntegrityError):
+                await session.commit()
+
+        @pytest.mark.asyncio
+        async def test_Tenant削除時にUserがCASCADE削除されること(self, session):
+            tenant = Tenant(id="uc2", name="テナント", owner="owner")
+            session.add(tenant)
+            await session.commit()
+
+            user = User(login_id="u", tenant_id="uc2", name="U", password="p", role=UserRole.USER)
+            session.add(user)
+            await session.commit()
+            user_id = user.id
+
+            await session.delete(tenant)
+            await session.commit()
+            session.expire_all()  # expire_on_commit=False のためキャッシュを手動でクリア
+
+            result = await session.get(User, user_id)
+            assert result is None
