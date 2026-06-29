@@ -1,10 +1,9 @@
 import os
+import subprocess
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-
-from app.models import tenant, user  # noqa: F401 — メタデータ登録のためインポート
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -12,14 +11,18 @@ TEST_DATABASE_URL = os.getenv(
 )
 
 
+def pytest_configure(config):
+    # テスト前に alembic upgrade head を実行してスキーマを最新にする
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True)
+
+
 @pytest.fixture(scope="session")
 async def engine():
     _engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    # テスト開始時に前回の残存データを削除（FK の CASCADE 順）
     async with _engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.execute(text("TRUNCATE TABLE users, tenants RESTART IDENTITY CASCADE"))
     yield _engine
-    async with _engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
     await _engine.dispose()
 
 
