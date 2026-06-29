@@ -36,7 +36,6 @@ class User(SQLModel, table=True):
         ),
     )
     name: str = Field(max_length=255)
-    password: str = Field(max_length=255)
     role: UserRole = Field(
         sa_column=sa.Column(
             sa.Enum(UserRole, name="userrole", create_type=True),
