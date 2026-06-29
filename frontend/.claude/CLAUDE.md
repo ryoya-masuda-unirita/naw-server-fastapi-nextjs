@@ -12,28 +12,32 @@ Angular 実装: `~/Documents/secuaigent-client`
 
 | 種別 | 技術 |
 |---|---|
-| フレームワーク | Next.js（App Router） |
+| フレームワーク | Vite + React 19 |
 | 言語 | TypeScript |
+| ルーティング | React Router v7 |
 | スタイル | Tailwind CSS |
 | サーバー状態管理 | TanStack Query（`useQuery` / `useMutation`） |
 | UI 状態管理 | Zustand |
 | HTTP | `fetch` ラッパー（`src/lib/api-client.ts`）でラップ |
+| i18n | react-i18next |
+| モック | MSW（Mock Service Worker） |
+| テスト | Vitest + React Testing Library |
 
 ---
 
-## Angular → Next.js 対応表
+## Angular → React 対応表
 
-| Angular | Next.js |
+| Angular | React |
 |---|---|
-| Standalone Component | React Component（Server / Client） |
+| Standalone Component | React Component |
 | NgRx signalStore（API 呼び出し部分） | TanStack Query（`useQuery` / `useMutation`） |
 | NgRx signalStore（UI 状態部分） | Zustand store |
-| `withComputed` | `useMemo` または TanStack Query の `select` |
+| `withComputed` | `useMemo` |
 | `@Injectable({ providedIn: 'root' })` Service | TanStack Query hooks / Zustand（singleton） |
-| Angular Guard | Next.js middleware / Server Component での認証チェック |
-| `HttpInterceptor`（モック） | `msw`（Mock Service Worker） |
-| `ngx-translate` | `next-intl` |
-| `ChangeDetectionStrategy.OnPush` | Server Component 優先 + Client Component 最小化 |
+| Angular Guard | React Router の `loader` / コンポーネント内での認証チェック |
+| `HttpInterceptor`（モック） | MSW（Mock Service Worker） |
+| `ngx-translate` | react-i18next |
+| `ChangeDetectionStrategy.OnPush` | `React.memo` / `useMemo` / `useCallback` による再レンダリング最適化 |
 | `src/types/` | `src/types/` |
 | `src/app/core/constants/` | `src/lib/constants/` |
 
@@ -44,11 +48,10 @@ Angular 実装: `~/Documents/secuaigent-client`
 ### レイヤー責務
 
 ```
-Page（Server Component）  → 初期データ fetch・レイアウト
-Page（Client Component）  → インタラクティブな操作
-TanStack Query hooks      → API 呼び出し・キャッシュ・ローディング・エラー管理
-Zustand store             → UI 状態（フィルター・選択状態・ダイアログ開閉等）
-api-client.ts             → fetch のラッパー（認証ヘッダー付与等）
+Page Component        → ルーティング単位のコンポーネント
+TanStack Query hooks  → API 呼び出し・キャッシュ・ローディング・エラー管理
+Zustand store         → UI 状態（フィルター・選択状態・ダイアログ開閉等）
+api-client.ts         → fetch のラッパー（認証ヘッダー付与等）
 ```
 
 ### TanStack Query のパターン
@@ -97,8 +100,6 @@ export const useXxxStore = create<XxxStore>((set) => ({
 
 ### バックエンドのレスポンス形式
 
-Spring Boot の `Page<T>` をそのまま再現する（FastAPI 側も同形式で返す）。
-
 ```typescript
 interface PagedResponse<T> {
   content: T[];
@@ -114,11 +115,10 @@ interface PagedResponse<T> {
 
 ```
 src/
-├── app/                    # Next.js App Router
-│   ├── (auth)/             # 認証関連ページ
-│   ├── (admin)/            # 管理者向けページ
-│   ├── (chat)/             # チャットページ
-│   └── layout.tsx
+├── routes/                 # ルーティング定義・ページコンポーネント
+│   ├── auth/               # 認証関連ページ
+│   ├── admin/              # 管理者向けページ
+│   └── chat/               # チャットページ
 ├── components/
 │   ├── features/           # 機能固有コンポーネント
 │   │   ├── admin/
@@ -141,6 +141,9 @@ src/
 # 開発サーバー起動
 npm run dev
 
+# ビルド
+npm run build
+
 # テスト
 npm test
 
@@ -155,7 +158,6 @@ npm run lint
 
 ## コーディング規約
 
-- `'use client'` は必要最小限にとどめる。データ取得は Server Component で行う
 - `any` 型は使わない。型定義を `src/types/` に作成すること
 - 文言は必ず i18n ファイルを通す。ハードコードしない
 - コメントは「なぜそうしているか」を書く。コードをそのまま言葉にするコメントは書かない

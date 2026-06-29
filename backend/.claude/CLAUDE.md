@@ -153,18 +153,27 @@ ruff check app/
 
 ## ローカル開発環境のDB
 
-Spring Boot 側と同じ Docker コンテナを共有する。
+プロジェクトルート（`naw-server-fastapi-nextjs/`）の `docker-compose.yml` で PostgreSQL を起動する。
+
+```bash
+docker compose up -d
+```
 
 ```
-コンテナ名: naw-postgres
+コンテナ名: naw-fastapi-postgres
 ホスト:     localhost
-ポート:     7654
+ポート:     5433
 DB名:       postgres
 ユーザー:   root
 パスワード: root
 ```
 
-詳細な手順・注意点は `~/Documents/naw-server/.claude/CLAUDE.md` の「ローカル開発環境のDB」を参照すること。
+起動後、Alembic でマイグレーションを実行する。
+
+```bash
+cd backend
+alembic upgrade head
+```
 
 ---
 
