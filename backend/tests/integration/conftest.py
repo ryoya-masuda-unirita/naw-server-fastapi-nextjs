@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.core.security import hash_password
-from app.database import Base, get_session
+from app.core.database import Base, get_session
 from app.main import app
 from app.models.tenant import Tenant
 from app.models.user import User

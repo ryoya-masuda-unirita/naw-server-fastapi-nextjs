@@ -23,10 +23,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
         # 最新のパスワードを取得して検証
-        try:
-            current_password_hash = await PasswordService.get_current_password_hash(user.id, session)
-        except HTTPException:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        current_password_hash = await PasswordService.get_current_password_hash(user.id, session)
 
         if not verify_password(password, current_password_hash):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -89,6 +86,7 @@ class AuthService:
         user.is_required_password_reset = False
         session.add(user)
         await session.flush()
+        await session.commit()
 
         # 新 JWT トークンを生成
         token = create_access_token(user.login_id, tenant_id)

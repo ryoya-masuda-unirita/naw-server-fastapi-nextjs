@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk ls *)",
+      "Bash(rtk git *)",
+      "Bash(rtk git commit -m ' *)",
+      "Bash(alembic upgrade *)",
+      "Bash(rtk read *)",
+      "Bash(rtk poetry *)",
+      "Bash(/usr/local/bin/poetry install *)",
+      "Bash(poetry --version)",
+      "Bash(rtk docker *)",
+      "Bash(rtk pip *)",
+      "Bash(uv run *)",
+      "Bash(rtk psql *)",
+      "Bash(/usr/local/bin/psql -h localhost -p 5433 -U root -d postgres -c \"\\\\d password_histories\")",
+      "Bash(git reset *)",
+      "Bash(rm -rf /Users/pcm23005/Documents/naw-server-fastapi-nextjs/backend/tests/conftest.py /Users/pcm23005/Documents/naw-server-fastapi-nextjs/backend/tests/unit/test_*.py /Users/pcm23005/Documents/naw-server-fastapi-nextjs/backend/tests/integration/test_auth.py)"
+    ],
+    "additionalDirectories": [
+      "/Users/pcm23005/Documents/naw-server-fastapi-nextjs/backend/tests/unit"
+    ]
+  }
+}

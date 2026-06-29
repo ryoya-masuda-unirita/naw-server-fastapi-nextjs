@@ -28,12 +28,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(login_id: str, tenant_id: str) -> str:
     """JWT トークンを生成"""
-    expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    now = datetime.utcnow()
+    expire = now + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": login_id,
         "tenantId": tenant_id,
-        "exp": expire,
-        "iat": datetime.utcnow(),
+        "exp": int(expire.timestamp()),
+        "iat": int(now.timestamp()),
     }
     encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -58,7 +59,7 @@ def _get_session_dependency():
 
 async def get_current_user(
     credentials=Depends(security),
-    session: AsyncSession = Depends(lambda: _get_session_dependency()),
+    session: AsyncSession = Depends(_get_session_dependency),
 ):
     """認証済みユーザーを取得（/api/** の保護に使用）"""
     from app.models.user import User
@@ -66,11 +67,12 @@ async def get_current_user(
     token = credentials.credentials
     payload = decode_token(token)
     login_id = payload.get("sub")
+    tenant_id = payload.get("tenantId")
 
-    if not login_id:
+    if not login_id or not tenant_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    stmt = select(User).where(User.login_id == login_id)
+    stmt = select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
     result = await session.execute(stmt)
     user = result.scalars().first()
 
