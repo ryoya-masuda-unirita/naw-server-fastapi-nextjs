@@ -196,13 +196,25 @@ import pytest
 from httpx import AsyncClient
 ```
 
+### ディレクトリ構成
+
+```
+tests/
+├── unit/          # DB 不要。1 つの関数・メソッドを単独で検証するテスト
+└── integration/   # DB 接続が必要なテスト
+    └── conftest.py  # alembic upgrade head + TRUNCATE + engine/session fixture
+```
+
+- **unit**: 外部依存なし。Router テスト（`ASGITransport` 経由）、Service テスト（Repository をモック）など
+- **integration**: 実際の DB に接続して制約・CASCADE・データ整合性を確認するテスト
+
 ### テストの種類
 
-| 種別 | 対象 | 方針 |
+| 種別 | ディレクトリ | 方針 |
 |---|---|---|
-| Router テスト | `test_xxx_router.py` | `AsyncClient` でエンドポイントを叩く |
-| Service テスト | `test_xxx_service.py` | Repository をモックして純粋なロジックをテスト |
-| Repository テスト | `test_xxx_repository.py` | テスト用 DB に実際に接続してテスト |
+| Router テスト | `unit/` | `AsyncClient` + `ASGITransport` でエンドポイントを叩く（DB 不要） |
+| Service テスト | `unit/` | Repository をモックして純粋なロジックをテスト |
+| Model/Repository テスト | `integration/` | テスト用 DB に実際に接続してテスト |
 
 ### 命名規則
 
