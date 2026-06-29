@@ -81,15 +81,26 @@ naw-server-fastapi-nextjs/
 
 ### Issue 起票手順
 
-Issue 起票は必ず以下の2ステップで行う（プロジェクトボードに自動追加されないため）。
+Issue 起票は必ず以下の手順を順番に行う。
 
 ```bash
-# Step 1: Issue 作成
-gh issue create --title "#XX 変更内容（日本語）" --body "..."
+# Step 1: Issue 作成（返ってきた URL から番号を取得する）
+gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body "..."
 
 # Step 2: プロジェクトボードに追加（Todo 状態で登録される）
 gh project item-add 3 --owner ryoya-masuda-unirita \
-  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/XX
+  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+
+# Step 3: feature ブランチを develop から作成
+git checkout develop && git checkout -b feature/issue-{番号}        # NAW なし
+git checkout develop && git checkout -b feature/issue-{番号}-NAW-XXXX  # NAW あり
+
+# Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
+mkdir -p docs/issue-{番号}           # NAW なし
+mkdir -p docs/issue-{番号}-NAW-XXXX  # NAW あり
+# 00_チケット内容.md を作成（テンプレート参照）
+git add docs/ && git commit -m "#{番号} issue-{番号} 00_チケット内容.md を作成"
+git push -u origin feature/issue-{番号}
 ```
 
 - プロジェクト番号: `3`
