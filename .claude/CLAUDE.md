@@ -315,10 +315,10 @@ async def test_insert_tenant(self, session):
 ## PRのタイトルフォーマット
 
 ```
-#XX 変更内容（日本語）
+#{番号} issue-{番号} NAW-XXXX 変更概要（日本語）
 ```
 
-- Issue 番号 + 半角スペース + 日本語の概要
+- NAW チケットがない場合は `NAW-XXXX` を省略する
 - 技術的な実装詳細ではなく、何を実現したかを書く
 - 70文字以内
 
