@@ -43,6 +43,13 @@ async def session(engine):
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as sess:
         yield sess
+
+        # テスト後にテーブルをクリア
+        from sqlalchemy import text
+        tables = ["password_histories", "users", "tenants"]
+        for table in tables:
+            await sess.execute(text(f"DELETE FROM {table}"))
+        await sess.commit()
         await sess.rollback()
 
 
