@@ -79,6 +79,22 @@ naw-server-fastapi-nextjs/
 - GitHub Projects でステータス管理（起票・進行中・レビュー中・完了）
 - PR 説明に `Closes #XX` を書くとマージ時に Issue が自動クローズされる
 
+### Issue 起票手順
+
+Issue 起票は必ず以下の2ステップで行う（プロジェクトボードに自動追加されないため）。
+
+```bash
+# Step 1: Issue 作成
+gh issue create --title "#XX 変更内容（日本語）" --body "..."
+
+# Step 2: プロジェクトボードに追加（Todo 状態で登録される）
+gh project item-add 3 --owner ryoya-masuda-unirita \
+  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/XX
+```
+
+- プロジェクト番号: `3`
+- オーナー: `ryoya-masuda-unirita`
+
 ### NAW チケットとの対応
 
 GitHub Issue の番号と NAW チケット番号（`NAW-XXXX`）は一致しない。移植元の NAW チケットがある場合は Issue 本文に参照として記載すること。
