@@ -2,9 +2,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.security import hash_password, verify_password
-from backend.app.models.password_history import PasswordHistory
-from backend.app.models.tenant import Tenant
+from app.core.security import hash_password, verify_password
+from app.models.password_history import PasswordHistory
+from app.models.tenant import Tenant
 
 
 class PasswordService:

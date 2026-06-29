@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# backend ディレクトリを Python パスに追加
+backend_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(backend_dir))
+
 import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -6,7 +13,7 @@ import jwt
 
 from app.core.security import hash_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.password_history import PasswordHistory
 
 
@@ -34,7 +41,7 @@ def test_user(test_tenant):
         tenant_id=test_tenant.id,
         login_id="testuser",
         name="Test User",
-        role="USER",
+        role=UserRole.USER,
         is_required_password_reset=False,
     )
 

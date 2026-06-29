@@ -1,14 +1,10 @@
 from datetime import datetime, timedelta
-from typing import Optional
-
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
 from passlib.context import CryptContext
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.app.database import get_session
-from backend.app.models.user import User
 
 # JWT 設定
 SECRET_KEY = "your-secret-key-change-in-production"
@@ -54,19 +50,25 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
+def _get_session_dependency():
+    """get_session を遅延ロード"""
+    from app.database import get_session
+    return get_session
+
+
 async def get_current_user(
-    credentials: HTTPAuthCredentials = Depends(security),
-    session: AsyncSession = Depends(get_session),
-) -> User:
+    credentials=Depends(security),
+    session: AsyncSession = Depends(lambda: _get_session_dependency()),
+):
     """認証済みユーザーを取得（/api/** の保護に使用）"""
+    from app.models.user import User
+
     token = credentials.credentials
     payload = decode_token(token)
     login_id = payload.get("sub")
 
     if not login_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    from sqlalchemy import select
 
     stmt = select(User).where(User.login_id == login_id)
     result = await session.execute(stmt)
