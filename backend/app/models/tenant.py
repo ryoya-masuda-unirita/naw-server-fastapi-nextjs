@@ -42,7 +42,10 @@ class Tenant(SQLModel, table=True):
         default=True,
         sa_column=sa.Column(sa.Boolean, nullable=False, server_default=sa.true()),
     )
-    pw_policy_valid_symbols: str = Field(default="!@#$%^&*", max_length=100)
+    pw_policy_valid_symbols: str = Field(
+        default="!@#$%^&*",
+        sa_column=sa.Column(sa.String(100), nullable=False, server_default="!@#$%^&*"),
+    )
     pw_validity_period_days: int = Field(
         default=90,
         sa_column=sa.Column(sa.SmallInteger, nullable=False, server_default="90"),
@@ -55,5 +58,10 @@ class Tenant(SQLModel, table=True):
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     updated_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
     )

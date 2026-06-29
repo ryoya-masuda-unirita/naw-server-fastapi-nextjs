@@ -1,15 +1,15 @@
+import os
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
 from app.models import tenant, user  # noqa: F401 — メタデータ登録のためインポート
 
-TEST_DATABASE_URL = "postgresql+asyncpg://root:root@localhost:5433/postgres"
-
-
-@pytest.fixture(scope="session")
-def anyio_backend():
-    return "asyncio"
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://root:root@localhost:5433/postgres",
+)
 
 
 @pytest.fixture(scope="session")

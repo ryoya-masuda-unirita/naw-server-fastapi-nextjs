@@ -52,5 +52,10 @@ class User(SQLModel, table=True):
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     updated_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
     )

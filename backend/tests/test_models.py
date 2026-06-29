@@ -2,25 +2,10 @@ import uuid
 
 import pytest
 import sqlalchemy.exc
-from sqlmodel import select
 
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
-
-FIXTURE_TENANT = Tenant(
-    id="test-tenant-01",
-    name="テストテナント",
-    owner="owner01",
-)
-
-FIXTURE_USER = User(
-    login_id="test-user",
-    tenant_id="test-tenant-01",
-    name="テストユーザー",
-    password="hashed_password",
-    role=UserRole.USER,
-)
 
 
 class TestTenantModel:
