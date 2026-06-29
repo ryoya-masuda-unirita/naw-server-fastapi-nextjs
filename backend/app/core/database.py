@@ -1,8 +1,12 @@
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import SQLModel
 
 from app.core.config import get_settings
+
+# SQLModel.metadata を Base として export
+Base = SQLModel
 
 
 def _create_session_maker() -> async_sessionmaker[AsyncSession]:
