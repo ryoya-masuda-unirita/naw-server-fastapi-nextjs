@@ -6,7 +6,8 @@ from app.main import app
 
 class TestHealthRouter:
     @pytest.mark.asyncio
-    async def test_ヘルスチェックが正常に返ること(self):
+    async def test_health_check_returns_ok(self):
+        """ヘルスチェックが正常に返ること"""
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
