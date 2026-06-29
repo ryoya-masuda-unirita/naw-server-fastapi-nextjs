@@ -7,11 +7,11 @@ from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
 
-
 class TestTenantModel:
     class TestInsert:
         @pytest.mark.asyncio
-        async def test_Tenantをインサートできること(self, session):
+        async def test_insert_tenant(self, session):
+            """テナントをインサートできること"""
             tenant = Tenant(id="t1", name="テナント1", owner="owner1")
             session.add(tenant)
             await session.commit()
@@ -20,7 +20,8 @@ class TestTenantModel:
             assert result.name == "テナント1"
 
         @pytest.mark.asyncio
-        async def test_デフォルト値が正しく設定されること(self, session):
+        async def test_default_values(self, session):
+            """デフォルト値が正しく設定されること"""
             tenant = Tenant(id="t2", name="テナント2", owner="owner2")
             session.add(tenant)
             await session.commit()
@@ -33,14 +34,16 @@ class TestTenantModel:
 
     class TestConstraints:
         @pytest.mark.asyncio
-        async def test_pw_histories_limitが0でCHECK制約違反になること(self, session):
+        async def test_check_constraint_pw_histories_limit_zero(self, session):
+            """pw_histories_limit が 0 で CHECK 制約違反になること"""
             tenant = Tenant(id="t3", name="テナント3", owner="owner3", pw_histories_limit=0)
             session.add(tenant)
             with pytest.raises(sqlalchemy.exc.IntegrityError):
                 await session.commit()
 
         @pytest.mark.asyncio
-        async def test_idが重複するとPK制約違反になること(self, session):
+        async def test_primary_key_duplicate(self, session):
+            """id が重複すると PK 制約違反になること"""
             t1 = Tenant(id="dup", name="テナントA", owner="owner")
             t2 = Tenant(id="dup", name="テナントB", owner="owner")
             session.add(t1)
@@ -53,7 +56,8 @@ class TestTenantModel:
 class TestUserModel:
     class TestInsert:
         @pytest.mark.asyncio
-        async def test_Userをインサートできること(self, session):
+        async def test_insert_user(self, session):
+            """ユーザーをインサートできること"""
             tenant = Tenant(id="ut1", name="テナント", owner="owner")
             session.add(tenant)
             await session.commit()
@@ -73,7 +77,8 @@ class TestUserModel:
             assert result.login_id == "user01"
 
         @pytest.mark.asyncio
-        async def test_idがUUIDとして自動生成されること(self, session):
+        async def test_id_auto_generated_as_uuid(self, session):
+            """id が UUID として自動生成されること"""
             tenant = Tenant(id="ut2", name="テナント", owner="owner")
             session.add(tenant)
             await session.commit()
@@ -91,7 +96,8 @@ class TestUserModel:
             assert isinstance(user.id, uuid.UUID)
 
         @pytest.mark.asyncio
-        async def test_is_required_password_resetのデフォルトがtrueであること(self, session):
+        async def test_is_required_password_reset_default_true(self, session):
+            """is_required_password_reset のデフォルトが True であること"""
             tenant = Tenant(id="ut3", name="テナント", owner="owner")
             session.add(tenant)
             await session.commit()
@@ -111,7 +117,8 @@ class TestUserModel:
 
     class TestConstraints:
         @pytest.mark.asyncio
-        async def test_login_idとtenant_idの重複でUNIQUE制約違反になること(self, session):
+        async def test_unique_constraint_login_id_tenant_id(self, session):
+            """login_id と tenant_id の重複で UNIQUE 制約違反になること"""
             tenant = Tenant(id="uc1", name="テナント", owner="owner")
             session.add(tenant)
             await session.commit()
@@ -125,7 +132,8 @@ class TestUserModel:
                 await session.commit()
 
         @pytest.mark.asyncio
-        async def test_存在しないtenant_idでFK制約違反になること(self, session):
+        async def test_foreign_key_constraint_nonexistent_tenant(self, session):
+            """存在しない tenant_id で FK 制約違反になること"""
             user = User(
                 login_id="orphan",
                 tenant_id="nonexistent",
@@ -138,7 +146,8 @@ class TestUserModel:
                 await session.commit()
 
         @pytest.mark.asyncio
-        async def test_Tenant削除時にUserがCASCADE削除されること(self, session):
+        async def test_cascade_delete_user_on_tenant_delete(self, session):
+            """テナント削除時にユーザーが CASCADE 削除されること"""
             tenant = Tenant(id="uc2", name="テナント", owner="owner")
             session.add(tenant)
             await session.commit()

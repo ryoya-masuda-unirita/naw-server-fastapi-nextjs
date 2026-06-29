@@ -206,13 +206,18 @@ from httpx import AsyncClient
 
 ### 命名規則
 
+- クラス名: 英語（`TestAssistantRouter`, `TestCreate` など）
+- テストメソッド名: **英語**（`test_insert_tenant`, `test_default_values` など）
+- テストの意図は**日本語 docstring** に書く
+
 ```python
-# describe 相当のクラスで日本語グループ化
 class TestAssistantRouter:
     class TestCreate:
-        async def test_アシスタントを作成できること(self): ...
-        async def test_名前が空だと作成できないこと(self): ...
+        async def test_insert_assistant(self, session):
+            """アシスタントを作成できること"""
+            ...
 
-# フィクスチャデータは FIXTURE_ プレフィックス
-FIXTURE_ASSISTANT = {"name": "テストアシスタント", ...}
+        async def test_name_empty_raises_error(self, session):
+            """名前が空だと作成できないこと"""
+            ...
 ```
