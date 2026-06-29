@@ -28,7 +28,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(login_id: str, tenant_id: str) -> str:
     """JWT トークンを生成"""
-    now = datetime.utcnow()
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
     expire = now + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": login_id,

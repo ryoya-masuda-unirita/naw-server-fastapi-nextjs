@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 
@@ -29,11 +29,12 @@ class TestSecurityUtilities:
 
     def test_decode_expired_token(self):
         """有効期限切れ JWT デコード"""
+        now = datetime.now(timezone.utc)
         payload = {
             "sub": "testuser",
             "tenantId": "test-tenant",
-            "exp": datetime.utcnow() - timedelta(hours=1),
-            "iat": datetime.utcnow(),
+            "exp": int((now - timedelta(hours=1)).timestamp()),
+            "iat": int(now.timestamp()),
         }
         token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -42,11 +43,12 @@ class TestSecurityUtilities:
 
     def test_decode_invalid_token(self):
         """不正な JWT デコード"""
+        now = datetime.now(timezone.utc)
         payload = {
             "sub": "testuser",
             "tenantId": "test-tenant",
-            "exp": datetime.utcnow() + timedelta(hours=5),
-            "iat": datetime.utcnow(),
+            "exp": int((now + timedelta(hours=5)).timestamp()),
+            "iat": int(now.timestamp()),
         }
         token = jwt.encode(payload, "wrong-secret", algorithm=ALGORITHM)
 

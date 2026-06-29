@@ -6,7 +6,7 @@ backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import jwt
@@ -68,11 +68,12 @@ def valid_jwt_token(test_user):
 @pytest.fixture
 def expired_jwt_token(test_user):
     """有効期限切れ JWT"""
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": test_user.login_id,
         "tenantId": "test-tenant",
-        "exp": datetime.utcnow() - timedelta(hours=1),
-        "iat": datetime.utcnow(),
+        "exp": int((now - timedelta(hours=1)).timestamp()),
+        "iat": int(now.timestamp()),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -80,10 +81,11 @@ def expired_jwt_token(test_user):
 @pytest.fixture
 def invalid_jwt_token():
     """不正な JWT（署名が違う秘密鍵で生成）"""
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": "testuser",
         "tenantId": "test-tenant",
-        "exp": datetime.utcnow() + timedelta(hours=5),
-        "iat": datetime.utcnow(),
+        "exp": int((now + timedelta(hours=5)).timestamp()),
+        "iat": int(now.timestamp()),
     }
     return jwt.encode(payload, "wrong-secret-key", algorithm=ALGORITHM)
