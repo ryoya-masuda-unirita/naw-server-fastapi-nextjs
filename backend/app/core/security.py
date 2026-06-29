@@ -54,7 +54,7 @@ def decode_token(token: str) -> dict:
 
 def _get_session_dependency():
     """get_session を遅延ロード"""
-    from app.database import get_session
+    from app.core.database import get_session
     return get_session
 
 
