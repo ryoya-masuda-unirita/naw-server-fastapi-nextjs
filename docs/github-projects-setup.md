@@ -4,8 +4,14 @@
 
 1. `github.com/<user>/naw-server-fastapi-nextjs` を開く
 2. 「Projects」タブ → 「New project」をクリック
-3. テンプレートで「Board」を選択（カンバン形式）
-4. プロジェクト名を入力して「Create project」
+3. Table ビューでプロジェクトが作成される（テンプレート選択画面は出ない）
+
+## 1-2. Board ビューを追加する
+
+1. プロジェクト上部の「**+ New view**」をクリック
+2. 「**Board**」を選択
+
+これでカンバン形式のボードビューが追加される。
 
 ## 2. ステータスのカラムを設定する
 
