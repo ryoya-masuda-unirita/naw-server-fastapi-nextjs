@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: naw-fastapi-postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      TZ: Asia/Tokyo
+      PGDATA: /var/lib/postgresql/18/data
+    ports:
+      - "5433:5432"
+    volumes:
+      - naw_fastapi_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  naw_fastapi_pgdata:
