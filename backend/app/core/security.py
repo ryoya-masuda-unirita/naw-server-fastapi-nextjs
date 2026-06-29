@@ -6,6 +6,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from passlib.context import CryptContext
 
+from app.core.database import get_session
+
 # JWT 設定
 SECRET_KEY = "your-secret-key-change-in-production"
 ALGORITHM = "HS512"
@@ -52,15 +54,9 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
-def _get_session_dependency():
-    """get_session を遅延ロード"""
-    from app.core.database import get_session
-    return get_session
-
-
 async def get_current_user(
     credentials=Depends(security),
-    session: AsyncSession = Depends(_get_session_dependency),
+    session: AsyncSession = Depends(get_session),
 ):
     """認証済みユーザーを取得（/api/** の保護に使用）"""
     from app.models.user import User
