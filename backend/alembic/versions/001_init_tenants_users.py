@@ -38,8 +38,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_tenants"),
         sa.CheckConstraint("pw_histories_limit >= 1", name="ck_tenants_pw_histories_limit"),
     )
-    op.create_index("tenants_is_deleted_idx", "tenants", ["is_deleted"])
-
     op.create_table(
         "users",
         sa.Column("id", sa.UUID(), nullable=False, server_default=sa.text("gen_random_uuid()")),
@@ -60,5 +58,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("users")
     op.execute("DROP TYPE IF EXISTS userrole")
-    op.drop_index("tenants_is_deleted_idx", table_name="tenants")
     op.drop_table("tenants")

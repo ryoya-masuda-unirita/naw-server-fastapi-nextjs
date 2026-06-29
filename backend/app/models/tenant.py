@@ -8,7 +8,6 @@ class Tenant(SQLModel, table=True):
     __tablename__ = "tenants"
     __table_args__ = (
         sa.CheckConstraint("pw_histories_limit >= 1", name="ck_tenants_pw_histories_limit"),
-        sa.Index("tenants_is_deleted_idx", "is_deleted"),
     )
 
     id: str = Field(max_length=32, primary_key=True)
