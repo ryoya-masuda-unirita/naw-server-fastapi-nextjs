@@ -153,18 +153,27 @@ ruff check app/
 
 ## ローカル開発環境のDB
 
-Spring Boot 側と同じ Docker コンテナを共有する。
+プロジェクトルート（`naw-server-fastapi-nextjs/`）の `docker-compose.yml` で PostgreSQL を起動する。
+
+```bash
+docker compose up -d
+```
 
 ```
-コンテナ名: naw-postgres
+コンテナ名: naw-fastapi-postgres
 ホスト:     localhost
-ポート:     7654
+ポート:     5433
 DB名:       postgres
 ユーザー:   root
 パスワード: root
 ```
 
-詳細な手順・注意点は `~/Documents/naw-server/.claude/CLAUDE.md` の「ローカル開発環境のDB」を参照すること。
+起動後、Alembic でマイグレーションを実行する。
+
+```bash
+cd backend
+alembic upgrade head
+```
 
 ---
 
@@ -187,23 +196,40 @@ import pytest
 from httpx import AsyncClient
 ```
 
+### ディレクトリ構成
+
+```
+tests/
+├── unit/          # DB 不要。1 つの関数・メソッドを単独で検証するテスト
+└── integration/   # DB 接続が必要なテスト
+    └── conftest.py  # alembic upgrade head + TRUNCATE + engine/session fixture
+```
+
+- **unit**: 外部依存なし。Router テスト（`ASGITransport` 経由）、Service テスト（Repository をモック）など
+- **integration**: 実際の DB に接続して制約・CASCADE・データ整合性を確認するテスト
+
 ### テストの種類
 
-| 種別 | 対象 | 方針 |
+| 種別 | ディレクトリ | 方針 |
 |---|---|---|
-| Router テスト | `test_xxx_router.py` | `AsyncClient` でエンドポイントを叩く |
-| Service テスト | `test_xxx_service.py` | Repository をモックして純粋なロジックをテスト |
-| Repository テスト | `test_xxx_repository.py` | テスト用 DB に実際に接続してテスト |
+| Router テスト | `unit/` | `AsyncClient` + `ASGITransport` でエンドポイントを叩く（DB 不要） |
+| Service テスト | `unit/` | Repository をモックして純粋なロジックをテスト |
+| Model/Repository テスト | `integration/` | テスト用 DB に実際に接続してテスト |
 
 ### 命名規則
 
+- クラス名: 英語（`TestAssistantRouter`, `TestCreate` など）
+- テストメソッド名: **英語**（`test_insert_tenant`, `test_default_values` など）
+- テストの意図は**日本語 docstring** に書く
+
 ```python
-# describe 相当のクラスで日本語グループ化
 class TestAssistantRouter:
     class TestCreate:
-        async def test_アシスタントを作成できること(self): ...
-        async def test_名前が空だと作成できないこと(self): ...
+        async def test_insert_assistant(self, session):
+            """アシスタントを作成できること"""
+            ...
 
-# フィクスチャデータは FIXTURE_ プレフィックス
-FIXTURE_ASSISTANT = {"name": "テストアシスタント", ...}
+        async def test_name_empty_raises_error(self, session):
+            """名前が空だと作成できないこと"""
+            ...
 ```
