@@ -8,6 +8,7 @@ from app.core.security import (
     decode_token,
     hash_password,
     verify_password,
+    verify_password_async,
     SECRET_KEY,
     ALGORITHM,
 )
@@ -93,3 +94,21 @@ class TestSecurityUtilities:
         assert hash1 != hash2
         assert verify_password(password, hash1)
         assert verify_password(password, hash2)
+
+
+class TestVerifyPasswordAsync:
+    """パスワード非同期検証テスト"""
+
+    async def test_returns_true_for_correct_password(self):
+        """正しいパスワードでTrueを返すこと"""
+        password = "TestPassword123!"
+        hashed = hash_password(password)
+
+        assert await verify_password_async(password, hashed) is True
+
+    async def test_returns_false_for_incorrect_password(self):
+        """誤ったパスワードでFalseを返すこと"""
+        password = "TestPassword123!"
+        hashed = hash_password(password)
+
+        assert await verify_password_async("WrongPassword", hashed) is False

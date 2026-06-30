@@ -132,6 +132,65 @@ class TestGetUsers:
         assert response.status_code == 403
 
 
+class TestGetUsersSearchAndSort:
+
+    async def test_percent_in_search_text_is_treated_as_literal(
+        self, client, admin_headers, session, tenant
+    ):
+        """検索文字列中の%がワイルドカードとして機能しないこと"""
+        literal_user = User(
+            id=uuid4(), tenant_id=tenant.id, login_id="literal-user",
+            name="ab%c", role=UserRole.USER, is_required_password_reset=False,
+        )
+        plain_user = User(
+            id=uuid4(), tenant_id=tenant.id, login_id="plain-user",
+            name="abc", role=UserRole.USER, is_required_password_reset=False,
+        )
+        session.add_all([literal_user, plain_user])
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"searchText": "b%c"}
+            )
+
+        assert response.status_code == 200
+        names = [u["name"] for u in response.json()["content"]]
+        assert "ab%c" in names
+        assert "abc" not in names
+
+    async def test_sort_by_camel_case_field(self, client, admin_headers, session, tenant):
+        """移植元フロントエンドが実際に送信するキャメルケースのsort値でソートできること"""
+        user_a = User(
+            id=uuid4(), tenant_id=tenant.id, login_id="user-a",
+            name="Alpha", role=UserRole.USER, is_required_password_reset=False,
+        )
+        user_z = User(
+            id=uuid4(), tenant_id=tenant.id, login_id="user-z",
+            name="Zulu", role=UserRole.USER, is_required_password_reset=False,
+        )
+        session.add_all([user_z, user_a])
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"sort": "name,asc"}
+            )
+
+        assert response.status_code == 200
+        names = [u["name"] for u in response.json()["content"]]
+        assert names.index("Alpha") < names.index("Zulu")
+
+    async def test_sort_with_disallowed_column_falls_back(self, client, admin_headers):
+        """許可リスト外のsort値を指定してもエラーにならず既定列にフォールバックすること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"sort": "login_key,asc"}
+            )
+
+        assert response.status_code == 200
+
+
 class TestCreateUser:
 
     async def test_creates_user_with_initial_password(self, client, admin_headers):

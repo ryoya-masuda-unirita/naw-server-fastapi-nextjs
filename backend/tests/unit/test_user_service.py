@@ -342,3 +342,52 @@ class TestGenerateInitialPassword:
         )
         with pytest.raises(ValueError):
             UserService._generate_initial_password(tenant)
+
+
+class TestEscapeLikePattern:
+
+    def test_escapes_percent(self):
+        """%をエスケープすること"""
+        result = UserService._escape_like_pattern("100%")
+        assert result == "%100\\%%"
+
+    def test_escapes_underscore(self):
+        """_をエスケープすること"""
+        result = UserService._escape_like_pattern("a_b")
+        assert result == "%a\\_b%"
+
+    def test_escapes_backslash(self):
+        """\\を二重にエスケープすること（バックスラッシュを最初に処理し二重エスケープを防ぐ）"""
+        result = UserService._escape_like_pattern("a\\b")
+        assert result == "%a\\\\b%"
+
+
+class TestResolveSortColumn:
+
+    def test_resolves_snake_case(self):
+        """スネークケースの許可列名を解決できること"""
+        assert UserService._resolve_sort_column("created_at") is User.created_at
+
+    def test_resolves_camel_case(self):
+        """キャメルケースの許可列名（フロントエンドが実際に送信する形式）を解決できること"""
+        assert UserService._resolve_sort_column("updatedAt") is User.updated_at
+
+    def test_falls_back_to_created_at_for_unknown_column(self):
+        """許可リスト外の列名は作成日時にフォールバックすること"""
+        assert UserService._resolve_sort_column("login_key") is User.created_at
+
+
+class TestIssueInitialPassword:
+
+    async def test_generates_password_and_saves_history(self, test_tenant, test_user):
+        """初期パスワードを生成し、パスワード履歴が1回保存されること"""
+        session = AsyncMock()
+
+        with patch(f"{REPO_PATH}.save", new=AsyncMock()) as mock_save:
+            plain_password, expired_at = await UserService._issue_initial_password(
+                test_user, test_tenant, session
+            )
+
+        assert len(plain_password) >= test_tenant.pw_policy_min_length
+        assert expired_at is not None
+        mock_save.assert_called_once()
