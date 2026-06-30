@@ -131,6 +131,27 @@ class UserService:
         return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
 
     @staticmethod
+    async def _issue_initial_password(
+        user: User, tenant: Tenant, session: AsyncSession
+    ) -> tuple[str, datetime]:
+        """初期パスワードを生成し、パスワード履歴へ保存する。
+
+        Args:
+            user: 対象ユーザー。
+            tenant: パスワードポリシーを持つテナント。
+            session: 非同期DBセッション。
+
+        Returns:
+            生成した平文パスワードと有効期限のタプル。
+        """
+        plain_password = UserService._generate_initial_password(tenant)
+        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
+        await PasswordHistoryRepository.save(
+            user.id, tenant.id, hash_password(plain_password), session, expired_at=expired_at
+        )
+        return plain_password, expired_at
+
+    @staticmethod
     async def create_user(
         req: UserCreateRequest,
         tenant_id: str,
@@ -157,8 +178,6 @@ class UserService:
             )
 
         tenant = await UserService._get_tenant(tenant_id, session)
-        plain_password = UserService._generate_initial_password(tenant)
-        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
 
         user = User(
             login_id=req.loginId,
@@ -171,9 +190,7 @@ class UserService:
         session.add(user)
         await session.flush()
 
-        await PasswordHistoryRepository.save(
-            user.id, tenant_id, hash_password(plain_password), session, expired_at=expired_at
-        )
+        plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
         await session.commit()
         await session.refresh(user)
 
@@ -218,11 +235,7 @@ class UserService:
 
         if req.resetPassword:
             tenant = await UserService._get_tenant(tenant_id, session)
-            plain_password = UserService._generate_initial_password(tenant)
-            expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
-            await PasswordHistoryRepository.save(
-                user.id, tenant_id, hash_password(plain_password), session, expired_at=expired_at
-            )
+            plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
             user.is_required_password_reset = True
 
         session.add(user)
