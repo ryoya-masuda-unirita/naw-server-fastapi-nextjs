@@ -52,6 +52,19 @@ schemas/      → リクエスト・レスポンス専用スキーマ（モデ�
 core/         → 設定・DI・共通ユーティリティ
 ```
 
+### routers と services の対応規則
+
+**router と service は 1 対 1 で対応させること。**
+
+```
+routers/users.py   ↔  services/user_service.py
+routers/auth.py    ↔  services/auth_service.py
+```
+
+- 複数の router から共通で使う DB 操作は `repositories/` に切り出す
+- 複数の router から共通で使う純粋な計算ロジック（ハッシュ・トークン生成等）は `core/` に置く
+- `xxx_service.py` が別の `yyy_service.py` を呼ぶ構造は禁止
+
 ### ディレクトリ構造
 
 ```
@@ -130,6 +143,22 @@ class PagedResponse(BaseModel, Generic[T]):
     number: int   # 0-indexed
     size: int
 ```
+
+---
+
+## 新規 Issue 対応開始時の手順
+
+新しいチケット・Issue に着手する前に、必ず以下の手順で `develop` を最新化してからブランチを切ること。
+
+```bash
+git fetch
+git checkout develop
+git pull          # または git merge origin/develop
+git checkout -b feature/issue-X
+```
+
+- `develop` を最新化せずにブランチを切ると、マージ済みの実装が取り込まれず、依存する機能が欠けた状態で開発することになる
+- ブランチを切った後、`git log origin/develop ^HEAD --oneline` で develop との差分がないことを確認すること
 
 ---
 
