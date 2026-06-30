@@ -89,7 +89,7 @@ class UserService:
         total = (await session.execute(count_stmt)).scalar() or 0
 
         sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0] if sort_parts else "created_at"
+        sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
         col = UserService._resolve_sort_column(sort_col_name)
         stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())

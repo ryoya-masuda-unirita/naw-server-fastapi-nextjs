@@ -217,5 +217,6 @@ class TestAuthServicePasswordReset:
             )
 
         mock_save.assert_called_once()
-        args, _ = mock_save.call_args
+        args, kwargs = mock_save.call_args
         assert args[0] == test_user_with_password["user"].id
+        assert kwargs.get("expired_at") is not None

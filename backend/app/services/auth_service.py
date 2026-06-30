@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,20 @@ class AuthService:
 
     @staticmethod
     async def login(username: str, password: str, tenant_id: str, session: AsyncSession) -> AuthResponse:
-        """ログイン処理"""
+        """ログイン処理を行い認証レスポンスを返す。
+
+        Args:
+            username: ログインID。
+            password: 平文パスワード。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            認証結果を含む AuthResponse。
+
+        Raises:
+            HTTPException: 認証失敗時は 401 を返す。
+        """
         user = await UserRepository.find_by_login_id(username, tenant_id, session)
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -51,7 +66,22 @@ class AuthService:
     async def reset_password(
         login_id: str, old_password: str, new_password: str, tenant_id: str, session: AsyncSession
     ) -> AuthResponse:
-        """パスワードリセット処理"""
+        """初回ログイン時のパスワードリセット処理を行い認証レスポンスを返す。
+
+        Args:
+            login_id: ログインID。
+            old_password: 旧パスワード（初期パスワード）。
+            new_password: 新パスワード。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            認証成功レスポンス（新パスワードで発行したJWTを含む）。
+
+        Raises:
+            HTTPException: ユーザーが存在しない場合は 403、旧パスワード不一致は 403、
+                テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
+        """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not found")
@@ -65,7 +95,8 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
         verify_password_strength(new_password, tenant)
         await check_password_not_reused(user.id, new_password, tenant, session)
-        await PasswordHistoryRepository.save(user.id, tenant_id, hash_password(new_password), session)
+        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
+        await PasswordHistoryRepository.save(user.id, tenant_id, hash_password(new_password), session, expired_at=expired_at)
 
         user.is_required_password_reset = False
         session.add(user)
