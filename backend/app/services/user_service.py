@@ -12,6 +12,8 @@ from app.core.security import hash_password
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.repositories.password_history_repository import PasswordHistoryRepository
+from app.repositories.tenant_repository import TenantRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     PagedUserResponse,
     UserCreateRequest,
@@ -107,11 +109,7 @@ class UserService:
         Raises:
             HTTPException: loginId が既に存在する場合 400 を返す。
         """
-        existing = (
-            await session.execute(
-                select(User).where(User.login_id == req.loginId, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        existing = await UserRepository.find_by_login_id(req.loginId, tenant_id, session)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -206,11 +204,7 @@ class UserService:
             tenant_id: テナントID。
             session: 非同期DBセッション。
         """
-        user = (
-            await session.execute(
-                select(User).where(User.login_id == user_id, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        user = await UserRepository.find_by_login_id(user_id, tenant_id, session)
         if user:
             await session.delete(user)
             await session.commit()
@@ -285,11 +279,7 @@ class UserService:
         Raises:
             HTTPException: ユーザーが存在しない場合 404 を返す。
         """
-        user = (
-            await session.execute(
-                select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return user
@@ -308,9 +298,7 @@ class UserService:
         Raises:
             HTTPException: テナントが存在しない場合 400 を返す。
         """
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.id == tenant_id))
-        ).scalars().first()
+        tenant = await TenantRepository.find_by_id(tenant_id, session)
         if not tenant:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
         return tenant

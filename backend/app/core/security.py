@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from fastapi import Depends, Header, HTTPException, status
@@ -8,6 +7,7 @@ from passlib.context import CryptContext
 
 from app.core.database import get_session
 from app.models.user import User, UserRole
+from app.repositories.user_repository import UserRepository
 
 # JWT 設定
 SECRET_KEY = "your-secret-key-change-in-production"
@@ -79,10 +79,7 @@ async def get_current_user(
     if not login_id or not tenant_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    stmt = select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
-    result = await session.execute(stmt)
-    user = result.scalars().first()
-
+    user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
