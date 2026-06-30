@@ -209,10 +209,34 @@ alembic upgrade head
 ## コーディング規約
 
 - PEP 8 準拠
-- 型ヒントを必ず付ける（Python 3.12+ 構文: `list[str]`、`dict[str, int]` 等）
+- 型ヒントを**すべての関数・メソッドの引数と戻り値に必ず付ける**（Python 3.12+ 構文: `list[str]`、`dict[str, int]` 等）
 - `async/await` を使う（sync な DB アクセスは禁止）
 - `Optional` は使わず `X | None` で書く
 - コメントは「なぜそうしているか」を書く。コードをそのまま言葉にするコメントは書かない
+
+### docstring
+
+**Google スタイル**で書く。引数・戻り値・例外がある関数には必ず記載すること。
+
+```python
+def example(name: str, count: int) -> list[str]:
+    """概要を1行で書く。
+
+    Args:
+        name: 名前の説明。
+        count: 件数の説明。
+
+    Returns:
+        文字列のリスト。
+
+    Raises:
+        ValueError: count が負の場合。
+    """
+```
+
+- 概要行は動詞で始める（「〜を取得する」「〜を検証する」など）
+- 引数・戻り値がない場合は該当セクションを省略してよい
+- テストメソッドには引数・戻り値セクション不要（日本語 docstring 1行のみ）
 
 ---
 
