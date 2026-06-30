@@ -84,3 +84,21 @@ def get_tenant_id_from_header(x_tenant_id: str) -> str:
     if not x_tenant_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="X-Tenant-ID header is required")
     return x_tenant_id
+
+
+async def require_admin(
+    current_user=Depends(get_current_user),
+):
+    """ADMIN または SYSTEM ロールのユーザーのみ通過させる。
+
+    Returns:
+        認可済みの User オブジェクト。
+
+    Raises:
+        HTTPException: ロールが ADMIN/SYSTEM 以外の場合 403 を返す。
+    """
+    from app.models.user import UserRole
+
+    if current_user.role not in (UserRole.ADMIN, UserRole.SYSTEM):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied")
+    return current_user

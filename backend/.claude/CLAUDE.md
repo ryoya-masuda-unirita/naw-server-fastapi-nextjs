@@ -146,6 +146,12 @@ class PagedResponse(BaseModel, Generic[T]):
 
 ---
 
+## Human in the Loop（HITL）モード
+
+HITL 方式で進める場合、タスクを完了するたびに **その場で** `06_タスクリスト.md` の該当項目を `- [x]` にチェックすること。まとめてチェックするのは禁止。
+
+---
+
 ## 新規 Issue 対応開始時の手順
 
 新しいチケット・Issue に着手する前に、必ず以下の手順で `develop` を最新化してからブランチを切ること。
