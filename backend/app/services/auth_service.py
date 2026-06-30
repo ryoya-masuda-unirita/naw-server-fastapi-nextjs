@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.password_policy import check_password_not_reused, verify_password_strength
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, hash_password, verify_password_async
 from app.repositories.password_history_repository import PasswordHistoryRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_repository import UserRepository
@@ -23,7 +23,7 @@ class AuthService:
         if not latest:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-        if not verify_password(password, latest.password):
+        if not await verify_password_async(password, latest.password):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
         if user.is_required_password_reset:
@@ -57,7 +57,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not found")
 
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
-        if not latest or not verify_password(old_password, latest.password):
+        if not latest or not await verify_password_async(old_password, latest.password):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid old password")
 
         tenant = await TenantRepository.find_by_id(tenant_id, session)

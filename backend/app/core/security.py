@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
@@ -27,6 +28,23 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """パスワードを検証"""
     return pwd_context.verify(plain_password, hashed_password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """パスワードを別スレッドで検証し、イベントループの占有を防ぐ。
+
+    bcrypt の検証処理は CPU バウンドな同期処理のため、async 関数内で直接呼び出すと
+    イベントループを占有し他のリクエスト処理を遅延させる。asyncio.to_thread で
+    別スレッドに退避させる。
+
+    Args:
+        plain_password: 検証対象の平文パスワード。
+        hashed_password: 比較対象のハッシュ化済みパスワード。
+
+    Returns:
+        パスワードが一致すれば True。
+    """
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 
 def create_access_token(login_id: str, tenant_id: str) -> str:
