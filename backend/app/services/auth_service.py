@@ -2,6 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -66,8 +67,9 @@ class AuthService:
         if not latest or not verify_password(old_password, latest.password):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid old password")
 
-        await AuthService._verify_password_strength(new_password, tenant_id, session)
-        await AuthService._check_password_history(user.id, new_password, tenant_id, session)
+        tenant = await AuthService._get_tenant(tenant_id, session)
+        verify_password_strength(new_password, tenant)
+        await check_password_not_reused(user.id, new_password, tenant, session)
         await PasswordHistoryRepository.save(user.id, tenant_id, hash_password(new_password), session)
 
         user.is_required_password_reset = False
@@ -87,37 +89,23 @@ class AuthService:
         )
 
     @staticmethod
-    async def _verify_password_strength(new_password: str, tenant_id: str, session: AsyncSession) -> None:
+    async def _get_tenant(tenant_id: str, session: AsyncSession) -> Tenant:
+        """テナントIDでテナントを取得する。存在しない場合は 400 を送出する。
+
+        Args:
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            Tenant オブジェクト。
+
+        Raises:
+            HTTPException: テナントが存在しない場合 400 を返す。
+        """
         stmt = select(Tenant).where(Tenant.id == tenant_id)
         result = await session.execute(stmt)
         tenant = result.scalars().first()
 
         if not tenant:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
-
-        if len(new_password) < tenant.pw_policy_min_length:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Password must be at least {tenant.pw_policy_min_length} characters",
-            )
-
-    @staticmethod
-    async def _check_password_history(
-        user_id, new_password: str, tenant_id: str, session: AsyncSession
-    ) -> None:
-        stmt = select(Tenant).where(Tenant.id == tenant_id)
-        result = await session.execute(stmt)
-        tenant = result.scalars().first()
-
-        if not tenant:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
-
-        recent_hashes = await PasswordHistoryRepository.get_recent_hashes(
-            user_id, tenant.pw_histories_limit, session
-        )
-        for hashed in recent_hashes:
-            if verify_password(new_password, hashed):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Password has been used before",
-                )
+        return tenant

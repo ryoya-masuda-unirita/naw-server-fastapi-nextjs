@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from uuid import uuid4
 
+from app.core.security import hash_password
 from app.services.user_service import UserService
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
@@ -251,13 +252,18 @@ class TestUpdateProfile:
 
         mock_user = MagicMock()
         mock_user.scalars.return_value.first.return_value = test_user
-        session.execute = AsyncMock(return_value=mock_user)
+        mock_tenant = MagicMock()
+        mock_tenant.scalars.return_value.first.return_value = test_tenant
+        session.execute = AsyncMock(side_effect=[mock_user, mock_tenant])
         session.commit = AsyncMock()
         session.refresh = AsyncMock()
 
         req = UserProfileUpdateRequest(password="NewPassword123!")
 
-        with patch(f"{REPO_PATH}.save", new=AsyncMock()):
+        with patch(f"{REPO_PATH}.save", new=AsyncMock()), patch(
+            "app.core.password_policy.PasswordHistoryRepository.get_recent_hashes",
+            new=AsyncMock(return_value=[]),
+        ):
             await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
 
         assert test_user.is_required_password_reset is False
@@ -275,6 +281,44 @@ class TestUpdateProfile:
 
         assert result.loginId == test_user.login_id
         session.commit.assert_not_called()
+
+    async def test_raises_400_when_password_too_short(self, test_tenant, test_user):
+        """最小長未満のパスワードは HTTPException 400 を返すこと"""
+        session = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.scalars.return_value.first.return_value = test_user
+        mock_tenant = MagicMock()
+        mock_tenant.scalars.return_value.first.return_value = test_tenant
+        session.execute = AsyncMock(side_effect=[mock_user, mock_tenant])
+
+        req = UserProfileUpdateRequest(password="short")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+
+        assert exc_info.value.status_code == 400
+
+    async def test_raises_400_when_password_reused(self, test_tenant, test_user):
+        """過去パスワードを再利用した場合 HTTPException 400 を返すこと"""
+        session = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.scalars.return_value.first.return_value = test_user
+        mock_tenant = MagicMock()
+        mock_tenant.scalars.return_value.first.return_value = test_tenant
+        session.execute = AsyncMock(side_effect=[mock_user, mock_tenant])
+
+        req = UserProfileUpdateRequest(password="ReusedPassword123!")
+
+        with patch(
+            "app.core.password_policy.PasswordHistoryRepository.get_recent_hashes",
+            new=AsyncMock(return_value=[hash_password("ReusedPassword123!")]),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+
+        assert exc_info.value.status_code == 400
 
 
 class TestGenerateInitialPassword:

@@ -123,6 +123,14 @@ class TestGetUsers:
 
         assert response.status_code == 403
 
+    async def test_tenant_header_mismatch_gets_403(self, client, admin_token):
+        """JWT と異なる X-Tenant-ID を指定すると 403 になること"""
+        headers = {"Authorization": f"Bearer {admin_token}", "X-Tenant-ID": "other-tenant"}
+        async with client as c:
+            response = await c.get("/api/admin/users", headers=headers)
+
+        assert response.status_code == 403
+
 
 class TestCreateUser:
 

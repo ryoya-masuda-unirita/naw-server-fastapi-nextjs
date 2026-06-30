@@ -2,11 +2,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer
 from passlib.context import CryptContext
 
 from app.core.database import get_session
+from app.models.user import User, UserRole
 
 # JWT 設定
 SECRET_KEY = "your-secret-key-change-in-production"
@@ -57,10 +58,19 @@ def decode_token(token: str) -> dict:
 async def get_current_user(
     credentials=Depends(security),
     session: AsyncSession = Depends(get_session),
-):
-    """認証済みユーザーを取得（/api/** の保護に使用）"""
-    from app.models.user import User
+) -> User:
+    """認証済みユーザーを取得（/api/** の保護に使用）。
 
+    Args:
+        credentials: Authorization ヘッダーから取得した Bearer トークン。
+        session: 非同期DBセッション。
+
+    Returns:
+        認証済みの User オブジェクト。
+
+    Raises:
+        HTTPException: トークンが不正、またはユーザーが存在しない場合 401 を返す。
+    """
     token = credentials.credentials
     payload = decode_token(token)
     login_id = payload.get("sub")
@@ -87,9 +97,12 @@ def get_tenant_id_from_header(x_tenant_id: str) -> str:
 
 
 async def require_admin(
-    current_user=Depends(get_current_user),
-):
+    current_user: User = Depends(get_current_user),
+) -> User:
     """ADMIN または SYSTEM ロールのユーザーのみ通過させる。
+
+    Args:
+        current_user: 認証済みユーザー。
 
     Returns:
         認可済みの User オブジェクト。
@@ -97,8 +110,30 @@ async def require_admin(
     Raises:
         HTTPException: ロールが ADMIN/SYSTEM 以外の場合 403 を返す。
     """
-    from app.models.user import UserRole
-
     if current_user.role not in (UserRole.ADMIN, UserRole.SYSTEM):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied")
     return current_user
+
+
+async def get_verified_tenant_id(
+    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
+    current_user: User = Depends(get_current_user),
+) -> str:
+    """X-Tenant-ID ヘッダーが JWT 内の tenant_id と一致することを検証する。
+
+    JWT の tenant_id とリクエストヘッダーの値が異なると、認証済みユーザーが
+    自分の所属しないテナントのデータへアクセスできてしまうため検証する。
+
+    Args:
+        x_tenant_id: リクエストヘッダーのテナントID。
+        current_user: JWT から認証されたユーザー。
+
+    Returns:
+        検証済みのテナントID。
+
+    Raises:
+        HTTPException: ヘッダーと JWT の tenant_id が一致しない場合 403 を返す。
+    """
+    if x_tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    return x_tenant_id

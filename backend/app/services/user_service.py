@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
@@ -251,10 +252,14 @@ class UserService:
 
         Raises:
             HTTPException: ユーザーが存在しない場合 404 を返す。
+            HTTPException: 新パスワードがポリシーを満たさない場合 400 を返す。
         """
         user = await UserService._get_user(login_id, tenant_id, session)
 
         if req.password:
+            tenant = await UserService._get_tenant(tenant_id, session)
+            verify_password_strength(req.password, tenant)
+            await check_password_not_reused(user.id, req.password, tenant, session)
             await PasswordHistoryRepository.save(
                 user.id, tenant_id, hash_password(req.password), session
             )
