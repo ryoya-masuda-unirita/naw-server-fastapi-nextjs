@@ -22,7 +22,7 @@ async def login(
 
 
 @router.post("/logout")
-async def logout():
+async def logout() -> dict[str, str]:
     """ログアウト"""
     return {"message": "Logout successful."}
 

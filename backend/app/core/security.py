@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from fastapi import Depends, Header, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
 from app.core.database import get_session
@@ -74,7 +74,7 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials=Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """認証済みユーザーを取得（/api/** の保護に使用）。

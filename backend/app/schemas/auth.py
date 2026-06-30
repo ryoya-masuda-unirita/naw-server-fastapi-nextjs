@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel
 
 
@@ -31,10 +29,10 @@ class AuthResponse(BaseModel):
     id: str
     name: str
     role: str
-    token: Optional[str] = None
+    token: str | None = None
     groups: list[AuthGroupResponse] = []
     loginStatus: str = "SUCCESS"
-    reason: Optional[str] = None
+    reason: str | None = None
 
     class Config:
         from_attributes = True
