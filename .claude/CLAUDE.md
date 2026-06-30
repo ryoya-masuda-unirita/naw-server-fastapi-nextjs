@@ -91,9 +91,12 @@ gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body 
 gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
 
-# Step 3: feature ブランチを develop から作成
-git checkout develop && git checkout -b feature/issue-{番号}        # NAW なし
-git checkout develop && git checkout -b feature/issue-{番号}-NAW-XXXX  # NAW あり
+# Step 3: develop を最新化してから feature ブランチを作成
+git fetch
+git checkout develop
+git pull   # または git merge origin/develop
+git checkout -b feature/issue-{番号}        # NAW なし
+git checkout -b feature/issue-{番号}-NAW-XXXX  # NAW あり
 
 # Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
 mkdir -p docs/issue-{番号}           # NAW なし
@@ -164,8 +167,15 @@ feature/issue-X
 
 ### Issue 対応開始時の確認手順
 
-1. `git branch --show-current` で現在のブランチを確認する
-2. 対象 Issue のブランチが存在しない場合、依存する未マージ PR がないかを `gh pr list` で確認する
+1. 必ず `develop` を最新化してからブランチを切る
+
+```bash
+git fetch
+git checkout develop
+git pull   # または git merge origin/develop
+```
+
+2. 依存する未マージ PR がないかを `gh pr list` で確認する
 3. 依存がなければ `develop` から、依存があればその依存ブランチから切る
 4. ユーザーの承認なしに AI がブランチを作成・切り替える
 5. ブランチ作成後、要件定義・基本設計（01・02）の作成を開始する
