@@ -4,9 +4,10 @@ import string
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
+from typing import Any
+
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute
 
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
@@ -28,7 +29,10 @@ from app.schemas.user import (
 
 class UserService:
 
-    _SORTABLE_COLUMNS: dict[str, InstrumentedAttribute] = {
+    # SQLModelはMapped[]注釈を使わないため、クラス属性アクセス（User.created_at等）は
+    # mypy上InstrumentedAttributeではなくPydanticフィールド型として解釈される。
+    # 実行時の型（InstrumentedAttribute）とは一致しないためAnyとする。
+    _SORTABLE_COLUMNS: dict[str, Any] = {
         "created_at": User.created_at,
         "createdAt": User.created_at,
         "login_id": User.login_id,
@@ -116,7 +120,7 @@ class UserService:
         return f"%{escaped}%"
 
     @staticmethod
-    def _resolve_sort_column(sort_col_name: str) -> InstrumentedAttribute:
+    def _resolve_sort_column(sort_col_name: str) -> Any:
         """ソート対象列名を許可リストに基づいてモデル属性に解決する。
 
         許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
