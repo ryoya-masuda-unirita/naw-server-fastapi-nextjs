@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
@@ -26,6 +27,17 @@ from app.schemas.user import (
 
 
 class UserService:
+
+    _SORTABLE_COLUMNS: dict[str, InstrumentedAttribute] = {
+        "created_at": User.created_at,
+        "createdAt": User.created_at,
+        "login_id": User.login_id,
+        "loginId": User.login_id,
+        "name": User.name,
+        "role": User.role,
+        "updated_at": User.updated_at,
+        "updatedAt": User.updated_at,
+    }
 
     @staticmethod
     async def get_users(
@@ -56,11 +68,11 @@ class UserService:
         stmt = select(User).where(User.tenant_id == tenant_id)
 
         if search_text:
-            pattern = f"%{search_text.lower()}%"
+            pattern = UserService._escape_like_pattern(search_text.lower())
             stmt = stmt.where(
                 or_(
-                    func.lower(User.login_id).like(pattern),
-                    func.lower(User.name).like(pattern),
+                    func.lower(User.login_id).like(pattern, escape="\\"),
+                    func.lower(User.name).like(pattern, escape="\\"),
                 )
             )
 
@@ -75,7 +87,7 @@ class UserService:
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0] if sort_parts else "created_at"
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-        col = getattr(User, sort_col_name, User.created_at)
+        col = UserService._resolve_sort_column(sort_col_name)
         stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())
         stmt = stmt.offset(page * size).limit(size)
 
@@ -89,6 +101,34 @@ class UserService:
             page=page,
             size=size,
         )
+
+    @staticmethod
+    def _escape_like_pattern(value: str) -> str:
+        """LIKE検索のワイルドカード文字（% _ \\）をエスケープし前後に%を付与する。
+
+        Args:
+            value: エスケープ対象の検索文字列。
+
+        Returns:
+            LIKE検索にそのまま使用できるエスケープ済みパターン文字列。
+        """
+        escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return f"%{escaped}%"
+
+    @staticmethod
+    def _resolve_sort_column(sort_col_name: str) -> InstrumentedAttribute:
+        """ソート対象列名を許可リストに基づいてモデル属性に解決する。
+
+        許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
+        既定の作成日時列にフォールバックする。
+
+        Args:
+            sort_col_name: リクエストで指定されたソート対象列名。
+
+        Returns:
+            ソートに使用するモデル属性。
+        """
+        return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
 
     @staticmethod
     async def create_user(
