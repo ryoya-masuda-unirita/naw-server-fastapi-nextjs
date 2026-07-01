@@ -4,6 +4,7 @@ from uuid import uuid4
 import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -30,13 +31,21 @@ def event_loop():
 @pytest.fixture(scope="session")
 async def engine():
     """インメモリ SQLite DB エンジン"""
-    engine = create_async_engine(DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
+    _engine = create_async_engine(DATABASE_URL, echo=False)
+
+    # SQLite はデフォルトで外部キー制約を無効にするため接続ごとに有効化する
+    @event.listens_for(_engine.sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_conn, _):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    async with engine.begin() as conn:
+    yield _engine
+    async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+    await _engine.dispose()
 
 
 @pytest.fixture
@@ -47,7 +56,9 @@ async def session(engine):
         yield sess
 
         # テスト後にテーブルをクリア
+        # IntegrityError 等でセッションが中断された場合に備えてロールバックで回復する
         from sqlalchemy import text
+        await sess.rollback()
         tables = ["password_histories", "users", "tenants"]
         for table in tables:
             await sess.execute(text(f"DELETE FROM {table}"))
