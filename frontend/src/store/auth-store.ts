@@ -5,6 +5,7 @@ import { ROUTES } from '@/lib/constants/routes';
 import type {
   User,
   LoginRequest,
+  LoginResponse,
   LoginStatus,
   AuthSessionResponse,
   BackendAuthResponse,
@@ -82,23 +83,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     },
 
     async login(credentials: LoginRequest): Promise<LoginStatus> {
-      const response = await apiClient.post<
-        | {
-            loginStatus: 'SUCCESS';
-            id: string;
-            name: string;
-            role: 'USER' | 'ADMIN';
-            token: string;
-            groups: unknown[];
-          }
-        | {
-            loginStatus: 'REQUIRES_PASSWORD_RESET';
-            id: string;
-            name: string;
-            role: 'USER' | 'ADMIN';
-            reason: 'INITIAL' | 'EXPIRED';
-          }
-      >(API_PATHS.AUTH.LOGIN, credentials);
+      const response = await apiClient.post<LoginResponse>(
+        API_PATHS.AUTH.LOGIN,
+        credentials
+      );
 
       if (response.loginStatus === 'REQUIRES_PASSWORD_RESET') {
         set({ user: null });

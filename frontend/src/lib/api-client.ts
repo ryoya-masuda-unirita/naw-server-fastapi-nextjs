@@ -4,6 +4,22 @@ function resolveTenantId(): string {
   return sessionStorage.getItem('TENANT_ID') || '';
 }
 
+function getHeaders(customHeaders?: HeadersInit): Record<string, string> {
+  const tenantId = resolveTenantId();
+  return {
+    'Content-Type': 'application/json',
+    ...(tenantId && { 'X-Tenant-ID': tenantId }),
+    ...(customHeaders as Record<string, string>),
+  };
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 type RequestOptions = RequestInit & {
   params?: Record<string, string | number | boolean>;
 };
@@ -19,10 +35,10 @@ export const apiClient = {
     const res = await fetch(url.toString(), {
       ...options,
       method: 'GET',
-      headers: this._getHeaders(options?.headers),
+      headers: getHeaders(options?.headers),
       credentials: 'include',
     });
-    return this._handleResponse<T>(res);
+    return handleResponse<T>(res);
   },
 
   async post<T>(
@@ -33,26 +49,10 @@ export const apiClient = {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       method: 'POST',
-      headers: this._getHeaders(options?.headers),
+      headers: getHeaders(options?.headers),
       credentials: 'include',
       body: body ? JSON.stringify(body) : undefined,
     });
-    return this._handleResponse<T>(res);
-  },
-
-  private _getHeaders(customHeaders?: HeadersInit): Record<string, string> {
-    const tenantId = resolveTenantId();
-    return {
-      'Content-Type': 'application/json',
-      ...(tenantId && { 'X-Tenant-ID': tenantId }),
-      ...(customHeaders as Record<string, string>),
-    };
-  },
-
-  private async _handleResponse<T>(res: Response): Promise<T> {
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    return res.json();
+    return handleResponse<T>(res);
   },
 };
