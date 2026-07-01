@@ -1,0 +1,44 @@
+name: Project Status Sync
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - closed
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  move-to-review:
+    # Projects v2 requires a PAT with `project` scope (github.token cannot get it)
+    if: github.event.action != 'closed' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move linked issue to Review
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \
+            --pr "${{ github.event.pull_request.number }}" \
+            --status "Review"
+
+  move-to-done:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move linked issue to Done
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \
+            --pr "${{ github.event.pull_request.number }}" \
+            --status "Done"

@@ -14,6 +14,8 @@ description: Use when preparing a pull request for naw-server-fastapi-nextjs, in
 - テスト結果を記録する
 - 実機またはコマンドベースの確認結果をまとめる
 - `Closes #XX` を入れる
+- PR 作成後は `.github/workflows/project-status-sync.yml` により対応 Issue が `Review` へ自動反映される前提で確認する
+- `Closes #XX` により、PR マージ時に Issue がクローズされ GitHub Projects の `Done` へ自動反映される前提で確認する
 
 ## PR 本文の基本形
 

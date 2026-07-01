@@ -78,6 +78,9 @@ naw-server-fastapi-nextjs/
 - Issue 番号がそのままチケット番号になる（`#1`, `#2`, ...）
 - GitHub Projects でステータス管理（起票・進行中・レビュー中・完了）
 - PR 説明に `Closes #XX` を書くとマージ時に Issue が自動クローズされる
+- Issue 着手時は、原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
+- PR 作成後は `.github/workflows/project-status-sync.yml` により、対応 Issue を GitHub Projects の `Review` に自動反映する前提で運用する
+- PR が `develop` にマージされたら、`Closes #XX` と `.github/workflows/project-status-sync.yml` により GitHub Projects の `Done` まで自動反映される前提で運用する
 
 ### Issue 起票手順
 
@@ -91,12 +94,9 @@ gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body 
 gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
 
-# Step 3: develop を最新化してから feature ブランチを作成
-git fetch
-git checkout develop
-git pull   # または git merge origin/develop
-git checkout -b feature/issue-{番号}        # NAW なし
-git checkout -b feature/issue-{番号}-NAW-XXXX  # NAW あり
+# Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
 
 # Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
 mkdir -p docs/issue-{番号}           # NAW なし
@@ -163,22 +163,22 @@ feature/issue-X
 ```
 
 - 新規ブランチは基本的に `develop` から切る
+- `develop` はブランチ作成前に必ず最新化する
 - `main` からは切らない
 
 ### Issue 対応開始時の確認手順
 
-1. 必ず `develop` を最新化してからブランチを切る
+1. 原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X` を使って開始する
 
 ```bash
-git fetch
-git checkout develop
-git pull   # または git merge origin/develop
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
 ```
 
 2. 依存する未マージ PR がないかを `gh pr list` で確認する
 3. 依存がなければ `develop` から、依存があればその依存ブランチから切る
-4. ユーザーの承認なしに AI がブランチを作成・切り替える
-5. ブランチ作成後、要件定義・基本設計（01・02）の作成を開始する
+4. スクリプト未使用時は、ブランチ作成後に対応 Issue への linked branch 反映と GitHub Projects の `In Progress` 移動を手動で行う
+5. ユーザーの承認なしに AI がブランチを作成・切り替える
+6. ブランチ作成後、要件定義・基本設計（01・02）の作成を開始する
 
 ---
 

@@ -43,18 +43,17 @@
 
 ## 5. 作業開始時
 
-1. GitHub Projects で该当 Issue を「In Progress」に移動
-2. `feature/#XX` ブランチを作成して作業開始
+1. `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-XX` を実行する
+2. スクリプトにより `develop` 最新化、対応ブランチ作成、Issue への linked branch 反映、GitHub Projects の `In Progress` 更新を自動化する
 
 ```bash
-git checkout develop
-git checkout -b feature/#XX
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-XX
 ```
 
 ## 6. PR 作成時
 
-1. GitHub Projects で Issue を「In Review」に移動
-2. PR の説明に `Closes #XX` を記載する
+1. PR の説明に `Closes #XX` を記載する
+2. `.github/workflows/project-status-sync.yml` により、対応 Issue が GitHub Projects の `Review` に自動反映される
 
 ```markdown
 ## 変更概要
@@ -65,4 +64,4 @@ Closes #XX
 
 ## 7. マージ時
 
-PR がマージされると `Closes #XX` の記載により Issue が自動クローズされ、GitHub Projects 上でも「Done」に移動する。
+PR が `develop` へマージされると `Closes #XX` の記載により Issue が自動クローズされ、`.github/workflows/project-status-sync.yml` により GitHub Projects 上でも `Done` に自動反映される。

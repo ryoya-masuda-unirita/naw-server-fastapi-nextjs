@@ -53,6 +53,8 @@ naw-server-fastapi-nextjs/
 さらに、`docs/issue-*` の雛形が未作成なら、必要に応じて次の command を実行してから作業を続けること。
 
 ```bash
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X-NAW-XXXX
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW-XXXX
 ```
@@ -72,13 +74,25 @@ skill を読まずに進めてよいのは、単純な質問応答や軽微な�
 Issue 対応や PR 対応では、該当 skill を読んだ前提で進めること。
 
 判断が分かれる点だけ確認し、それ以外は止まらず進める。
+ただし Issue 対応では、`.claude/CLAUDE.md` と同等の承認フローを優先し、指定された承認ポイントでは必ず停止すること。
+
+### Issue 対応時の承認フロー
+
+- 第1承認: `01_要件定義.md` と `02_基本設計.md` の作成完了後に必ず停止し、承認を得る
+- 第2承認: `03_詳細設計.md` 〜 `07_gitコミット.md` の作成完了後に必ず停止し、`Human in the Loop` または `全自動` の実装方式を確認する
+- 上記承認を得る前に、実装コードの変更・生成へ進まない
+- `Human in the Loop` が選択された場合は、各タスク実行前に承認を得る
+- `全自動` が選択された場合のみ、実装フェーズ以降を止まらず進めてよい
 
 ## GitHub 運用
 
 - チケット管理は GitHub Issues + GitHub Projects
 - プロジェクト番号は `3`
 - オーナーは `ryoya-masuda-unirita`
+- Issue 着手時は、原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
 - PR 本文には必ず `Closes #XX` を含める
+- PR 作成後は `.github/workflows/project-status-sync.yml` により GitHub Projects の `Review` へ自動反映する前提で運用する
+- PR が `develop` へマージされたら、`Closes #XX` により Issue が自動クローズされ、GitHub Projects でも `Done` へ自動反映する前提で運用する
 - ブランチは `feature/issue-X` または `feature/issue-X-NAW-XXXX`
 - `main` から直接作業しない
 
