@@ -1,11 +1,13 @@
-import pytest
 from datetime import datetime
 from uuid import uuid4
 
+import jwt
+import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from app.core.security import hash_password
+from app.core.security import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.core.database import Base, get_session
 from app.main import app
 from app.models.tenant import Tenant
@@ -59,6 +61,12 @@ def override_get_session(session):
     app.dependency_overrides[get_session] = lambda: session
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(override_get_session):
+    """ASGITransport を利用したテストクライアント"""
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.fixture
@@ -119,3 +127,33 @@ async def test_user_with_password(session, test_tenant, test_user):
         "plain_password": plain_password,
         "hashed_password": hashed_password,
     }
+
+
+@pytest.fixture
+def valid_jwt_token(test_user, test_tenant):
+    """有効な JWT トークン"""
+    return create_access_token(test_user.login_id, test_tenant.id)
+
+
+@pytest.fixture
+def expired_jwt_token(test_user, test_tenant):
+    """有効期限切れ JWT"""
+    payload = {
+        "sub": test_user.login_id,
+        "tenantId": test_tenant.id,
+        "exp": 1,
+        "iat": 0,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+@pytest.fixture
+def invalid_jwt_token(test_tenant):
+    """不正な JWT（異なる秘密鍵で生成）"""
+    payload = {
+        "sub": "testuser",
+        "tenantId": test_tenant.id,
+        "exp": 4102444800,
+        "iat": 0,
+    }
+    return jwt.encode(payload, "wrong-secret-key", algorithm=ALGORITHM)
