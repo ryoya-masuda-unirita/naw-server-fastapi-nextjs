@@ -52,7 +52,6 @@ async def session(engine):
         for table in tables:
             await sess.execute(text(f"DELETE FROM {table}"))
         await sess.commit()
-        await sess.rollback()
 
 
 @pytest.fixture

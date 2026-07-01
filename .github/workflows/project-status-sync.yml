@@ -6,24 +6,23 @@ on:
       - opened
       - reopened
       - ready_for_review
-      - edited
       - closed
 
 permissions:
   contents: read
   issues: write
   pull-requests: read
-  repository-projects: write
 
 jobs:
   move-to-review:
-    if: github.event.action != 'closed'
+    # Projects v2 requires a PAT with `project` scope (github.token cannot get it)
+    if: github.event.action != 'closed' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Move linked issue to Review
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \
@@ -37,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Move linked issue to Done
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \

@@ -113,7 +113,7 @@ fi
 
 for current_issue in "${issue_numbers[@]}"; do
   item_id="$(
-    gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json \
+    gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit 200 \
       --jq ".items[] | select(.content.number==$current_issue) | .id" \
       | head -n 1
   )"
@@ -122,7 +122,7 @@ for current_issue in "${issue_numbers[@]}"; do
     issue_url="https://github.com/$REPO/issues/$current_issue"
     gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$issue_url" >/dev/null
     item_id="$(
-      gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json \
+      gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit 200 \
         --jq ".items[] | select(.content.number==$current_issue) | .id" \
         | head -n 1
     )"
