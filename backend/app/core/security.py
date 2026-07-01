@@ -1,13 +1,14 @@
+import asyncio
 from datetime import datetime, timedelta
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from fastapi import Depends, Header, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
 from app.core.database import get_session
 from app.models.user import User, UserRole
+from app.repositories.user_repository import UserRepository
 
 # JWT 設定
 SECRET_KEY = "your-secret-key-change-in-production"
@@ -27,6 +28,23 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """パスワードを検証"""
     return pwd_context.verify(plain_password, hashed_password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """パスワードを別スレッドで検証し、イベントループの占有を防ぐ。
+
+    bcrypt の検証処理は CPU バウンドな同期処理のため、async 関数内で直接呼び出すと
+    イベントループを占有し他のリクエスト処理を遅延させる。asyncio.to_thread で
+    別スレッドに退避させる。
+
+    Args:
+        plain_password: 検証対象の平文パスワード。
+        hashed_password: 比較対象のハッシュ化済みパスワード。
+
+    Returns:
+        パスワードが一致すれば True。
+    """
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 
 def create_access_token(login_id: str, tenant_id: str) -> str:
@@ -56,7 +74,7 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials=Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """認証済みユーザーを取得（/api/** の保護に使用）。
@@ -79,10 +97,7 @@ async def get_current_user(
     if not login_id or not tenant_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    stmt = select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
-    result = await session.execute(stmt)
-    user = result.scalars().first()
-
+    user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 

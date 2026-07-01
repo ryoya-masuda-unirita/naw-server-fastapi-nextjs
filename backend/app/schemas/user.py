@@ -1,9 +1,8 @@
-import math
 from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 
 
 class UserCreateRequest(BaseModel):
@@ -33,7 +32,7 @@ class UserResponse(BaseModel):
     isRequiredPasswordReset: bool
 
     @classmethod
-    def from_user(cls, user) -> "UserResponse":
+    def from_user(cls, user: User) -> "UserResponse":
         return cls(
             id=str(user.id),
             loginId=user.login_id,

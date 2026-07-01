@@ -3,7 +3,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import verify_password
+from app.core.security import verify_password_async
 from app.models.tenant import Tenant
 from app.repositories.password_history_repository import PasswordHistoryRepository
 
@@ -46,7 +46,7 @@ async def check_password_not_reused(
         user_id, tenant.pw_histories_limit, session
     )
     for hashed in recent_hashes:
-        if verify_password(new_password, hashed):
+        if await verify_password_async(new_password, hashed):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Password has been used before",

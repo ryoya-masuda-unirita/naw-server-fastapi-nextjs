@@ -66,6 +66,21 @@ class TestAuthServiceLogin:
 
         assert exc_info.value.status_code == 401
 
+    async def test_login_with_no_password_history(self, test_tenant, test_user):
+        """パスワード履歴が0件の場合、HTTPException 401 を返すこと"""
+        session = AsyncMock()
+        mock_user_result = MagicMock()
+        mock_user_result.scalars.return_value.first.return_value = test_user
+        session.execute = AsyncMock(return_value=mock_user_result)
+
+        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(return_value=None)):
+            with pytest.raises(HTTPException) as exc_info:
+                await AuthService.login(
+                    test_user.login_id, "AnyPassword123!", test_tenant.id, session
+                )
+
+        assert exc_info.value.status_code == 401
+
     async def test_login_when_password_reset_required(self, test_tenant):
         """is_required_password_reset=true の場合、REQUIRES_PASSWORD_RESET を返すこと"""
         session = AsyncMock()
@@ -178,3 +193,30 @@ class TestAuthServicePasswordReset:
                 )
 
         assert exc_info.value.status_code == 400
+
+    async def test_reset_password_calls_save(self, test_tenant, test_user_with_password):
+        """パスワードリセット成功時に新パスワードの履歴が保存されること"""
+        session = AsyncMock()
+        mock_user_result = MagicMock()
+        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_tenant_result = MagicMock()
+        mock_tenant_result.scalars.return_value.first.return_value = test_tenant
+        session.execute = AsyncMock(side_effect=[mock_user_result, mock_tenant_result])
+
+        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
+            return_value=MagicMock(password=test_user_with_password["hashed_password"])
+        )), patch(f"{REPO_PATH}.get_recent_hashes", new=AsyncMock(return_value=[])), patch(
+            f"{REPO_PATH}.save", new=AsyncMock()
+        ) as mock_save:
+            await AuthService.reset_password(
+                test_user_with_password["user"].login_id,
+                test_user_with_password["plain_password"],
+                "NewPassword123!",
+                test_tenant.id,
+                session,
+            )
+
+        mock_save.assert_called_once()
+        args, kwargs = mock_save.call_args
+        assert args[0] == test_user_with_password["user"].id
+        assert kwargs.get("expired_at") is not None

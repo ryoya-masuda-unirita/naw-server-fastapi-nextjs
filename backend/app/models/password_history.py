@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Optional
 
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
@@ -39,7 +38,7 @@ class PasswordHistory(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
-    expired_at: Optional[datetime] = Field(
+    expired_at: datetime | None = Field(
         default=None,
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
     )

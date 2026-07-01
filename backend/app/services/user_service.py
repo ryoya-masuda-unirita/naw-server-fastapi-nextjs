@@ -4,6 +4,8 @@ import string
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
+from typing import Any
+
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,8 @@ from app.core.security import hash_password
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.repositories.password_history_repository import PasswordHistoryRepository
+from app.repositories.tenant_repository import TenantRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     PagedUserResponse,
     UserCreateRequest,
@@ -24,6 +28,20 @@ from app.schemas.user import (
 
 
 class UserService:
+
+    # SQLModelはMapped[]注釈を使わないため、クラス属性アクセス（User.created_at等）は
+    # mypy上InstrumentedAttributeではなくPydanticフィールド型として解釈される。
+    # 実行時の型（InstrumentedAttribute）とは一致しないためAnyとする。
+    _SORTABLE_COLUMNS: dict[str, Any] = {
+        "created_at": User.created_at,
+        "createdAt": User.created_at,
+        "login_id": User.login_id,
+        "loginId": User.login_id,
+        "name": User.name,
+        "role": User.role,
+        "updated_at": User.updated_at,
+        "updatedAt": User.updated_at,
+    }
 
     @staticmethod
     async def get_users(
@@ -54,11 +72,11 @@ class UserService:
         stmt = select(User).where(User.tenant_id == tenant_id)
 
         if search_text:
-            pattern = f"%{search_text.lower()}%"
+            pattern = UserService._escape_like_pattern(search_text.lower())
             stmt = stmt.where(
                 or_(
-                    func.lower(User.login_id).like(pattern),
-                    func.lower(User.name).like(pattern),
+                    func.lower(User.login_id).like(pattern, escape="\\"),
+                    func.lower(User.name).like(pattern, escape="\\"),
                 )
             )
 
@@ -71,9 +89,9 @@ class UserService:
         total = (await session.execute(count_stmt)).scalar() or 0
 
         sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0] if sort_parts else "created_at"
+        sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-        col = getattr(User, sort_col_name, User.created_at)
+        col = UserService._resolve_sort_column(sort_col_name)
         stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())
         stmt = stmt.offset(page * size).limit(size)
 
@@ -87,6 +105,55 @@ class UserService:
             page=page,
             size=size,
         )
+
+    @staticmethod
+    def _escape_like_pattern(value: str) -> str:
+        """LIKE検索のワイルドカード文字（% _ \\）をエスケープし前後に%を付与する。
+
+        Args:
+            value: エスケープ対象の検索文字列。
+
+        Returns:
+            LIKE検索にそのまま使用できるエスケープ済みパターン文字列。
+        """
+        escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return f"%{escaped}%"
+
+    @staticmethod
+    def _resolve_sort_column(sort_col_name: str) -> Any:
+        """ソート対象列名を許可リストに基づいてモデル属性に解決する。
+
+        許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
+        既定の作成日時列にフォールバックする。
+
+        Args:
+            sort_col_name: リクエストで指定されたソート対象列名。
+
+        Returns:
+            ソートに使用するモデル属性。
+        """
+        return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
+
+    @staticmethod
+    async def _issue_initial_password(
+        user: User, tenant: Tenant, session: AsyncSession
+    ) -> tuple[str, datetime]:
+        """初期パスワードを生成し、パスワード履歴へ保存する。
+
+        Args:
+            user: 対象ユーザー。
+            tenant: パスワードポリシーを持つテナント。
+            session: 非同期DBセッション。
+
+        Returns:
+            生成した平文パスワードと有効期限のタプル。
+        """
+        plain_password = UserService._generate_initial_password(tenant)
+        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
+        await PasswordHistoryRepository.save(
+            user.id, tenant.id, hash_password(plain_password), session, expired_at=expired_at
+        )
+        return plain_password, expired_at
 
     @staticmethod
     async def create_user(
@@ -107,11 +174,7 @@ class UserService:
         Raises:
             HTTPException: loginId が既に存在する場合 400 を返す。
         """
-        existing = (
-            await session.execute(
-                select(User).where(User.login_id == req.loginId, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        existing = await UserRepository.find_by_login_id(req.loginId, tenant_id, session)
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -119,8 +182,6 @@ class UserService:
             )
 
         tenant = await UserService._get_tenant(tenant_id, session)
-        plain_password = UserService._generate_initial_password(tenant)
-        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
 
         user = User(
             login_id=req.loginId,
@@ -133,9 +194,7 @@ class UserService:
         session.add(user)
         await session.flush()
 
-        await PasswordHistoryRepository.save(
-            user.id, tenant_id, hash_password(plain_password), session, expired_at=expired_at
-        )
+        plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
         await session.commit()
         await session.refresh(user)
 
@@ -180,11 +239,7 @@ class UserService:
 
         if req.resetPassword:
             tenant = await UserService._get_tenant(tenant_id, session)
-            plain_password = UserService._generate_initial_password(tenant)
-            expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
-            await PasswordHistoryRepository.save(
-                user.id, tenant_id, hash_password(plain_password), session, expired_at=expired_at
-            )
+            plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
             user.is_required_password_reset = True
 
         session.add(user)
@@ -206,11 +261,7 @@ class UserService:
             tenant_id: テナントID。
             session: 非同期DBセッション。
         """
-        user = (
-            await session.execute(
-                select(User).where(User.login_id == user_id, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        user = await UserRepository.find_by_login_id(user_id, tenant_id, session)
         if user:
             await session.delete(user)
             await session.commit()
@@ -285,11 +336,7 @@ class UserService:
         Raises:
             HTTPException: ユーザーが存在しない場合 404 を返す。
         """
-        user = (
-            await session.execute(
-                select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
-            )
-        ).scalars().first()
+        user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return user
@@ -308,9 +355,7 @@ class UserService:
         Raises:
             HTTPException: テナントが存在しない場合 400 を返す。
         """
-        tenant = (
-            await session.execute(select(Tenant).where(Tenant.id == tenant_id))
-        ).scalars().first()
+        tenant = await TenantRepository.find_by_id(tenant_id, session)
         if not tenant:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
         return tenant
