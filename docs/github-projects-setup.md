@@ -43,12 +43,12 @@
 
 ## 5. 作業開始時
 
-1. GitHub Projects で该当 Issue を「In Progress」に移動
-2. `feature/#XX` ブランチを作成して作業開始
+1. `develop` を最新化して対応ブランチを作成し、Issue に linked branch を紐づける
+2. GitHub Projects で該当 Issue を「In Progress」に移動
 
 ```bash
 git checkout develop
-git checkout -b feature/#XX
+git checkout -b feature/issue-XX
 ```
 
 ## 6. PR 作成時
@@ -65,4 +65,4 @@ Closes #XX
 
 ## 7. マージ時
 
-PR がマージされると `Closes #XX` の記載により Issue が自動クローズされ、GitHub Projects 上でも「Done」に移動する。
+PR が `develop` へマージされると `Closes #XX` の記載により Issue が自動クローズされ、GitHub Projects 上でも「Done」に移動する。

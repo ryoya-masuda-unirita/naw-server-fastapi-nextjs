@@ -20,7 +20,9 @@ description: Use when working on a GitHub Issue in this repository, including is
 2. `gh pr list` で依存 PR の有無を確認する
 3. `develop` を最新化する
 4. 適切なブランチを切る
-5. `docs/issue-*` を作成する
+5. 作成したブランチを対応 Issue に紐づける
+6. Issue を GitHub Projects の `In Progress` に移動する
+7. `docs/issue-*` を作成する
 
 移植元:
 
@@ -35,7 +37,9 @@ feature/issue-X-NAW-XXXX
 ```
 
 - `main` から直接切らない
+- 必ず最新化した `develop` または依存ブランチから切る
 - 依存 PR がある場合は、その依存ブランチから切る
+- ブランチ作成後は対応 Issue の Development / linked branch として紐づける
 
 ## ドキュメント作成
 

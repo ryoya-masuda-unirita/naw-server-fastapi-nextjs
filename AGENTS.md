@@ -78,7 +78,11 @@ Issue 対応や PR 対応では、該当 skill を読んだ前提で進めるこ
 - チケット管理は GitHub Issues + GitHub Projects
 - プロジェクト番号は `3`
 - オーナーは `ryoya-masuda-unirita`
+- Issue 着手時は、必ず `develop` を最新化してから作業ブランチを切る
+- 作業ブランチは対応 Issue と紐づけること
+- 作業ブランチを切って着手したら、対象 Issue を GitHub Projects の `In Progress` へ移動する
 - PR 本文には必ず `Closes #XX` を含める
+- PR が `develop` へマージされたら、`Closes #XX` により Issue が自動クローズされ、GitHub Projects でも `Done` へ自動反映される前提で運用する
 - ブランチは `feature/issue-X` または `feature/issue-X-NAW-XXXX`
 - `main` から直接作業しない
 

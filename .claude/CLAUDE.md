@@ -78,6 +78,10 @@ naw-server-fastapi-nextjs/
 - Issue 番号がそのままチケット番号になる（`#1`, `#2`, ...）
 - GitHub Projects でステータス管理（起票・進行中・レビュー中・完了）
 - PR 説明に `Closes #XX` を書くとマージ時に Issue が自動クローズされる
+- Issue 着手時は、必ず `develop` を最新化してから作業ブランチを切る
+- 作業ブランチは対応 Issue に linked branch として紐づける
+- ブランチを切って着手したら、対象 Issue を GitHub Projects の `In Progress` に移動する
+- PR が `develop` にマージされたら、`Closes #XX` により GitHub Projects の `Done` まで自動反映される前提で運用する
 
 ### Issue 起票手順
 
@@ -98,7 +102,11 @@ git pull   # または git merge origin/develop
 git checkout -b feature/issue-{番号}        # NAW なし
 git checkout -b feature/issue-{番号}-NAW-XXXX  # NAW あり
 
-# Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
+# Step 4: 作成したブランチを Issue の linked branch として紐づけ、Projects を In Progress にする
+# GitHub UI の Development 欄、または gh / GitHub 連携で必ず紐づける
+# GitHub Projects でも対象 Issue を In Progress に移動する
+
+# Step 5: docs ディレクトリと 00_チケット内容.md を作成してコミット
 mkdir -p docs/issue-{番号}           # NAW なし
 mkdir -p docs/issue-{番号}-NAW-XXXX  # NAW あり
 # 00_チケット内容.md を作成（テンプレート参照）
@@ -163,6 +171,7 @@ feature/issue-X
 ```
 
 - 新規ブランチは基本的に `develop` から切る
+- `develop` はブランチ作成前に必ず最新化する
 - `main` からは切らない
 
 ### Issue 対応開始時の確認手順
@@ -177,8 +186,10 @@ git pull   # または git merge origin/develop
 
 2. 依存する未マージ PR がないかを `gh pr list` で確認する
 3. 依存がなければ `develop` から、依存があればその依存ブランチから切る
-4. ユーザーの承認なしに AI がブランチを作成・切り替える
-5. ブランチ作成後、要件定義・基本設計（01・02）の作成を開始する
+4. ブランチ作成後、対応 Issue に linked branch を紐づける
+5. GitHub Projects で対象 Issue を `In Progress` に移動する
+6. ユーザーの承認なしに AI がブランチを作成・切り替える
+7. ブランチ作成後、要件定義・基本設計（01・02）の作成を開始する
 
 ---
 
