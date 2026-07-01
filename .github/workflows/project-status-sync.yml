@@ -1,0 +1,45 @@
+name: Project Status Sync
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - edited
+      - closed
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  repository-projects: write
+
+jobs:
+  move-to-review:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move linked issue to Review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \
+            --pr "${{ github.event.pull_request.number }}" \
+            --status "Review"
+
+  move-to-done:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move linked issue to Done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bash .codex/skills/naw-issue-workflow/scripts/project_status_sync.sh \
+            --pr "${{ github.event.pull_request.number }}" \
+            --status "Done"

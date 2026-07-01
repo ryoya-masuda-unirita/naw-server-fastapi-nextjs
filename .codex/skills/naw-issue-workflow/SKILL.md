@@ -24,6 +24,8 @@ description: Use when working on a GitHub Issue in this repository, including is
 6. Issue を GitHub Projects の `In Progress` に移動する
 7. `docs/issue-*` を作成する
 
+この 3〜6 は、原則として `start_issue.sh` を使って自動化する。
+
 移植元:
 
 - バックエンド: `~/Documents/naw-server`
@@ -87,6 +89,20 @@ Issue 対応は、デフォルトで以下の承認フローに従う。
 
 ## Command 的に使う補助スクリプト
 
+Issue 開始時は次を優先して使う。
+
+```bash
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-12
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-12-NAW-1234
+```
+
+このスクリプトは以下を行う。
+
+- `develop` を最新化する
+- `feature/issue-*` ブランチを作成して checkout する
+- GitHub Issue に linked branch を反映する
+- GitHub Projects のステータスを `In Progress` に更新する
+
 `docs/issue-*` の雛形だけ先に作るときは次を使う。
 
 ```bash
@@ -104,6 +120,12 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12-NA
 - `docs/<issue-name>/` を作成
 - `00`〜`08` の markdown ファイルを作成
 - `00_チケット内容.md` と `06_タスクリスト.md` に最低限の雛形を入れる
+
+## PR / Projects 自動反映
+
+- PR 作成後は `.github/workflows/project-status-sync.yml` により、`Closes #XX` を含む PR の対応 Issue を `Review` へ自動更新する
+- PR が merge されたら、同 workflow により対応 Issue を `Done` へ自動更新する
+- Codex は PR 本文に必ず `Closes #XX` を入れ、自動反映の前提を満たすこと
 
 ## HITL
 

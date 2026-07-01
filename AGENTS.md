@@ -53,6 +53,8 @@ naw-server-fastapi-nextjs/
 さらに、`docs/issue-*` の雛形が未作成なら、必要に応じて次の command を実行してから作業を続けること。
 
 ```bash
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
+bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X-NAW-XXXX
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW-XXXX
 ```
@@ -87,11 +89,10 @@ Issue 対応や PR 対応では、該当 skill を読んだ前提で進めるこ
 - チケット管理は GitHub Issues + GitHub Projects
 - プロジェクト番号は `3`
 - オーナーは `ryoya-masuda-unirita`
-- Issue 着手時は、必ず `develop` を最新化してから作業ブランチを切る
-- 作業ブランチは対応 Issue と紐づけること
-- 作業ブランチを切って着手したら、対象 Issue を GitHub Projects の `In Progress` へ移動する
+- Issue 着手時は、原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
 - PR 本文には必ず `Closes #XX` を含める
-- PR が `develop` へマージされたら、`Closes #XX` により Issue が自動クローズされ、GitHub Projects でも `Done` へ自動反映される前提で運用する
+- PR 作成後は `.github/workflows/project-status-sync.yml` により GitHub Projects の `Review` へ自動反映する前提で運用する
+- PR が `develop` へマージされたら、`Closes #XX` により Issue が自動クローズされ、GitHub Projects でも `Done` へ自動反映する前提で運用する
 - ブランチは `feature/issue-X` または `feature/issue-X-NAW-XXXX`
 - `main` から直接作業しない
 
