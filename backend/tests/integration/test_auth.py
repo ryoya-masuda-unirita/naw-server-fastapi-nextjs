@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.main import app
-from app.database import get_session
+from app.core.database import get_session
 
 
 @pytest.mark.asyncio
