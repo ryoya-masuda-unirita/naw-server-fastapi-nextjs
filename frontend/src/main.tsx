@@ -1,35 +1,39 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
+import { BrowserRouter, useRoutes } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth-store';
+import { routes } from '@/routes/index';
 import './index.css';
 
 const queryClient = new QueryClient();
 
 function App() {
   const [isReady, setIsReady] = React.useState(false);
-  const authStore = useAuthStore();
+  const { ensureInitialized } = useAuthStore();
 
   React.useEffect(() => {
-    authStore.ensureInitialized().then(() => {
+    ensureInitialized().finally(() => {
       setIsReady(true);
     });
-  }, [authStore]);
+  }, [ensureInitialized]);
+
+  const element = useRoutes(routes);
 
   if (!isReady) {
-    return <div>Loading...</div>;
+    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
   }
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <div>App</div>
-    </QueryClientProvider>
-  );
+  return <>{element}</>;
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
   </React.StrictMode>
 );
