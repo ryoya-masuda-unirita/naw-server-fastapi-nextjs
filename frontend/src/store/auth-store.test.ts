@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
 import { useAuthStore } from './auth-store';
 

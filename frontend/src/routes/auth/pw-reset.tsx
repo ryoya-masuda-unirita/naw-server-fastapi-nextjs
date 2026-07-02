@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth-store';
@@ -11,23 +11,15 @@ export function PwResetPage() {
   const mutation = useResetPasswordMutation();
   const [searchParams] = useSearchParams();
 
-  const [username, setUsername] = useState('');
-  const [oldPassword, setOldPassword] = useState('');
+  const [username, setUsername] = useState(() => searchParams.get('username') ?? '');
+  const [oldPassword, setOldPassword] = useState(() => searchParams.get('oldPassword') ?? '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [reason, setReason] = useState<'INITIAL' | 'EXPIRED' | null>(null);
+  const [reason] = useState<'INITIAL' | 'EXPIRED' | null>(
+    () => searchParams.get('reason') as 'INITIAL' | 'EXPIRED' | null
+  );
   const [error, setError] = useState('');
   const [passwordMismatch, setPasswordMismatch] = useState(false);
-
-  useEffect(() => {
-    const usernameParam = searchParams.get('username');
-    const oldPasswordParam = searchParams.get('oldPassword');
-    const reasonParam = searchParams.get('reason') as 'INITIAL' | 'EXPIRED' | null;
-
-    if (usernameParam) setUsername(usernameParam);
-    if (oldPasswordParam) setOldPassword(oldPasswordParam);
-    if (reasonParam) setReason(reasonParam);
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
