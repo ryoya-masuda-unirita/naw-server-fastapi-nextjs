@@ -11,11 +11,14 @@ import type {
   BackendAuthResponse,
 } from '@/types/auth';
 
-interface AuthStore {
+interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
   userName: string;
+}
+
+interface AuthStore extends AuthState {
   ensureInitialized: () => Promise<void>;
   login: (credentials: LoginRequest) => Promise<LoginStatus>;
   logout: () => Promise<void>;
@@ -38,20 +41,22 @@ const resolveTenantId = (): string => {
   return sessionStorage.getItem('TENANT_ID') || '';
 };
 
-export const useAuthStore = create<AuthStore>((set, get) => {
+const deriveFromUser = (user: User | null): Pick<AuthState, 'isAuthenticated' | 'isAdmin' | 'userName'> => ({
+  isAuthenticated: user !== null,
+  isAdmin: user?.role === 'ADMIN',
+  userName: user?.name ?? 'Guest',
+});
+
+export const useAuthStore = create<AuthStore>((set) => {
   let initPromise: Promise<void> | null = null;
+
+  const setUser = (user: User | null) => set({ user, ...deriveFromUser(user) });
 
   return {
     user: null,
-    get isAuthenticated() {
-      return get().user !== null;
-    },
-    get isAdmin() {
-      return get().user?.role === 'ADMIN';
-    },
-    get userName() {
-      return get().user?.name ?? 'Guest';
-    },
+    isAuthenticated: false,
+    isAdmin: false,
+    userName: 'Guest',
 
     async ensureInitialized() {
       if (!initPromise) {
@@ -59,7 +64,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
           const stored = sessionStorage.getItem('AUTH_USER');
           if (stored) {
             try {
-              set({ user: JSON.parse(stored) });
+              setUser(JSON.parse(stored) as User);
             } catch {
               // ignore
             }
@@ -70,11 +75,11 @@ export const useAuthStore = create<AuthStore>((set, get) => {
               API_PATHS.AUTH.SESSION
             );
             const user = mapToUser(session);
-            set({ user });
+            setUser(user);
             sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
             sessionStorage.setItem('TENANT_ID', session.tenant_id);
           } catch {
-            set({ user: null });
+            setUser(null);
             sessionStorage.removeItem('AUTH_USER');
           }
         })();
@@ -89,7 +94,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       );
 
       if (response.loginStatus === 'REQUIRES_PASSWORD_RESET') {
-        set({ user: null });
+        setUser(null);
         sessionStorage.removeItem('AUTH_USER');
         try {
           await apiClient.post(API_PATHS.AUTH.LOGOUT, null);
@@ -103,7 +108,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
 
       const user = mapToUser(response);
-      set({ user });
+      setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
       sessionStorage.setItem('TENANT_ID', resolveTenantId());
       window.location.href = ROUTES.APP.DASHBOARD;
@@ -116,7 +121,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       } catch (e) {
         console.error('Logout service error', e);
       }
-      set({ user: null });
+      setUser(null);
       initPromise = null;
       sessionStorage.removeItem('AUTH_USER');
       sessionStorage.removeItem('TENANT_ID');
@@ -125,7 +130,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
 
     completePasswordReset(response: AuthSessionResponse): void {
       const user = mapToUser(response);
-      set({ user });
+      setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
       sessionStorage.setItem('TENANT_ID', resolveTenantId());
       window.location.href = ROUTES.APP.DASHBOARD;
