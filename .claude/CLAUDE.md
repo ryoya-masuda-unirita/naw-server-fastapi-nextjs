@@ -1,5 +1,7 @@
 # naw-server-fastapi-nextjs — Claude 向けプロジェクト設定
 
+@.claude/memory/MEMORY.md
+
 ## プロジェクト概要
 
 企業向け AI チャット管理 SaaS の**移植プロジェクト**。
