@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 
 # frontend/src は除外（フロント実装ファイル）
 !frontend/src/
