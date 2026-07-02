@@ -96,9 +96,9 @@ describe('useAuthStore', () => {
   });
 
   describe('completePasswordReset', () => {
-    test('user がセットされること', () => {
-      act(() => {
-        useAuthStore.getState().completePasswordReset({
+    test('user がセットされること', async () => {
+      await act(async () => {
+        await useAuthStore.getState().completePasswordReset({
           id: 'reset_user',
           name: 'Reset User',
           role: 'USER',

@@ -22,7 +22,7 @@ interface AuthStore extends AuthState {
   ensureInitialized: () => Promise<void>;
   login: (credentials: LoginRequest) => Promise<LoginStatus>;
   logout: () => Promise<void>;
-  completePasswordReset: (response: AuthSessionResponse) => void;
+  completePasswordReset: (response: AuthSessionResponse) => Promise<void>;
 }
 
 const mapToUser = (response: {
@@ -36,10 +36,6 @@ const mapToUser = (response: {
   role: response.role,
   groups: response.groups ?? [],
 });
-
-const resolveTenantId = (): string => {
-  return sessionStorage.getItem('TENANT_ID') || '';
-};
 
 const deriveFromUser = (user: User | null): Pick<AuthState, 'isAuthenticated' | 'isAdmin' | 'userName'> => ({
   isAuthenticated: user !== null,
@@ -65,8 +61,9 @@ export const useAuthStore = create<AuthStore>((set) => {
           if (stored) {
             try {
               setUser(JSON.parse(stored) as User);
-            } catch {
-              // ignore
+            } catch (e) {
+              console.warn('AUTH_USER in sessionStorage is corrupted. Clearing.', e);
+              sessionStorage.removeItem('AUTH_USER');
             }
           }
 
@@ -101,16 +98,24 @@ export const useAuthStore = create<AuthStore>((set) => {
         } catch {
           console.error('Logout during password reset failed');
         }
+        // パスワードを URL に含めず sessionStorage 経由で渡す（URL 露出防止）
+        sessionStorage.setItem('PW_RESET_OLD_PASSWORD', credentials.password);
         window.location.href = `${ROUTES.AUTH.PW_RESET}?username=${encodeURIComponent(
           response.id
-        )}&reason=${response.reason}&oldPassword=${encodeURIComponent(credentials.password)}`;
+        )}&reason=${response.reason}`;
         return 'REQUIRES_PASSWORD_RESET';
       }
 
       const user = mapToUser(response);
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-      sessionStorage.setItem('TENANT_ID', resolveTenantId());
+      // LoginResponse に tenant_id がないためセッション API から取得する
+      try {
+        const session = await apiClient.get<BackendAuthResponse>(API_PATHS.AUTH.SESSION);
+        sessionStorage.setItem('TENANT_ID', session.tenant_id);
+      } catch (e) {
+        console.warn('Failed to fetch tenant_id after login', e);
+      }
       window.location.href = ROUTES.APP.DASHBOARD;
       return 'SUCCESS';
     },
@@ -128,11 +133,17 @@ export const useAuthStore = create<AuthStore>((set) => {
       window.location.href = ROUTES.AUTH.LOGIN;
     },
 
-    completePasswordReset(response: AuthSessionResponse): void {
+    async completePasswordReset(response: AuthSessionResponse): Promise<void> {
       const user = mapToUser(response);
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-      sessionStorage.setItem('TENANT_ID', resolveTenantId());
+      // AuthSessionResponse に tenant_id がないためセッション API から取得する
+      try {
+        const session = await apiClient.get<BackendAuthResponse>(API_PATHS.AUTH.SESSION);
+        sessionStorage.setItem('TENANT_ID', session.tenant_id);
+      } catch (e) {
+        console.warn('Failed to fetch tenant_id after password reset', e);
+      }
       window.location.href = ROUTES.APP.DASHBOARD;
     },
   };

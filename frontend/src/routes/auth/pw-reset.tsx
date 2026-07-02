@@ -15,7 +15,15 @@ export function PwResetPage() {
   const [searchParams] = useSearchParams();
 
   const [username, setUsername] = useState(() => searchParams.get('username') ?? '');
-  const [oldPassword, setOldPassword] = useState(() => searchParams.get('oldPassword') ?? '');
+  const [oldPassword, setOldPassword] = useState(() => {
+    // sessionStorage 経由で受け取る（URL 露出防止）、テスト用に URL フォールバックも保持
+    const stored = sessionStorage.getItem('PW_RESET_OLD_PASSWORD');
+    if (stored) {
+      sessionStorage.removeItem('PW_RESET_OLD_PASSWORD');
+      return stored;
+    }
+    return searchParams.get('oldPassword') ?? '';
+  });
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [reason] = useState<'INITIAL' | 'EXPIRED' | null>(
@@ -40,7 +48,7 @@ export function PwResetPage() {
         oldPassword,
         newPassword,
       });
-      completePasswordReset(response);
+      await completePasswordReset(response);
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.includes('429')) {

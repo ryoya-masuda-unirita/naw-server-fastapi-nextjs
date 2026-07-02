@@ -63,7 +63,7 @@ export const authHandlers = [
     });
   }),
 
-  http.get(`${BASE_URL}/api/auth`, () => {
+  http.get(`${BASE_URL}/auth`, () => {
     return HttpResponse.json({
       id: 'user1',
       name: 'Test User',
