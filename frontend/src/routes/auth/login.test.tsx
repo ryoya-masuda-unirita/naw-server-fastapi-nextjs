@@ -37,7 +37,7 @@ describe('LoginPage', () => {
 
       const usernameInput = screen.getByRole('textbox');
       const passwordInputs = document.querySelectorAll('input[type="password"]');
-      const submitButton = screen.getByRole('button');
+      const submitButton = screen.getByRole('button', { name: /AUTH\.LOGIN\.SUBMIT/i });
 
       await user.type(usernameInput, 'user');
       await user.type(passwordInputs[0], 'pass');
@@ -57,7 +57,7 @@ describe('LoginPage', () => {
 
       const usernameInput = screen.getByRole('textbox');
       const passwordInputs = document.querySelectorAll('input[type="password"]');
-      const submitButton = screen.getByRole('button');
+      const submitButton = screen.getByRole('button', { name: /AUTH\.LOGIN\.SUBMIT/i });
 
       await user.type(usernameInput, 'invalid');
       await user.type(passwordInputs[0], 'wrong');
@@ -76,7 +76,7 @@ describe('LoginPage', () => {
 
       const usernameInput = screen.getByRole('textbox') as HTMLInputElement;
       const passwordInputs = document.querySelectorAll('input[type="password"]');
-      const submitButton = screen.getByRole('button');
+      const submitButton = screen.getByRole('button', { name: /AUTH\.LOGIN\.SUBMIT/i });
 
       await user.type(usernameInput, 'user');
       await user.type(passwordInputs[0], 'pass');

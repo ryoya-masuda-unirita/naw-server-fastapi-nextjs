@@ -5,6 +5,7 @@ import { BrowserRouter, useRoutes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth-store';
 import { routes } from '@/routes/index';
+import '@/lib/i18n';
 import './index.css';
 
 const queryClient = new QueryClient();

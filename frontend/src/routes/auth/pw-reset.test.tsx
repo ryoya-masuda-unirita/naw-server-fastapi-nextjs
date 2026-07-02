@@ -31,7 +31,7 @@ describe('PwResetPage', () => {
 
       const inputs = document.querySelectorAll('input');
       expect(inputs).toHaveLength(4);
-      expect(screen.getByRole('button')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /AUTH\.PW_RESET\.SUBMIT/i })).toBeInTheDocument();
     });
 
     test('reason=INITIAL のとき INITIAL メッセージが表示されること', () => {
@@ -67,7 +67,7 @@ describe('PwResetPage', () => {
       await user.type(inputs[1], 'oldpass');
       await user.type(inputs[2], 'NewPass123');
       await user.type(inputs[3], 'DifferentPass');
-      await user.click(screen.getByRole('button'));
+      await user.click(screen.getByRole('button', { name: /AUTH\.PW_RESET\.SUBMIT/i }));
 
       expect(screen.getByText('VALIDATION.PASSWORD_MISMATCH')).toBeInTheDocument();
     });
@@ -83,10 +83,11 @@ describe('PwResetPage', () => {
       await user.type(inputs[1], 'oldpass');
       await user.type(inputs[2], 'NewPass123');
       await user.type(inputs[3], 'NewPass123');
-      await user.click(screen.getByRole('button'));
+      const submitButton = screen.getByRole('button', { name: /AUTH\.PW_RESET\.SUBMIT/i });
+      await user.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByRole('button')).toBeDisabled();
+        expect(submitButton).toBeDisabled();
       });
     });
   });

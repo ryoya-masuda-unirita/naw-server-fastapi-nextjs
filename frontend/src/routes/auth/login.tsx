@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MdLogin } from 'react-icons/md';
 import { useAuthStore } from '@/store/auth-store';
 import { AuthLayout } from '@/components/layouts/auth-layout';
+import { FormInput } from '@/components/shared/form-input';
+import { Button } from '@/components/shared/button';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -39,53 +42,49 @@ export function LoginPage() {
     <AuthLayout>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 md:gap-6">
         <header className="flex items-center py-[10.5px]">
-          <h1 className="text-2xl font-bold">{t('AUTH.LOGIN.TITLE')}</h1>
+          <h1 className="text-h1 text-text-default">{t('AUTH.LOGIN.TITLE')}</h1>
         </header>
 
         {error && (
-          <div className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+          <div className="rounded bg-bg-error px-3 py-2 text-xs text-status-error">
             {error}
           </div>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">{t('AUTH.LOGIN.USER_ID_LABEL')}</label>
-          <input
-            type="text"
-            placeholder={t('AUTH.LOGIN.USER_ID_PLACEHOLDER')}
-            value={username}
-            onChange={(e) => { setUsername(e.target.value); setError(''); }}
-            disabled={isLoading}
-            required
-            minLength={3}
-            maxLength={50}
-            autoComplete="username"
-            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium">{t('AUTH.LOGIN.PASSWORD_LABEL')}</label>
-          <input
-            type="password"
-            placeholder={t('AUTH.LOGIN.PASSWORD_PLACEHOLDER')}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={isLoading}
-            required
-            maxLength={100}
-            autoComplete="current-password"
-            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-          />
-        </div>
-
-        <button
-          type="submit"
+        <FormInput
+          id="username"
+          label={t('AUTH.LOGIN.USER_ID_LABEL')}
+          placeholder={t('AUTH.LOGIN.USER_ID_PLACEHOLDER')}
+          value={username}
+          onChange={(v) => { setUsername(v); setError(''); }}
           disabled={isLoading}
-          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          required
+          autoComplete="username"
+        />
+
+        <FormInput
+          id="password"
+          label={t('AUTH.LOGIN.PASSWORD_LABEL')}
+          supportText={t('AUTH.LOGIN.PASSWORD_SUPPORT')}
+          placeholder={t('AUTH.LOGIN.PASSWORD_PLACEHOLDER')}
+          type="password"
+          value={password}
+          onChange={setPassword}
+          disabled={isLoading}
+          required
+          autoComplete="current-password"
+        />
+
+        <Button
+          type="submit"
+          size="lg"
+          fullWidth
+          disabled={isLoading}
+          loading={isLoading}
         >
-          {isLoading ? t('AUTH.LOGIN.SUBMITTING') : t('AUTH.LOGIN.SUBMIT')}
-        </button>
+          <MdLogin className="size-5 shrink-0" />
+          {t('AUTH.LOGIN.SUBMIT')}
+        </Button>
       </form>
     </AuthLayout>
   );
