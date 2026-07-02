@@ -25,6 +25,34 @@ Angular 実装: `~/Documents/secuaigent-client`
 
 ---
 
+## デザイン移行の方針
+
+**Angular のデザインを忠実に React へ移行すること。** 独自の簡易実装で代替しない。
+
+### 移行元のデザインリソース
+
+| リソース | パス |
+|---|---|
+| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/secuaigent-client/src/styles.css` |
+| 翻訳ファイル（日本語） | `~/Documents/secuaigent-client/public/i18n/ja.json` |
+| 翻訳ファイル（英語） | `~/Documents/secuaigent-client/public/i18n/en.json` |
+| 各ページの HTML テンプレート | `*.component.html` |
+
+### 移行手順
+
+1. **Angular の HTML テンプレートを必ず先に読む**（`*.component.html`）
+2. **`styles.css` のカスタムカラー・カスタムクラスを `src/index.css` に定義する**（`bg-surface-white`、`text-primary` 等）
+3. Tailwind クラスを Angular の HTML と 1:1 で対応させる
+4. Angular 固有のクラス（`app-button`、`app-form-input` 等）は同等の React コンポーネントに置き換える
+
+### やってはいけないこと
+
+- `bg-blue-600` などの汎用 Tailwind クラスで Angular のカスタムカラーを代用しない
+- Angular HTML を読まずに独自レイアウトを実装しない
+- デザインの差異を「移行元と違う」と言われるまで放置しない
+
+---
+
 ## Angular → React 対応表
 
 | Angular | React |

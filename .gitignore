@@ -16,6 +16,9 @@ eggs/
 .eggs/
 lib/
 lib64/
+
+# frontend/src は除外（フロント実装ファイル）
+!frontend/src/
 parts/
 sdist/
 var/
@@ -218,3 +221,4 @@ __marimo__/
 .streamlit/secrets.toml
 
 .serena/
+node_modules/
