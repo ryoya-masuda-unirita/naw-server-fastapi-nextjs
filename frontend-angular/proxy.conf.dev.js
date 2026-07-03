@@ -1,5 +1,5 @@
-// TODO: 開発サーバーのURLを設定すること
-const DEV_SERVER = 'http://TODO_DEV_SERVER_URL';
+// naw-server-fastapi-nextjs の FastAPI 開発サーバー
+const DEV_SERVER = 'http://localhost:8001';
 
 module.exports = {
   '/api': {

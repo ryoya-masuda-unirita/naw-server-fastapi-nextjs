@@ -45,7 +45,16 @@ export const environment = {
 
 ### 2. バックエンドサーバーを起動する
 
-バックエンド（`naw-server`）を事前に起動しておいてください。詳細は `naw-server` の README を参照してください。
+モノレポルートで PostgreSQL を起動し、`backend/` で FastAPI を起動してください。
+
+```bash
+# プロジェクトルート
+docker compose up -d
+
+# FastAPI（ポート 8001）
+cd backend
+uv run uvicorn app.main:app --reload --port 8001
+```
 
 ### 3. フロントエンドサーバーを起動する
 
@@ -59,8 +68,8 @@ ng serve --configuration=local
 
 | 用途 | URL |
 |---|---|
-| 通常アクセス | `http://localhost:4200/` |
-| バックエンドと接続して動作確認 | `http://test-tenant.localhost:4200/` |
+| 通常アクセス | `http://localhost:4201/` |
+| バックエンドと接続して動作確認 | `http://test-tenant.localhost:4201/` |
 
 > バックエンドと接続する場合はサブドメイン形式のURLを使用してください。テナントIDがホスト名から自動的に取得されます。
 

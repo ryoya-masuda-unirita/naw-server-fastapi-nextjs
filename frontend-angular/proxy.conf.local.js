@@ -1,11 +1,11 @@
 module.exports = {
   '/api': {
-    target: 'http://localhost:8080',
+    target: 'http://localhost:8001',
     secure: false,
     changeOrigin: true,
   },
   '/auth': {
-    target: 'http://localhost:8080',
+    target: 'http://localhost:8001',
     secure: false,
     changeOrigin: true,
     // ブラウザのページナビゲーション（Accept: text/html）はAngularに返す

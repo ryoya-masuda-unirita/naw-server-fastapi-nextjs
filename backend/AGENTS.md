@@ -48,7 +48,7 @@ core/         設定、DI、共通処理
 ## 開発コマンド
 
 ```bash
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --port 8001
 pytest
 mypy app/
 ruff check app/

@@ -137,7 +137,7 @@ class PagedResponse(BaseModel, Generic[T]):
 
 ```bash
 # 開発サーバー起動
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8001
 
 # テスト
 pytest
