@@ -3,8 +3,10 @@ import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth-store';
 import { ROUTES } from '@/lib/constants/routes';
+import { AppLayout } from '@/components/layouts/app-layout';
 import { LoginPage } from './auth/login';
 import { PwResetPage } from './auth/pw-reset';
+import { DashboardPage } from './app/dashboard';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -45,6 +47,14 @@ export const routes = [
   },
   {
     path: '/',
-    element: <Navigate to={ROUTES.AUTH.LOGIN} replace />,
+    element: (
+      <ProtectedRoute>
+        <AppLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <Navigate to={ROUTES.APP.DASHBOARD} replace /> },
+      { path: 'dashboard', element: <DashboardPage /> },
+    ],
   },
 ];
