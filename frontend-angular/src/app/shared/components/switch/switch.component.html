@@ -1,0 +1,52 @@
+<div
+  class="flex items-center gap-3"
+  [class.opacity-50]="disabled()"
+  [class.cursor-not-allowed]="disabled()"
+  [class.cursor-pointer]="!disabled()"
+>
+  <!-- Switch Track -->
+  <div
+    class="relative rounded-full transition-all duration-300 ease-in-out"
+    [ngClass]="[switchSize().track, checked() ? 'bg-primary' : 'bg-[#15819a33]']"
+  >
+    <!-- Switch Thumb -->
+    <div
+      class="absolute flex items-center justify-center top-1.5 left-1.5 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out"
+      [ngClass]="[switchSize().thumb, checked() ? switchSize().translate : 'translate-x-0']"
+    >
+      <!-- Icon inside thumb -->
+      @if (showIcon()) {
+        @if (checked()) {
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            class="w-5 h-5 text-primary"
+            aria-hidden="true"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <path
+              d="M16.667 5.5L8.333 13.833 3.333 8.833l1.175-1.175 3.825 3.825 6.859-6.859L16.667 5.5z"
+              fill="currentColor"
+              key="0"
+            ></path>
+          </svg>
+        } @else {
+          <span class="bg-primary rounded-full" [ngClass]="switchSize().iconLine"></span>
+        }
+      }
+    </div>
+  </div>
+
+  <!-- Label -->
+  @if (label()) {
+    <span
+      class="select-none text-sm font-medium"
+      [class.text-gray-900]="!disabled()"
+      [class.text-gray-400]="disabled()"
+    >
+      {{ label() }}
+    </span>
+  }
+</div>

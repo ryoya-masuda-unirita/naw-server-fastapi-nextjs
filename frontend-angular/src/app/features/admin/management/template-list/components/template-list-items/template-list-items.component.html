@@ -1,0 +1,123 @@
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="!allSelected() && someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange.emit($event)"
+  >
+    <span class="table-list-col-content table-list-label">
+      {{ 'TEMPLATES.NAME' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-91">
+      {{ 'TEMPLATES.SYSTEM_PROMPT' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-44">
+      {{ 'TEMPLATES.TEAMS' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'TEMPLATES.UPDATED_AT' | translate }}
+    </span>
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
+  </app-table-list-item>
+
+  <!-- Header (Mobile only) -->
+  @if (items().length > 0) {
+    <app-table-list-item
+      [isHeader]="true"
+      [showCheckbox]="true"
+      [checked]="allSelected()"
+      [indeterminate]="someSelected()"
+      class="flex md:hidden"
+      (checkedChange)="selectAllChange.emit($event)"
+    >
+      <span class="table-list-label">{{ 'COMMON.SELECT_ALL' | translate }}</span>
+    </app-table-list-item>
+  }
+
+  <!-- Data rows -->
+  @for (item of items(); track item.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(item.id)"
+      (checkedChange)="itemSelectChange.emit({ id: item.id, checked: $event })"
+    >
+      <div class="table-list-col-content table-list-start-label">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ item.name }}</p>
+        @if (item.description) {
+          <p class="table-list-desc">{{ item.description }}</p>
+        }
+      </div>
+
+      <div class="table-list-row-date md:w-91">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'TEMPLATES.SYSTEM_PROMPT' | translate }}
+        </span>
+        <span class="table-list-date flex-1 w-20 md:w-auto block">{{ item.systemPrompt }}</span>
+      </div>
+
+      <div class="table-list-row-date md:w-44">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'TEMPLATES.TEAMS' | translate }}
+        </span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-body-small md:text-body text-text-strong font-normal"
+        >
+          {{ formatTeams(item.teams) }}
+        </span>
+      </div>
+
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'TEMPLATES.UPDATED_AT' | translate }}
+        </span>
+        <span class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
+          {{ item.updatedAt | date: 'yyyy/MM/dd HH:mm' }}
+        </span>
+      </div>
+
+      <div slot="right" class="relative">
+        <app-context-menu
+          #contextMenu
+          [menuTpl]="apiMenuTpl"
+          [panelClass]="'dropdown-menu dropdown-menu--bordered w-[280px]'"
+        />
+        <ng-template #apiMenuTpl>
+          <div class="flex flex-col gap-1">
+            <button
+              type="button"
+              class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-secondary transition-colors w-full text-left"
+              (click)="editTemplate.emit(item); toggleMenu.emit(item.id); contextMenu.close()"
+            >
+              <app-svg-icon name="edit" class="w-5 h-5 text-text-strong shrink-0" />
+              <span class="text-label text-text-strong truncate">
+                {{ 'TEMPLATES.EDIT_ACTION' | translate }}</span
+              >
+            </button>
+          </div>
+          <hr class="border-border-weak my-1" />
+          <div class="flex flex-col gap-1">
+            <button
+              type="button"
+              class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
+              (click)="deleteTemplate.emit(item); toggleMenu.emit(item.id); contextMenu.close()"
+            >
+              <app-svg-icon name="delete" class="w-5 h-5 text-status-error shrink-0" />
+              <span class="text-label text-status-error truncate">{{
+                'TEMPLATES.DELETE_ACTION' | translate
+              }}</span>
+            </button>
+          </div>
+        </ng-template>
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (items().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'TEMPLATES.NO_DATA' | translate }}
+    </div>
+  }
+</app-table-list>

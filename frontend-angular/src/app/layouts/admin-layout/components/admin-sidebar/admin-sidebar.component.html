@@ -1,0 +1,65 @@
+<div
+  class="py-3"
+  [ngClass]="{
+    'px-2': uiStore.sidebarCollapsed(),
+    'px-3': !uiStore.sidebarCollapsed(),
+  }"
+>
+  <!-- Menu Sections -->
+  <div class="flex flex-col gap-6">
+    @for (section of menuSections(); track section.labelKey) {
+      <div class="flex flex-col">
+        <!-- Section Label -->
+        @if (!uiStore.sidebarCollapsed()) {
+          <div class="px-2 h-7 flex items-center text-xs font-medium text-text-muted">
+            {{ section.labelKey | translate }}
+          </div>
+        }
+
+        <!-- Section Items -->
+        <div class="flex flex-col">
+          @for (item of section.items; track item.labelKey) {
+            @if (item.route && !item.route.startsWith('#')) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="!bg-bg-brand-strong !text-primary"
+                class="flex items-center h-9 gap-2 px-2 py-1.5 rounded-lg text-text-default hover:bg-bg-brand-weak transition-colors text-xs font-medium"
+                [title]="item.labelKey | translate"
+              >
+                <!-- Icon -->
+                <span class="flex items-center justify-center shrink-0 w-5 h-5">
+                  <mat-icon class="icon-20">{{ item.icon }}</mat-icon>
+                </span>
+
+                @if (!uiStore.sidebarCollapsed()) {
+                  <!-- Text -->
+                  <span class="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {{ item.labelKey | translate }}
+                  </span>
+                }
+              </a>
+            } @else {
+              <button
+                type="button"
+                class="flex items-center h-9! gap-2 px-2 py-1.5 rounded-lg text-text-default hover:bg-bg-brand-weak transition-colors text-xs font-medium w-full text-left"
+                [title]="item.labelKey | translate"
+              >
+                <!-- Icon -->
+                <span class="flex items-center justify-center shrink-0 w-5 h-5">
+                  <mat-icon class="icon-20">{{ item.icon }}</mat-icon>
+                </span>
+
+                @if (!uiStore.sidebarCollapsed()) {
+                  <!-- Text -->
+                  <span class="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {{ item.labelKey | translate }}
+                  </span>
+                }
+              </button>
+            }
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

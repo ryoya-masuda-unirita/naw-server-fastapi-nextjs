@@ -1,0 +1,328 @@
+<div class="flex h-screen overflow-y-auto">
+  <aside
+    class="before:pointer-events-none before:inset-0 before:z-99 before:bg-bg-brand-weak before:transition-all before:duration-300 before:content-[''] before:absolute fixed left-0 top-0 bottom-0 bg-white flex flex-col z-100 transition-all duration-300"
+    [ngClass]="{
+      'w-60 md:w-64!': !uiStore.sidebarCollapsed(),
+      'w-13': uiStore.sidebarCollapsed(),
+      '-translate-x-full': !uiStore.sidebarMobileOpen(),
+      'translate-x-0': uiStore.sidebarMobileOpen(),
+      'md:translate-x-0': true,
+      'z-102': !uiStore.sidebarCollapsed() && uiStore.sidebarMobileOpen(),
+    }"
+  >
+    <!-- ===== Library Detail Mode Sidebar ===== -->
+    @if (uiStore.isBackMode()) {
+      <div class="flex-1 p-3 overflow-y-auto">
+        <app-back-sidebar (goToBack)="goToBack()" />
+      </div>
+    } @else {
+      <!-- Logo and collapse button (shown in both default and admin mode) -->
+      <div
+        class="pt-3 flex items-center w-full justify-between mb-6"
+        [ngClass]="{
+          'px-2': uiStore.sidebarCollapsed(),
+          'px-3': !uiStore.sidebarCollapsed(),
+        }"
+      >
+        <a [routerLink]="config().dashboardRoute" class="flex items-center">
+          <img
+            src="/secuaigent-logo.png"
+            alt="SecuAiGent"
+            class="max-w-35 md:max-w-39 h-auto transition-all duration-200 origin-left"
+            [ngClass]="{
+              'w-auto': !uiStore.sidebarCollapsed(),
+              'scale-100': !uiStore.sidebarCollapsed(),
+              'w-0': uiStore.sidebarCollapsed(),
+              'scale-0': uiStore.sidebarCollapsed(),
+            }"
+          />
+        </a>
+        <button
+          class="md:block p-1.5 rounded-full w-9! h-9! hover:bg-bg-brand-weak shrink-0 transition-all duration-200"
+          (click)="
+            !uiStore.sidebarMobileOpen() ? uiStore.toggleSidebar() : uiStore.closeMobileSidebar()
+          "
+        >
+          <span class="flex justify-center items-center text-primary">
+            <app-svg-icon name="toggleSidebar" class="w-5 h-5" />
+          </span>
+        </button>
+      </div>
+    }
+
+    <!-- ===== Admin Mode Sidebar ===== -->
+    @if (uiStore.isAdminMode()) {
+      <div class="flex-1 overflow-y-auto">
+        @if (isAdmin()) {
+          <app-admin-sidebar />
+        }
+      </div>
+    } @else if (!uiStore.isBackMode()) {
+      <!-- ===== Default Mode Sidebar ===== -->
+
+      <!-- Action Items (Fixed) -->
+      <div
+        class="shrink-0 mb-6 md:mb-9"
+        [ngClass]="{
+          'px-2': uiStore.sidebarCollapsed(),
+          'px-3': !uiStore.sidebarCollapsed(),
+        }"
+      >
+        <div>
+          @for (item of actionItems(); track item.labelKey) {
+            @if (item.route && !item.route.startsWith('#')) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="!bg-bg-brand-strong !text-primary"
+                class="flex items-center h-9 gap-2 px-2 py-2 rounded-lg text-text-default hover:bg-bg-brand-weak! transition-colors text-left text-xs font-normal"
+                [title]="item.labelKey | translate"
+              >
+                <span class="flex items-center justify-center shrink-0 w-5 h-5">
+                  @if (item.icon) {
+                    <app-svg-icon [name]="item.icon" class="w-5 h-5" />
+                    <!-- <mat-icon class="icon-20">{{ item.icon }}</mat-icon> -->
+                  } @else {
+                    <span [innerHTML]="item.icon"></span>
+                  }
+                </span>
+
+                <span
+                  class="flex-1 whitespace-nowrap transition-all font-medium"
+                  [ngClass]="{
+                    'opacity-0': uiStore.sidebarCollapsed(),
+                    invisible: uiStore.sidebarCollapsed(),
+                  }"
+                  >{{ item.labelKey | translate }}</span
+                >
+              </a>
+            } @else {
+              <button
+                type="button"
+                class="flex items-center h-9 gap-2 px-2 py-2 rounded-lg text-text-default hover:bg-bg-brand-weak transition-colors text-left text-xs font-normal"
+                [title]="item.labelKey | translate"
+                (click)="onActionItemClick(item)"
+                [ngClass]="{
+                  'w-full': !uiStore.sidebarCollapsed(),
+                  'w-9': uiStore.sidebarCollapsed(),
+                }"
+              >
+                <span class="flex items-center justify-center shrink-0 w-5 h-5">
+                  @if (item.icon) {
+                    <app-svg-icon [name]="item.icon" class="w-5 h-5" />
+                  } @else {
+                    <span [innerHTML]="item.icon"></span>
+                  }
+                </span>
+
+                <span
+                  class="flex-1 whitespace-nowrap transition-all duration-300 origin-left font-medium"
+                  [ngClass]="{
+                    'opacity-0': uiStore.sidebarCollapsed(),
+                    invisible: uiStore.sidebarCollapsed(),
+                  }"
+                  >{{ item.labelKey | translate }}</span
+                >
+              </button>
+            }
+          }
+        </div>
+      </div>
+
+      <!-- Scrollable Sections -->
+      <div
+        class="flex-1 overflow-y-auto sidebar-scroll overflow-x-hidden"
+        (scroll)="onSidebarScroll($event)"
+        [ngClass]="{
+          'px-2': uiStore.sidebarCollapsed(),
+          'px-3': !uiStore.sidebarCollapsed(),
+        }"
+      >
+        @for (section of allSectionGroups(); track $index) {
+          <div class="mb-6">
+            <!-- Section Header -->
+            <app-sidebar-header-section
+              [section]="section"
+              [sectionIndex]="$index"
+              [sidebarCollapsed]="!!uiStore.sidebarCollapsed()"
+              (sectionToggle)="toggleSection($event)"
+              (chatMenuOpened)="openChatMenu($event)"
+            />
+
+            <!-- Section items with animated height -->
+            <div
+              class="overflow-hidden transition-all duration-300 ease-in-out"
+              [style.height]="
+                section.labelKey === 'SIDEBAR.CHAT' && uiStore.sidebarCollapsed()
+                  ? '0px'
+                  : getSectionHeight(section)
+              "
+            >
+              @for (item of section.items; track item.roomId ?? item.labelKey) {
+                @if (item.labelKey === 'SIDEBAR.RANABASE') {
+                  <button
+                    (click)="openExternalServiceSite()"
+                    class="w-full flex items-center h-9 gap-2 px-2 py-2 rounded-lg text-text-default hover:bg-bg-brand-weak transition-colors text-xs font-normal group text-left"
+                    [title]="item.labelKey | translate"
+                  >
+                    @if (item.icon) {
+                      <span class="flex items-center justify-center shrink-0 w-5 h-5">
+                        @if (item.iconType === 'svg') {
+                          <app-svg-icon [name]="item.icon" class="w-5 h-5" />
+                        } @else if (item.iconType === 'image') {
+                          <img
+                            [src]="item.icon"
+                            class="w-5 h-5 rounded"
+                            [alt]="item.labelKey | translate"
+                          />
+                        } @else {
+                          <span [innerHTML]="item.icon"></span>
+                        }
+                      </span>
+                    }
+
+                    <span
+                      class="flex-1 whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300 origin-left font-medium"
+                      [ngClass]="{
+                        'opacity-0': uiStore.sidebarCollapsed(),
+                        invisible: uiStore.sidebarCollapsed(),
+                      }"
+                    >
+                      {{ item.labelKey | translate }}
+                    </span>
+                  </button>
+                } @else {
+                  @if (item.route && !item.route.startsWith('#')) {
+                    <app-sidebar-route-button
+                      [item]="item"
+                      [sidebarCollapsed]="!!uiStore.sidebarCollapsed()"
+                      [iconComponents]="iconComponents"
+                      (roomMenuOpened)="openRoomMenu($event.event, $event.roomId, $event.isPinned)"
+                    />
+                  } @else {
+                    <app-sidebar-button
+                      [item]="item"
+                      [sidebarCollapsed]="!!uiStore.sidebarCollapsed()"
+                      (roomMenuOpened)="openRoomMenu($event.event, $event.roomId, $event.isPinned)"
+                    />
+                  }
+                }
+              }
+              @if (
+                section.labelKey === 'SIDEBAR.CHAT' &&
+                isRoomsLoading() &&
+                !uiStore.sidebarCollapsed()
+              ) {
+                <div class="flex h-9 items-center justify-center">
+                  <app-circular-loading class="[&_svg]:h-5 [&_svg]:w-5" />
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Chat sort/delete menu (floating with slide animation) -->
+      <app-chat-context-menu
+        [isOpen]="chatMenuOpen()"
+        [chatMenuTopPx]="chatMenuTopPx()"
+        (sort)="openSortDialog()"
+        (deleteSelected)="openDeleteDialog()"
+        (closeMenu)="closeChatMenu()"
+      />
+
+      <!-- Chat room item menu -->
+      <app-chat-room-menu
+        [isOpen]="roomMenuState().isOpen"
+        [isPinned]="roomMenuState().isPinned"
+        [topPx]="roomMenuState().topPx"
+        [triggerTopPx]="roomMenuState().triggerTopPx"
+        (rename)="onRenameRoom()"
+        (togglePin)="onTogglePinRoom()"
+        (delete)="openConfirmDeleteDialog()"
+        (closeMenu)="closeRoomMenu()"
+      />
+    }
+
+    <!-- Mobile close button (appears outside sidebar) -->
+    <button
+      class="flex absolute right-0 top-0 z-50 ml-2 h-4 w-4 translate-x-5 bg-text-strong rounded-full justify-center items-center hover:bg-bg-brand-weak transition-colors md:hidden!"
+      (click)="uiStore.closeMobileSidebar()"
+      [ngClass]="{
+        hidden: !uiStore.sidebarMobileOpen(),
+      }"
+    >
+      <app-svg-icon name="close" class="w-3 h-3 text-white!" />
+    </button>
+
+    <!-- ========== USER SECTION (Bottom - always visible) ========== -->
+    <div
+      class="flex items-center h-14 p-2 mb-1 border-t border-text-lighter"
+      [ngClass]="{
+        hidden: uiStore.isBackMode(),
+      }"
+    >
+      <!-- User dropdown menu -->
+      <app-user-menu
+        #userMenuRef
+        [userMenuActions]="userMenuActions()"
+        [userName]="authStore.userName()"
+        [avatarUrl]="'/icons/default-avt-icon.svg'"
+        [sidebarCollapsed]="uiStore.sidebarCollapsed()"
+        (menuAction)="onUserMenuAction($event)"
+      />
+    </div>
+  </aside>
+
+  <!-- ========== MOBILE OVERLAY ========== -->
+  <div
+    class="fixed inset-0 bg-black/50 z-99 md:hidden transition-all"
+    [ngClass]="{
+      'opacity-0': !uiStore.sidebarMobileOpen(),
+      invisible: !uiStore.sidebarMobileOpen(),
+      'pointer-events-none': !uiStore.sidebarMobileOpen(),
+    }"
+    tabindex="0"
+    (click)="uiStore.closeMobileSidebar()"
+    (keydown.escape)="uiStore.closeMobileSidebar()"
+  ></div>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <div
+    class="flex-1 flex flex-col h-screen transition-all duration-300 bg-white overflow-hidden"
+    [ngClass]="{
+      'md:ml-64': !uiStore.sidebarCollapsed(),
+      'md:ml-13': uiStore.sidebarCollapsed(),
+    }"
+  >
+    <main class="flex-1 overflow-hidden __sidebar">
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<!-- ========== DIALOG TEMPLATES ========== -->
+<ng-template #newChatContent>
+  <app-new-chat-dialog [selectedAssistantId]="newChatAssistantId" />
+</ng-template>
+
+<ng-template #newChatActions>
+  <div class="flex w-full justify-center gap-3">
+    <app-button
+      class="dialog-cancel-btn flex-1"
+      variant="outline"
+      size="lg"
+      [fullWidth]="true"
+      (buttonClick)="cancelNewChat()"
+      >{{ 'COMMON.CANCEL' | translate }}</app-button
+    >
+    <app-button
+      class="flex-1"
+      size="lg"
+      [fullWidth]="true"
+      [disabled]="!newChatAssistantId() || isCreatingRoom()"
+      [loading]="isCreatingRoom()"
+      (buttonClick)="confirmNewChat()"
+      >{{ 'COMMON.CREATE' | translate }}</app-button
+    >
+  </div>
+</ng-template>

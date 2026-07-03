@@ -1,0 +1,75 @@
+<!-- Astro layout: 検索 / フィルター / 並べ替え / 件数 + ページ送り -->
+<div class="library-filters">
+  <!-- 検索 -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-label font-medium text-text-medium">
+      {{ 'CHAT_HISTORY.SEARCH_LABEL' | translate }}
+    </span>
+    <app-search-input
+      class="md:w-40 w-full"
+      size="small"
+      [value]="searchQuery()"
+      [placeholder]="'CHAT_HISTORY.SEARCH_PLACEHOLDER'"
+      (valueChange)="onSearchChange($event)"
+    />
+  </div>
+
+  <!-- フィルター -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-label font-medium text-text-medium">
+      {{ 'CHAT_HISTORY.FILTER_LABEL' | translate }}
+    </span>
+    <div class="flex flex-col md:flex-row gap-2 w-full">
+      <app-select-with-search
+        class="md:w-40 w-full"
+        size="small"
+        [options]="userOptions()"
+        [value]="filterUser()"
+        [placeholder]="'CHAT_HISTORY.ALL_USERS' | translate"
+        [supportText]="'CHAT_HISTORY.FILTER_USER_SUPPORT' | translate"
+        (valueChange)="onUserChange($event)"
+      />
+      <app-period-filter
+        class="md:w-40 w-full"
+        size="small"
+        [options]="periodOptions()"
+        [value]="filterPeriod()"
+        [range]="filterPeriodRange()"
+        (selectionChange)="onPeriodChange($event)"
+      />
+    </div>
+  </div>
+
+  <!-- 並べ替え -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <label for="chat-history-sort" class="text-label font-medium text-text-medium">
+      {{ 'CHAT_HISTORY.SORT_LABEL' | translate }}
+    </label>
+    <app-form-sort-input
+      id="chat-history-sort"
+      class="w-full md:w-40"
+      size="sm"
+      [fields]="sortFieldOptions()"
+      [orders]="sortOrderOptions()"
+      [selectedField]="sortField()"
+      [selectedOrder]="sortOrder()"
+      (fieldChange)="onSortFieldChange($event)"
+      (orderChange)="onSortOrderChange($event)"
+      [placeholder]="'CHAT_HISTORY.SORT_BY_UPDATED' | translate"
+    />
+  </div>
+
+  <!-- 件数 + ページ送り (top) -->
+  <div class="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [currentPageOverride]="pageIndex()"
+      [countDisplay]="countDisplay()"
+      (pageChange)="onPageChange($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
+  </div>
+</div>

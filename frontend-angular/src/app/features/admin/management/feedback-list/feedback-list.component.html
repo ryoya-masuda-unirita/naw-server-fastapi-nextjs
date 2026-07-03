@@ -1,0 +1,19 @@
+<app-admin-page-shell
+  [title]="'SIDEBAR.FEEDBACK' | translate"
+  [customHeader]="false"
+  [tabs]="tabs()"
+  [activeTabId]="activeTabId()"
+  (tabChange)="onTabChange($event)"
+>
+  @switch (activeTabId()) {
+    @case ('accuracy') {
+      <app-accuracy-tab />
+    }
+    @case ('satisfaction') {
+      <app-satisfaction-tab />
+    }
+    @case ('count') {
+      <app-count-tab />
+    }
+  }
+</app-admin-page-shell>

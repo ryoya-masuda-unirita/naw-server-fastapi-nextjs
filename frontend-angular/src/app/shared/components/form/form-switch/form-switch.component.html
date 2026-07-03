@@ -1,0 +1,45 @@
+<div class="flex flex-col gap-3">
+  @if (label()) {
+    <div class="flex flex-col md:gap-1">
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium text-text-default leading-[1.4]" [for]="inputId()">
+          {{ label() }}
+        </label>
+        @if (badgeText()) {
+          <span
+            class="bg-bg-secondary text-text-muted text-[10px] px-1 py-0.5 rounded leading-none"
+            >{{ badgeText() }}</span
+          >
+        }
+      </div>
+      @if (supportText()) {
+        <p class="text-xs text-text-muted leading-[1.4] max-sm:mt-1">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  @if (warning()) {
+    <div class="flex items-center gap-1 md:mt-1 text-status-caution">
+      <app-mat-icon icon="warning" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ warning() }}</p>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="flex items-center gap-1 md:mt-1 text-status-error">
+      <app-mat-icon icon="warning" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ error() }}</p>
+    </div>
+  }
+
+  <div class="form-switch-wrapper flex items-center w-full" [class.has-error]="!!error()">
+    <app-switch
+      [label]="switchLabel()"
+      [disabled]="isDisabled()"
+      [size]="size()"
+      [showIcon]="showIcon()"
+      [checked]="activeValue()"
+      (checkedChange)="onSwitchChange($event)"
+    ></app-switch>
+  </div>
+</div>

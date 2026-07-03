@@ -1,0 +1,161 @@
+<div class="library-filters">
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.FILTER_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-select
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [options]="serverOptions"
+        [placeholder]="'ADMIN.ASSISTANT.ALL_CONNECTION_SERVERS' | translate"
+        [value]="serverFilter()"
+        (valueChange)="onServerChange($event)"
+      />
+      <app-select
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [options]="categoryOptions"
+        [placeholder]="'ADMIN.ASSISTANT.ALL_CATEGORIES' | translate"
+        [value]="categoryFilter()"
+        (valueChange)="onCategoryChange($event)"
+      />
+    </div>
+  </div>
+
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.SORT_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-form-sort-input
+        class="library-sort-wrap library-combobox w-full md:w-40"
+        size="sm"
+        [fields]="sortFields"
+        [(selectedField)]="sortField"
+        [(selectedOrder)]="sortOrder"
+        [placeholder]="'ADMIN.GLOSSARY.ASSISTANT_SORT_ADDED'"
+      />
+    </div>
+  </div>
+
+  <div class="library-page-info">
+    <span class="library-page-count">{{ countDisplay() }}</span>
+    <div class="library-page-arrows">
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(1)"
+          [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+        >
+          <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(pageIndex() - 1)"
+          [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(pageIndex() + 1)"
+          [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(totalPages())"
+          [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+        >
+          <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-table-list id="tag-list">
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="false"
+    class="hidden md:flex w-full"
+    [hasActions]="false"
+  >
+    <span class="table-list-col-content table-list-label">{{
+      'ADMIN.GLOSSARY.ASSISTANT_COL_NAME' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-20">{{
+      'ADMIN.GLOSSARY.ASSISTANT_COL_SERVER' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-30">{{
+      'ADMIN.GLOSSARY.ASSISTANT_COL_MODEL' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-40">{{
+      'ADMIN.GLOSSARY.ASSISTANT_COL_CATEGORY' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-16">{{
+      'ADMIN.GLOSSARY.ASSISTANT_COL_HISTORY' | translate
+    }}</span>
+  </app-table-list-item>
+
+  @for (row of pageSlice(); track row.id) {
+    <app-table-list-item [showCheckbox]="false" [hasActions]="false">
+      <div class="table-list-col-content table-list-start-label">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ row.name }}</p>
+        <p class="table-list-desc">{{ row.description }}</p>
+      </div>
+      <div class="table-list-row-date md:w-20">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.GLOSSARY.ASSISTANT_COL_SERVER' | translate
+        }}</span>
+        <span class="table-list-date flex-1 w-20 md:w-auto font-medium">{{ row.server }}</span>
+      </div>
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.GLOSSARY.ASSISTANT_COL_MODEL' | translate
+        }}</span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-body-small md:text-body text-text-strong font-normal!"
+          >{{ row.model }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:w-40">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.GLOSSARY.ASSISTANT_COL_CATEGORY' | translate
+        }}</span>
+        <div class="flex-1 w-30 md:w-auto text-[0px]">
+          <span class="assistant-tag">{{ row.category }}</span>
+        </div>
+      </div>
+      <div class="table-list-row-date md:w-16">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.GLOSSARY.ASSISTANT_COL_HISTORY' | translate
+        }}</span>
+        <span class="table-list-date flex-1 w-30 md:w-auto font-medium">{{ row.history }}</span>
+      </div>
+    </app-table-list-item>
+  }
+</app-table-list>
+
+@if (pageSlice().length === 0) {
+  <div class="px-4 py-8 text-center text-text-muted">{{ 'COMMON.NO_DATA' | translate }}</div>
+}
+
+<div class="library-pagination pt-0">
+  <app-pagination
+    [totalPages]="totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [currentPageOverride]="pageIndex()"
+    (pageChange)="onPageChange($event)"
+  />
+</div>

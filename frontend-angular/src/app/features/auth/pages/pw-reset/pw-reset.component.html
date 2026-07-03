@@ -1,0 +1,130 @@
+<div class="login-page flex min-h-screen flex-col justify-end">
+  <main
+    class="flex flex-1 flex-col items-center justify-center px-4 max-sm:justify-start! max-sm:py-10"
+  >
+    <div class="flex w-full max-w-158 flex-col items-center gap-8">
+      <img
+        src="/secuaigent-logo.png"
+        alt="SecuAIgent Logo"
+        class="h-[36.6px] w-60 max-w-full object-contain md:h-16 md:w-105"
+      />
+
+      <div
+        class="flex w-full max-w-150 flex-col gap-8 rounded-4xl bg-surface-white px-4 pb-8 pt-6 md:p-8!"
+      >
+        <form class="flex flex-col gap-4 md:gap-6" [formGroup]="form" (ngSubmit)="onSubmit()">
+          <header class="flex flex-col gap-2 py-[10.5px]">
+            <h1 class="text-h1 text-text-default">
+              {{ 'AUTH.PW_RESET.TITLE' | translate }}
+            </h1>
+            @if (reasonMessageKey(); as messageKey) {
+              <p class="text-sm text-text-medium">{{ messageKey | translate }}</p>
+            }
+          </header>
+
+          <app-form-input
+            formControlName="username"
+            [label]="'AUTH.PW_RESET.USER_ID_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.USER_ID_PLACEHOLDER' | translate"
+            [error]="usernameError()"
+            type="text"
+            autocomplete="username"
+          />
+
+          <app-form-input
+            formControlName="oldPassword"
+            [label]="'AUTH.PW_RESET.OLD_PASSWORD_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.PASSWORD_PLACEHOLDER' | translate"
+            [error]="oldPasswordError()"
+            type="password"
+            autocomplete="current-password"
+            [showPasswordToggle]="true"
+          />
+
+          <app-form-input
+            formControlName="newPassword"
+            [label]="'AUTH.PW_RESET.NEW_PASSWORD_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.PASSWORD_PLACEHOLDER' | translate"
+            [error]="newPasswordError()"
+            [maxLength]="passwordMaxLength"
+            [asciiOnly]="true"
+            type="password"
+            autocomplete="new-password"
+            [showPasswordToggle]="true"
+          />
+
+          <app-form-input
+            formControlName="confirmPassword"
+            [label]="'AUTH.PW_RESET.CONFIRM_PASSWORD_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.PASSWORD_PLACEHOLDER' | translate"
+            [error]="confirmPasswordError()"
+            [maxLength]="passwordMaxLength"
+            [asciiOnly]="true"
+            type="password"
+            autocomplete="new-password"
+            [showPasswordToggle]="true"
+          />
+
+          <app-button
+            type="submit"
+            [loading]="authApi.resetPasswordMutation.isPending()"
+            [fullWidth]="true"
+            iconPosition="left"
+          >
+            <mat-icon icon class="h-5! w-5! text-[20px]!">lock_reset</mat-icon>
+            {{ 'AUTH.PW_RESET.SUBMIT' | translate }}
+          </app-button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer class="w-full bg-surface-footer px-4 py-4 md:px-8! md:py-6!">
+    <div class="flex w-full flex-col items-center gap-4 md:flex-row md:justify-between">
+      <div class="flex items-center justify-center gap-3 md:justify-start">
+        <a
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-xs leading-[1.7] text-primary underline underline-offset-2"
+        >
+          <span>{{ 'AUTH.FOOTER.TERMS' | translate }}</span>
+          <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+        </a>
+        <a
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-xs leading-[1.7] text-primary underline underline-offset-2"
+        >
+          <span>{{ 'AUTH.FOOTER.PRIVACY' | translate }}</span>
+          <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+        </a>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 md:justify-end">
+        <div class="inline-flex items-center text-[10px]">
+          <p class="text-note-small text-text-medium">
+            {{ 'AUTH.FOOTER.COMPANY_LABEL' | translate }}：
+          </p>
+          <a
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-[10px] leading-[1.4] text-primary underline underline-offset-2"
+          >
+            <span>{{ 'AUTH.FOOTER.COMPANY_NAME' | translate }}</span>
+            <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+          </a>
+        </div>
+        <p class="text-[10px] font-bold leading-[1.4] text-text-muted">
+          {{ 'AUTH.FOOTER.COPYRIGHT' | translate }}
+        </p>
+      </div>
+    </div>
+  </footer>
+</div>

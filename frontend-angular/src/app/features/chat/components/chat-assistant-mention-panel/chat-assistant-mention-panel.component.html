@@ -1,0 +1,72 @@
+<div
+  class="mention-panel"
+  role="listbox"
+  [attr.aria-label]="'CHAT.INPUT.SELECT_ASSISTANT' | translate"
+>
+  @if (isEmpty()) {
+    <p class="mention-panel__empty px-4 py-3 text-(length:--text-note) text-text-medium">
+      {{ 'CHAT.INPUT.ASSISTANT_MENTION_EMPTY' | translate }}
+    </p>
+  } @else {
+    <div class="flex flex-col min-w-0 max-h-80 overflow-y-auto">
+      @for (assistant of assistants(); track assistant.id; let i = $index) {
+        <button
+          type="button"
+          class="mention-option flex h-auto gap-1 items-start cursor-pointer w-full px-4 py-2 text-left rounded-sm text-(length:--text-note) text-text-strong transition-colors duration-150 shrink-0 hover:bg-bg-brand-weak"
+          role="option"
+          [attr.aria-selected]="activeIndex() === i"
+          [attr.data-active]="activeIndex() === i ? 'true' : null"
+          (click)="onSelect(assistant)"
+          (mouseenter)="onHover(i)"
+        >
+          <div class="flex flex-col gap-1 flex-1 min-w-0">
+            <div class="flex items-start gap-2 w-full">
+              <span
+                class="mention-option__check flex h-5 w-5 shrink-0 justify-center items-center"
+                aria-hidden="true"
+                [ngClass]="{
+                  'opacity-0': selectedAssistantId() !== assistant.id,
+                }"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="w-5 h-5"
+                  aria-hidden="true"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path
+                    d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+              <span
+                class="flex-1 min-w-0 truncate text-note"
+                [ngClass]="{
+                  'text-primary': selectedAssistantId() === assistant.id || activeIndex() === i,
+                }"
+                >{{ assistant.name }}</span
+              >
+            </div>
+            <div class="flex flex-col gap-1 items-start w-full pl-7">
+              <p
+                class="text-(length:--text-note-small) leading-[1.4] text-text-medium line-clamp-2 w-full"
+              >
+                {{ assistant.description }}
+              </p>
+              @if (assistant.category) {
+                <span
+                  class="inline-flex rounded-sm border border-border-strong px-1 py-0.5 text-(length:--text-note-small) font-medium whitespace-nowrap text-text-medium self-start"
+                  >{{ assistant.category }}</span
+                >
+              }
+            </div>
+          </div>
+        </button>
+      }
+    </div>
+  }
+</div>

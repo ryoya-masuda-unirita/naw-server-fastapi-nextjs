@@ -1,0 +1,37 @@
+<div
+  class="flex items-center justify-between px-2 transition-all duration-500"
+  (click)="onHeaderClick()"
+  [ngClass]="{
+    'cursor-pointer': !sidebarCollapsed() && section().labelKey !== 'SIDEBAR.CHAT',
+    'opacity-0': sidebarCollapsed(),
+    invisible: sidebarCollapsed(),
+  }"
+>
+  <span
+    class="text-xs font-medium text-text-muted whitespace-nowrap transition-all duration-300 origin-left"
+  >
+    {{ section().labelKey | translate }}
+  </span>
+
+  @if (section().labelKey === 'SIDEBAR.CHAT') {
+    <button
+      class="p-1.5 flex justify-center items-center rounded-md hover:bg-bg-brand-weak transition-colors w-7! h-7!"
+      (click)="onChatMenuClick($event)"
+      [disabled]="!!sidebarCollapsed()"
+    >
+      <span class="flex justify-center items-center text-text-lighter w-5! h-5!">
+        <app-svg-icon name="newsort" class="w-5 h-5" />
+      </span>
+    </button>
+  } @else {
+    <button
+      class="p-1.5 flex justify-center items-center rounded-md hover:bg-gray-200 transition-colors w-7! h-7!"
+      (click)="onToggleButtonClick($event)"
+      [disabled]="!!sidebarCollapsed()"
+    >
+      <span class="flex justify-center items-center text-text-lighter w-7! h-7!">
+        <app-svg-icon [name]="section().collapsed ? 'arrowDown' : 'arrowUp'" class="w-5 h-5" />
+      </span>
+    </button>
+  }
+</div>

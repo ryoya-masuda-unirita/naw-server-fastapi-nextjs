@@ -1,0 +1,13 @@
+<div class="flex flex-col gap-2 w-fulll p-4 rounded-xl bg-bg-error" role="alert">
+  <div class="flex gap-1 items-start">
+    <span class="shrink-0 pt-px" aria-hidden="true">
+      <app-svg-icon name="error" class="w-5 h-5 text-status-error" />
+    </span>
+    <p class="flex-1 min-w-0 text-label-x-large font-medium text-text-strong">
+      {{ title() }}
+    </p>
+  </div>
+  <p class="text-body-small font-normal text-text-strong leading-[1.7]">
+    {{ message() }}
+  </p>
+</div>

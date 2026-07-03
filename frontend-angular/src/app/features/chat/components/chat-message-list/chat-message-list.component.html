@@ -1,0 +1,27 @@
+@if (messages().length === 0 && !isLoading()) {
+  <app-chat-message-logo
+    [isNewChat]="isNewChat()"
+    [assistantDescription]="assistantDescription()"
+  />
+} @else {
+  <div class="chat-page-messages" #scrollContainer>
+    <div class="chat-page-messages-wrapper">
+      @for (message of messages(); track message.id; let isLast = $last) {
+        <app-chat-message-item
+          [message]="message"
+          [isLast]="isLast"
+          [versionInfo]="lookupVersionInfo(message)"
+          (copyMessage)="handleCopy($event)"
+          (regenerate)="handleRegenerate($event)"
+          (retry)="handleRetry($event)"
+          (delete)="handleDelete($event)"
+          (rate)="handleRate($event)"
+          (handleSend)="handleEditSubmit(message.messageId || message.id, $event)"
+          (prevVersion)="handlePrevVersion(message)"
+          (nextVersion)="handleNextVersion(message)"
+          [isReadOnly]="isReadOnly() ?? false"
+        />
+      }
+    </div>
+  </div>
+}

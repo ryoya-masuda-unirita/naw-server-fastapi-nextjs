@@ -1,0 +1,227 @@
+<div class="flex-1 flex flex-col h-full">
+  <header
+    class="shrink-0 flex flex-col bg-bg-primary z-30 border-b border-border-strong sticky top-0"
+  >
+    <div class="flex items-center px-2 py-2 md:px-6 md:py-3">
+      <!-- Mobile: Menu Button -->
+      <button
+        type="button"
+        class="header-button-default md:hidden w-7"
+        [title]="'HEADER.SIDEBAR_TOGGLE' | translate"
+        (click)="onToggleSidebar()"
+      >
+        <app-svg-icon name="panel" class="w-5 h-5" />
+      </button>
+
+      <!-- Back Button -->
+      <app-icon-button
+        variant="tertiary-gray"
+        [link]="ROUTES.APP.ADMIN_TRAINING_DATA"
+        class="ml-3 md:ml-0! md:mr-2"
+        ariaLabel="戻る"
+      >
+        <app-svg-icon name="arrowLeft" />
+      </app-icon-button>
+
+      <!-- Title Area -->
+      <div class="flex-1 min-w-0 flex items-center gap-1 ml-3 md:ml-0">
+        <h1 class="text-h1 truncate pt-1 min-h-9">
+          {{ item() ? item()!.name : ('LEARNING_DATA.DETAIL_TITLE' | translate) }}
+        </h1>
+
+        <!-- Edit Button with Menu -->
+        <app-context-menu
+          [menuTpl]="menuTpl"
+          [customTrigger]="editTrigger"
+          panelClass="dropdown-menu dropdown-menu--bordered w-70"
+          menuMinWidth=""
+          #editMenu
+        />
+
+        <ng-template #editTrigger>
+          <app-icon-button
+            variant="tertiary-gray"
+            size="largePc"
+            ariaLabel="学習先フォルダ"
+            class="mb-px md:mb-0"
+          >
+            <app-svg-icon name="edit" />
+          </app-icon-button>
+        </ng-template>
+
+        <ng-template #menuTpl>
+          <button
+            type="button"
+            class="dropdown-item"
+            role="menuitem"
+            (click)="onRename(); editMenu.close()"
+          >
+            <span class="dropdown-item-icon">
+              <app-svg-icon name="edit" class="w-5 h-5" />
+            </span>
+            {{ 'LEARNING_DATA.MENU_EDIT_FOLDER' | translate }}
+          </button>
+          <hr class="dropdown-divider" />
+          <button
+            type="button"
+            class="dropdown-item dropdown-item--danger"
+            role="menuitem"
+            (click)="onDeleteFolder(); editMenu.close()"
+          >
+            <span class="dropdown-item-icon">
+              <app-svg-icon name="delete" class="w-5 h-5" />
+            </span>
+            {{ 'LEARNING_DATA.MENU_DELETE_FOLDER' | translate }}
+          </button>
+        </ng-template>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 min-h-0 overflow-hidden">
+    @if (isLoading()) {
+      <div class="flex justify-center items-center h-full md:h-20 w-full">
+        <app-loading size="lg"></app-loading>
+      </div>
+    } @else if (item(); as data) {
+      @if (data.type === 'LOCAL') {
+        <app-local-view [data]="data"></app-local-view>
+      } @else {
+        <app-cloud-view [data]="data"></app-cloud-view>
+      }
+    } @else {
+      <div class="flex justify-center items-center h-full text-text-muted w-full">
+        {{ 'COMMON.NO_DATA' | translate }}
+      </div>
+    }
+  </div>
+
+  <!-- Edit Folder Modal -->
+  <ng-template #editFolderFormTpl>
+    <div class="relative">
+      @if (folderModal.isLoading()) {
+        <div class="absolute inset-0 z-10 flex items-center justify-center bg-bg-primary/60">
+          <app-circular-loading />
+        </div>
+      }
+      <div [formGroup]="editFolderForm" class="flex flex-col gap-4 md:gap-6 text-text-strong">
+        @if (editFolderForm.get('server')?.value === 'LOCAL') {
+          <div class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6">
+            <div class="flex gap-1 items-start md:gap-2">
+              <span class="shrink-0 h-5" aria-hidden="true">
+                <app-svg-icon name="lightbulb" class="icon-20 text-brand-primary" />
+              </span>
+              <p class="flex-1 min-w-0 text-label-large md:text-label-x-large font-medium">
+                {{ 'LEARNING_DATA.LOCAL_MODAL_INFO_TITLE' | translate }}
+              </p>
+            </div>
+            <p class="text-body-small">
+              {{ 'LEARNING_DATA.LOCAL_INFO_TEXT' | translate }}
+            </p>
+          </div>
+        }
+
+        <!-- Training folder name -->
+        <app-form-input
+          id="edit-folder-name"
+          formControlName="name"
+          [label]="'LEARNING_DATA.FOLDER_NAME_LABEL' | translate"
+          [placeholder]="'LEARNING_DATA.FOLDER_NAME_PLACEHOLDER' | translate"
+          [error]="folderNameError()"
+        />
+
+        <!-- Connection server (radio) -->
+        <app-form-radio
+          formControlName="server"
+          [label]="'LEARNING_DATA.SERVER_LABEL' | translate"
+          layout="vertical"
+          [options]="serverOptions"
+          classOption="gap-2"
+          [disabled]="true"
+        ></app-form-radio>
+
+        @if (folderModal.hasNoEndpoints()) {
+          <p class="text-body-small text-status-error">
+            {{ 'LEARNING_DATA.NO_ENDPOINTS' | translate }}
+          </p>
+        }
+
+        @if (editFolderForm.get('server')?.value === 'LOCAL') {
+          <app-form-select
+            inputId="edit-folder-endpoint"
+            formControlName="endpointId"
+            [label]="'LEARNING_DATA.ENDPOINT_LABEL' | translate"
+            [placeholder]="'LEARNING_DATA.ENDPOINT_PLACEHOLDER' | translate"
+            [options]="folderModal.endpointOptions()"
+            [error]="endpointError()"
+            [disabled]="folderModal.isLoading() || folderModal.hasNoEndpoints()"
+          />
+        }
+
+        <!-- Training folder description -->
+        <app-form-textarea
+          formControlName="description"
+          [label]="'LEARNING_DATA.FOLDER_DESC_LABEL' | translate"
+          [badgeText]="'COMMON.OPTIONAL' | translate"
+          [placeholder]="'LEARNING_DATA.FOLDER_DESC_PLACEHOLDER' | translate"
+          [rows]="4"
+          [areaHeight]="144"
+          [error]="folderDescError()"
+        ></app-form-textarea>
+
+        <!-- Only valid when Local is selected -->
+        @if (editFolderForm.get('server')?.value === 'LOCAL') {
+          <div class="flex flex-col gap-4 md:gap-6">
+            <app-form-input
+              id="edit-folder-fetch-id"
+              formControlName="fetchId"
+              [label]="'LEARNING_DATA.EDIT_FETCH_ID_LABEL' | translate"
+              [badgeText]="'COMMON.OPTIONAL' | translate"
+              [placeholder]="'LEARNING_DATA.EDIT_FETCH_ID_PLACEHOLDER' | translate"
+            />
+            <app-form-input
+              id="edit-folder-delete-id"
+              formControlName="deleteId"
+              [label]="'LEARNING_DATA.EDIT_DELETE_ID_LABEL' | translate"
+              [badgeText]="'COMMON.OPTIONAL' | translate"
+              [placeholder]="'LEARNING_DATA.EDIT_DELETE_ID_PLACEHOLDER' | translate"
+            />
+            <app-form-input
+              id="edit-folder-learn-id"
+              formControlName="learnId"
+              [label]="'LEARNING_DATA.EDIT_LEARN_ID_LABEL' | translate"
+              [badgeText]="'COMMON.OPTIONAL' | translate"
+              [placeholder]="'LEARNING_DATA.EDIT_LEARN_ID_PLACEHOLDER' | translate"
+            />
+          </div>
+        }
+      </div>
+    </div>
+  </ng-template>
+
+  <ng-template #editFolderActions>
+    <div class="flex gap-3 justify-end max-sm:justify-center">
+      <app-button
+        variant="outline"
+        size="lg"
+        class="dialog-cancel-btn flex-1"
+        [fullWidth]="true"
+        [disabled]="isSubmitting()"
+        (buttonClick)="closeModal()"
+      >
+        {{ 'COMMON.CANCEL' | translate }}
+      </app-button>
+      <app-button
+        variant="solid"
+        size="lg"
+        class="flex-1"
+        [fullWidth]="true"
+        [disabled]="!canSubmitEditFolder()"
+        [loading]="isSubmitting()"
+        (buttonClick)="submitEditFolder()"
+      >
+        {{ 'COMMON.SAVE' | translate }}
+      </app-button>
+    </div>
+  </ng-template>
+</div>

@@ -1,0 +1,12 @@
+<div class="mb-6 w-12">
+  <img src="/logo-min.svg" alt="SecuRiGent Logo" class="w-12 h-12" />
+</div>
+<h3 class="text-h5 text-text-medium font-medium">
+  {{ (!isNewChat() ? 'CHAT.EMPTY.TITLE' : 'CHAT.EMPTY.SUBTITLE') | translate }}
+</h3>
+
+@if (!isNewChat() && assistantDescription()) {
+  <p class="text-body text-text-medium mt-1">
+    {{ assistantDescription() }}
+  </p>
+}

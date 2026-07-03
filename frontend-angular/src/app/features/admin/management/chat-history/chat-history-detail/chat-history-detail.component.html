@@ -1,0 +1,43 @@
+<header class="shrink-0 flex items-center gap-1 h-11 md:h-14 px-2 md:px-4 bg-bg-primary z-30">
+  <app-icon-button
+    variant="tertiary-gray"
+    [link]="backRoute"
+    [ariaLabel]="'COMMON.BACK' | translate"
+  >
+    <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+  </app-icon-button>
+
+  <h1 class="chat-page-header-title min-w-0 flex-1">
+    {{ displayRoomName() || ('CHAT_HISTORY.TITLE' | translate) }}
+  </h1>
+</header>
+
+<div class="flex flex-1 min-h-0 overflow-hidden w-full">
+  @if (isLoading()) {
+    <div class="chat-main">
+      <app-loading />
+    </div>
+  } @else if (loadError() === 'forbidden') {
+    <div class="chat-main flex flex-col items-center justify-center gap-4 p-6">
+      <p class="text-text-muted">{{ 'CHAT_HISTORY.DETAIL.FORBIDDEN' | translate }}</p>
+    </div>
+  } @else if (loadError() === 'general') {
+    <div class="chat-main flex flex-col items-center justify-center gap-4 p-6">
+      <p class="text-text-muted">{{ 'CHAT_HISTORY.DETAIL.LOAD_ERROR' | translate }}</p>
+    </div>
+  } @else if (messages().length === 0) {
+    <div class="chat-main flex flex-col items-center justify-center gap-4 p-6">
+      <p class="text-text-muted">{{ 'CHAT_HISTORY.DETAIL.EMPTY' | translate }}</p>
+    </div>
+  } @else {
+    <app-chat-window
+      [showHeader]="false"
+      [isReadOnly]="true"
+      [roomId]="roomId()"
+      [messages]="messages()"
+    />
+    @if (showViewer()) {
+      <app-chat-data-panel [roomId]="roomId()" />
+    }
+  }
+</div>

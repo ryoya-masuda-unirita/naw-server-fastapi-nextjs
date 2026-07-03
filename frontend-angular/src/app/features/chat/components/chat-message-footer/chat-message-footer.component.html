@@ -1,0 +1,99 @@
+<div class="chat-message-footer">
+  <div class="chat-message-actions">
+    <div class="chat-pagination" [hidden]="!showPagination() || isReadOnly()">
+      <button
+        type="button"
+        class="chat-message-action"
+        [class.opacity-40]="!canPrevVersion()"
+        [class.cursor-not-allowed]="!canPrevVersion()"
+        [disabled]="!canPrevVersion()"
+        [attr.aria-label]="'CHAT.MESSAGE.PREV_VERSION' | translate"
+        (click)="prevVersion.emit()"
+      >
+        <app-svg-icon name="chevronLeft" class="w-5 h-5" />
+      </button>
+      <span class="chat-pagination-label">{{ versionCurrent() }}/{{ versionTotal() }}</span>
+      <button
+        type="button"
+        class="chat-message-action"
+        [class.opacity-40]="!canNextVersion()"
+        [class.cursor-not-allowed]="!canNextVersion()"
+        [disabled]="!canNextVersion()"
+        [attr.aria-label]="'CHAT.MESSAGE.NEXT_VERSION' | translate"
+        (click)="nextVersion.emit()"
+      >
+        <app-svg-icon name="chevronRight" class="w-5 h-5" />
+      </button>
+    </div>
+    <button
+      type="button"
+      data-copy-btn
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      [class.chat-message-action--copied]="isCopied()"
+      aria-label="コピー"
+      (click)="handleCopy()"
+    >
+      <span data-icon-default><app-svg-icon name="copy" class="w-5 h-5" /></span>
+      <span data-icon-copied><app-svg-icon name="check" class="w-5 h-5" /></span>
+    </button>
+    <button
+      type="button"
+      data-thumbs-up-btn
+      class="inline-flex items-center justify-center transition-colors duration-200 rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7 disabled:cursor-not-allowed"
+      [class.cursor-pointer]="!thumbsUpActive()"
+      [class.is-on]="thumbsUpActive()"
+      [disabled]="thumbsUpActive()"
+      aria-label="良い"
+      (click)="handleThumbsUp()"
+      [hidden]="isUser() || isReadOnly()"
+    >
+      <span data-icon-default><app-svg-icon name="thumbsUpOutline" class="w-5 h-5" /></span>
+      <span data-icon-on class="text-primary!"
+        ><app-svg-icon name="thumbsUp" class="w-5 h-5"
+      /></span>
+    </button>
+    <button
+      type="button"
+      data-thumbs-down-btn
+      class="inline-flex items-center justify-center transition-colors duration-200 rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7 disabled:cursor-not-allowed"
+      [class.cursor-pointer]="!thumbsDownActive()"
+      [class.is-on]="thumbsDownActive()"
+      [disabled]="thumbsDownActive()"
+      aria-label="良くない"
+      (click)="handleThumbsDown()"
+      [hidden]="isUser() || isReadOnly()"
+    >
+      <span data-icon-default><app-svg-icon name="thumbsDownOutline" class="w-5 h-5" /></span>
+      <span data-icon-on class="text-primary!"
+        ><app-svg-icon name="thumbsDown" class="w-5 h-5"
+      /></span>
+    </button>
+    <button
+      type="button"
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      [attr.aria-label]="'CHAT.MESSAGE.EDIT' | translate"
+      (click)="handleOpenEdit()"
+      [hidden]="!isUser() || isReadOnly()"
+    >
+      <app-svg-icon name="edit" class="w-5 h-5" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      aria-label="再生成"
+      (click)="handleRegenerate()"
+      [hidden]="isUser() || isReadOnly()"
+    >
+      <app-svg-icon name="renew" class="w-5 h-5" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      aria-label="削除"
+      (click)="handleDelete()"
+      [hidden]="isReadOnly()"
+    >
+      <app-svg-icon name="delete" class="w-5 h-5" />
+    </button>
+  </div>
+</div>

@@ -1,0 +1,262 @@
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange.emit($event)"
+  >
+    <span class="table-list-col-content table-list-label">
+      {{ 'LEARNING_DATA.COLUMN_DISPLAY_NAME' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-60">
+      {{ 'LEARNING_DATA.COLUMN_LINK_NAME' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'LEARNING_DATA.COLUMN_UPDATED_AT' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'LEARNING_DATA.COLUMN_UPDATED_BY' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-16">
+      {{ 'LEARNING_DATA.COLUMN_LEARNING' | translate }}
+    </span>
+
+    <div slot="right" class="hidden md:flex items-center justify-center gap-2 invisible">
+      @if (showDownload()) {
+        <div class="w-9 h-9"></div>
+      }
+      <div class="w-9 h-9"></div>
+    </div>
+  </app-table-list-item>
+
+  <!-- Header (Mobile only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="someSelected()"
+    class="flex md:hidden"
+    (checkedChange)="selectAllChange.emit($event)"
+  >
+    <span class="table-list-label">{{ 'COMMON.SELECT_ALL' | translate }}</span>
+  </app-table-list-item>
+
+  <!-- Data rows -->
+  @for (row of files(); track row.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(row.id)"
+      (checkedChange)="toggleItemSelection.emit({ row, checked: $event })"
+      (click)="rowClick.emit(row)"
+    >
+      <!-- Display Name Column -->
+      <div class="table-list-col-content table-list-start-label">
+        @if (isRenamingMode() && editingNames()[row.id]) {
+          <input
+            type="text"
+            class="input-parts-field h-9 px-3 text-body-small w-full"
+            [value]="editingNames()[row.id].displayName"
+            (input)="
+              updateEditingValue.emit({
+                id: row.id,
+                field: 'displayName',
+                value: $any($event.target).value,
+              })
+            "
+            (click)="$event.stopPropagation()"
+            aria-label="学習データの表示名"
+          />
+        } @else {
+          <p class="table-list-title text-label-large md:text-label-x-large">
+            {{ row.displayName }}
+          </p>
+        }
+      </div>
+
+      <!-- Link Name Column -->
+      <div class="table-list-row-date md:w-60">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'LEARNING_DATA.COLUMN_LINK_NAME' | translate }}
+        </span>
+        @if (isRenamingMode() && editingNames()[row.id]) {
+          <input
+            type="text"
+            class="input-parts-field h-9 px-3 text-body-small flex-1 min-w-0"
+            [value]="editingNames()[row.id].name"
+            (input)="
+              updateEditingValue.emit({
+                id: row.id,
+                field: 'name',
+                value: $any($event.target).value,
+              })
+            "
+            (click)="$event.stopPropagation()"
+            aria-label="リンク時の表示名"
+          />
+        } @else {
+          <span
+            class="table-list-date flex-1 w-20 md:w-auto text-body-small md:text-body text-text-strong font-normal"
+          >
+            {{ row.name }}
+          </span>
+        }
+      </div>
+
+      <!-- Updated At Column -->
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto font-normal!">
+          {{ 'LEARNING_DATA.COLUMN_UPDATED_AT' | translate }}
+        </span>
+        <span class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
+          {{ row.updatedAt | date: 'yyyy/MM/dd HH:mm' }}
+        </span>
+      </div>
+
+      <!-- Updated By Column -->
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'LEARNING_DATA.COLUMN_UPDATED_BY' | translate }}
+        </span>
+        <span class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
+          {{ row.updatedBy }}
+        </span>
+      </div>
+
+      <!-- Learning Status Column -->
+      <div class="table-list-row-date md:w-16">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'LEARNING_DATA.COLUMN_LEARNING' | translate }}
+        </span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium"
+          data-learning-status
+        >
+          {{
+            (row.status === 'ENABLE' ? 'LEARNING_DATA.STATUS_ON' : 'LEARNING_DATA.STATUS_OFF')
+              | translate
+          }}
+        </span>
+      </div>
+
+      <!-- Actions -->
+      <div slot="right">
+        <div class="flex flex-col md:flex-row items-center justify-center gap-2">
+          <!-- Download Button (Visible if showDownload is true) -->
+          @if (showDownload()) {
+            <app-icon-button
+              variant="tertiary-gray"
+              size="largePc"
+              class="md:w-9! md:h-9!"
+              [ariaLabel]="'LEARNING_DATA.DOWNLOAD' | translate"
+              (click)="download.emit(row); $event.stopPropagation()"
+            >
+              <app-svg-icon name="fileDownload" class="icon-20" />
+            </app-icon-button>
+          }
+
+          <app-context-menu
+            [menuTpl]="menuTpl"
+            panelClass="dropdown-menu dropdown-menu--bordered w-70"
+            menuMinWidth=""
+            [closeOnContentClick]="false"
+            #rowMenu
+          />
+
+          <!-- <app-icon-button
+            variant="tertiary-gray"
+            size="largePc"
+            class="md:w-9! md:h-9!"
+            (click)="preview.emit(row); $event.stopPropagation()"
+          >
+            <app-svg-icon name="arrowRight" class="icon-20" />
+          </app-icon-button> -->
+
+          <ng-template #menuTpl>
+            <button
+              type="button"
+              class="dropdown-item"
+              role="menuitem"
+              (click)="editLearningData.emit(row); rowMenu.close()"
+            >
+              <span class="dropdown-item-icon">
+                <app-svg-icon name="edit" class="w-5 h-5" />
+              </span>
+              {{ 'LEARNING_DATA.EDIT_LEARNING_DATA_SETTINGS' | translate }}
+            </button>
+            @if (showDownload()) {
+              <button
+                type="button"
+                class="dropdown-item"
+                role="menuitem"
+                (click)="download.emit(row); rowMenu.close()"
+              >
+                <span class="dropdown-item-icon">
+                  <app-svg-icon name="fileDownload" class="w-5 h-5" />
+                </span>
+                {{ 'LEARNING_DATA.DOWNLOAD' | translate }}
+              </button>
+            }
+            <button
+              type="button"
+              class="dropdown-item"
+              role="menuitem"
+              (click)="toggleLearning.emit(row); $event.stopPropagation()"
+            >
+              <span class="dropdown-item-icon">
+                <app-svg-icon
+                  [name]="row.status === 'ENABLE' ? 'newRemove' : 'checkCircle'"
+                  class="w-5 h-5"
+                />
+              </span>
+              {{
+                row.status === 'ENABLE'
+                  ? ('LEARNING_DATA.SET_LEARNING_OFF' | translate)
+                  : ('LEARNING_DATA.SET_LEARNING_ON' | translate)
+              }}
+            </button>
+
+            <hr class="dropdown-divider" />
+
+            <button
+              type="button"
+              class="dropdown-item dropdown-item--danger"
+              role="menuitem"
+              (click)="deleteFile.emit(row); rowMenu.close()"
+            >
+              <span class="dropdown-item-icon">
+                <app-svg-icon name="delete" class="w-5 h-5" />
+              </span>
+              {{ 'LEARNING_DATA.DELETE_FROM_FOLDER' | translate }}
+            </button>
+          </ng-template>
+        </div>
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (files().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'TEMPLATES.NO_DATA' | translate }}
+    </div>
+  }
+</app-table-list>
+
+<!-- Pagination -->
+<div class="flex justify-center">
+  <app-pagination
+    [totalPages]="totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [showPageNumbers]="true"
+    [currentPageOverride]="currentPage()"
+    (pageChange)="pageChange.emit($event)"
+  />
+</div>

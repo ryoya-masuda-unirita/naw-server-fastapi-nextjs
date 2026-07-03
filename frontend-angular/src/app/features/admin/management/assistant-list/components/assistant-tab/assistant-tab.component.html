@@ -1,0 +1,286 @@
+<!-- ---- Create button / Selection actions (desktop only) ---- -->
+<div class="sp-fixed-btn">
+  @if (selectedAssistants().length > 0) {
+    <div class="flex flex-col-reverse md:flex-row gap-3">
+      <app-button
+        variant="outline"
+        intent="cancel"
+        size="lg"
+        (buttonClick)="onDeselectAll()"
+        class="w-full md:w-36.5 inline-grid"
+        [heightPx]="54"
+      >
+        {{ 'ADMIN.ASSISTANT.CLEAR_SELECTION' | translate }}
+      </app-button>
+      <app-button
+        variant="outline"
+        size="lg"
+        intent="delete"
+        (buttonClick)="onDeleteSelected()"
+        class="w-full md:w-30.5 inline-grid"
+        [heightPx]="54"
+      >
+        <app-svg-icon name="delete" class="w-5 h-5" /> {{ 'COMMON.DELETE' | translate }}
+      </app-button>
+    </div>
+  } @else {
+    <div data-assistant-create-wrap>
+      <app-button
+        variant="solid"
+        size="lg"
+        iconPosition="right"
+        [fullWidth]="true"
+        class="w-full md:w-auto"
+        (buttonClick)="onAddAssistant()"
+      >
+        <div class="flex items-center gap-1 justify-center leading-normal">
+          <app-svg-icon name="addCircle" class="text-xl!" />
+          <span> {{ 'ADMIN.ASSISTANT.CREATE_ASSISTANT' | translate }} </span>
+        </div>
+      </app-button>
+    </div>
+  }
+</div>
+
+<!-- 検索・フィルター・並べ替え -->
+<div class="library-filters">
+  <!-- 検索 -->
+  <div class="library-filter-group">
+    <span class="library-filter-label"> {{ 'ADMIN.LIBRARY.SEARCH_LABEL' | translate }} </span>
+    <app-search-input
+      size="small"
+      [value]="searchInput()"
+      [placeholder]="'ADMIN.LIBRARY.SEARCH_PLACEHOLDER'"
+      (valueChange)="onSearchValueChange($event)"
+      class="library-combobox"
+    />
+  </div>
+
+  <!-- フィルター -->
+  <div class="library-filter-group">
+    <span class="library-filter-label"> {{ 'ADMIN.LIBRARY.FILTER_LABEL' | translate }} </span>
+    <div class="library-filter-selects">
+      <app-select
+        placeholder="{{ 'ADMIN.ASSISTANT.ALL_CONNECTION_SERVERS' | translate }}"
+        [options]="this.store.serverOptions()"
+        [value]="this.store.filter().filterServer || null"
+        (valueChange)="onFilterChange('filterServer', $event)"
+        size="small"
+        class="library-combobox"
+      />
+      <app-select
+        placeholder="{{ 'ADMIN.ASSISTANT.ALL_CATEGORIES' | translate }}"
+        [options]="this.store.categoriesOptions()"
+        [value]="this.store.filter().filterCategory || null"
+        (valueChange)="onFilterChange('filterCategory', $event)"
+        size="small"
+        class="library-combobox"
+      />
+      <app-select
+        placeholder="{{ 'ADMIN.ASSISTANT.ALL_TEAMS' | translate }}"
+        [options]="this.store.groupOptions()"
+        [value]="this.store.filter().filterTeam || null"
+        (valueChange)="onFilterChange('filterTeam', $event)"
+        size="small"
+        class="library-combobox"
+      />
+      <!-- TODO: 用語辞書フィルターは今後対応 -->
+      <!--
+      <app-select
+        placeholder="{{ 'ADMIN.ASSISTANT.ALL_TERMS' | translate }}"
+        [options]="this.store.dictionaryOptions()"
+        [value]="this.store.filter().filterTerm || null"
+        (selectionChange)="onFilterChange('filterTerm', $event)"
+        size="small"
+        class="library-combobox"
+      />
+      -->
+    </div>
+  </div>
+
+  <!-- 並べ替え -->
+  <div class="library-filter-group">
+    <span class="library-filter-label"> {{ 'ADMIN.LIBRARY.SORT_LABEL' | translate }} </span>
+    <div class="library-filter-selects">
+      <app-form-sort-input
+        size="sm"
+        [fields]="sortFieldOptions"
+        [selectedField]="store.filter().sortField!"
+        [selectedOrder]="store.filter().sortOrder!"
+        (fieldChange)="onSortChange($event, store.filter().sortOrder ?? 'desc')"
+        (orderChange)="onSortChange(store.filter().sortField ?? null, $event)"
+        placeholder="{{ 'ADMIN.ASSISTANT.SORT_UPDATED_AT' | translate }}"
+        class="library-combobox library-sort-wrap"
+      />
+    </div>
+  </div>
+
+  <!-- 件数 + ページ送り -->
+  <div class="library-page-info">
+    <app-pagination
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [useQueryParams]="false"
+      [countDisplay]="store.countDisplay()"
+      [totalPages]="store.totalPages()"
+      [currentPageOverride]="store.filter().pageIndex + 1"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>
+
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="!allSelected() && someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange($event)"
+  >
+    <span class="table-list-col-content table-list-label">
+      {{ 'ADMIN.ASSISTANT.DISPLAY_NAME' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-20">
+      {{ 'ADMIN.ASSISTANT.CONNECT_SERVER' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-40">
+      {{ 'ADMIN.ASSISTANT.CATEGORY' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-40">
+      {{ 'ADMIN.ASSISTANT.TEAM_TERM' | translate }}
+    </span>
+
+    <span class="table-list-col-date table-list-label md:w-16">
+      {{ 'ADMIN.ASSISTANT.HISTORY_SEND' | translate }}
+    </span>
+
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
+  </app-table-list-item>
+
+  <!-- Data rows -->
+  @for (item of store.items(); track item.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(item.id)"
+      (checkedChange)="toggleItemSelection(item, $event)"
+    >
+      <div class="table-list-col-content table-list-start-label">
+        <p class="table-list-title text-label-large md:text-label-x-large">
+          {{ item.name }}
+        </p>
+        @if (item.description) {
+          <p class="table-list-desc">{{ item.description }}</p>
+        }
+      </div>
+
+      <div class="table-list-row-date md:w-20">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ASSISTANT.CONNECT_SERVER' | translate
+        }}</span>
+        <span class="table-list-date flex-1 w-20 md:w-auto font-medium">{{
+          displayItem(item.type, this.store.serverOptions())
+        }}</span>
+      </div>
+
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL' | translate
+        }}</span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-body-small md:text-body text-text-strong"
+          >{{ item.endpoints?.[0]?.label }}</span
+        >
+      </div>
+
+      <div class="table-list-row-date md:w-40">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.ASSISTANT.CATEGORY' | translate
+        }}</span>
+        <div class="flex-1 w-30 md:w-auto text-[0px]">
+          @for (
+            category of item.categories ?? (item.category ? [item.category] : []);
+            track category.id
+          ) {
+            <span
+              class="assistant-tag font-medium leading-[1.4] inline-flex items-baseline rounded p-1 border border-gray-400 text-[10px] text-text-medium"
+              >{{ category.name }}</span
+            >
+          }
+        </div>
+      </div>
+
+      <div class="table-list-row-date md:w-40">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.ASSISTANT.TEAM_TERM' | translate
+        }}</span>
+        <div class="flex-1 flex flex-col gap-1 w-30 md:w-full">
+          <span class="table-list-date font-medium">
+            {{ displayItems(item.groups, this.store.groupOptions()) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="table-list-row-date md:w-16">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'ADMIN.ASSISTANT.HISTORY_SEND' | translate
+        }}</span>
+        <span class="table-list-date flex-1 w-30 md:w-auto font-medium">{{
+          item.includeHistory ? 'ON' : 'OFF'
+        }}</span>
+      </div>
+
+      <div slot="right" class="relative">
+        <app-assistant-tab-menu
+          [item]="item"
+          (editAssistant)="onEditAssistant($event)"
+          (deleteAssistant)="onDeleteAssistant($event)"
+        />
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (store.items().length === 0 && !store.isLoading()) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'ADMIN.ASSISTANT.ASSISTANT_NO_DATA' | translate }}
+    </div>
+  }
+</app-table-list>
+
+<div class="flex justify-center mt-6">
+  <app-pagination
+    [totalPages]="store.totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [currentPageOverride]="store.filter().pageIndex + 1"
+    (pageChange)="onPageChange($event)"
+  />
+</div>
+
+<!-- ---- Dialog Contents ---- -->
+
+<ng-template #addAssistantContent>
+  <app-assistant-add-dialog [formGroup]="addForm" />
+</ng-template>
+
+<ng-template #editAssistantContent>
+  <app-assistant-edit-dialog
+    [formGroup]="editForm"
+    [assistantId]="editForm.get('id')?.value || ''"
+  />
+</ng-template>
+
+<ng-template #deleteMessageContent>
+  <p class="modal-delete-confirm-message pt-1">
+    {{ 'ADMIN.ASSISTANT.DELETE_ASSISTANT_MESSAGE' | translate }}
+  </p>
+</ng-template>

@@ -1,0 +1,49 @@
+<!-- Backdrop overlay: click to close, blocks other interactions -->
+@if (isOpen() || visible()) {
+  <div
+    class="w-screen h-screen fixed inset-0 z-199 bg-bg-overlay md:bg-transparent!"
+    (click)="closeMenu.emit()"
+  ></div>
+}
+
+<!-- Menu panel -->
+<div
+  class="fixed left-0 bottom-0 w-screen rounded-tl-lg rounded-tr-lg md:bottom-auto! md:left-2! md:w-60 md:rounded-lg z-200 bg-white shadow-md p-4 flex flex-col gap-1 overflow-y-auto"
+  [class]="hostClasses()"
+  [style.top.px]="isDesktop() ? menuTopPx() : null"
+  [style.max-height.px]="isDesktop() ? desktopMaxHeightPx() : null"
+  (click)="$event.stopPropagation()"
+  (animationend)="onAnimationEnd()"
+>
+  <button
+    type="button"
+    class="w-full flex items-center gap-2 px-2 h-9 text-xs font-medium! text-text-default hover:bg-surface-sidebar hover:rounded-lg transition-colors"
+    (click)="onSort()"
+  >
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <path
+        d="M5.21094 5.83464H7.29427L4.3776 2.91797L1.46094 5.83464H3.54427V14.168H1.46094L4.3776 17.0846L7.29427 14.168H5.21094V5.83464ZM8.54427 4.16797V5.83464H18.5443V4.16797H8.54427ZM8.54427 15.8346H18.5443V14.168H8.54427V15.8346ZM8.54427 10.8346H18.5443V9.16797H8.54427V10.8346Z"
+        fill="currentColor"
+        key="0"
+      ></path>
+    </svg>
+    <!-- <mat-icon class="icon-20">format_line_spacing</mat-icon> -->
+    <span>{{ 'SIDEBAR.SORT_CHAT' | translate }}</span>
+  </button>
+  <hr class="border-border-light mx-2 my-1" />
+  <button
+    type="button"
+    class="w-full flex items-center gap-2 px-2 h-9 text-[12px] font-medium text-red-500 hover:bg-bg-error hover:rounded-lg transition-colors"
+    (click)="onDeleteSelected()"
+  >
+    <mat-icon class="icon-20 text-red-500">delete</mat-icon>
+    <span>{{ 'SIDEBAR.DELETE_SELECTED' | translate }}</span>
+  </button>
+</div>

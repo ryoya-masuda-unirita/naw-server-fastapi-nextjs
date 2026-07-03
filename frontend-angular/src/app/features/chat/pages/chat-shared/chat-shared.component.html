@@ -1,0 +1,51 @@
+@if (isLoading()) {
+  <div class="flex-1 flex items-center justify-center bg-white w-full">
+    <app-loading />
+  </div>
+} @else if (hasAccess()) {
+  <aside class="w-[260px] bg-gray-50 border-r border-gray-200 flex flex-col min-h-screen">
+    <div class="p-4 whitespace-nowrap">
+      <a
+        [routerLink]="backRoute()"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors"
+      >
+        <span class="material-symbols-outlined"> subdirectory_arrow_left </span>
+        {{ 'COMMON.BACK' | translate }}
+      </a>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col h-auto">
+    <app-chat-window
+      [showHeader]="true"
+      [roomId]="roomId()"
+      [isReadOnly]="true"
+      [messages]="messages()"
+      [isLoading]="isMessagesLoading()"
+    />
+  </div>
+
+  <app-chat-data-panel [roomId]="roomId()" [isReadOnly]="true" />
+} @else {
+  <aside class="w-[260px] bg-[#F4F4F4] border-r border-gray-200 flex flex-col min-h-screen">
+    <div class="p-4">
+      <a
+        [routerLink]="backRoute()"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors"
+      >
+        <span class="material-symbols-outlined"> subdirectory_arrow_left </span>
+        {{ 'COMMON.BACK' | translate }}
+      </a>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col items-center justify-center px-8 bg-white">
+    <div class="mb-8">
+      <img src="/logo-short.png" alt="Logo" class="w-auto h-20" />
+    </div>
+
+    <p class="text-base text-gray-700 text-center">
+      {{ 'CHAT.SHARED.NO_ACCESS' | translate }}
+    </p>
+  </div>
+}

@@ -1,0 +1,8 @@
+/* Add custom radio styles here if tailwind utility classes are not enough.
+   Since we use tailwind form plugin or standard appearance, usually it looks fine.
+*/
+
+input[type='radio'] {
+  /* Ensuring custom colors can be styled correctly if form plugin is missing */
+  accent-color: var(--color-brand-primary);
+}

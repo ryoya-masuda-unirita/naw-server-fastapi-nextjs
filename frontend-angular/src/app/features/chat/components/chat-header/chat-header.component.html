@@ -1,0 +1,197 @@
+<header class="shrink-0 flex items-center h-11 md:h-14 px-2 md:px-4 bg-bg-primary z-30">
+  <!-- LEFT: Hamburger — mobile only -->
+  <button
+    type="button"
+    class="header-button-default md:hidden! w-7 h-7"
+    (click)="toggleSidebar()"
+    [attr.aria-label]="'HEADER.SIDEBAR_TOGGLE' | translate"
+  >
+    <app-svg-icon name="toggleSidebar" class="w-5 h-5 text-text-weak" />
+  </button>
+
+  <!-- CENTER: Title + context button -->
+  <div
+    class="chat-page-header"
+    [ngClass]="{
+      hidden: isHideName(),
+    }"
+  >
+    <h1 class="chat-page-header-title">{{ title() }}</h1>
+
+    <!-- Desktop: rename button -->
+    <button
+      type="button"
+      class="header-button-default hidden md:flex"
+      (click)="renameClick.emit()"
+      [attr.aria-label]="'HEADER.RENAME' | translate"
+      [ngClass]="{ 'md:hidden!': isReadOnly() }"
+    >
+      <app-svg-icon name="edit" class="w-5 h-5 text-text-weak" />
+    </button>
+
+    <!-- Mobile: new chat button -->
+    <!-- <button
+      type="button"
+      class="header-button-default md:hidden"
+      (click)="newChatClick.emit()"
+      [attr.aria-label]="'SIDEBAR.NEW_CHAT' | translate"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M4.5 17C4.0875 17 3.73437 16.8531 3.44062 16.5594C3.14687 16.2656 3 15.9125 3 15.5V4.5C3 4.08181 3.14583 3.72375 3.4375 3.42583C3.72917 3.12806 4.08333 2.98611 4.5 3H11.7083L10.2083 4.5H4.5V15.5H15.5V9.79167L17 8.29167V15.5C17 15.9125 16.8531 16.2656 16.5594 16.5594C16.2656 16.8531 15.9125 17 15.5 17H4.5ZM8 12V8.8125L15.375 1.4375C15.5278 1.28472 15.6944 1.17361 15.875 1.10417C16.0556 1.03472 16.2396 1 16.4271 1C16.6271 1 16.8177 1.03472 16.999 1.10417C17.1802 1.17361 17.3468 1.2832 17.4988 1.43292L18.5625 2.5C18.7153 2.65278 18.8264 2.81944 18.8958 3C18.9653 3.18056 19 3.36806 19 3.5625C19 3.75694 18.9651 3.94507 18.8954 4.12688C18.8257 4.30854 18.7147 4.47458 18.5625 4.625L11.1875 12H8ZM9.5 10.5H10.5625L15.375 5.6875L14.8542 5.14583L14.3125 4.625L9.5 9.4375V10.5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button> -->
+  </div>
+
+  <!-- RIGHT: Actions -->
+  <div
+    class="chat-page-header-actions"
+    [ngClass]="{
+      hidden: isHideName(),
+    }"
+  >
+    <!-- Desktop: share button -->
+    <button
+      type="button"
+      class="header-button-default hidden! md:flex!"
+      (click)="shareClick.emit()"
+      [attr.aria-label]="'HEADER.SHARE' | translate"
+      [ngClass]="{ 'md:hidden!': isReadOnly() }"
+    >
+      <mat-icon class="icon-20 text-text-lighter">share</mat-icon>
+    </button>
+
+    <!-- Desktop: like button -->
+    <button
+      type="button"
+      class="header-button-default hidden! md:flex!"
+      (click)="likeClick.emit()"
+      [attr.aria-label]="'HEADER.LIKE' | translate"
+      [ngClass]="{ 'md:hidden!': isReadOnly() }"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M7.5026 18.3346H15.0026C15.6943 18.3346 16.2859 17.918 16.5359 17.318L19.0526 11.443C19.1276 11.2513 19.1693 11.0513 19.1693 10.8346V9.16797C19.1693 8.2513 18.4193 7.5013 17.5026 7.5013H12.2443L13.0359 3.69297L13.0609 3.4263C13.0609 3.08464 12.9193 2.76797 12.6943 2.54297L11.8109 1.66797L6.31927 7.15964C6.01927 7.45964 5.83594 7.8763 5.83594 8.33464V16.668C5.83594 17.5846 6.58594 18.3346 7.5026 18.3346ZM7.5026 8.33464L11.1193 4.71797L10.0026 9.16797H17.5026V10.8346L15.0026 16.668H7.5026V8.33464ZM0.835938 8.33464H4.16927V18.3346H0.835938V8.33464Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+
+    <!-- Mobile: ··· dropdown -->
+    <div class="relative dropdown md:hidden!">
+      <button
+        type="button"
+        class="header-button-default"
+        [attr.aria-label]="'HEADER.MORE' | translate"
+        [attr.aria-expanded]="isMoreMenuOpen()"
+        aria-haspopup="menu"
+        (click)="$event.stopPropagation(); toggleMoreMenu()"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <path
+            d="M9.99563 16C9.58188 16 9.22917 15.8527 8.9375 15.5581C8.64583 15.2635 8.5 14.9094 8.5 14.4956C8.5 14.0819 8.64729 13.7292 8.94187 13.4375C9.23646 13.1458 9.59062 13 10.0044 13C10.4181 13 10.7708 13.1473 11.0625 13.4419C11.3542 13.7365 11.5 14.0906 11.5 14.5044C11.5 14.9181 11.3527 15.2708 11.0581 15.5625C10.7635 15.8542 10.4094 16 9.99563 16ZM9.99563 11.5C9.58188 11.5 9.22917 11.3527 8.9375 11.0581C8.64583 10.7635 8.5 10.4094 8.5 9.99563C8.5 9.58188 8.64729 9.22917 8.94187 8.9375C9.23646 8.64583 9.59062 8.5 10.0044 8.5C10.4181 8.5 10.7708 8.64729 11.0625 8.94188C11.3542 9.23646 11.5 9.59062 11.5 10.0044C11.5 10.4181 11.3527 10.7708 11.0581 11.0625C10.7635 11.3542 10.4094 11.5 9.99563 11.5ZM9.99563 7C9.58188 7 9.22917 6.85271 8.9375 6.55812C8.64583 6.26354 8.5 5.90937 8.5 5.49562C8.5 5.08187 8.64729 4.72917 8.94187 4.4375C9.23646 4.14583 9.59062 4 10.0044 4C10.4181 4 10.7708 4.14729 11.0625 4.44188C11.3542 4.73646 11.5 5.09063 11.5 5.50438C11.5 5.91813 11.3527 6.27083 11.0581 6.5625C10.7635 6.85417 10.4094 7 9.99563 7Z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+
+      <div
+        class="dropdown-menu dropdown-menu--bordered"
+        role="menu"
+        [hidden]="!isMoreMenuOpen()"
+        [class.is-open]="isMoreMenuOpen()"
+      >
+        <button
+          type="button"
+          class="dropdown-item"
+          role="menuitem"
+          (click)="handleRename()"
+          [ngClass]="{ hidden: isReadOnly() }"
+        >
+          <span class="dropdown-item-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <path
+                d="M2 20V16H18V20H2ZM5.5 12.5H6.5625L12.375 6.6875L11.8333 6.125L11.3125 5.625L5.5 11.4375V12.5ZM4 14V10.8142L12.375 2.4375C12.5278 2.28472 12.6933 2.17361 12.8717 2.10417C13.0499 2.03472 13.2374 2 13.4342 2C13.6308 2 13.8194 2.03472 14 2.10417C14.1806 2.17361 14.3479 2.28431 14.5021 2.43625L15.5625 3.5C15.7153 3.65278 15.8264 3.81944 15.8958 4C15.9653 4.18056 16 4.37083 16 4.57083C16 4.75819 15.9656 4.9425 15.8969 5.12375C15.8281 5.305 15.7188 5.47062 15.5688 5.62062L7.1875 14H4ZM12.375 6.6875L11.8333 6.125L11.3125 5.625L12.375 6.6875Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          {{ 'HEADER.RENAME' | translate }}
+        </button>
+        <button type="button" class="dropdown-item" role="menuitem" (click)="handleSettings()">
+          <span class="flex justify-center items-center">
+            <mat-icon class="icon-20">dock_to_right</mat-icon>
+          </span>
+          {{ 'HEADER.OPEN_VIEWER' | translate }}
+        </button>
+        <div class="dropdown-divider"></div>
+        <button
+          type="button"
+          class="dropdown-item"
+          role="menuitem"
+          (click)="handleShare()"
+          [ngClass]="{ hidden: isReadOnly() }"
+        >
+          <span class="flex justify-center items-center">
+            <mat-icon class="icon-20">shared</mat-icon>
+          </span>
+          {{ 'HEADER.SHARE' | translate }}
+        </button>
+        <button
+          type="button"
+          class="dropdown-item"
+          role="menuitem"
+          (click)="handleLike()"
+          [ngClass]="{ hidden: isReadOnly() }"
+        >
+          <span class="dropdown-item-icon">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <path
+                d="M7.5026 18.3346H15.0026C15.6943 18.3346 16.2859 17.918 16.5359 17.318L19.0526 11.443C19.1276 11.2513 19.1693 11.0513 19.1693 10.8346V9.16797C19.1693 8.2513 18.4193 7.5013 17.5026 7.5013H12.2443L13.0359 3.69297L13.0609 3.4263C13.0609 3.08464 12.9193 2.76797 12.6943 2.54297L11.8109 1.66797L6.31927 7.15964C6.01927 7.45964 5.83594 7.8763 5.83594 8.33464V16.668C5.83594 17.5846 6.58594 18.3346 7.5026 18.3346ZM7.5026 8.33464L11.1193 4.71797L10.0026 9.16797H17.5026V10.8346L15.0026 16.668H7.5026V8.33464ZM0.835938 8.33464H4.16927V18.3346H0.835938V8.33464Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          {{ 'HEADER.RATE' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+</header>

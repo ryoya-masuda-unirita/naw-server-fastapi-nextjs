@@ -1,0 +1,123 @@
+<div class="flex flex-col grow min-h-0 gap-8 md:gap-6 py-4 md:py-6">
+  <!-- Action bar (mobile-fixed via .sp-fixed-btn) -->
+  <div class="sp-fixed-btn">
+    @if (store.someSelected()) {
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        <app-button
+          variant="outline"
+          intent="cancel"
+          size="lg"
+          type="button"
+          (buttonClick)="clearSelection()"
+        >
+          {{ 'GROUPS.DESELECT' | translate }}
+        </app-button>
+        <app-button
+          variant="outline"
+          intent="delete"
+          size="lg"
+          type="button"
+          (buttonClick)="onRemoveUser()"
+        >
+          <app-svg-icon name="delete" class="w-5 h-5" />
+          {{ 'GROUPS.REMOVE_SELECTED' | translate }}
+        </app-button>
+      </div>
+    } @else {
+      <div>
+        <app-button
+          variant="solid"
+          size="lg"
+          type="button"
+          [fullWidth]="true"
+          (buttonClick)="onAddUser()"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="addCircle" class="w-5 h-5" />
+          {{ 'GROUPS.ADD_USER' | translate }}
+        </app-button>
+      </div>
+    }
+  </div>
+
+  <!-- Filters -->
+  <app-group-users-filter
+    [pageIndex]="store.filter().pageIndex"
+    [totalPages]="store.totalPages()"
+    [countDisplay]="countDisplay()"
+    (pageIndexChange)="store.updatePageIndex($event)"
+    (filterChange)="onFilterChange($event)"
+  />
+
+  <!-- Table -->
+  @if (store.isLoading()) {
+    <div class="flex justify-center p-8">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  } @else {
+    <app-group-users-table
+      [items]="store.items()"
+      [selectedIds]="store.selectedIds()"
+      [allSelected]="store.allSelected()"
+      [someSelected]="store.someSelected()"
+      [openMenuId]="openMenuId()"
+      [currentUser]="currentUser()"
+      (selectAllChange)="onSelectAll($event)"
+      (itemSelectChange)="onItemSelect($event)"
+      (toggleMenu)="toggleMenu($event)"
+      (editRole)="onEditRole($event)"
+      (removeUser)="onRemoveUser($event)"
+    />
+
+    @if (store.totalItems() > 0) {
+      <div class="flex justify-center">
+        <app-pagination
+          [totalPages]="store.totalPages()"
+          [useQueryParams]="false"
+          [showPageSize]="false"
+          [showFirstLast]="false"
+          [currentPageOverride]="store.filter().pageIndex"
+          (pageChange)="store.updatePageIndex($event)"
+        />
+      </div>
+    }
+  }
+</div>
+
+<!-- Add user dialog content -->
+<ng-template #addUserContent>
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-text-default leading-[1.4]">
+      {{ 'GROUPS.MEMBERS_LABEL' | translate }}
+    </span>
+    <p class="text-xs text-text-muted leading-[1.4] mb-2">
+      {{ 'GROUPS.ADD_USER_SUPPORT' | translate }}
+    </p>
+    <app-multi-select
+      [value]="addUserSelection()"
+      (selectionChange)="addUserSelection.set($event)"
+      [options]="userOptions"
+      [placeholder]="'GROUPS.MEMBERS_PLACEHOLDER' | translate"
+    />
+  </div>
+</ng-template>
+
+<!-- Edit role dialog content -->
+<ng-template #editRoleContent>
+  <div class="flex flex-col">
+    <app-form-radio
+      [label]="'GROUPS.ADMINS_LABEL' | translate"
+      [supportText]="'GROUPS.ADMINS_SUPPORT' | translate"
+      [value]="editRoleValue()"
+      (valueChange)="changeRole($event)"
+      [options]="roleOptions()"
+      layout="vertical"
+      classOption="flex-col gap-3"
+    />
+  </div>
+</ng-template>
+
+<!-- Remove user confirmation dialog content -->
+<ng-template #removeUserContent>
+  <p class="modal-delete-confirm-message">{{ 'GROUPS.REMOVE_USER_MESSAGE' | translate }}</p>
+</ng-template>

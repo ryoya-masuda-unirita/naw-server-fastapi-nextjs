@@ -1,0 +1,10 @@
+@if (isLoading()) {
+  <div class="chat-main">
+    <app-loading />
+  </div>
+} @else {
+  <app-chat-window [isLoading]="isLoading()" [roomId]="roomId()" [messages]="messages()" />
+  @if (showViewer()) {
+    <app-chat-data-panel [roomId]="roomId()" />
+  }
+}

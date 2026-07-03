@@ -1,0 +1,257 @@
+<fieldset class="block group">
+  @if (label() || supportText() || errorMessage()) {
+    <div class="fieldset-head mb-3">
+      @if (label()) {
+        <label [for]="id() + '-search'" class="fieldset-title">
+          {{ label() }}
+          @if (badgeText()) {
+            <span class="fieldset-any">{{ badgeText() }}</span>
+          }
+        </label>
+      }
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+      @if (errorMessage()) {
+        <p class="fieldset-error-message" role="alert">
+          <app-svg-icon name="attention" />
+          {{ errorMessage() }}
+        </p>
+      }
+    </div>
+  }
+
+  <div class="combobox-wrap" [attr.data-open]="isOpen() ? 'true' : 'false'" data-cmulti-wrap>
+    <!-- ---- PC trigger ---- -->
+    <div
+      class="combobox-trigger"
+      [class.combobox-trigger--error]="error()"
+      [class.combobox-trigger--disabled]="disabled()"
+      [attr.data-filled]="filled() || null"
+      data-cmulti-trigger
+      (click)="toggle()"
+    >
+      <div class="combobox-chips-row" #chipsRow data-cmulti-chips>
+        @for (opt of selectedOptions(); track opt.value) {
+          <span class="combobox-chip" data-chip-el (click)="$event.stopPropagation()">
+            <span class="truncate" style="max-width: 96px">{{ opt.label }}</span>
+            <button
+              type="button"
+              class="combobox-chip-remove"
+              [attr.aria-label]="'削除'"
+              (click)="removeChip($event, opt.value)"
+            >
+              <app-svg-icon name="closePath" class="w-3! h-3!" />
+            </button>
+          </span>
+        }
+
+        <input
+          #pcInput
+          type="text"
+          class="combobox-chips-search"
+          [id]="id() + '-search'"
+          [attr.placeholder]="!hasValue() ? placeholder() : ''"
+          [attr.data-placeholder]="placeholder()"
+          autocomplete="off"
+          role="combobox"
+          aria-haspopup="listbox"
+          [attr.aria-expanded]="isOpen()"
+          [attr.aria-controls]="id() + '-listbox'"
+          aria-autocomplete="list"
+          [disabled]="disabled()"
+          [value]="query()"
+          (focus)="onPcInputFocus()"
+          (blur)="onPcInputBlur()"
+          (input)="onQueryInput($event)"
+          (click)="$event.stopPropagation()"
+        />
+      </div>
+
+      <span class="combobox-separator right-11" aria-hidden="true"></span>
+      <button
+        type="button"
+        class="combobox-chevron-btn"
+        tabindex="-1"
+        aria-hidden="true"
+        [disabled]="disabled()"
+        (click)="$event.preventDefault(); $event.stopPropagation(); toggle()"
+      >
+        <app-svg-icon name="dropDown" class="w-5 h-5" />
+      </button>
+    </div>
+
+    <!-- backdrop (SP) -->
+    <div class="combobox-backdrop" (click)="cancel()" aria-hidden="true"></div>
+
+    <!-- dropdown / bottom sheet -->
+    @if (isVisible()) {
+      <div
+        #list
+        class="combobox-list"
+        [class.combobox-list--big]="panelSize() === 'big'"
+        [class.combobox-list--full]="panelSize() === 'full'"
+        [attr.hidden]="isOpen() ? null : ''"
+        role="listbox"
+        [id]="id() + '-listbox'"
+        aria-multiselectable="true"
+        [style.top]="listStyle().top"
+        [style.bottom]="listStyle().bottom"
+        [style.left]="listStyle().left"
+        [style.right]="listStyle().right"
+        [style.width]="listStyle().width"
+        [style.max-height]="listStyle().maxHeight"
+        [style.opacity]="listStyle().opacity"
+        (click)="$event.stopPropagation()"
+        data-cmulti-list
+      >
+        <div class="combobox-list__search">
+          <div class="combobox-list__sp-trigger">
+            @for (opt of selectedOptions(); track opt.value) {
+              <span class="combobox-chip" (click)="$event.stopPropagation()">
+                <span class="truncate" style="max-width: 96px">{{ opt.label }}</span>
+                <button
+                  type="button"
+                  class="combobox-chip-remove"
+                  [attr.aria-label]="'削除'"
+                  (click)="removeChip($event, opt.value)"
+                >
+                  <app-svg-icon name="closePath" class="w-3 h-3" />
+                </button>
+              </span>
+            }
+            <input
+              #spInput
+              type="text"
+              class="combobox-list__sp-input"
+              [attr.placeholder]="!hasValue() ? placeholder() : ''"
+              [attr.data-placeholder]="placeholder()"
+              autocomplete="off"
+              [value]="query()"
+              (focus)="onSpInputFocus()"
+              (blur)="onSpInputBlur()"
+              (input)="onQueryInput($event)"
+            />
+            <span class="combobox-separator right-10" aria-hidden="true"></span>
+            <span class="combobox-list__sp-chevron" aria-hidden="true">
+              <app-svg-icon name="dropDown" class="w-5 h-5" />
+            </span>
+          </div>
+          @if (searchHint()) {
+            <p class="combobox-list__hint">{{ searchHint() }}</p>
+          }
+        </div>
+
+        <div class="combobox-list__body">
+          <button
+            type="button"
+            class="combobox-select-all"
+            (click)="toggleAll()"
+            [attr.data-state]="allSelected() ? 'true' : someSelected() ? 'indeterminate' : 'false'"
+          >
+            <span
+              class="relative flex h-5 w-5 shrink-0 items-center justify-center"
+              aria-hidden="true"
+            >
+              <span class="input-checkbox-icon-false">
+                <app-svg-icon name="selectedFlase" class="input-checkbox-icon-svg" />
+              </span>
+              <span class="input-checkbox-icon-true">
+                <app-svg-icon name="selectedTrue" class="input-checkbox-icon-svg" />
+              </span>
+              <span class="input-checkbox-icon-indeterminate">
+                <app-svg-icon name="checkboxAll" class="input-checkbox-icon-svg" />
+              </span>
+            </span>
+            <span>
+              {{
+                !allSelected()
+                  ? ('COMMON.SELECT_ALL' | translate)
+                  : ('COMMON.RELEASE_ALL' | translate)
+              }}
+            </span>
+          </button>
+
+          @for (opt of filteredOptions(); track opt.value) {
+            <button
+              type="button"
+              class="combobox-option combobox-option__multi"
+              [class.combobox-option--rich]="!!(opt.description || opt.category)"
+              role="option"
+              [attr.aria-selected]="isSelected(opt) ? 'true' : 'false'"
+              [attr.data-selected]="isSelected(opt) ? 'true' : 'false'"
+              [disabled]="opt.disabled"
+              (click)="toggleOption(opt)"
+            >
+              @if (opt.description || opt.category) {
+                <div class="combobox-option__body">
+                  <div class="combobox-option__head">
+                    <span
+                      class="combobox-option__check combobox-option__check--multi relative"
+                      aria-hidden="true"
+                    >
+                      <span class="input-checkbox-icon-false">
+                        <app-svg-icon name="selectedFlase" class="input-checkbox-icon-svg" />
+                      </span>
+                      <span class="input-checkbox-icon-true">
+                        <app-svg-icon name="selectedTrue" class="input-checkbox-icon-svg" />
+                      </span>
+                    </span>
+                    <span class="combobox-option-title">{{ opt.label }}</span>
+                  </div>
+                  <div class="combobox-option__detail">
+                    @if (opt.description) {
+                      <p class="combobox-option__desc">{{ opt.description }}</p>
+                    }
+                    @if (opt.category) {
+                      <span class="combobox-option__category">{{ opt.category }}</span>
+                    }
+                  </div>
+                </div>
+              } @else {
+                <span
+                  class="combobox-option__check combobox-option__check--multi relative"
+                  aria-hidden="true"
+                >
+                  <span class="input-checkbox-icon-false">
+                    <app-svg-icon name="selectedFlase" class="input-checkbox-icon-svg" />
+                  </span>
+                  <span class="input-checkbox-icon-true">
+                    <app-svg-icon name="selectedTrue" class="input-checkbox-icon-svg" />
+                  </span>
+                </span>
+                <span class="combobox-option-title">{{ opt.label }}</span>
+              }
+            </button>
+          }
+
+          @if (filteredOptions().length === 0) {
+            <p class="combobox-empty">{{ emptyMessage() }}</p>
+          }
+        </div>
+
+        <div class="combobox-multi-footer">
+          <app-button
+            variant="outline"
+            type="button"
+            size="largePcDefault"
+            intent="cancel"
+            classProps="text-base md:text-sm"
+            (buttonClick)="cancel()"
+          >
+            {{ 'COMMON.CANCEL' | translate }}
+          </app-button>
+          <app-button
+            variant="solid"
+            type="button"
+            size="largePcDefault"
+            (buttonClick)="confirm()"
+            classProps="text-base md:text-sm"
+          >
+            {{ 'COMMON.CONFIRM_SELECTION' | translate }}
+          </app-button>
+        </div>
+      </div>
+    }
+  </div>
+</fieldset>

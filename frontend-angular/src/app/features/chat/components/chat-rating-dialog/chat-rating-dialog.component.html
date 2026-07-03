@@ -1,0 +1,20 @@
+<div class="flex flex-col gap-3">
+  <div>
+    <p class="fieldset-title">
+      {{ 'CHAT.RATING_DIALOG.RATING_LABEL' | translate }}
+    </p>
+    <p class="fieldset-support-text">
+      {{ 'CHAT.RATING_DIALOG.SUPPORT_TEXT' | translate }}
+    </p>
+  </div>
+
+  <!-- Rating Options -->
+  <app-form-radio
+    [options]="ratingOptions"
+    [value]="selectedRating()"
+    name="rating"
+    (valueChange)="selectRating($event)"
+    [classOption]="'gap-2 flex-col!'"
+    [inputClass]="'gap-2'"
+  />
+</div>

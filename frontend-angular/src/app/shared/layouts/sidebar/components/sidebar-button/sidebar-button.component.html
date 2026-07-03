@@ -1,0 +1,58 @@
+<button
+  type="button"
+  class="flex items-center h-9 gap-2 px-2 py-2 rounded-lg text-text-default hover:bg-bg-brand-weak transition-colors text-xs font-normal group w-full text-left"
+  [title]="item().labelKey | translate"
+>
+  @if (item().icon) {
+    <span class="flex items-center justify-center shrink-0 w-5 h-5">
+      @if (item().iconType === 'svg') {
+        <app-svg-icon [name]="item().icon!" class="w-5 h-5" />
+      } @else if (item().iconType === 'image') {
+        <img [src]="item().icon" class="w-5 h-5 rounded" [alt]="item().labelKey | translate" />
+      } @else {
+        <span [innerHTML]="item().icon"></span>
+      }
+    </span>
+  }
+
+  <span
+    class="flex-1 whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300 origin-left font-medium"
+    [ngClass]="{
+      'opacity-0': sidebarCollapsed(),
+      invisible: sidebarCollapsed(),
+    }"
+  >
+    {{ item().labelKey | translate }}
+  </span>
+
+  @if (!sidebarCollapsed()) {
+    @if (item().hasPin) {
+      <span
+        class="flex items-center justify-center text-text-weak transition-all duration-300 w-7 h-7"
+      >
+        <app-svg-icon name="push_pin" class="w-5 h-5 transition-opacity text-primary!" />
+      </span>
+    }
+
+    @if (item().hasMenu) {
+      <app-icon-button
+        variant="tertiary-gray"
+        classProps="dropdown-trigger hidden group-hover:flex group-hover:opacity-100 group-[.group-active]:hover:text-brand-primary ml-1"
+        aria-expanded="false"
+        aria-haspopup="true"
+        aria-label="操作メニュー"
+        (click)="onRoomMenuClick($event)"
+      >
+        <app-svg-icon name="more" class="w-5 h-5" />
+      </app-icon-button>
+    }
+
+    @if (item().badge) {
+      <span
+        class="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full transition-all duration-300"
+      >
+        {{ item().badge }}
+      </span>
+    }
+  }
+</button>

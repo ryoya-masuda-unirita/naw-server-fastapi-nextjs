@@ -1,0 +1,81 @@
+<div class="library-filters">
+  <!-- Search -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-label font-medium text-text-muted">
+      {{ 'LEARNING_DATA.SEARCH_LABEL' | translate }}
+    </span>
+    <app-search-input
+      class="md:w-40 w-full"
+      size="small"
+      [value]="query() || ''"
+      [placeholder]="'LEARNING_DATA.SEARCH_PLACEHOLDER' | translate"
+      (valueChange)="searchQuery.emit($event)"
+      [showClearButton]="true"
+    />
+  </div>
+
+  <!-- Filter -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-label font-medium text-text-muted">
+      {{ 'LEARNING_DATA.FILTER_LABEL' | translate }}
+    </span>
+    <div class="flex flex-col md:flex-row gap-2 w-full">
+      <app-select-with-search
+        class="md:w-40 w-full"
+        size="small"
+        [options]="userOptions()"
+        [value]="selectedUser() === 'all' ? null : selectedUser()"
+        [placeholder]="'LEARNING_DATA.ALL_USERS' | translate"
+        [supportText]="'CHAT_HISTORY.FILTER_USER_SUPPORT' | translate"
+        (valueChange)="userChange.emit($event)"
+      />
+      <app-period-filter
+        class="md:w-40 w-full"
+        size="small"
+        [options]="periodOptions()"
+        [value]="selectedPeriod()"
+        [range]="filterPeriodRange()"
+        (selectionChange)="periodChange.emit($event)"
+      />
+      <app-select
+        class="md:w-40 w-full"
+        size="small"
+        [placeholder]="'LEARNING_DATA.ALL_SETTINGS' | translate"
+        [options]="statusOptions()"
+        [value]="selectedStatus() || null"
+        (valueChange)="statusChange.emit($event)"
+      />
+    </div>
+  </div>
+
+  <!-- Sort -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-label font-medium text-text-muted">
+      {{ 'LEARNING_DATA.SORT_LABEL' | translate }}
+    </span>
+    <app-form-sort-input
+      class="md:w-40 w-full"
+      size="sm"
+      [fields]="sortOptions()"
+      [selectedField]="sortField()"
+      [selectedOrder]="sortOrder()"
+      (fieldChange)="sortFieldChange.emit($event)"
+      (orderChange)="sortOrderChange.emit($event)"
+      [placeholder]="'LEARNING_DATA.SORT_UPDATED_AT' | translate"
+    />
+  </div>
+
+  <!-- Count + Pagination -->
+  <div class="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
+    <app-pagination
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [useQueryParams]="false"
+      [showFirstLast]="true"
+      [countDisplay]="countDisplay()"
+      [totalPages]="totalPages()"
+      [currentPageOverride]="currentPage()"
+      (pageChange)="pageChange.emit($event)"
+    />
+  </div>
+</div>

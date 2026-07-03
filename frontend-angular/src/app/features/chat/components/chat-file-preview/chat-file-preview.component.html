@@ -1,0 +1,121 @@
+<div class="w-80 flex flex-col h-full bg-white border-l border-gray-200">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+    <div class="flex items-center gap-2">
+      <button
+        class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+        [attr.aria-label]="'CHAT.VIEWER.BACK' | translate"
+      >
+        <mat-icon>keyboard_arrow_left</mat-icon>
+      </button>
+      <h3 class="text-lg font-semibold text-gray-900">
+        {{ 'CHAT.VIEWER.TITLE' | translate }}
+      </h3>
+    </div>
+    <div class="flex items-center gap-1">
+      <button
+        class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+        [attr.aria-label]="'CHAT.VIEWER.SHARE' | translate"
+      >
+        <mat-icon>share</mat-icon>
+      </button>
+      <button
+        (click)="handleCloseEvent()"
+        class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+        [attr.aria-label]="'CHAT.FILE_PREVIEW.CLOSE' | translate"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Content Sections -->
+  <div class="flex-1 overflow-y-auto">
+    <!-- Document Title Section -->
+    <div class="px-4 py-3 border-b border-gray-200">
+      <h2 class="text-xl font-semibold text-gray-900">
+        {{ 'CHAT.VIEWER.DOCUMENT_TITLE' | translate }}
+      </h2>
+    </div>
+
+    <!-- Explanation Section -->
+    <div class="px-4 py-4 border-b border-gray-200">
+      <div class="flex items-center gap-2 mb-3">
+        <mat-icon class="text-gray-500">info</mat-icon>
+        <h3 class="text-base font-semibold text-gray-700">
+          {{ 'CHAT.VIEWER.EXPLANATION' | translate }}
+        </h3>
+      </div>
+      <p class="text-sm text-gray-600 leading-relaxed">
+        {{ 'CHAT.VIEWER.EXPLANATION_TEXT' | translate }}
+      </p>
+    </div>
+
+    <!-- Files/Attachments Section -->
+    @if (files().length > 0) {
+      <div class="px-4 py-4 border-b border-gray-200">
+        <h3 class="text-base font-semibold text-gray-700 mb-3">
+          {{ 'CHAT.VIEWER.ATTACHMENTS' | translate }}
+        </h3>
+        <div class="space-y-3">
+          @for (file of files(); track file.id) {
+            <div class="border border-gray-200 rounded-lg overflow-hidden">
+              <!-- Image Preview -->
+              @if (isImage(file) && file.url) {
+                <div
+                  class="aspect-video bg-gray-100 flex items-center justify-center overflow-hidden"
+                >
+                  <img [src]="file.url" [alt]="file.name" class="w-full h-full object-contain" />
+                </div>
+              } @else {
+                <!-- File Icon -->
+                <div class="aspect-video bg-gray-100 flex items-center justify-center">
+                  <mat-icon class="text-6xl text-gray-400">{{ getFileIcon(file) }}</mat-icon>
+                </div>
+              }
+
+              <!-- File Info -->
+              <div class="p-3">
+                <p class="text-sm font-medium text-gray-900 truncate" [title]="file.name">
+                  {{ file.name }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  {{ formatFileSize(file.size) }}
+                </p>
+
+                <!-- Actions -->
+                <div class="flex gap-2 mt-3">
+                  @if (file.url) {
+                    <button
+                      (click)="handleDownloadEvent(file)"
+                      class="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                      <mat-icon class="text-base">download</mat-icon>
+                      <span>{{ 'CHAT.FILE_PREVIEW.DOWNLOAD' | translate }}</span>
+                    </button>
+                  }
+
+                  <button
+                    (click)="handleRemoveEvent(file)"
+                    class="flex items-center justify-center gap-1 px-3 py-2 text-sm text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                    [attr.aria-label]="'CHAT.FILE_PREVIEW.REMOVE' | translate"
+                  >
+                    <mat-icon class="text-base">delete</mat-icon>
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Empty State -->
+    @if (files().length === 0) {
+      <div class="flex flex-col items-center justify-center h-full text-center px-4">
+        <mat-icon class="text-6xl text-gray-300 mb-2">folder_open</mat-icon>
+        <p class="text-gray-500">{{ 'CHAT.FILE_PREVIEW.EMPTY' | translate }}</p>
+      </div>
+    }
+  </div>
+</div>

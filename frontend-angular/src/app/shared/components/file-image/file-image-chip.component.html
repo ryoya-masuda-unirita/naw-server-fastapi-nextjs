@@ -1,0 +1,19 @@
+<div
+  class="inline-flex rounded-lg border border-border-strong bg-white h-16 w-16 shrink-0 relative overflow-hidden"
+>
+  <img
+    [src]="getFilePreviewUrl(file())"
+    [alt]="file().name"
+    class="absolute inset-0 rounded-lg object-cover w-full h-full"
+  />
+  @if (showRemoveBtn()) {
+    <button
+      type="button"
+      class="flex h-4 w-4 cursor-pointer bg-text-strong text-white transition-opacity rounded-full shrink-0 justify-center items-center hover:opacity-80 absolute top-0.75 right-0.75"
+      [attr.aria-label]="'CHAT.INPUT.REMOVE_FILE' | translate"
+      (click)="onRemove()"
+    >
+      <mat-icon class="icon-12 text-white!">close</mat-icon>
+    </button>
+  }
+</div>

@@ -1,0 +1,6 @@
+<app-form-input
+  [label]="'CHAT.WINDOW.RENAME_NAME_LABEL' | translate"
+  [placeholder]="'CHAT.WINDOW.RENAME_NAME_PLACEHOLDER' | translate"
+  [value]="actionBridge().name()"
+  (valueChange)="actionBridge().name.set($event)"
+/>

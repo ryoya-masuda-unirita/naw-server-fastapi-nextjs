@@ -1,0 +1,34 @@
+.trigger-wrapper {
+  &::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 0 0 1px var(--color-border-strong);
+    transition: box-shadow 0.2s ease;
+  }
+
+  &.has-value::before {
+    box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+  }
+
+  &.is-open::before {
+    box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}

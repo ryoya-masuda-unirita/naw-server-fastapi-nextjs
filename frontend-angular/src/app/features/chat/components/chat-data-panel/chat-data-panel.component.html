@@ -1,0 +1,17 @@
+@if (!isCollapsed()) {
+  <div
+    class="absolute left-0 top-0 bottom-0 w-1 z-10 cursor-col-resize transition-colors duration-100 hover:bg-brand-primary/30"
+    role="separator"
+    aria-orientation="vertical"
+    [attr.aria-label]="'CHAT.VIEWER.RESIZE_LABEL' | translate"
+    title="ドラッグしてサイズを変更"
+    (mousedown)="startResize($event)"
+  ></div>
+}
+
+<app-chat-summary
+  [chatId]="roomId()"
+  [headerOptions]="headerOptions()"
+  [isReadOnly]="isReadOnly()"
+  (collapseChange)="onCollapseChange($event)"
+/>

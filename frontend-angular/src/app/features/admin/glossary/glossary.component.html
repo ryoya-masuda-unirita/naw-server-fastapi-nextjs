@@ -1,0 +1,19 @@
+<app-page-header
+  title=""
+  [titleKey]="'SIDEBAR.GLOSSARY'"
+  [showSidebarToggle]="true"
+  [showActions]="false"
+  [showLanguageToggle]="true"
+  [tabs]="tabs()"
+  [activeTabId]="activeTabId()"
+  [showBackButton]="false"
+  (tabChange)="onTabChange($event)"
+/>
+
+@if (activeTabId() === 'terms') {
+  <app-glossary-terms-tab />
+}
+
+@if (activeTabId() === 'tags') {
+  <app-glossary-tags-tab />
+}

@@ -1,0 +1,186 @@
+<!-- Description -->
+<p class="text-body">{{ 'FEEDBACK.COUNT_DESCRIPTION' | translate }}</p>
+
+<!-- 検索・フィルター・並べ替え -->
+<div class="library-filters">
+  <!-- フィルター -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="library-filter-label">{{ 'FEEDBACK.FILTER' | translate }}</span>
+    <div class="flex flex-col md:flex-row gap-2 w-full">
+      <app-select
+        class="md:w-40 w-full"
+        size="small"
+        [options]="responseStatusOptions()"
+        [value]="selectedResponseStatus()"
+        [placeholder]="'FEEDBACK.ALL_RESPONSES' | translate"
+        (valueChange)="onResponseStatusChange($event)"
+      />
+      <app-select
+        class="md:w-40 w-full"
+        size="small"
+        [options]="satisfactionOptions()"
+        [value]="selectedSatisfaction()"
+        [placeholder]="'FEEDBACK.ALL_SATISFACTION' | translate"
+        (valueChange)="onSatisfactionChange($event)"
+      />
+    </div>
+  </div>
+
+  <!-- 並べ替え -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="library-filter-label">{{ 'FEEDBACK.SORT_ORDER' | translate }}</span>
+    <app-form-sort-input
+      class="w-full md:w-40"
+      size="sm"
+      [fields]="sortFieldOptions()"
+      [orders]="sortOrderOptions()"
+      [selectedField]="sortField()"
+      [selectedOrder]="sortOrder()"
+      (fieldChange)="onSortFieldChange($event)"
+      (orderChange)="onSortOrderChange($event)"
+    />
+  </div>
+
+  <!-- 件数 + ページ送り -->
+  <div class="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [currentPageOverride]="currentPage()"
+      [countDisplay]="countDisplay()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>
+
+<!-- テーブル -->
+<app-table-list>
+  <app-table-list-item
+    [isHeader]="true"
+    class="hidden table-list-row-content md:flex"
+    [hasActions]="false"
+  >
+    <span class="table-list-col-content table-list-label flex-1">{{
+      'FEEDBACK.USER_DISPLAY_NAME' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30">{{
+      'FEEDBACK.UPDATED_AT' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.ACCURACY_COUNT' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.SAT1_LABEL' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.SAT2_LABEL' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.SAT3_LABEL' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.SAT4_LABEL' | translate
+    }}</span>
+    <span class="table-list-row-date md:justify-start table-list-label md:w-30.75">{{
+      'FEEDBACK.SAT5_LABEL' | translate
+    }}</span>
+  </app-table-list-item>
+
+  @for (item of paginatedItems(); track item.id) {
+    <app-table-list-item [hasActions]="false">
+      <div class="table-list-col-content table-list-start-label">
+        <span class="table-list-title text-label-large md:text-label-x-large">{{
+          item.userName
+        }}</span>
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.UPDATED_AT' | translate
+        }}</span>
+        <span class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
+          {{ item.updatedAt ? (item.updatedAt | date: 'yyyy/MM/dd HH:mm') : '-' }}
+        </span>
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.ACCURACY_EVALUATION' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body text-text-strong md:w-full font-normal flex-1 flex flex-col gap-1 w-30"
+          >{{ item.accuracyCount }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.SAT1_LABEL' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body text-text-strong md:w-full font-normal flex-1 flex flex-col gap-1 w-30"
+          >{{ item.satisfaction1 }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.SAT2_LABEL' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body md:w-full font-normal text-text-strong flex-1 flex flex-col gap-1 w-30"
+          >{{ item.satisfaction2 }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.SAT3_LABEL' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body md:w-full font-normal text-text-strong flex-1 flex flex-col gap-1 w-30"
+          >{{ item.satisfaction3 }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.SAT4_LABEL' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body md:w-full font-normal text-text-strong flex-1 flex flex-col gap-1 w-30"
+          >{{ item.satisfaction4 }}</span
+        >
+      </div>
+      <div class="table-list-row-date md:justify-start md:w-30.75">
+        <span class="table-list-label md:hidden w-30 md:w-auto">{{
+          'FEEDBACK.SAT5_LABEL' | translate
+        }}</span>
+        <span
+          class="table-list-date text-body-small md:text-body md:w-full font-normal text-text-strong flex-1 flex flex-col gap-1 w-30"
+          >{{ item.satisfaction5 }}</span
+        >
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (isLoading()) {
+    <div class="flex justify-center py-8">
+      <app-circular-loading />
+    </div>
+  } @else if (paginatedItems().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'FEEDBACK.NO_DATA' | translate }}
+    </div>
+  }
+</app-table-list>
+
+<!-- 下部ページネーション -->
+@if (filteredItems().length > 0) {
+  <div class="flex justify-center">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showFirstLast]="false"
+      [currentPageOverride]="currentPage()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+}

@@ -1,0 +1,118 @@
+<div [formGroup]="form()" class="flex flex-col gap-4 md:gap-6">
+  <!-- Info Block -->
+  <div class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6">
+    <div class="flex gap-1 items-start md:gap-2">
+      <span class="shrink-0 h-5" aria-hidden="true">
+        <app-svg-icon name="lightbulb" class="icon-20 text-brand-primary" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large md:text-label-x-large font-medium">
+        {{ 'LEARNING_DATA.CHUNK_INFO_TITLE' | translate }}
+      </p>
+    </div>
+    <p class="text-body-small">
+      {{ 'LEARNING_DATA.CHUNK_INFO_TEXT' | translate }}
+    </p>
+  </div>
+
+  <!-- Upload File -->
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-text-default leading-[1.4]">
+      {{ 'LEARNING_DATA.EDIT_DATA_UPLOAD_FILE_LABEL' | translate }}
+    </span>
+    <!-- <p class="text-xs text-text-muted leading-[1.4] mb-2">
+      {{ 'LEARNING_DATA.EDIT_DATA_UPLOAD_FILE_SUPPORT' | translate }}
+    </p> -->
+
+    <div
+      class="flex flex-col sm:flex-row items-start sm:items-center justify-center sm:justify-start gap-3 md:gap-6"
+    >
+      @if (editFilePreview()) {
+        <div
+          class="relative shrink-0 w-40 h-40 rounded-xl overflow-hidden bg-bg-brand-weak border border-border-strong"
+        >
+          <img
+            [src]="editFilePreview()"
+            alt=""
+            class="absolute inset-0 w-full h-full object-fill"
+          />
+          <button
+            type="button"
+            class="absolute top-0.75 right-0.75 w-4.5 h-4.5 rounded-full bg-text-strong flex items-center justify-center text-text-white cursor-pointer hover:bg-text-default transition-colors"
+            (click)="removePreview.emit()"
+            aria-label="ファイルを削除"
+          >
+            <app-svg-icon name="close" class="w-3! h-3!" />
+          </button>
+        </div>
+      }
+
+      <div class="flex flex-col gap-1 items-center">
+        @if (editFilePreview() && editingFile()?.name) {
+          <p class="text-label text-text-medium font-medium max-w-48 truncate">
+            {{ editingFile()?.name }}
+          </p>
+        }
+        <label class="cursor-pointer">
+          <input type="file" class="hidden" (change)="editFileChange.emit($event)" accept="*" />
+          <span
+            class="inline-flex items-center justify-center gap-1 h-9 px-3 rounded-full border border-border-brand bg-bg-primary text-brand-primary text-sm font-medium hover:bg-bg-brand-weak hover:border-brand-secondary hover:text-brand-secondary transition-colors"
+          >
+            <app-svg-icon name="fileUpload" class="icon-20" />
+            <span class="leading-[1.4]">{{ 'LEARNING_DATA.UPLOAD_FILE_BUTTON' | translate }}</span>
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Display Name -->
+  <app-form-input
+    id="edit-display-name"
+    formControlName="displayName"
+    [label]="'LEARNING_DATA.EDIT_DATA_DISPLAY_NAME_LABEL' | translate"
+    [placeholder]="'LEARNING_DATA.EDIT_DATA_DISPLAY_NAME_PLACEHOLDER' | translate"
+    [error]="getEditError('displayName')"
+  />
+
+  <!-- Link Name -->
+  <app-form-input
+    id="edit-link-name"
+    formControlName="name"
+    [label]="'LEARNING_DATA.EDIT_DATA_LINK_NAME_LABEL' | translate"
+    [placeholder]="'LEARNING_DATA.EDIT_DATA_LINK_NAME_PLACEHOLDER' | translate"
+    [error]="getEditError('name')"
+  />
+
+  <!-- Chunk Size -->
+  <fieldset class="flex flex-col gap-3 group">
+    <div class="fieldset-head">
+      <span class="fieldset-title">
+        {{ 'LEARNING_DATA.EDIT_DATA_CHUNK_SIZE_LABEL' | translate }}
+      </span>
+      <!-- <p class="fieldset-support-text">
+        {{ 'LEARNING_DATA.EDIT_DATA_CHUNK_SIZE_SUPPORT' | translate }}
+      </p> -->
+    </div>
+    <app-chunk-select
+      formControlName="chunkSize"
+      [placeholder]="'LEARNING_DATA.EDIT_DATA_CHUNK_SIZE_PLACEHOLDER' | translate"
+      size="lg"
+      class="w-full"
+      [error]="getEditError('chunkSize') ? ' ' : ''"
+    />
+    @if (getEditError('chunkSize')) {
+      <span class="text-xs text-status-error">
+        {{ getEditError('chunkSize') }}
+      </span>
+    }
+  </fieldset>
+
+  <!-- Learning Setting Toggle -->
+  @if (editingFile()) {
+    <app-form-switch
+      formControlName="status"
+      [label]="'LEARNING_DATA.EDIT_DATA_LEARNING_SETTING_LABEL' | translate"
+      size="lg"
+    />
+  }
+</div>

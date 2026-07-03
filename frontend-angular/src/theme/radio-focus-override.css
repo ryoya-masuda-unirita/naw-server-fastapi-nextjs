@@ -1,0 +1,41 @@
+/**
+ * Global CSS Override for Radio Input Focus Ring
+ * 
+ * Add this to your global styles.scss or styles.css to remove
+ * focus rings from all radio inputs across your application.
+ * 
+ * This complements the component-level Tailwind classes:
+ * - outline-none
+ * - focus:outline-none
+ * - focus:ring-0
+ * - focus:ring-offset-0
+ */
+
+/* Remove default browser focus styles from radio inputs */
+input[type='radio'] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+input[type='radio']:focus,
+input[type='radio']:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: inherit !important;
+}
+
+/* Prevent Tailwind focus ring classes from applying to radio inputs */
+input[type='radio']:focus {
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
+
+/**
+ * Usage:
+ * 
+ * Add to src/styles.scss:
+ * 
+ * @import 'theme/radio-focus-override.css';
+ * 
+ * OR copy the rules directly into your global styles file.
+ */

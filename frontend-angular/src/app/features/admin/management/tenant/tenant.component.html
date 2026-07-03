@@ -1,0 +1,35 @@
+<app-admin-page-shell
+  [title]="tenantName()"
+  [customHeader]="false"
+  [tabs]="tabs()"
+  [activeTabId]="activeTabId()"
+  (tabChange)="onTabChange($event)"
+  (editClick)="onEditClick()"
+  [showTitleEdit]="true"
+>
+  @if (isLoading()) {
+    <div class="flex items-center justify-center py-16">
+      <div
+        class="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"
+      ></div>
+    </div>
+  } @else {
+    @switch (activeTabId()) {
+      @case ('usage') {
+        <app-usage-tab />
+      }
+      @case ('api') {
+        <app-api-tab />
+      }
+    }
+  }
+</app-admin-page-shell>
+
+<ng-template #renameWsModalContent>
+  <div class="flex flex-col gap-4 md:gap-6">
+    <app-form-input
+      [label]="'TENANT.RENAME_WS_TITLE' | translate"
+      [formControl]="renameWsNameControl"
+    />
+  </div>
+</ng-template>

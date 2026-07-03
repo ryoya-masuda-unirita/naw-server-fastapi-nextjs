@@ -1,0 +1,36 @@
+<div class="relative w-[168px] h-[168px]">
+  <!-- SVG Circle -->
+  <svg class="w-full h-full -rotate-90" viewBox="0 0 120 120">
+    <!-- Background circle -->
+    <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e5e5" stroke-width="8" />
+    <!-- Progress circle -->
+    <circle
+      cx="60"
+      cy="60"
+      r="50"
+      fill="none"
+      stroke="var(--color-primary)"
+      stroke-width="8"
+      stroke-linecap="round"
+      [attr.stroke-dasharray]="strokeDasharray()"
+      class="transition-all duration-500"
+    />
+  </svg>
+
+  <!-- Center text -->
+  <div class="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+    <div class="flex flex-col items-center pb-px">
+      <p class="text-[10px] font-medium text-text-muted leading-[1.4] text-center">
+        {{ label() }}
+      </p>
+      <div class="flex items-baseline justify-center mb-[-1px]">
+        <p class="text-[20px] font-medium text-[#1a1a1a] leading-[1.4]">
+          {{ formattedCurrent() }}
+        </p>
+      </div>
+    </div>
+    <p class="text-[12px] font-medium text-text-muted leading-[1.4] text-center">
+      上限{{ formattedLimit() }}
+    </p>
+  </div>
+</div>

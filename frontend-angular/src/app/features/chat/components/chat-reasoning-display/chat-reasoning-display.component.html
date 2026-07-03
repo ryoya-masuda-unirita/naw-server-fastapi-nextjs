@@ -1,0 +1,16 @@
+@for (section of reasoning().sections; track $index) {
+  <div class="chat-reasoning-section">
+    <p
+      class="chat-reasoning-summary text-xs font-medium text-text-muted"
+      [textContent]="section.summary"
+    ></p>
+    @if (section.detail) {
+      <div
+        #detailScrollContainer
+        class="chat-reasoning-detail overflow-y-auto text-xs text-text-weak"
+        aria-live="polite"
+        [textContent]="section.detail"
+      ></div>
+    }
+  </div>
+}

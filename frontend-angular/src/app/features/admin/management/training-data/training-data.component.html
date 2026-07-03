@@ -1,0 +1,277 @@
+<app-page-header
+  title=""
+  [titleKey]="'LEARNING_DATA.LEARNING_DATA'"
+  [showSidebarToggle]="true"
+  [showActions]="false"
+  [showLanguageToggle]="true"
+  [showBackButton]="false"
+/>
+
+<div class="flex flex-1 min-h-0 overflow-hidden">
+  <main
+    class="flex flex-col gap-0 md:gap-6 flex-1 min-w-0 min-h-0 overflow-y-auto px-4 pt-4 pb-6 md:px-6 md:pt-6"
+    data-learning-main
+  >
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 md:gap-6">
+      <!-- Desktop: 新規作成ボタン -->
+      <app-button
+        variant="solid"
+        size="lg"
+        iconPosition="left"
+        [fullWidth]="true"
+        class="!hidden md:!flex md:w-auto items-center self-start"
+        (buttonClick)="openCreateModal()"
+      >
+        <app-svg-icon icon name="addCircle" />
+        <span>{{ 'LEARNING_DATA.CREATE_NEW_FOLDER' | translate }}</span>
+      </app-button>
+
+      <!-- 検索・フィルター・並べ替え -->
+      <div
+        class="flex flex-col md:flex-row justify-end items-start md:items-end gap-3 md:gap-6 w-full md:w-auto"
+      >
+        <!-- 検索 -->
+        <div class="flex flex-col gap-1 w-full md:w-40">
+          <label for="library-search" class="font-medium text-xs leading-[1.4] text-text-muted">{{
+            'LEARNING_DATA.SEARCH_LABEL' | translate
+          }}</label>
+          <app-search-input
+            id="library-search"
+            [placeholder]="'LEARNING_DATA.SEARCH_PLACEHOLDER' | translate"
+            size="small"
+            [value]="searchQuery()"
+            (valueChange)="onSearchQuery($event)"
+            class="w-full"
+          />
+        </div>
+        <!-- 並べ替え -->
+        <div class="flex flex-col gap-1 w-full md:w-40">
+          <label for="library-sort" class="font-medium text-xs leading-[1.4] text-text-muted">{{
+            'LEARNING_DATA.SORT_LABEL' | translate
+          }}</label>
+          <app-form-sort-input
+            id="library-sort"
+            size="sm"
+            [selectedField]="sortField()"
+            [selectedOrder]="sortDir()"
+            (fieldChange)="onSortFieldChange($event)"
+            (orderChange)="onSortOrderChange($event)"
+            [fields]="sortFieldOptions"
+            [placeholder]="sortFieldOptions[0].label"
+            class="w-full"
+          />
+        </div>
+
+        <!-- 件数 + ページ送り -->
+        <div class="flex w-full justify-center md:w-auto md:block">
+          <app-pagination
+            [totalPages]="totalPages()"
+            [useQueryParams]="false"
+            [showPageSize]="false"
+            [showPageNumbers]="false"
+            [showFirstLast]="true"
+            [currentPageOverride]="currentPage()"
+            (pageChange)="onPageChange($event)"
+            [countDisplay]="countDisplay()"
+          />
+        </div>
+      </div>
+    </div>
+    <div class="term-cards text-text-strong">
+      @for (item of items(); track item.id) {
+        <div class="term-card border border-border-weak">
+          <div class="term-card-head">
+            <div class="term-card-name">{{ item.folder }}</div>
+          </div>
+          <div class="term-card-body relative md:pr-52">
+            <div class="term-card-row">
+              <div class="term-card-label">{{ 'LEARNING_DATA.DISPLAY_NAME' | translate }}</div>
+              <div class="term-card-text">{{ item.server }}</div>
+            </div>
+            <div class="term-card-row">
+              <div class="term-card-label">{{ 'LEARNING_DATA.DESCRIPTION' | translate }}</div>
+              <div class="term-card-text">{{ item.desc }}</div>
+            </div>
+            <div class="term-card-actions">
+              <app-button
+                variant="outline"
+                size="lg"
+                iconPosition="left"
+                (buttonClick)="navigateToDetail(item.id)"
+              >
+                <app-svg-icon icon name="edit" class="icon-20 leading-none"></app-svg-icon>
+                <span>{{ 'LEARNING_DATA.VIEW_EDIT' | translate }}</span>
+              </app-button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- ページネーション -->
+    <!-- ---- Bottom pagination ---- -->
+    <div class="flex justify-center mt-8 md:mt-0">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [maxVisiblePages]="3"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+      />
+    </div>
+  </main>
+
+  <!-- SP: Fixed bottom Add button -->
+  <div
+    class="fixed md:hidden bottom-0 right-0 w-full flex justify-center p-4 bg-white border-t border-text-lighter/90"
+    style="z-index: 100"
+  >
+    <app-button
+      variant="solid"
+      size="lg"
+      iconPosition="left"
+      [fullWidth]="true"
+      (buttonClick)="openCreateModal()"
+      class="flex items-center justify-center w-full"
+    >
+      <app-svg-icon icon name="addCircle" />
+      <span>{{ 'LEARNING_DATA.CREATE_NEW_FOLDER' | translate }}</span>
+    </app-button>
+  </div>
+</div>
+
+<!-- Create Folder Modal -->
+<ng-template #createFolderFormTpl>
+  <div class="relative">
+    @if (folderModal.isLoading()) {
+      <div class="absolute inset-0 z-10 flex items-center justify-center bg-bg-primary/60">
+        <app-circular-loading />
+      </div>
+    }
+    <div [formGroup]="createFolderForm" class="flex flex-col gap-4 md:gap-6 text-text-strong">
+      @if (createFolderForm.get('server')?.value !== 'SAAS_GLOBAL') {
+        <div
+          class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+        >
+          <div class="flex gap-1 items-start md:gap-2">
+            <span class="shrink-0 h-5" aria-hidden="true">
+              <app-svg-icon name="lightbulb" class="icon-20 text-brand-primary" />
+            </span>
+            <p class="flex-1 min-w-0 text-label-large md:text-label-x-large font-medium">
+              {{ 'LEARNING_DATA.LOCAL_INFO_TITLE' | translate }}
+            </p>
+          </div>
+          <p class="text-body-small">
+            {{ 'LEARNING_DATA.LOCAL_INFO_TEXT' | translate }}
+          </p>
+        </div>
+      }
+
+      <!-- 学習先フォルダの名前 -->
+      <app-form-input
+        id="create-folder-name"
+        formControlName="name"
+        [label]="'LEARNING_DATA.FOLDER_NAME_LABEL' | translate"
+        [placeholder]="'LEARNING_DATA.FOLDER_NAME_PLACEHOLDER' | translate"
+        [error]="folderNameError()"
+      />
+
+      <!-- 接続サーバー（ラジオ） -->
+      <app-form-radio
+        formControlName="server"
+        [label]="'LEARNING_DATA.SERVER_LABEL' | translate"
+        layout="vertical"
+        [options]="serverOptions"
+        classOption="gap-2"
+      ></app-form-radio>
+
+      @if (folderModal.hasNoEndpoints() && createFolderForm.get('server')?.value) {
+        <p class="text-body-small text-status-error">
+          {{ 'LEARNING_DATA.NO_ENDPOINTS' | translate }}
+        </p>
+      }
+
+      @if (createFolderForm.get('server')?.value === 'LOCAL') {
+        <app-form-select
+          inputId="create-folder-endpoint"
+          formControlName="endpointId"
+          [label]="'LEARNING_DATA.ENDPOINT_LABEL' | translate"
+          [placeholder]="'LEARNING_DATA.ENDPOINT_PLACEHOLDER' | translate"
+          [options]="folderModal.endpointOptions()"
+          [error]="endpointError()"
+          [disabled]="folderModal.isLoading() || folderModal.hasNoEndpoints()"
+        />
+      }
+
+      <!-- 学習先フォルダの説明 -->
+      <app-form-textarea
+        id="create-folder-description"
+        formControlName="description"
+        [label]="'LEARNING_DATA.FOLDER_DESC_LABEL' | translate"
+        [badgeText]="'COMMON.OPTIONAL' | translate"
+        [placeholder]="'LEARNING_DATA.FOLDER_DESC_PLACEHOLDER' | translate"
+        [rows]="4"
+        [areaHeight]="144"
+        [error]="folderDescError()"
+      ></app-form-textarea>
+
+      <!-- ローカル選択時のみ有効 -->
+      @if (createFolderForm.get('server')?.value !== 'SAAS_GLOBAL') {
+        <div class="flex flex-col gap-4 md:gap-6">
+          <app-form-input
+            id="create-folder-fetch-id"
+            formControlName="fetchId"
+            [label]="'LEARNING_DATA.FETCH_ID_LABEL' | translate"
+            [placeholder]="'LEARNING_DATA.FETCH_ID_PLACEHOLDER' | translate"
+            [error]="fetchIdError()"
+            [disabled]="!createFolderForm.get('server')?.value"
+          />
+          <app-form-input
+            id="create-folder-delete-id"
+            formControlName="deleteId"
+            [label]="'LEARNING_DATA.DELETE_ID_LABEL' | translate"
+            [placeholder]="'LEARNING_DATA.DELETE_ID_PLACEHOLDER' | translate"
+            [error]="deleteIdError()"
+            [disabled]="!createFolderForm.get('server')?.value"
+          />
+          <app-form-input
+            id="create-folder-learn-id"
+            formControlName="learnId"
+            [label]="'LEARNING_DATA.LEARN_ID_LABEL' | translate"
+            [placeholder]="'LEARNING_DATA.LEARN_ID_PLACEHOLDER' | translate"
+            [error]="learnIdError()"
+            [disabled]="!createFolderForm.get('server')?.value"
+          />
+        </div>
+      }
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #createFolderActions>
+  <div class="flex gap-3 justify-end max-sm:justify-center">
+    <app-button
+      variant="outline"
+      size="lg"
+      class="dialog-cancel-btn flex-1"
+      [fullWidth]="true"
+      [disabled]="isSubmitting()"
+      (buttonClick)="closeModal()"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      class="flex-1"
+      [fullWidth]="true"
+      [disabled]="!canSubmitCreateFolder()"
+      [loading]="isSubmitting()"
+      (buttonClick)="submitCreateFolder()"
+    >
+      {{ 'COMMON.CREATE' | translate }}
+    </app-button>
+  </div>
+</ng-template>

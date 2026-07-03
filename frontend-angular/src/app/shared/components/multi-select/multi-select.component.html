@@ -1,0 +1,284 @@
+<!-- Trigger -->
+<div
+  class="trigger-wrapper relative flex min-h-12 w-full flex-wrap items-center gap-1 rounded-lg bg-white pl-4 pr-4 py-2 cursor-pointer transition-all duration-200"
+  [ngClass]="{
+    'is-open': isOpen(),
+    'has-value': hasValue() && !isOpen(),
+    'bg-surface-disabled': disabled(),
+    'opacity-60': disabled(),
+    'cursor-not-allowed': disabled(),
+  }"
+  [attr.aria-expanded]="isOpen()"
+  [attr.aria-haspopup]="'listbox'"
+  (click)="toggle()"
+>
+  @if (hasValue()) {
+    @for (opt of selectedOptions(); track opt.value) {
+      <span class="combobox-chip" (click)="$event.stopPropagation()">
+        <span class="truncate max-w-24">{{ opt.label }}</span>
+        <button
+          [attr.aria-label]="opt.label"
+          (click)="removeChip($event, opt.value)"
+          type="button"
+          class="combobox-chip-remove"
+        >
+          <app-svg-icon name="closePath" class="w-3! h-3!" /></button
+      ></span>
+    }
+  } @else {
+    <span class="flex-1 min-w-0 truncate font-medium text-sm text-text-lighter">
+      {{ placeholder() }}
+    </span>
+  }
+
+  <app-mat-icon
+    icon="expand_more"
+    class="text-[20px]! ml-auto shrink-0 text-text-weak transition-transform duration-200"
+    [ngClass]="{ 'rotate-180': isOpen() }"
+  />
+</div>
+
+<!-- Desktop Dropdown Panel -->
+@if (!isMobile() && isVisible()) {
+  <div
+    class="absolute left-0 right-0 z-50 py-4 gap-2 bg-white rounded-xl shadow-default animate-fade-in flex flex-col overflow-hidden border border-border-strong"
+    [ngClass]="{
+      'opacity-0': !isOpen(),
+      'top-full mt-1': !placeAbove(),
+      'bottom-full mb-1': placeAbove(),
+    }"
+    [style.max-height]="dropdownMaxHeight()"
+    role="listbox"
+    aria-multiselectable="true"
+    (click)="$event.stopPropagation()"
+  >
+    @if (supportText()) {
+      <div class="px-4 pt-4 pb-2 text-xs text-text-muted font-normal shrink-0">
+        {{ supportText() }}
+      </div>
+    }
+
+    <!-- Options -->
+    <div class="flex flex-col min-h-0 overflow-y-auto gap-2">
+      <!-- Select All -->
+      <button
+        type="button"
+        class="flex items-center gap-3 w-full px-4 py-1 text-base text-left border-none cursor-pointer transition-colors duration-150 shrink-0 hover:bg-bg-brand-weak"
+        (click)="toggleAll()"
+      >
+        <span class="flex items-center justify-center w-5 h-5 shrink-0">
+          <app-checkbox
+            size="sm"
+            [checked]="allSelected()"
+            [indeterminate]="someSelected()"
+            [isHeader]="true"
+          />
+        </span>
+        <span
+          class="flex-1 text-sm font-medium"
+          [ngClass]="{
+            'text-brand-primary': allSelected() || someSelected(),
+            'text-text-default': !allSelected() && !someSelected(),
+          }"
+        >
+          {{
+            !allSelected() ? ('COMMON.SELECT_ALL' | translate) : ('COMMON.RELEASE_ALL' | translate)
+          }}
+        </span>
+      </button>
+      @if (options().length === 0) {
+        <div class="py-1 text-base text-center text-text-muted">
+          {{ 'COMMON.EMPTY_RESULT' | translate }}
+        </div>
+      }
+      @for (option of options(); track option.value) {
+        <button
+          type="button"
+          class="flex items-center gap-3 w-full px-4 py-1 text-base text-left border-none cursor-pointer transition-colors duration-150"
+          [ngClass]="{
+            'bg-bg-brand-weak': isSelected(option),
+            'hover:bg-bg-brand-weak': !isSelected(option),
+            'opacity-50 cursor-not-allowed': option.disabled,
+          }"
+          [disabled]="option.disabled"
+          role="option"
+          [attr.aria-selected]="isSelected(option)"
+          (click)="toggleOption(option)"
+        >
+          <span class="flex items-center justify-center w-5 h-5 shrink-0">
+            <app-checkbox [checked]="isSelected(option)" [indeterminate]="false" />
+          </span>
+          <span
+            class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm"
+            [ngClass]="{
+              'text-brand-secondary': isSelected(option),
+              'font-medium': isSelected(option),
+              'text-text-default': !isSelected(option),
+            }"
+          >
+            {{ option.label }}
+          </span>
+        </button>
+      }
+    </div>
+
+    <!-- Footer actions -->
+    <div class="flex justify-end gap-2 border-t border-border bg-white px-4 pt-4">
+      <app-button
+        variant="outline"
+        size="sm"
+        [heightPx]="36"
+        (buttonClick)="cancel()"
+        class="dialog-cancel-btn"
+      >
+        {{ 'COMMON.CANCEL' | translate }}
+      </app-button>
+      <app-button variant="solid" size="sm" [heightPx]="36" (buttonClick)="confirm()">
+        {{ 'COMMON.CONFIRM_SELECTION' | translate }}
+      </app-button>
+    </div>
+  </div>
+
+  <!-- </div> -->
+}
+
+<!-- Mobile Bottom Drawer -->
+@if (isMobile() && isVisible()) {
+  <div
+    class="fixed inset-0 z-200 flex flex-col justify-end transition-opacity duration-200"
+    [ngClass]="{
+      'opacity-0': !isOpen(),
+      'pointer-events-none': !isOpen(),
+    }"
+    (click)="confirm(); $event.stopPropagation()"
+  >
+    <div class="absolute inset-0 bg-bg-overlay"></div>
+
+    <div
+      class="relative bg-white rounded-t-2xl shadow-default flex flex-col max-h-[80vh] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] gap-4"
+      [ngClass]="{ 'translate-y-full': !isOpen() }"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="pt-4 px-4">
+        <div
+          class="combobox-list__sp-trigger"
+          [ngClass]="{
+            'is-open': isOpen(),
+            'has-value': hasValue() && !isOpen(),
+            'bg-surface-disabled': disabled(),
+            'opacity-60': disabled(),
+          }"
+          [attr.aria-expanded]="isOpen()"
+          [attr.aria-haspopup]="'listbox'"
+        >
+          @if (hasValue()) {
+            @for (opt of selectedOptions(); track opt.value) {
+              <span class="combobox-chip" (click)="$event.stopPropagation()">
+                <span class="truncate max-w-24">{{ opt.label }}</span>
+                <button
+                  [attr.aria-label]="opt.label"
+                  (click)="removeChip($event, opt.value)"
+                  type="button"
+                  class="combobox-chip-remove"
+                >
+                  <app-svg-icon name="closePath" class="w-3! h-3!" /></button
+              ></span>
+            }
+          } @else {
+            <span class="flex-1 min-w-0 truncate font-medium text-sm text-text-lighter">
+              {{ placeholder() }}
+            </span>
+          }
+          <span class="combobox-list__sp-chevron">
+            <app-mat-icon
+              icon="expand_more"
+              class="text-[20px]! shrink-0 text-text-weak transition-transform duration-200"
+              [ngClass]="{ 'rotate-180 !text-brand-primary': isOpen() }"
+              [attr.aria-hidden]="true"
+            />
+          </span>
+        </div>
+      </div>
+      @if (supportText()) {
+        <div class="px-4 pt-4 text-xs text-text-muted font-normal shrink-0">
+          {{ supportText() }}
+        </div>
+      }
+
+      <!-- Options (mobile) -->
+      <div
+        class="flex flex-col overflow-y-auto min-h-0 gap-2"
+        role="listbox"
+        aria-multiselectable="true"
+      >
+        <!-- Select All (mobile) -->
+        <button type="button" class="combobox-select-all" (click)="toggleAll()">
+          <span class="flex items-center justify-center w-5 h-5 shrink-0">
+            <app-checkbox
+              [isHeader]="true"
+              [checked]="allSelected()"
+              [indeterminate]="someSelected()"
+            />
+          </span>
+          <span>
+            {{
+              !allSelected()
+                ? ('COMMON.SELECT_ALL' | translate)
+                : ('COMMON.RELEASE_ALL' | translate)
+            }}
+          </span>
+        </button>
+        @if (options().length === 0) {
+          <div class="py-3 text-xs text-center text-text-muted">
+            {{ 'COMMON.EMPTY_RESULT' | translate }}
+          </div>
+        }
+        @for (option of options(); track option.value) {
+          <button
+            type="button"
+            class="flex items-center gap-2 w-full px-4 py-1 text-sm text-left border-none cursor-pointer transition-colors duration-150 font-medium"
+            [ngClass]="{
+              'bg-bg-brand-weak': isSelected(option),
+              'hover:bg-bg-brand-weak': !isSelected(option),
+              'opacity-50': option.disabled,
+              'cursor-not-allowed': option.disabled,
+            }"
+            [disabled]="option.disabled"
+            role="option"
+            [attr.aria-selected]="isSelected(option)"
+            (click)="toggleOption(option)"
+          >
+            <span class="flex items-center justify-center w-5 h-5 shrink-0">
+              <app-checkbox [checked]="isSelected(option)" [indeterminate]="false" />
+            </span>
+            <span
+              class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm"
+              [ngClass]="{
+                'text-brand-secondary': isSelected(option),
+                'font-medium': isSelected(option),
+                'text-text-default': !isSelected(option),
+              }"
+            >
+              {{ option.label }}
+            </span>
+          </button>
+        }
+      </div>
+
+      <!-- Footer (mobile) -->
+      <div class="combobox-multi-footer pb-4">
+        <app-button
+          variant="outline"
+          (buttonClick)="cancel()"
+          class="dialog-cancel-btn"
+          size="largePcDefault"
+        >
+          {{ 'COMMON.CANCEL' | translate }}
+        </app-button>
+        <app-button variant="solid" (buttonClick)="confirm()" size="largePcDefault">
+          {{ 'COMMON.CONFIRM_SELECTION' | translate }}
+        </app-button>
+      </div>
+    </div>
+  </div>
+}

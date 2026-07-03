@@ -1,0 +1,47 @@
+<div class="relative block w-full group">
+  <input
+    class="input-parts-field type-search library-search-field truncate w-full md:w-40 text-text-default"
+    [class.h-12]="size() !== 'small'"
+    [class.px-4]="size() !== 'small'"
+    [class.text-sm]="size() !== 'small'"
+    [class.h-9]="size() === 'small'"
+    [class.pl-3]="size() === 'small'"
+    [class.pr-17]="size() === 'small' && value() !== ''"
+    [class.text-xs]="size() === 'small'"
+    [value]="value()"
+    (input)="handleInput($event)"
+    (focus)="onFocus()"
+    (blur)="onBlur()"
+    [placeholder]="placeholder() | translate"
+    [attr.aria-label]="ariaLabel() | translate"
+    [class.text-brand-secondary]="value() && !isFocused()"
+    [ngClass]="inputClass()"
+  />
+
+  @if (showClearButton() && value()) {
+    <button
+      type="button"
+      class="combobox-clear"
+      (click)="handleClear()"
+      [attr.aria-label]="'COMMON.CLEAR' | translate"
+    >
+      <app-svg-icon
+        name="close"
+        class="shrink-0 w-3! h-3! transition-colors duration-200 text-text-white!"
+      />
+    </button>
+  }
+
+  @if (showSearchIcon()) {
+    <div
+      class="absolute top-1/2 -translate-y-1/2 right-3 w-5 h-5 flex items-center justify-center pointer-events-none text-text-weak transition-colors duration-200 group-focus-within:text-brand-primary"
+      aria-hidden="true"
+    >
+      <app-svg-icon
+        name="search"
+        class="shrink-0 w-5! h-5! text-current transition-colors duration-200"
+        [class.text-brand-primary!]="value()"
+      />
+    </div>
+  }
+</div>

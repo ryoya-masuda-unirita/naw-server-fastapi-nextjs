@@ -1,0 +1,128 @@
+<!-- Page Size Selector -->
+@if (showPageSize()) {
+  <div class="relative md:flex hidden items-center gap-2 mr-3">
+    @if (showPageSizeLabel()) {
+      <label
+        for="page-size-select"
+        class="absolute -top-6.5 left-0 text-sm font-medium text-text-muted"
+        >{{ 'COMMON.PAGE_SIZE_LABEL' | translate }}</label
+      >
+    }
+    <div class="relative flex items-center">
+      <select
+        id="page-size-select"
+        class="appearance-none w-24 px-4 py-2 pr-9 text-sm font-medium text-text-default bg-white border border-border rounded-lg cursor-pointer min-w-20 min-h-12 hover:border-text-default focus:outline-none focus:border-primary"
+        [value]="pageSize()"
+        (change)="onPageSizeChange($event)"
+      >
+        @for (size of pageSizeOptions(); track size) {
+          <option [value]="size" [selected]="size === pageSize()">{{ size }}</option>
+        }
+      </select>
+      <svg
+        class="absolute right-2 pointer-events-none text-text-muted"
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="none"
+      >
+        <path
+          d="M5.83333 7.91667L10 12.0833L14.1667 7.91667"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </div>
+  </div>
+}
+
+<!-- Count Display -->
+@if (countDisplay()) {
+  <span class="text-label font-medium text-text-medium whitespace-nowrap mr-2">{{
+    countDisplay()
+  }}</span>
+}
+
+<!-- Navigation buttons: First & Previous -->
+<div class="flex items-center gap-1 mr-2">
+  <!-- First Page Button -->
+  @if (showFirstLast()) {
+    <button
+      type="button"
+      class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+      [disabled]="!canGoPrev()"
+      (click)="goToFirstPage()"
+      aria-label="First page"
+    >
+      <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+    </button>
+  }
+
+  <!-- Previous Page Button -->
+  <button
+    type="button"
+    class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+    [disabled]="!canGoPrev()"
+    (click)="goToPrevPage()"
+    aria-label="Previous page"
+  >
+    <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+  </button>
+</div>
+
+<!-- Page Numbers -->
+@if (showPageNumbers()) {
+  <div class="flex items-center gap-1 mr-2">
+    @for (page of visiblePages(); track $index) {
+      @if (isNumber(page)) {
+        <button
+          type="button"
+          class="h-7 w-7 cursor-pointer border border-border-weak text-label-large font-(--text-label-large--font-weight) rounded-full flex justify-center items-center"
+          [class]="
+            page === currentPage()
+              ? 'pointer-events-none bg-bg-brand-weak text-brand-secondary!'
+              : 'text-text-medium'
+          "
+          (click)="goToPage(page)"
+          [attr.aria-current]="page === currentPage() ? 'page' : null"
+        >
+          {{ page }}
+        </button>
+      } @else {
+        <span
+          class="flex justify-center items-center w-7 h-7 border border-border-weak rounded-full text-label-large text-text-medium font-medium"
+          >{{ page }}</span
+        >
+      }
+    }
+  </div>
+}
+
+<!-- Navigation buttons: Next & Last -->
+<div class="flex items-center gap-1">
+  <!-- Next Page Button -->
+  <button
+    type="button"
+    class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+    [disabled]="!canGoNext()"
+    (click)="goToNextPage()"
+    aria-label="Next page"
+  >
+    <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+  </button>
+
+  <!-- Last Page Button -->
+  @if (showFirstLast()) {
+    <button
+      type="button"
+      class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+      [disabled]="!canGoNext()"
+      (click)="goToLastPage()"
+      aria-label="Last page"
+    >
+      <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+    </button>
+  }
+</div>

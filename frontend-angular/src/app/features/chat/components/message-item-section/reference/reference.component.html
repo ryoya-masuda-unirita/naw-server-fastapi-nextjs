@@ -1,0 +1,10 @@
+<div class="chat-ref-section">
+  <p class="chat-ref-title">参考資料</p>
+  <ul>
+    @for (ref of referenceFilePaths(); track ref.url) {
+      <li>
+        <a [href]="ref.url" target="_blank" rel="noopener noreferrer">{{ ref.name }}</a>
+      </li>
+    }
+  </ul>
+</div>

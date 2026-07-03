@@ -1,0 +1,38 @@
+<div [class]="tabClasses()">
+  @for (tab of tabs(); track tab.id) {
+    @if (tab.route && !tab.route.startsWith('#') && !tab.disabled) {
+      <a
+        [routerLink]="tab.route"
+        [class]="getTabItemClasses(tab)"
+        [attr.aria-current]="isActive(tab.id) ? 'page' : null"
+        [attr.aria-disabled]="tab.disabled"
+        (click)="onTabClick(tab)"
+      >
+        @if (tab.icon) {
+          <mat-icon class="text-current text-xl w-5 h-5">{{ tab.icon }}</mat-icon>
+        }
+        <span>{{ tab.label | translate }}</span>
+        @if (isActive(tab.id)) {
+          <span class="absolute -bottom-0.5 -left-4 -right-4 h-1.25 bg-brand-primary mx-4"></span>
+        }
+      </a>
+    } @else {
+      <button
+        type="button"
+        [class]="getTabItemClasses(tab)"
+        [attr.aria-current]="isActive(tab.id) ? 'page' : null"
+        [attr.aria-disabled]="tab.disabled"
+        [disabled]="tab.disabled"
+        (click)="onTabClick(tab)"
+      >
+        @if (tab.icon) {
+          <mat-icon class="text-current text-xl w-5 h-5">{{ tab.icon }}</mat-icon>
+        }
+        <span class="font-medium">{{ tab.label | translate }}</span>
+        @if (isActive(tab.id)) {
+          <span class="absolute -bottom-0.5 -left-4 -right-4 h-1.25 bg-brand-primary mx-4"></span>
+        }
+      </button>
+    }
+  }
+</div>

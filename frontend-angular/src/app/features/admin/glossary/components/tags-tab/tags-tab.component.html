@@ -1,0 +1,248 @@
+<div
+  class="flex flex-col gap-8 p-4 pb-28! md:gap-6 md:px-6! md:py-6! overflow-auto md:max-h-[calc(100vh- +115px)]"
+  [class.max-h-[calc(100vh-150px)]]="selectedTags().length > 0"
+  [class.max-h-[calc(100vh-105px)]]="selectedTags().length === 0"
+>
+  <!-- ---- Create button / Selection actions (desktop only) ---- -->
+  <div class="hidden md:flex items-start">
+    @if (selectedTags().length > 0) {
+      <div class="flex items-center gap-3">
+        <app-button
+          variant="outline"
+          class="w-36.5"
+          [fullWidth]="true"
+          intent="cancel"
+          (buttonClick)="onDeselectAll()"
+          size="md"
+          [heightPx]="54"
+        >
+          {{ 'GROUPS.CLEAR_SELECTION' | translate }}
+        </app-button>
+        <app-button
+          variant="outline"
+          class="w-30.5"
+          [fullWidth]="true"
+          intent="delete"
+          (buttonClick)="openDeleteSelectedTags()"
+          size="md"
+          [heightPx]="54"
+        >
+          <div class="flex items-center gap-1 justify-center leading-normal">
+            <app-mat-icon icon="delete" class="text-xl! leading-none" />
+            <span>{{ 'COMMON.DELETE' | translate }}</span>
+          </div>
+        </app-button>
+      </div>
+    } @else {
+      <app-button
+        variant="solid"
+        size="lg"
+        iconPosition="left"
+        [fullWidth]="true"
+        class="w-50.5 items-center"
+        (buttonClick)="onCreateTag()"
+      >
+        <app-svg-icon name="add_circle" class="text-xl!" />
+        <span>{{ 'ADMIN.GLOSSARY.ADD_TAG' | translate }}</span>
+      </app-button>
+    }
+  </div>
+
+  <!-- ---- Controls ---- -->
+  <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-4">
+    <!-- Sort -->
+    <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+      <span class="text-label font-medium text-text-medium">{{
+        'ADMIN.LIBRARY.TAGS.SORT_LABEL' | translate
+      }}</span>
+
+      <app-form-sort-input
+        id="tag-sort"
+        size="sm"
+        [fields]="sortOptions"
+        [(selectedField)]="sortBy"
+        (fieldChange)="currentPage.set(1)"
+        (fieldChange)="currentPage.set(1)"
+        class="w-full md:w-40"
+        [placeholder]="'ADMIN.LIBRARY.TAGS.SORT_UPDATED_AT' | translate"
+      />
+    </div>
+
+    <!-- Count + pagination -->
+    <div class="flex justify-center md:justify-end">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showPageNumbers]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+        [countDisplay]="countDisplay()"
+      />
+    </div>
+  </div>
+
+  <!-- ---- Table ---- -->
+  <app-table-list>
+    <app-table-list-item
+      [isHeader]="true"
+      [showCheckbox]="true"
+      [checked]="allSelected()"
+      [indeterminate]="someSelected()"
+      class="hidden md:flex"
+      (checkedChange)="toggleAllSelection($event)"
+    >
+      <span class="table-list-label shrink-0 w-30">{{
+        'ADMIN.LIBRARY.TAGS.HEADER_UPDATED_AT' | translate
+      }}</span>
+      <span class="table-list-col-content table-list-label">{{
+        'ADMIN.LIBRARY.TAGS.HEADER_NAME' | translate
+      }}</span>
+      <span slot="right" class="w-9 h-9 invisible"></span>
+    </app-table-list-item>
+
+    <app-table-list-item
+      [isHeader]="true"
+      [showCheckbox]="true"
+      [checked]="allSelected()"
+      [indeterminate]="someSelected()"
+      class="flex md:hidden"
+      (checkedChange)="toggleAllSelection($event)"
+    >
+      <span class="table-list-label">{{ 'COMMON.SELECT_ALL' | translate }}</span>
+    </app-table-list-item>
+
+    @if (isLoading()) {
+      @for (i of [1, 2, 3, 4, 5]; track i) {
+        <app-table-list-item [showCheckbox]="true">
+          <div class="shrink-0 w-30 max-sm:w-auto flex flex-col gap-1">
+            <app-skeleton height="14px" width="80px" />
+            <app-skeleton height="14px" width="60px" />
+          </div>
+          <div class="table-list-col-content flex flex-col gap-1">
+            <app-skeleton height="16px" width="120px" />
+            <app-skeleton height="14px" width="200px" />
+          </div>
+        </app-table-list-item>
+      }
+    } @else {
+      @for (item of paginatedTags(); track item.id) {
+        <app-table-list-item
+          [showCheckbox]="true"
+          [checked]="isTagSelected(item)"
+          (checkedChange)="toggleItemSelection(item, $event)"
+        >
+          <div class="shrink-0 w-30 max-sm:w-auto flex flex-col gap-0.5">
+            <p class="font-roboto font-medium text-label text-text-medium truncate">
+              {{ item.updatedDate | date: 'yyyy/MM/dd HH:mm' }}
+            </p>
+            <p class="font-medium text-label text-text-medium truncate">{{ item.updatedBy }}</p>
+          </div>
+
+          <div class="table-list-col-content">
+            <p class="font-medium text-label-large md:text-label-x-large text-text-strong truncate">
+              {{ item.name }}
+            </p>
+            @if (item.description) {
+              <p class="text-body-small text-text-medium line-clamp-1">{{ item.description }}</p>
+            } @else {
+              <p class="text-body-small text-text-medium">-</p>
+            }
+          </div>
+
+          <app-glossary-tag-item-menu
+            slot="right"
+            [item]="item"
+            (editSettings)="onEditSettings($event)"
+            (deleteItem)="onDeleteTag($event)"
+          />
+        </app-table-list-item>
+      }
+
+      @if (paginatedTags().length === 0) {
+        <div class="px-8 py-16 text-center text-text-muted">
+          {{ 'COMMON.NO_DATA' | translate }}
+        </div>
+      }
+    }
+  </app-table-list>
+
+  <!-- ---- Bottom pagination ---- -->
+  <div class="flex justify-center">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showFirstLast]="false"
+      [currentPageOverride]="currentPage()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>
+
+<!-- Fixed mobile add / selection buttons -->
+<div
+  class="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-bg-primary border-t border-border-strong shadow-lg z-10"
+>
+  @if (selectedTags().length > 0) {
+    <div class="flex flex-col gap-3">
+      <app-button
+        variant="outline"
+        [fullWidth]="true"
+        intent="delete"
+        size="lg"
+        (buttonClick)="openDeleteSelectedTags()"
+      >
+        <div class="flex items-center gap-1 justify-center">
+          <app-mat-icon icon="delete" class="text-xl! leading-none" />
+          <span>{{ 'COMMON.DELETE' | translate }}</span>
+        </div>
+      </app-button>
+      <app-button
+        variant="outline"
+        [fullWidth]="true"
+        intent="cancel"
+        (buttonClick)="onDeselectAll()"
+        size="lg"
+      >
+        {{ 'GROUPS.CLEAR_SELECTION' | translate }}
+      </app-button>
+    </div>
+  } @else {
+    <app-button
+      variant="solid"
+      size="lg"
+      [fullWidth]="true"
+      class="w-full"
+      (buttonClick)="onCreateTag()"
+    >
+      <app-svg-icon name="add_circle" />
+      <span>{{ 'ADMIN.LIBRARY.TAGS.ADD' | translate }}</span>
+    </app-button>
+  }
+</div>
+
+<!-- Edit tag dialog actions -->
+<ng-template #editTagCustomActions>
+  <div class="flex gap-3 justify-end max-[576px]:justify-center">
+    <app-button
+      variant="outline"
+      size="lg"
+      class="dialog-cancel-btn flex-1"
+      [fullWidth]="true"
+      (buttonClick)="closeEditTagDialog()"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      class="flex-1"
+      [fullWidth]="true"
+      (buttonClick)="saveEditTag()"
+      [disabled]="!isFormValid()"
+    >
+      {{ (isCreateMode() ? 'COMMON.CREATE' : 'COMMON.SAVE') | translate }}
+    </app-button>
+  </div>
+</ng-template>

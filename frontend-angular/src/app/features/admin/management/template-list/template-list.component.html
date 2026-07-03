@@ -1,0 +1,107 @@
+<app-admin-page-shell
+  [titleKey]="'TEMPLATES.TITLE'"
+  [mainClass]="store.someSelected() ? 'pb-[153px] md:pb-0' : 'pb-[87px] md:pb-0'"
+>
+  <!-- Mobile-fixed / inline action bar (Astro .sp-fixed-btn) -->
+  <div class="sp-fixed-btn">
+    @if (store.someSelected()) {
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        <app-button
+          variant="outline"
+          intent="cancel"
+          size="lg"
+          type="button"
+          (buttonClick)="clearSelection()"
+          [classProps]="'w-full'"
+        >
+          {{ 'TEMPLATES.DESELECT' | translate }}
+        </app-button>
+        <app-button
+          variant="outline"
+          intent="delete"
+          size="lg"
+          type="button"
+          (buttonClick)="onDeleteTemplate()"
+          [classProps]="'w-full'"
+        >
+          <app-svg-icon name="delete" class="w-5 h-5" />
+          {{ 'TEMPLATES.DELETE_SELECTED' | translate }}
+        </app-button>
+      </div>
+    } @else {
+      <div>
+        <app-button
+          variant="solid"
+          size="lg"
+          type="button"
+          [fullWidth]="true"
+          (buttonClick)="onAddTemplate()"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="addCircle" class="w-5 h-5" />
+          {{ 'TEMPLATES.ADD_TEMPLATE' | translate }}
+        </app-button>
+      </div>
+    }
+  </div>
+
+  <!-- Filters row -->
+  <app-template-list-filter
+    [pageIndex]="store.filter().pageIndex"
+    [totalPages]="store.totalPages()"
+    [countDisplay]="countDisplay()"
+    [teams]="teamFilterNames()"
+    (pageIndexChange)="store.updatePageIndex($event)"
+    (filterChange)="onFilterChange($event)"
+  />
+
+  <!-- Table list -->
+  @if (store.isLoading()) {
+    <div class="flex justify-center p-8">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  } @else {
+    <app-template-list-items
+      [items]="store.items()"
+      [selectedIds]="store.selectedIds()"
+      [allSelected]="store.allSelected()"
+      [someSelected]="store.someSelected()"
+      [openMenuId]="openMenuId()"
+      (selectAllChange)="onSelectAll($event)"
+      (itemSelectChange)="onItemSelect($event)"
+      (toggleMenu)="toggleMenu($event)"
+      (editTemplate)="onEditTemplate($event)"
+      (deleteTemplate)="onDeleteTemplate($event)"
+    />
+
+    @if (store.totalItems() > 0) {
+      <div class="flex justify-center">
+        <app-pagination
+          [totalPages]="store.totalPages()"
+          [useQueryParams]="false"
+          [showPageSize]="false"
+          [showFirstLast]="false"
+          [currentPageOverride]="store.filter().pageIndex"
+          (pageChange)="store.updatePageIndex($event)"
+        />
+      </div>
+    }
+  }
+</app-admin-page-shell>
+
+<!-- Delete confirmation dialog content -->
+<ng-template #deleteDialogContent>
+  <p class="modal-delete-confirm-message -mt-2 md:mt-1">
+    {{ 'TEMPLATES.DELETE_TEMPLATE_MESSAGE' | translate }}
+  </p>
+</ng-template>
+
+<!-- Edit template dialog content (parent passes pre-filled editForm) -->
+<ng-template #editTemplateContent>
+  <app-template-form [formGroup]="editForm" [teamOptions]="teamSelectOptions" />
+</ng-template>
+
+<!-- Add template dialog content (parent passes empty addForm) -->
+<ng-template #addTemplateContent>
+  <app-template-form [formGroup]="addForm" [teamOptions]="teamSelectOptions" />
+</ng-template>

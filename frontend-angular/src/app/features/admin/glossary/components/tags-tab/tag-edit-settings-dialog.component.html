@@ -1,0 +1,17 @@
+<app-form-input
+  [label]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.NAME_LABEL' | translate"
+  [supportText]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.NAME_SUPPORT' | translate"
+  [value]="name()"
+  (valueChange)="setName($event)"
+  [placeholder]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.TAG_NAME_PLACEHOLDER' | translate"
+/>
+
+<app-form-textarea
+  [textareaClass]="'min-h-36'"
+  [label]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.DESC_LABEL' | translate"
+  [badgeText]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.OPTIONAL' | translate"
+  [supportText]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.DESC_SUPPORT' | translate"
+  [value]="description()"
+  (valueChange)="setDescription($event)"
+  [placeholder]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.TAG_DESC_PLACEHOLDER' | translate"
+/>

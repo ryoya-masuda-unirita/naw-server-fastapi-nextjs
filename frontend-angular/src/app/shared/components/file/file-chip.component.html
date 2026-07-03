@@ -1,0 +1,28 @@
+<div
+  class="inline-flex rounded-lg border border-border-strong bg-white items-start gap-4 max-w-60 p-1"
+>
+  <div class="flex items-center gap-3 py-2 pr-4 pl-2">
+    <div class="flex h-10 w-10 rounded-lg bg-brand-primary shrink-0 justify-center items-center">
+      <app-mat-icon icon="attach_file" class="text-xs! text-white! leading-none" />
+    </div>
+    <div class="flex flex-col items-start min-w-0">
+      <span
+        class="text-(length:--text-note) font-medium text-text-strong truncate max-w-30 overflow-hidden"
+        >{{ file().name }}</span
+      >
+      <span class="text-[10px] leading-[1.4] font-medium text-text-weak">{{
+        getFileTypeLabel(file())
+      }}</span>
+    </div>
+  </div>
+  @if (showRemoveBtn()) {
+    <button
+      type="button"
+      class="flex h-4 w-4 cursor-pointer bg-text-strong text-white transition-opacity rounded-full shrink-0 justify-center items-center hover:opacity-80"
+      [attr.aria-label]="'CHAT.INPUT.REMOVE_FILE' | translate"
+      (click)="onRemove()"
+    >
+      <mat-icon class="icon-12 text-white!">close</mat-icon>
+    </button>
+  }
+</div>

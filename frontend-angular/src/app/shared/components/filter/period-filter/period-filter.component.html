@@ -1,0 +1,335 @@
+<!-- Trigger -->
+<div
+  class="trigger-wrapper relative flex items-center w-full pl-3 pr-4 rounded-lg text-sm transition-all duration-200 overflow-hidden cursor-pointer"
+  [class.h-12]="size() !== 'small'"
+  [class.h-9]="size() === 'small'"
+  [class.bg-bg-brand-weak]="hasSelection() && !isOpen()"
+  [class.bg-white]="!hasSelection() || isOpen()"
+  [class.has-value]="hasSelection() && !isOpen()"
+  [class.is-open]="isOpen()"
+  [class.bg-surface-disabled]="disabled()"
+  [class.opacity-60]="disabled()"
+  [class.cursor-not-allowed]="disabled()"
+  [attr.aria-expanded]="isOpen()"
+  [attr.aria-haspopup]="'listbox'"
+  (click)="toggle()"
+>
+  <span
+    class="flex-1 min-w-0 text-ellipsis whitespace-nowrap overflow-hidden font-medium"
+    [class.text-sm]="size() !== 'small'"
+    [class.text-xs]="size() === 'small'"
+    [class.text-brand-secondary]="hasSelection() && !isOpen()"
+    [class.text-text-default]="hasSelection() && isOpen()"
+    [class.text-text-lighter]="!hasSelection()"
+  >
+    {{ selectedLabel() }}
+  </span>
+
+  @if (hasSelection()) {
+    <button
+      type="button"
+      class="shrink-0 flex items-center justify-center h-4 w-4 ml-2 cursor-pointer text-white bg-text-default rounded-full"
+      (click)="clearAll($event)"
+    >
+      <app-svg-icon name="close" class="w-3 h-3" />
+    </button>
+  }
+
+  <app-svg-icon
+    name="arrowDown"
+    class="-mr-1.25 shrink-0 w-5 h-5 text-text-weak transition-transform duration-200 ml-2"
+    [class.text-brand-primary!]="isOpen()"
+    [class.rotate-180]="isOpen()"
+  />
+</div>
+
+<!-- Desktop Panel -->
+@if (!isMobile() && isOpen()) {
+  <div class="absolute top-full left-0 z-50 mt-1 flex gap-1 animate-fade-in" role="dialog">
+    <!-- Panel 1: Main View -->
+    <div
+      class="w-[260px] bg-white rounded-xl shadow-default border border-border-strong overflow-hidden shrink-0"
+    >
+      <ng-container *ngTemplateOutlet="mainView" />
+    </div>
+
+    <!-- Panel 2: Range / Calendar View -->
+    @if (view() === 'range' || view() === 'calendar') {
+      <div class="relative shrink-0">
+        <div
+          class="w-[260px] bg-white rounded-xl shadow-default border border-border-strong overflow-hidden"
+        >
+          <ng-container *ngTemplateOutlet="rangeView" />
+        </div>
+
+        <!-- Floating Calendar for Desktop -->
+        @if (view() === 'calendar') {
+          <div
+            class="absolute z-50 left-0 bg-white rounded-xl shadow-default border border-border-strong overflow-hidden animate-fade-in"
+            [ngClass]="calendarTarget() === 'from' ? 'top-[56px]' : 'top-[108px]'"
+            style="width: 292px"
+          >
+            <ng-container *ngTemplateOutlet="calendarView; context: { showBack: false }" />
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
+<!-- Mobile Drawer -->
+@if (isMobile() && isOpen()) {
+  <div
+    class="fixed inset-0 z-50 flex flex-col justify-end"
+    (click)="close(); $event.stopPropagation()"
+  >
+    <div class="absolute inset-0 bg-bg-overlay"></div>
+    <div
+      class="relative bg-white rounded-t-xl shadow-default flex flex-col max-h-[85vh] overflow-hidden"
+      (click)="$event.stopPropagation()"
+    >
+      @switch (view()) {
+        @case ('main') {
+          <ng-container *ngTemplateOutlet="mainView" />
+        }
+        @case ('range') {
+          <div class="px-4 pt-2">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-secondary"
+              (click)="backToMain()"
+              [attr.aria-label]="'COMMON.BACK' | translate"
+            >
+              <app-svg-icon name="arrowLeft" class="w-4 h-4" />
+            </button>
+          </div>
+          <ng-container *ngTemplateOutlet="rangeView" />
+        }
+        @case ('calendar') {
+          <div class="px-4 pt-2">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-secondary"
+              (click)="backToRange()"
+              [attr.aria-label]="'COMMON.BACK' | translate"
+            >
+              <app-svg-icon name="arrowLeft" class="w-4 h-4" />
+            </button>
+          </div>
+          <ng-container *ngTemplateOutlet="calendarView; context: { showBack: false }" />
+        }
+      }
+    </div>
+  </div>
+}
+
+<!-- ===== Main View Template ===== -->
+<ng-template #mainView>
+  <div class="flex flex-col py-2" role="listbox">
+    @for (option of options(); track trackOption($index, option)) {
+      <button
+        type="button"
+        class="dl-option"
+        [attr.data-selected]="isPresetSelected(option) ? 'true' : null"
+        role="option"
+        [attr.aria-selected]="isPresetSelected(option)"
+        (click)="selectPreset(option)"
+      >
+        <span class="dl-option__check" aria-hidden="true">
+          <app-svg-icon name="newCheck" class="w-5 h-5" />
+        </span>
+        <span class="flex-1 min-w-0 truncate">{{ option.label | translate }}</span>
+      </button>
+    }
+
+    @if (allowCustom()) {
+      <button
+        type="button"
+        class="dl-option border-t border-border-weak"
+        [attr.data-selected]="
+          isCustomSelected() || (!isMobile() && view() !== 'main') ? 'true' : null
+        "
+        (click)="openRangeView()"
+      >
+        <span class="dl-option__check" aria-hidden="true">
+          <app-svg-icon name="newCheck" class="w-5 h-5" />
+        </span>
+        <span class="flex-1 min-w-0 truncate">
+          {{ 'COMMON.PERIOD_FILTER.SPECIFY_PERIOD' | translate }}
+        </span>
+        <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+      </button>
+    }
+  </div>
+</ng-template>
+
+<!-- ===== Range View Template ===== -->
+<ng-template #rangeView>
+  <div class="flex flex-col px-4 py-3 gap-3">
+    <div class="flex items-center gap-2">
+      <div class="relative flex-1">
+        <input
+          type="text"
+          readonly
+          class="w-full h-10 pl-3 pr-9 rounded-lg border border-border-strong bg-white text-sm cursor-pointer focus:outline-none focus:border-brand-primary"
+          [value]="tempFrom()"
+          [placeholder]="'COMMON.PERIOD_FILTER.DATE_PLACEHOLDER' | translate"
+          (click)="openCalendar('from')"
+        />
+        @if (tempFrom()) {
+          <button
+            type="button"
+            class="absolute top-1/2 -translate-y-1/2 right-9 flex items-center justify-center h-4 w-4 cursor-pointer text-white bg-text-default rounded-full"
+            (click)="clearRangeInput('from', $event)"
+          >
+            <app-svg-icon name="close" class="w-3 h-3" />
+          </button>
+        }
+        <app-svg-icon
+          name="calendar"
+          class="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-weak pointer-events-none"
+        />
+      </div>
+      <span class="text-xs text-text-default shrink-0">
+        {{ 'COMMON.PERIOD_FILTER.FROM_LABEL' | translate }}
+      </span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <div class="relative flex-1">
+        <input
+          type="text"
+          readonly
+          class="w-full h-10 pl-3 pr-9 rounded-lg border border-border-strong bg-white text-sm cursor-pointer focus:outline-none focus:border-brand-primary"
+          [value]="tempTo()"
+          [placeholder]="'COMMON.PERIOD_FILTER.DATE_PLACEHOLDER' | translate"
+          (click)="openCalendar('to')"
+        />
+        @if (tempTo()) {
+          <button
+            type="button"
+            class="absolute top-1/2 -translate-y-1/2 right-9 flex items-center justify-center h-4 w-4 cursor-pointer text-white bg-text-default rounded-full"
+            (click)="clearRangeInput('to', $event)"
+          >
+            <app-svg-icon name="close" class="w-3 h-3" />
+          </button>
+        }
+        <app-svg-icon
+          name="calendar"
+          class="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-weak pointer-events-none"
+        />
+      </div>
+      <span class="text-xs text-text-default shrink-0">
+        {{ 'COMMON.PERIOD_FILTER.UNTIL_LABEL' | translate }}
+      </span>
+    </div>
+  </div>
+
+  <div class="flex gap-3 justify-end px-4 py-3 border-t border-border-weak bg-bg-surface-soft">
+    <app-button
+      variant="outline"
+      intent="cancel"
+      size="largePcDefault"
+      type="button"
+      (buttonClick)="cancelRange()"
+    >
+      {{ 'COMMON.PERIOD_FILTER.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="largePcDefault"
+      type="button"
+      [disabled]="!tempFrom() || !tempTo()"
+      (buttonClick)="confirmRange()"
+    >
+      {{ 'COMMON.PERIOD_FILTER.APPLY' | translate }}
+    </app-button>
+  </div>
+</ng-template>
+
+<!-- ===== Calendar View Template ===== -->
+<ng-template #calendarView let-showBack="showBack">
+  <div class="datepicker flex flex-col">
+    <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      @if (showBack) {
+        <button
+          type="button"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-secondary"
+          (click)="backToRange()"
+          [attr.aria-label]="'COMMON.BACK' | translate"
+        >
+          <app-svg-icon name="arrowLeft" class="w-4 h-4" />
+        </button>
+      } @else {
+        <span class="w-7"></span>
+      }
+      <span class="text-sm font-medium text-text-default">{{ monthLabel() }}</span>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-secondary"
+          (click)="prevMonth()"
+          [attr.aria-label]="'COMMON.BACK' | translate"
+        >
+          <app-svg-icon name="arrowLeft" class="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-secondary"
+          (click)="nextMonth()"
+        >
+          <app-svg-icon name="arrowRight" class="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+
+    <div class="px-3 pb-2">
+      <table class="w-full text-center text-xs">
+        <thead>
+          <tr class="text-text-weak">
+            @for (key of weekdayKeys; track key) {
+              <th class="py-1 font-normal w-9">{{ key | translate }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of calendarRows(); track trackRow($index)) {
+            <tr>
+              @for (cell of row; track trackCell($index)) {
+                <td class="p-0.5">
+                  @if (cell.inMonth && cell.date) {
+                    <button
+                      type="button"
+                      class="datepicker-cell w-8 h-8 rounded-full text-sm flex items-center justify-center transition-colors"
+                      [class.text-text-default]="!cell.isSelected"
+                      [class.bg-brand-primary]="cell.isSelected"
+                      [class.text-white]="cell.isSelected"
+                      [class.font-bold]="cell.isToday && !cell.isSelected"
+                      [class.text-brand-primary]="cell.isToday && !cell.isSelected"
+                      [class.hover:bg-secondary]="!cell.isSelected"
+                      (click)="selectDate(cell)"
+                    >
+                      {{ cell.day }}
+                    </button>
+                  } @else {
+                    <span
+                      class="datepicker-cell w-8 h-8 rounded-full text-sm flex items-center justify-center text-text-lighter"
+                    >
+                      {{ cell.day || '' }}
+                    </span>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-end px-4 py-2 border-t border-border-weak">
+      <app-button variant="text" size="sm" type="button" (buttonClick)="selectCalendarToday()">
+        {{ 'COMMON.PERIOD_FILTER.CALENDAR_TODAY' | translate }}
+      </app-button>
+    </div>
+  </div>
+</ng-template>

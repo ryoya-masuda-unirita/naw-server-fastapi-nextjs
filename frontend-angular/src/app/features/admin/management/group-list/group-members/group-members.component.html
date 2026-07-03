@@ -1,0 +1,144 @@
+<app-page-header
+  title=""
+  [titleKey]="groupName()"
+  [showSidebarToggle]="true"
+  [showActions]="false"
+  [showLanguageToggle]="true"
+  [tabs]="tabs()"
+  [showBackButtonInMobile]="true"
+  (backClick)="goBack()"
+/>
+
+<!-- Content -->
+<div class="flex flex-col gap-6 pt-4 pb-19 md:py-6 px-4">
+  <!-- Add User Button -->
+  <div class="hidden md:block">
+    <app-button
+      variant="solid"
+      size="lg"
+      iconPosition="right"
+      (buttonClick)="editGroup()"
+      class="w-42"
+    >
+      <span>{{ 'ADMIN_CONSOLE.ADD_USER' | translate }}</span>
+      <mat-icon class="w-5 h-5">add</mat-icon>
+    </app-button>
+  </div>
+
+  <!-- Filter Row: Filters on left, Pagination on right -->
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3">
+    <!-- Left: Filters -->
+    <div class="flex flex-col gap-1 w-full">
+      <span class="text-sm font-medium text-text-muted">{{
+        'ADMIN_CONSOLE.FILTER' | translate
+      }}</span>
+      <div class="flex flex-col md:flex-row flex-wrap gap-3 w-full">
+        <!-- Role Filter -->
+        <app-select [options]="filterOptions" [(value)]="filterType" class="md:w-60 w-full" />
+
+        <!-- Search Input -->
+        <app-search-input
+          [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+          [(value)]="searchTerm"
+          class="md:w-60 w-full"
+          size="small"
+        />
+      </div>
+    </div>
+
+    <!-- Right side: Display count & Pagination -->
+    <div class="flex items-center gap-3 w-full justify-center md:justify-start md:w-auto">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        (pageChange)="onPageChange($event)"
+      />
+    </div>
+  </div>
+
+  <div>
+    <app-table
+      [data]="paginatedData()"
+      [columns]="columns()"
+      [selectable]="true"
+      [sortable]="true"
+      (selectionChange)="onSelectionChange($event)"
+    ></app-table>
+
+    <!-- Custom Templates -->
+    <ng-template #roleTemplate let-row>
+      <div
+        class="flex flex-row md:flex-col justify-between md:justify-start items-center md:items-start"
+      >
+        <span class="text-xs text-text-muted inline md:hidden">{{
+          'AUTH.PERMISSION' | translate
+        }}</span>
+        <span class="text-xs md:text-sm text-text-default">{{ row.role }}</span>
+      </div>
+    </ng-template>
+
+    <ng-template #descriptionTemplate let-row>
+      <div class="flex flex-col gap-1">
+        <div class="text-sm font-medium text-text-default">{{ row.name }}</div>
+        <div class="text-xs text-text-muted">{{ row.description }}</div>
+      </div>
+    </ng-template>
+
+    <ng-template #statusTemplate let-row>
+      @if (row.enabled) {
+        <mat-icon class="w-5 h-5 text-text-muted">check_circle</mat-icon>
+      } @else {
+        <mat-icon class="w-5 h-5 text-text-muted">cancel</mat-icon>
+      }
+    </ng-template>
+
+    <ng-template #actionsTemplate let-row>
+      <button type="button" class="p-1" (click)="$event.stopPropagation()">
+        <mat-icon class="w-5 h-5 text-text-muted">more_horiz</mat-icon>
+      </button>
+    </ng-template>
+  </div>
+</div>
+
+<!-- Dialog Content Templates -->
+<ng-template #addUserContent>
+  <div class="min-h-10"></div>
+</ng-template>
+
+<ng-template #addAssistantContent>
+  <div class="min-h-10"></div>
+</ng-template>
+
+<ng-template #editGroupContent>
+  <div class="flex flex-col gap-3">
+    <input
+      type="text"
+      [ngModel]="groupFormData().groupName"
+      (ngModelChange)="groupFormData.set({ groupName: $event })"
+      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      class="w-full px-4 py-2.5 border border-border rounded-lg text-sm text-text-default placeholder:text-text-muted focus:outline-none"
+    />
+  </div>
+</ng-template>
+
+<ng-template #deleteAction>
+  <app-button variant="text" size="md" (buttonClick)="deleteGroup()">
+    <span>{{ 'COMMON.DELETE' | translate }}</span>
+  </app-button>
+</ng-template>
+
+<!-- Fixed Mobile Button -->
+<div
+  class="md:hidden fixed bottom-0 left-0 right-0 h-19 p-4 bg-white border-t border-border shadow-lg"
+>
+  <app-button
+    (buttonClick)="editGroup()"
+    [variant]="'solid'"
+    [size]="'lg'"
+    [fullWidth]="true"
+    class="w-full!"
+  >
+    <span>{{ 'ADMIN_CONSOLE.ADD_USER' | translate }}</span>
+    <mat-icon>add</mat-icon>
+  </app-button>
+</div>

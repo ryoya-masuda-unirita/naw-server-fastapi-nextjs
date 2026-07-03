@@ -1,0 +1,76 @@
+<div class="flex flex-col gap-3">
+  @if (label() || supportText()) {
+    <div class="fieldset-head">
+      @if (label()) {
+        <label [for]="inputId()" class="fieldset-title">
+          {{ label() }}
+          @if (badgeText()) {
+            <span class="fieldset-any">{{ badgeText() }}</span>
+          }
+        </label>
+      }
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  @if (warning()) {
+    <div class="flex items-center gap-1 text-status-caution mb-3">
+      <app-svg-icon [name]="'alert'" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ warning() }}</p>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="flex items-center gap-1 md:mt-1 text-status-error mb-3">
+      <app-mat-icon icon="warning" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ error() }}</p>
+    </div>
+  }
+
+  <div class="flex gap-3 items-center">
+    <div
+      class="trigger-wrapper relative flex items-center w-full rounded-lg text-body font-normal transition-all duration-200 h-12"
+      [class.has-value]="displayValue() && !isFocused()"
+      [class.bg-bg-brand-weak]="displayValue() && !isFocused() && !error() && !isDisabled()"
+      [class.bg-bg-error]="error()"
+      [class.bg-white]="!error() && !isDisabled()"
+      [class.is-disabled]="isDisabled()"
+      [class.has-error]="error()"
+    >
+      <input
+        [type]="inputType()"
+        [value]="displayValue()"
+        (input)="onInput($event)"
+        (focus)="isFocused.set(true)"
+        (blur)="isFocused.set(false); onBlur()"
+        [placeholder]="placeholder()"
+        [disabled]="isDisabled()"
+        [attr.readonly]="readOnly() ? '' : null"
+        [autocomplete]="autocomplete()"
+        [attr.maxlength]="maxLength()"
+        class="flex-1 min-w-0 bg-transparent border-none outline-none text-body leading-[1.7] text-text-strong placeholder:text-text-weak placeholder:opacity-100 disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis h-12 px-4 placeholder:font-extralight!"
+      />
+
+      @if (showPasswordToggle() && type() === 'password') {
+        <button
+          type="button"
+          (click)="togglePasswordVisibility()"
+          class="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-text-lighter"
+          [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+        >
+          <app-mat-icon
+            [icon]="showPassword() ? 'visibility' : 'visibility_off'"
+            class="text-[20px]!"
+          >
+          </app-mat-icon>
+        </button>
+      }
+    </div>
+
+    @if (endAdornment()) {
+      <ng-container [ngTemplateOutlet]="endAdornment()"></ng-container>
+    }
+  </div>
+</div>

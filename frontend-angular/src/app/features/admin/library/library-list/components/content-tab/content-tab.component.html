@@ -1,0 +1,200 @@
+<div
+  class="flex flex-col gap-8 p-4 md:gap-6 md:p-6 overflow-auto max-h-[calc(100vh-105px)] md:max-h-[calc(100vh-115px)]"
+>
+  <!-- ---- Controls ---- -->
+  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4">
+    <div class="flex flex-col md:flex-row md:items-start gap-3 md:gap-6">
+      <!-- Search -->
+      <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+        <span class="text-label font-medium text-text-medium">{{
+          'ADMIN.LIBRARY.SEARCH_LABEL' | translate
+        }}</span>
+        <app-search-input
+          size="small"
+          [value]="searchInput()"
+          [placeholder]="'ADMIN.LIBRARY.SEARCH_PLACEHOLDER'"
+          (valueChange)="onSearchValueChange($event)"
+        />
+      </div>
+
+      <!-- Filter -->
+      <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+        <span class="text-label font-medium text-text-medium">{{
+          'ADMIN.LIBRARY.FILTER_LABEL' | translate
+        }}</span>
+        <div class="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+          <app-select
+            [options]="userFilterOptions()"
+            [value]="filterUser() || null"
+            [placeholder]="'ADMIN.LIBRARY.ALL_USERS' | translate"
+            size="small"
+            (valueChange)="onUserFilterChange($event)"
+            [supportText]="'ADMIN.LIBRARY.FILTER_USER_SUPPORT' | translate"
+            class="md:w-40 w-full"
+          />
+          <app-select
+            [options]="tagFilterOptions()"
+            [value]="filterTag() || null"
+            [placeholder]="'ADMIN.LIBRARY.ALL_TAGS' | translate"
+            (valueChange)="onTagFilterChange($event)"
+            size="small"
+            class="md:w-40 w-full"
+          />
+          <!-- コンテンツタイプフィルタはバックエンドが未対応のため一時的にコメントアウト -->
+          <!--
+          <app-select
+            [options]="contentFilterOptions()"
+            [value]="filterContent() || null"
+            [placeholder]="'ADMIN.LIBRARY.ALL_CONTENT' | translate"
+            size="small"
+            class="md:w-40 w-full"
+          />
+          -->
+        </div>
+      </div>
+
+      <!-- Sort -->
+      <div class="flex flex-col gap-1 items-start">
+        <label for="library-sort" class="text-label font-medium text-text-medium">{{
+          'ADMIN.LIBRARY.SORT_LABEL' | translate
+        }}</label>
+        <app-form-sort-input
+          id="library-sort"
+          size="sm"
+          [fields]="sortFieldOptions"
+          [(selectedField)]="sortField"
+          [(selectedOrder)]="sortOrder"
+          (fieldChange)="onSortFieldChange()"
+          (orderChange)="onSortOrderChange()"
+          class="w-full md:w-40"
+          [placeholder]="'ADMIN.LIBRARY.SORT_PLACEHOLDER' | translate"
+        />
+      </div>
+    </div>
+
+    <!-- Count + top pagination -->
+    <div class="flex gap-3 items-center justify-center">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showPageNumbers]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+        [countDisplay]="countDisplay()"
+      />
+    </div>
+  </div>
+
+  <!-- ---- Table ---- -->
+  @if (isLoading()) {
+    <div class="flex flex-col gap-2">
+      @for (i of [1, 2, 3, 4, 5]; track i) {
+        <div class="flex items-center gap-4 px-4 py-3 border border-border-weak rounded-lg">
+          <app-skeleton height="40px" width="40px" rounded="rounded-lg" class="shrink-0" />
+          <div class="flex flex-col gap-1 flex-1">
+            <app-skeleton height="16px" width="160px" />
+            <app-skeleton height="14px" width="100px" />
+          </div>
+          <app-skeleton height="14px" width="80px" class="shrink-0 hidden md:block" />
+          <app-skeleton height="14px" width="60px" class="shrink-0 hidden md:block" />
+        </div>
+      }
+    </div>
+  } @else {
+    <app-table
+      [data]="items()"
+      [columns]="columns()"
+      [actionsTemplate]="actionsTemplate"
+      [actionsWidth]="'w-31'"
+    />
+  }
+
+  <!-- ---- Bottom pagination ---- -->
+  <div class="flex justify-center">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showFirstLast]="false"
+      [currentPageOverride]="currentPage()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>
+
+<!-- Templates (static: true — always in DOM) -->
+<ng-template #nameTemplate let-row>
+  <div class="table-list-col-content table-list-start-label">
+    <span class="table-list-title text-label-large md:text-label-x-large">
+      {{ row.title }}
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #tagsTemplate let-row>
+  <div class="library-tags">
+    @for (tag of row.tags; track tag.id) {
+      <span class="library-tag"><span class="library-tag-hash">#</span>{{ tag.name }}</span>
+    }
+  </div>
+</ng-template>
+
+<ng-template #dateTemplate let-row>
+  <div class="table-list-row-date md:w-30 font-medium!">
+    <span class="table-list-date flex-1 w-30 md:w-auto">
+      {{ row.updatedAt | date: 'yyyy/MM/dd HH:mm' }}
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #actionsTemplate let-row>
+  <div class="flex items-center justify-center flex-col md:flex-row gap-2">
+    <app-library-item-menu
+      [item]="row"
+      [isOwner]="isOwner(row)"
+      (editSettings)="onEditSettings($event)"
+      (copyLink)="onCopyLink($event)"
+      (deleteItem)="onDeleteItem($event)"
+    />
+    <button
+      class="flex items-center justify-center p-1 md:p-2! rounded-full hover:bg-bg-brand-weak transition-colors"
+      (click)="onItemAction(row); $event.stopPropagation()"
+    >
+      <app-mat-icon
+        icon="chevron_right"
+        class="text-text-weak text-xl! leading-none transition-colors"
+      />
+    </button>
+  </div>
+</ng-template>
+
+<ng-template #editSettingsHeaderTrailing>
+  <button class="copy-link-btn hidden md:flex" (click)="onDialogCopyLink()">
+    <app-mat-icon [icon]="dialogLinkCopied() ? 'check' : 'link'" class="text-xl! leading-none" />
+    <span class="text-label-large">{{ 'ADMIN.LIBRARY.MENU.COPY_LINK' | translate }}</span>
+  </button>
+</ng-template>
+
+<ng-template #editSettingsCustomActions>
+  <div class="flex gap-3 justify-end max-sm:justify-center">
+    <app-button
+      variant="outline"
+      size="lg"
+      class="dialog-cancel-btn flex-1"
+      [fullWidth]="true"
+      (buttonClick)="closeEditSettingsDialog()"
+    >
+      {{ 'ADMIN.LIBRARY.EDIT_SETTINGS.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      class="flex-1"
+      [fullWidth]="true"
+      (buttonClick)="saveEditSettings()"
+    >
+      {{ 'ADMIN.LIBRARY.EDIT_SETTINGS.SAVE' | translate }}
+    </app-button>
+  </div>
+</ng-template>

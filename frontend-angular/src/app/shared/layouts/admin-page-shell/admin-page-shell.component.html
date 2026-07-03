@@ -1,0 +1,25 @@
+<div class="shrink-0 flex flex-col bg-bg-primary z-30">
+  @if (customHeader()) {
+    <ng-content select="[shellHeader]" />
+  } @else {
+    <app-page-header
+      [title]="title()"
+      [titleKey]="titleKey() ?? ''"
+      [showSidebarToggle]="showSidebarToggle()"
+      [showActions]="showActions()"
+      [showLanguageToggle]="showLanguageToggle()"
+      [showBackButton]="showBackButton()"
+      [showTitleEdit]="showTitleEdit()"
+      (renameClick)="editClick.emit()"
+      [tabs]="tabs()"
+      [activeTabId]="activeTabId()"
+      (tabChange)="tabChange.emit($event)"
+    />
+  }
+</div>
+
+<div class="flex flex-1 min-h-0 overflow-hidden">
+  <main [ngClass]="[customHeader() ? 'term-main--full' : 'term-main', mainClass()]">
+    <ng-content />
+  </main>
+</div>

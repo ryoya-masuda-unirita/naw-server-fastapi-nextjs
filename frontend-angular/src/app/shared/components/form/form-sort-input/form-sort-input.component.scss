@@ -1,0 +1,49 @@
+.trigger-wrapper {
+  &::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 0 0 1px var(--color-border-strong);
+    transition: box-shadow 0.2s ease;
+  }
+
+  &.has-value::before {
+    box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+  }
+
+  &.is-open::before {
+    box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+  }
+}
+
+.icon-size {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+:host ::ng-deep {
+  .mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    line-height: 20px;
+  }
+}
+
+// Override Angular Material MDC Menu Item default min-height (48px)
+::ng-deep .sort-menu {
+  .mat-mdc-menu-content {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .mat-mdc-menu-item {
+    min-height: 36px !important;
+    height: 36px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+}

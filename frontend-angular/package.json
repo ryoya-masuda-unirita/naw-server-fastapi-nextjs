@@ -1,0 +1,86 @@
+{
+  "name": "example",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve --configuration local",
+    "dev": "ng serve --configuration dev",
+    "start:dev": "ng serve --configuration dev",
+    "start:local": "ng serve --configuration local",
+    "build": "ng build",
+    "build:prod": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test:file": "ng test --include",
+    "test": "ng test",
+    "format": "prettier --write \"src/**/*.{ts,html,scss}\"",
+    "lint": "ng lint",
+    "lint:fix": "ng lint --fix",
+    "prepare": "husky"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "overrides": [
+      {
+        "files": "*.html",
+        "options": {
+          "parser": "angular"
+        }
+      }
+    ]
+  },
+  "private": true,
+  "packageManager": "npm@10.9.4",
+  "dependencies": {
+    "@angular/animations": "^21.1.0",
+    "@angular/cdk": "^21.1.0",
+    "@angular/common": "^21.1.0",
+    "@angular/compiler": "^21.1.0",
+    "@angular/core": "^21.1.0",
+    "@angular/forms": "^21.1.0",
+    "@angular/material": "^21.1.0",
+    "@angular/platform-browser": "^21.1.0",
+    "@angular/router": "^21.1.0",
+    "@fontsource/noto-sans-jp": "^5.2.9",
+    "@fontsource/roboto": "^5.2.6",
+    "@ngrx/signals": "^21.0.1",
+    "@ngx-translate/core": "^17.0.0",
+    "@ngx-translate/http-loader": "^17.0.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@tanstack/angular-query-experimental": "^5.95.2",
+    "echarts": "^6.1.0",
+    "marked": "^18.0.4",
+    "material-symbols": "^0.40.2",
+    "mermaid": "^11.14.0",
+    "ngx-markdown": "^21.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@analogjs/vite-plugin-angular": "^2.5.1",
+    "@angular/build": "^21.1.0",
+    "@angular/cli": "^21.1.0",
+    "@angular/compiler-cli": "^21.1.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "angular-eslint": "21.1.0",
+    "autoprefixer": "^10.4.23",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "happy-dom": "^20.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "postcss": "^8.5.6",
+    "prettier": "^3.8.0",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "8.47.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.8"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,html,scss}": [
+      "prettier --write"
+    ]
+  }
+}

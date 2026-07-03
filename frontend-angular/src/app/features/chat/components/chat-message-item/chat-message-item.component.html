@@ -1,0 +1,145 @@
+@if (isUser()) {
+  <article class="chat-message chat-message--user max-w-full min-w-0">
+    @if (hasAttachments()) {
+      <div class="chat-user-attachments">
+        @for (attachment of message().attachmentFiles!; track attachment.id) {
+          @if (isImageFile(attachment)) {
+            <div class="file-chip file-chip--image">
+              <img
+                [src]="getFilePreviewUrl(attachment)"
+                [alt]="attachment.name"
+                class="file-chip__img"
+              />
+            </div>
+          } @else {
+            <app-file-chip-document [name]="attachment.name" />
+          }
+        }
+        @for (file of message().files!; track $index) {
+          @if (isImageFile(file)) {
+            <div class="file-chip file-chip--image">
+              <img [src]="getFilePreviewUrl(file)" [alt]="file.name" class="file-chip__img" />
+            </div>
+          } @else {
+            <app-file-chip [file]="file" />
+          }
+        }
+      </div>
+    }
+
+    @if (message().question) {
+      <div class="chat-user-bubble max-w-full min-w-0" [hidden]="isEditing()">
+        <p
+          class="chat-user-text whitespace-pre-wrap wrap-break-word"
+          [textContent]="message().question"
+        ></p>
+      </div>
+    }
+
+    <app-chat-message-footer
+      (copy)="handleCopy()"
+      (thumbsUp)="handleThumbsUp()"
+      (thumbsDown)="handleThumbsDown()"
+      (regenerate)="handleRegenerate()"
+      (delete)="handleDelete()"
+      [showPagination]="showPagination()"
+      [versionCurrent]="versionCurrent()"
+      [versionTotal]="versionTotal()"
+      [canPrevVersion]="canPrevVersion()"
+      [canNextVersion]="canNextVersion()"
+      [hidden]="isEditing()"
+      (openEdit)="openEdit()"
+      (prevVersion)="prevVersion.emit()"
+      (nextVersion)="nextVersion.emit()"
+      [isUser]="isUser()"
+      [thumbsUpActive]="thumbsUpActive()"
+      [thumbsDownActive]="thumbsDownActive()"
+      [isReadOnly]="isReadOnly() ?? false"
+    />
+
+    <div class="chat-user-edit" [hidden]="!isEditing() || (isReadOnly() ?? false)">
+      <div class="chat-user-edit-field">
+        <textarea
+          class="chat-user-textarea"
+          rows="5"
+          [(ngModel)]="editText"
+          (keydown)="handleEditKeyDown($event)"
+          (compositionstart)="onCompositionStart()"
+          (compositionend)="onCompositionEnd()"
+        ></textarea>
+      </div>
+      <div class="chat-user-edit-footer">
+        <p class="chat-edit-note">
+          {{ 'CHAT.MESSAGE.EDIT_NOTE' | translate }}
+          @if (hasAttachments()) {
+            <br />{{ 'CHAT.MESSAGE.EDIT_NOTE_ATTACHMENT' | translate }}
+          }
+        </p>
+        <div class="flex items-center gap-2 shrink-0 w-full justify-end">
+          <app-button
+            variant="text"
+            size="sm"
+            classProps="text-sm! px-3! py-2!"
+            [heightPx]="37.59"
+            (buttonClick)="cancelEdit()"
+          >
+            {{ 'COMMON.CANCEL' | translate }}
+          </app-button>
+          <app-button
+            variant="solid"
+            size="sm"
+            classProps="text-sm! px-3! py-2!"
+            [heightPx]="37.59"
+            (buttonClick)="submitEdit()"
+          >
+            {{ 'CHAT.MESSAGE.RESEND' | translate }}
+          </app-button>
+        </div>
+      </div>
+    </div>
+  </article>
+}
+
+@if (isAssistant()) {
+  <article class="chat-message chat-message--assistant">
+    <div class="chat-message-sender">
+      @if (assistantNamePending()) {
+        <app-skeleton variant="text" width="8rem" height="0.875rem" />
+      } @else {
+        {{ assistantName() || ('CHAT.MESSAGE.UNKNOWN_ASSISTANT' | translate) }}
+      }
+    </div>
+    @if (hasReasoning()) {
+      <app-chat-reasoning-display [reasoning]="message().reasoning!" />
+    }
+    @if (isPendingAssistant()) {
+      <div class="chat-message-bubble">
+        <app-circular-loading />
+      </div>
+    } @else {
+      <div class="chat-message-bubble">
+        @if (message().status === 'ERROR') {
+          <app-message-error-section [errorMessage]="message().message ?? ''" />
+        } @else {
+          <markdown appChartBlocks [data]="message().answer" [disableSanitizer]="true"></markdown>
+          @if (message().referenceFilePaths?.length) {
+            <app-reference [referenceFilePaths]="message().referenceFilePaths || []" />
+          }
+        }
+      </div>
+    }
+
+    @if (!isPendingAssistant()) {
+      <app-chat-message-footer
+        (copy)="handleCopy()"
+        (thumbsUp)="handleThumbsUp()"
+        (thumbsDown)="handleThumbsDown()"
+        (regenerate)="handleRegenerate()"
+        (delete)="handleDelete()"
+        [thumbsUpActive]="thumbsUpActive()"
+        [thumbsDownActive]="thumbsDownActive()"
+        [isReadOnly]="isReadOnly() ?? false"
+      />
+    }
+  </article>
+}

@@ -1,0 +1,61 @@
+<div
+  class="file-upload"
+  [class.file-upload--full]="variant() === 'full'"
+  [attr.data-drag-over]="isDragging()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+>
+  <div>
+    <input
+      #fileInput
+      type="file"
+      [id]="id()"
+      class="sr-only"
+      multiple
+      (change)="onFileSelect($event)"
+    />
+    <input
+      #folderInput
+      type="file"
+      [id]="id() + '-folder'"
+      class="sr-only"
+      webkitdirectory
+      (change)="onFileSelect($event)"
+    />
+
+    <div class="file-upload__content">
+      <p class="file-upload__title text-sm text-text-strong">
+        {{
+          (variant() === 'full' ? 'FILE_UPLOAD.DROP_FILE_OR_FOLDER' : 'CHAT.INPUT.DROP_FILES')
+            | translate
+        }}
+      </p>
+
+      @if (variant() === 'full') {
+        <div class="file-upload__buttons">
+          <app-button
+            variant="outline"
+            size="md"
+            classProps="!text-sm !px-3"
+            [heightPx]="36"
+            (buttonClick)="triggerFileSelect()"
+          >
+            <app-svg-icon name="file" class="icon-20" />
+            <span>{{ 'COMMON.SELECT_FILE' | translate }}</span>
+          </app-button>
+          <app-button
+            variant="outline"
+            size="md"
+            classProps="!text-sm !px-3"
+            [heightPx]="36"
+            (buttonClick)="triggerFolderSelect()"
+          >
+            <app-svg-icon name="folder" class="icon-20" />
+            <span>{{ 'COMMON.SELECT_FOLDER' | translate }}</span>
+          </app-button>
+        </div>
+      }
+    </div>
+  </div>
+</div>

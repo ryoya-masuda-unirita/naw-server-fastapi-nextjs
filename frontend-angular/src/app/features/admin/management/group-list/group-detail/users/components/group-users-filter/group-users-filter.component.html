@@ -1,0 +1,56 @@
+<div class="library-filters">
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-xs font-medium text-text-muted">
+      {{ 'GROUPS.SEARCH_LABEL' | translate }}
+    </span>
+    <app-search-input
+      class="md:w-40 w-full"
+      size="small"
+      [value]="searchQuery()"
+      [placeholder]="'GROUPS.SEARCH_PLACEHOLDER' | translate"
+      (valueChange)="onSearchChange($event)"
+    />
+  </div>
+
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="text-xs font-medium text-text-muted">
+      {{ 'GROUPS.FILTER_LABEL' | translate }}
+    </span>
+    <app-select
+      class="md:w-40 w-full"
+      size="small"
+      [options]="roleOptions()"
+      [value]="filterRole()"
+      (valueChange)="onRoleChange($event)"
+    />
+  </div>
+
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <label for="group-users-sort" class="text-xs font-medium text-text-muted">
+      {{ 'GROUPS.SORT_LABEL' | translate }}
+    </label>
+    <app-form-sort-input
+      id="group-users-sort"
+      class="w-full md:w-40"
+      size="sm"
+      [fields]="sortFieldOptions()"
+      [orders]="sortOrderOptions()"
+      [selectedField]="sortField()"
+      [selectedOrder]="sortOrder()"
+      (fieldChange)="onSortFieldChange($event)"
+      (orderChange)="onSortOrderChange($event ?? '')"
+    />
+  </div>
+
+  <div class="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [currentPageOverride]="pageIndex()"
+      [countDisplay]="countDisplay()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>

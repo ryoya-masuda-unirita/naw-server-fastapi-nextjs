@@ -1,0 +1,216 @@
+<form [formGroup]="formGroup()" class="flex flex-col gap-4 md:gap-6">
+  @if (
+    getControlValue('serverType') === serverTypes.SECURE || getControlValue('serverType') === ''
+  ) {
+    <div
+      class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+      data-assistant-info-block=""
+    >
+      <div class="flex gap-1 items-start md:gap-2">
+        <app-svg-icon
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          class="w-5 h-5 text-primary"
+          fill="currentColor"
+          aria-hidden="true"
+          preserveAspectRatio="xMidYMid meet"
+          name="light"
+        />
+        <p class="flex-1 min-w-0 text-label-large md:text-label-x-large font-medium">
+          {{ 'ADMIN.ASSISTANT.NOTE_LOCAL_TEXT_1' | translate }}
+        </p>
+      </div>
+      <p class="text-body-small">
+        {{ 'ADMIN.ASSISTANT.NOTE_LOCAL_TEXT_2' | translate }}
+      </p>
+    </div>
+  }
+
+  <app-form-input
+    formControlName="name"
+    [label]="'ADMIN.ASSISTANT.DISPLAY_NAME' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.DISPLAY_NAME_PLACEHOLDER' | translate"
+    [value]="getControlValue('name')"
+    (valueChange)="setControlValue('name', $event)"
+    (formBlur)="touchControl('name')"
+    [error]="nameError()"
+    autocomplete="off"
+  />
+
+  <app-form-radio
+    formControlName="serverType"
+    [label]="'ADMIN.ASSISTANT.CONNECT_SERVER' | translate"
+    [options]="serverTypeOptions"
+    [value]="getControlValue('serverType')"
+    (valueChange)="setControlValue('serverType', $event)"
+    (formBlur)="touchControl('serverType')"
+    [error]="serverTypeError()"
+    layout="vertical"
+    classOption="flex-col gap-2"
+  />
+
+  <app-form-select
+    formControlName="serverApi"
+    [label]="'ADMIN.ASSISTANT.CONNECT_API' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.PLACEHOLDER_CONNECT_API' | translate"
+    [options]="
+      getControlValue('serverType') !== ''
+        ? serverApiOptions[getControlValue('serverType')] || []
+        : []
+    "
+    [value]="getControlValue('serverApi')"
+    (valueChange)="setControlValue('serverApi', $event)"
+    (formBlur)="touchControl('serverApi')"
+    [error]="serverApiError()"
+    [disabled]="getControlValue('serverType') === ''"
+    size="default"
+    class="w-full"
+    classNameInputSelect="pl-4 pr-5"
+  />
+
+  @if (getControlValue('serverType') === '') {
+    <app-form-input
+      [label]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL_LOCAL' | translate"
+      [placeholder]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL_LOCAL_PLACEHOLDER' | translate"
+      autocomplete="off"
+      [error]="modelError()"
+    />
+    <app-form-select
+      [label]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL' | translate"
+      [placeholder]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL_NOT_LOCAL_PLACEHOLDER' | translate"
+      [options]="[]"
+      [error]="modelError()"
+      [disabled]="getControlValue('serverType') === '' || getControlValue('serverApi') === ''"
+      size="default"
+      class="w-full"
+      classNameInputSelect="pl-4 pr-5"
+    />
+  } @else {
+    @if (getControlValue('serverType') === serverTypes.SECURE) {
+      <app-form-input
+        formControlName="model"
+        [label]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL_LOCAL' | translate"
+        [supportText]="'ADMIN.ASSISTANT.SUPPORT_LOCAL_TEXT' | translate"
+        [placeholder]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL_LOCAL_PLACEHOLDER' | translate"
+        [value]="getControlValue('model')"
+        (valueChange)="setControlValue('model', $event)"
+        (formBlur)="touchControl('model')"
+        [error]="modelError()"
+        [disabled]="getControlValue('serverType') === ''"
+        autocomplete="off"
+      />
+    } @else {
+      <app-form-select
+        formControlName="model"
+        [label]="'ADMIN.ASSISTANT.GENERATIVE_AI_MODEL' | translate"
+        [placeholder]="'ADMIN.ASSISTANT.SELECT_MODEL' | translate"
+        [options]="
+          getControlValue('serverType') !== '' && getControlValue('serverApi') !== ''
+            ? modelOptions[getControlValue('serverType')]?.[getControlValue('serverApi')] || []
+            : []
+        "
+        [value]="getControlValue('model')"
+        (valueChange)="setControlValue('model', $event)"
+        (formBlur)="touchControl('model')"
+        [error]="modelError()"
+        [disabled]="getControlValue('serverType') === '' || getControlValue('serverApi') === ''"
+        size="default"
+        class="w-full"
+        classNameInputSelect="pl-4 pr-5"
+      />
+    }
+  }
+
+  @if (
+    getControlValue('serverType') === serverTypes.SAAS_RAG || getControlValue('serverType') === ''
+  ) {
+    <app-form-select
+      formControlName="folder"
+      [label]="'ADMIN.ASSISTANT.LEARNING_FOLDER' | translate"
+      [placeholder]="'ADMIN.ASSISTANT.SELECT_FOLDER' | translate"
+      [options]="folderOptions()"
+      [value]="getControlValue('folder')"
+      (valueChange)="setControlValue('folder', $event)"
+      (formBlur)="touchControl('folder')"
+      [error]="folderError()"
+      [disabled]="getControlValue('serverApi') === ''"
+      size="default"
+      class="w-full"
+      classNameInputSelect="pl-4 pr-5"
+    />
+  }
+
+  <app-combobox-multi
+    id="categories"
+    name="categories"
+    formControlName="categories"
+    [label]="'ADMIN.ASSISTANT.CATEGORY' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.SELECT_CATEGORY' | translate"
+    [options]="categoriesOptions()"
+    [value]="getControlValue('categories')"
+    (valueChange)="setControlValue('categories', $event)"
+    (formBlur)="touchControl('categories')"
+    [searchHint]="'ADMIN.ASSISTANT.CATEGORIES_SEARCH_HINT' | translate"
+    [errorMessage]="categoryError()"
+    panelSize="full"
+  />
+
+  <app-combobox-multi
+    id="groups"
+    name="groups"
+    formControlName="groups"
+    [label]="'ADMIN.ASSISTANT.BELONGING_TEAM' | translate"
+    [badgeText]="'COMMON.OPTIONAL' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.SELECT_TEAM' | translate"
+    [options]="groupsOptions()"
+    [value]="getControlValue('groups')"
+    (valueChange)="setControlValue('groups', $event)"
+    (formBlur)="touchControl('groups')"
+    [searchHint]="'ADMIN.ASSISTANT.TEAMS_SEARCH_HINT' | translate"
+    [errorMessage]="groupsError()"
+    panelSize="full"
+  />
+
+  <!-- TODO: 用語辞書は APIサーバ未対応のため今後対応 -->
+  <!--
+  <app-combobox-multi
+    id="dictionaries"
+    name="dictionaries"
+    formControlName="dictionaries"
+    [label]="'ADMIN.ASSISTANT.BELONGING_TERM' | translate"
+    [badgeText]="'COMMON.OPTIONAL' | translate"
+    [supportText]="'ADMIN.ASSISTANT.SUPPORT_TEXT' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.SELECT_TERM' | translate"
+    [options]="dictionariesOptions"
+    [value]="getControlValue('dictionaries')"
+    (valueChange)="setControlValue('dictionaries', $event)"
+    (formBlur)="touchControl('dictionaries')"
+    [searchHint]="'ADMIN.ASSISTANT.TERMS_SEARCH_HINT' | translate"
+    [errorMessage]="dictionariesError()"
+    panelSize="full"
+  />
+  -->
+
+  <app-form-textarea
+    formControlName="description"
+    [label]="'ADMIN.ASSISTANT.ASSISTANT_DESCRIPTION' | translate"
+    [badgeText]="'COMMON.OPTIONAL' | translate"
+    [placeholder]="'ADMIN.ASSISTANT.ASSISTANT_DESCRIPTION_PLACEHOLDER' | translate"
+    [value]="getControlValue('description')"
+    (valueChange)="setControlValue('description', $event)"
+    (formBlur)="touchControl('description')"
+    [error]="descriptionError()"
+    [rows]="5"
+  />
+
+  <app-form-switch
+    formControlName="includeHistory"
+    [label]="'ADMIN.ASSISTANT.HISTORY_SEND' | translate"
+    [checked]="getControlValue('includeHistory')"
+    (checkedChange)="setControlValue('includeHistory', $event)"
+    (formBlur)="touchControl('includeHistory')"
+    [error]="includeHistoryError()"
+    size="lg"
+  />
+</form>

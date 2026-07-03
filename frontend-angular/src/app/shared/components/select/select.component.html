@@ -1,0 +1,174 @@
+<!-- Select Trigger -->
+<div
+  class="trigger-wrapper relative flex items-center w-full pl-3 pr-4 rounded-lg text-sm transition-all duration-200 overflow-hidden cursor-pointer"
+  [class.h-12]="size() !== 'small'"
+  [class.h-9]="size() === 'small'"
+  [class.bg-bg-brand-weak]="selectedOption() && !isVisible() && !plainStyle()"
+  [class.bg-white]="!selectedOption() || isVisible() || plainStyle()"
+  [class.has-value]="selectedOption() && !isOpen() && !plainStyle()"
+  [class.is-open]="isOpen()"
+  [class.bg-surface-disabled]="disabled()"
+  [class.opacity-60]="disabled()"
+  [class.cursor-not-allowed]="disabled()"
+  [attr.aria-expanded]="isOpen()"
+  [attr.aria-haspopup]="'listbox'"
+  (click)="toggle()"
+  [ngClass]="classNameInputSelect()"
+>
+  <span
+    class="flex-1 min-w-0 text-ellipsis whitespace-nowrap overflow-hidden font-medium"
+    [class.text-sm]="size() !== 'small'"
+    [class.text-xs]="size() === 'small'"
+    [class.text-brand-secondary]="selectedOption() && !isOpen() && !plainStyle()"
+    [class.text-text-strong]="selectedOption() && !plainStyle()"
+    [class.text-text-medium]="selectedOption() && plainStyle()"
+    [class.text-text-lighter]="!selectedOption()"
+  >
+    {{ displayLabel() }}
+  </span>
+
+  @if (selectedOption() && showClear()) {
+    <button
+      type="button"
+      class="shrink-0 flex items-center justify-center h-4 w-4 ml-2 cursor-pointer text-white bg-text-default rounded-full"
+      (click)="clearValue(); $event.stopPropagation()"
+    >
+      <app-svg-icon name="close" class="w-3 h-3" />
+    </button>
+  }
+  <app-svg-icon
+    name="arrowDown"
+    class="w-5 h-5 -mr-1 text-text-weak ml-2"
+    [class.text-brand-primary!]="isOpen()"
+  />
+</div>
+
+<!-- Desktop Dropdown Panel -->
+@if (!isMobile() && isOpen()) {
+  <div
+    class="fixed z-9999 bg-white rounded-xl py-4 shadow-default animate-fade-in flex flex-col overflow-hidden border border-border-strong px-px"
+    [style.top]="dropdownStyle().top"
+    [style.left]="dropdownStyle().left"
+    [style.width]="dropdownStyle().width"
+    [style.max-height]="dropdownStyle().maxHeight"
+    role="listbox"
+  >
+    @if (supportText()) {
+      <div class="px-4 pb-4 text-xs text-text-muted font-normal shrink-0">
+        {{ supportText() }}
+      </div>
+    }
+    <div class="flex flex-col overflow-y-auto min-h-0">
+      @if (options().length === 0) {
+        <div class="py-3 text-xs text-center text-text-muted">
+          {{ 'COMMON.EMPTY_RESULT' | translate }}
+        </div>
+      }
+      @for (option of options(); track option.value) {
+        <button
+          type="button"
+          class="flex items-center gap-2 w-full px-4 text-sm text-left border-none cursor-pointer transition-colors duration-150 font-normal py-2"
+          [class]="
+            isSelected(option)
+              ? 'bg-secondary text-primary'
+              : 'bg-transparent text-text-default hover:bg-secondary'
+          "
+          [class.opacity-50]="option.disabled"
+          [class.cursor-not-allowed]="option.disabled"
+          [disabled]="option.disabled"
+          role="option"
+          [attr.aria-selected]="isSelected(option)"
+          (click)="selectOption(option)"
+        >
+          <span class="flex items-center justify-center w-5 h-5 shrink-0">
+            @if (isSelected(option)) {
+              <app-mat-icon icon="check" class="text-[22px]! text-brand-primary" />
+            }
+          </span>
+          @if (option.description || option.category) {
+            <div class="flex-1 min-w-0 flex flex-col gap-1">
+              <div
+                class="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium"
+                [class.text-brand-secondary]="isSelected(option)"
+              >
+                {{ option.label }}
+              </div>
+              <div class="flex items-start gap-2 mt-0.5">
+                <div class="text-label-small text-text-muted line-clamp-2 flex-1">
+                  {{ option.description }}
+                </div>
+              </div>
+              @if (option.category) {
+                <span
+                  class="inline-flex self-start rounded-sm border border-border-strong p-1 text-note-small font-medium whitespace-nowrap text-text-medium"
+                  >{{ option.category }}</span
+                >
+              }
+            </div>
+          } @else {
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs">{{
+              option.label
+            }}</span>
+          }
+        </button>
+      }
+    </div>
+  </div>
+}
+
+<!-- Mobile Bottom Drawer -->
+@if (isMobile() && isVisible()) {
+  <div
+    class="fixed inset-0 z-50 flex flex-col justify-end transition-opacity duration-200"
+    [class.opacity-0]="!isOpen()"
+    [class.pointer-events-none]="!isOpen()"
+    (click)="close(); $event.stopPropagation()"
+  >
+    <div class="absolute inset-0 bg-bg-overlay"></div>
+
+    <div
+      class="relative bg-white rounded-t-xl shadow-default flex flex-col max-h-[80vh] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      [class.translate-y-full]="!isOpen()"
+      (click)="$event.stopPropagation()"
+    >
+      @if (supportText()) {
+        <div class="px-4 pt-4 text-xs text-text-muted font-normal shrink-0">
+          {{ supportText() }}
+        </div>
+      }
+      <div class="flex flex-col gap-1 overflow-y-auto min-h-0 py-4" role="listbox">
+        @if (options().length === 0) {
+          <div class="py-3 text-xs text-center text-text-muted">
+            {{ 'COMMON.EMPTY_RESULT' | translate }}
+          </div>
+        }
+        @for (option of options(); track option.value) {
+          <button
+            type="button"
+            class="flex items-start gap-2 w-full px-4 py-2 text-sm text-left border-none cursor-pointer transition-colors duration-150 font-normal"
+            [class]="
+              isSelected(option)
+                ? 'bg-secondary text-primary'
+                : 'bg-transparent text-text-default hover:bg-secondary'
+            "
+            [class.opacity-50]="option.disabled"
+            [class.cursor-not-allowed]="option.disabled"
+            [disabled]="option.disabled"
+            role="option"
+            [attr.aria-selected]="isSelected(option)"
+            (click)="selectOption(option)"
+          >
+            <span class="flex items-center justify-center w-5 h-5 shrink-0">
+              @if (isSelected(option)) {
+                <app-mat-icon icon="check" class="text-[22px]! text-brand-primary" />
+              }
+            </span>
+            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs">{{
+              option.label
+            }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

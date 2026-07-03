@@ -1,0 +1,72 @@
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="!allSelected() && someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange.emit($event)"
+  >
+    <span class="table-list-col-content table-list-label">
+      {{ 'TEAM.TEMPLATE.TEMPLATE_NAME' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-94">
+      {{ 'TEAM.TEMPLATE.SYSTEM_PROMPT' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'TEAM.TEMPLATE.UPDATED_AT' | translate }}
+    </span>
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
+  </app-table-list-item>
+
+  <!-- Data rows -->
+  @for (item of items(); track item.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(item.id)"
+      (checkedChange)="itemSelectChange.emit({ id: item.id, checked: $event })"
+    >
+      <div class="table-list-col-content table-list-start-label">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ item.name }}</p>
+        <p class="table-list-desc">{{ item.description }}</p>
+      </div>
+
+      <div class="table-list-row-date md:w-94">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'TEAM.TEMPLATE.SYSTEM_PROMPT' | translate }}
+        </span>
+        <span
+          class="table-list-date flex-1 w-20 md:w-auto line-clamp-1 md:line-clamp-3 whitespace-break-spaces"
+          [innerHTML]="item.systemPrompt"
+        ></span>
+      </div>
+
+      <div class="table-list-row-date md:w-30">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'TEAM.TEMPLATE.UPDATED_AT' | translate }}
+        </span>
+        <span class="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
+          {{ item.updatedAt | date: 'yyyy/MM/dd HH:mm' }}
+        </span>
+      </div>
+
+      <div slot="right">
+        <app-icon-button
+          variant="tertiary-gray"
+          size="largePc"
+          [ariaLabel]="'COMMON.DELETE' | translate"
+          (click)="deleteItem.emit(item.id)"
+        >
+          <app-svg-icon name="delete" class="w-5 h-5" />
+        </app-icon-button>
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (items().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'TEAM.TEMPLATE.NO_ITEMS' | translate }}
+    </div>
+  }
+</app-table-list>

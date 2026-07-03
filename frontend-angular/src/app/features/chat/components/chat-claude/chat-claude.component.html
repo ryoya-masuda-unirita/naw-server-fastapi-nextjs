@@ -1,0 +1,225 @@
+<div
+  id="chat-assist-flow"
+  class="absolute bottom-0 left-0 z-10000 flex-1 flex flex-col justify-end w-full bg-bg-primary overflow-y-auto"
+>
+  <!-- 上部フェードオーバーレイ -->
+  <div class="relative flex flex-col items-center">
+    <div
+      class="absolute top-0 left-0 right-0 h-8 from-white to-transparent pointer-events-none z-10"
+    ></div>
+
+    <div class="flex flex-col gap-2 items-center pb-4 px-4 pt-6 w-full md:p-0">
+      <!-- カード本体 -->
+      <div
+        id="assist-card"
+        class="bg-white border border-border-weak flex flex-col gap-3 items-start max-w-180 p-4 rounded-16 w-full"
+        style="
+          box-shadow:
+            0px 0px 1px 0px rgba(0, 0, 0, 0.3),
+            0px 4px 4px 0px rgba(0, 0, 0, 0.02);
+        "
+      >
+        <!-- ヘッダー -->
+        <div class="flex gap-3 items-start w-full">
+          <div class="flex flex-1 flex-col md:flex-row md:items-center flex-wrap gap-2 min-w-0">
+            <!-- 質問テキスト -->
+            <p id="assist-question" class="flex-1 text-h5">
+              {{ currentQuestion().text }}
+            </p>
+            <!-- ページャー -->
+            <div class="flex gap-1 items-center shrink-0">
+              <button
+                type="button"
+                class="flex items-center justify-center p-1 rounded-full hover:bg-bg-secondary"
+                [class.text-text-weak]="displayIndex() > 1"
+                [class.text-text-disabled]="displayIndex() <= 1"
+                [class.pointer-events-none]="displayIndex() <= 1"
+                (click)="onPrev()"
+                aria-label="前の質問"
+              >
+                <app-svg-icon name="arrowLeft" class="w-5 h-5" />
+              </button>
+              <div
+                class="flex items-center gap-0.5 font-medium text-text-medium whitespace-nowrap text-label-large"
+              >
+                <span id="assist-current">{{ displayIndex() }}</span>
+                <span>/</span>
+                <span id="assist-total">{{ totalCount() }}</span>
+                <span class="text-label">件</span>
+              </div>
+              <button
+                type="button"
+                class="flex items-center justify-center p-1 rounded-full hover:bg-bg-secondary"
+                [class.text-text-weak]="displayIndex() < totalCount()"
+                [class.text-text-disabled]="displayIndex() >= totalCount()"
+                [class.pointer-events-none]="displayIndex() >= totalCount()"
+                (click)="onNext()"
+                aria-label="次の質問へ"
+              >
+                <app-svg-icon name="arrowRight" class="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <!-- 閉じるボタン -->
+          <button
+            type="button"
+            class="flex items-center justify-center bg-text-strong p-1 rounded-full shrink-0"
+            (click)="onClose()"
+            aria-label="閉じる"
+          >
+            <app-svg-icon name="close" class="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        <!-- 選択肢リスト -->
+        <div
+          id="assist-options"
+          class="flex flex-col w-full"
+          [class.gap-2]="isMulti()"
+          role="listbox"
+          aria-label="選択肢"
+        >
+          <!-- すべて選択 (multi-select only) -->
+          @if (isMulti()) {
+            <button
+              type="button"
+              (click)="toggleSelectAll()"
+              [attr.aria-selected]="isAllSelected()"
+              class="assist-option flex items-center gap-2 w-full py-1 px-4 rounded h-7.5 text-left"
+            >
+              <span
+                class="relative flex h-5 w-5 shrink-0 items-center justify-center"
+                aria-hidden="true"
+              >
+                <span
+                  class="input-checkbox-icon"
+                  [class.input-checkbox-icon-checked]="isAllSelected()"
+                >
+                  <app-svg-icon
+                    [name]="isAllSelected() ? 'selectedTrue' : 'selectedFlase'"
+                    class="input-checkbox-icon-svg"
+                    [ngClass]="{ 'text-brand-primary': isAllSelected() }"
+                  />
+                </span>
+              </span>
+              <span
+                class="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-label-x-large assist-opt-text"
+                >すべて選択</span
+              >
+            </button>
+          }
+
+          <!-- Options list -->
+          @for (option of currentOptions(); track $index) {
+            <button
+              type="button"
+              role="option"
+              (click)="selectOption($index)"
+              [attr.aria-selected]="isOptionSelected($index)"
+              [class.py-1]="isMulti()"
+              [class.h-7]="isMulti()"
+              [class.py-2]="!isMulti()"
+              [class.h-9]="!isMulti()"
+              class="assist-option flex items-center gap-2 w-full px-4 rounded text-left"
+            >
+              @if (isMulti()) {
+                <span
+                  class="relative flex h-5 w-5 shrink-0 items-center justify-center"
+                  aria-hidden="true"
+                >
+                  <span
+                    class="input-checkbox-icon"
+                    [class.input-checkbox-icon-checked]="isOptionSelected($index)"
+                  >
+                    <app-svg-icon
+                      [name]="isOptionSelected($index) ? 'selectedTrue' : 'selectedFlase'"
+                      class="input-checkbox-icon-svg"
+                      [ngClass]="{ 'text-brand-primary': isOptionSelected($index) }"
+                    />
+                  </span>
+                </span>
+              } @else {
+                <svg
+                  viewBox="0 0 20 20"
+                  width="20"
+                  height="20"
+                  aria-hidden="true"
+                  class="shrink-0 w-5 h-5 text-brand-secondary check-icon"
+                >
+                  <path
+                    d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              }
+              <span
+                class="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap assist-opt-text"
+                [class.text-label-large]="isMulti()"
+                [class.text-note]="!isMulti()"
+                [class.text-brand-secondary]="isOptionSelected($index) && !isMulti()"
+                >{{ option }}</span
+              >
+            </button>
+          }
+
+          <!-- その他を入力 -->
+          <div
+            class="assist-option other-row flex flex-wrap items-center gap-2 w-full px-4 rounded"
+            [class.py-2]="!isMulti()"
+            [attr.aria-selected]="isOtherSelected() || (isMulti() && !!otherText())"
+          >
+            @if (isMulti()) {
+              <span
+                class="relative flex h-5 w-5 shrink-0 items-center justify-center cursor-pointer"
+                aria-hidden="true"
+                (click)="toggleOtherCheckbox()"
+              >
+                <span class="input-checkbox-icon" [class.input-checkbox-icon-checked]="otherText()">
+                  <app-svg-icon
+                    [name]="otherText() ? 'selectedTrue' : 'selectedFlase'"
+                    class="input-checkbox-icon-svg"
+                    [ngClass]="{ 'text-brand-primary': otherText() }"
+                  />
+                </span>
+              </span>
+            } @else {
+              <svg
+                viewBox="0 0 20 20"
+                width="20"
+                height="20"
+                aria-hidden="true"
+                class="shrink-0 w-5 h-5 text-brand-secondary check-icon"
+              >
+                <path
+                  d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+                  fill="currentColor"
+                />
+              </svg>
+            }
+            <input
+              type="text"
+              placeholder="その他を入力"
+              class="input-parts-field flex-1 h-9"
+              [value]="getOtherDisplayValue()"
+              (focus)="onOtherFocus()"
+              (input)="onOtherInput($event)"
+            />
+          </div>
+        </div>
+
+        <!-- フッター -->
+        <div class="flex gap-2 items-center justify-end w-full">
+          <app-button variant="outline" intent="cancel" (click)="onSkip()"> スキップ </app-button>
+          <app-button [variant]="isLastQuestion() ? 'solid' : 'outline'" (click)="onAdvance()">
+            {{ isLastQuestion() ? '送信' : '次へ' }}
+          </app-button>
+        </div>
+      </div>
+
+      <!-- 免責テキスト -->
+      <p class="text-note text-text-medium text-center">
+        回答は必ずしも正しいとは限りません。重要な情報は確認するようにしてください。
+      </p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,32 @@
+<app-context-menu [menuTpl]="menuTpl" [hasPaddingButton]="false" />
+
+<ng-template #menuTpl>
+  <!-- Primary actions -->
+  <div class="flex flex-col gap-1">
+    <button
+      class="flex items-center gap-2 p-2 rounded-lg hover:bg-bg-brand-weak transition-colors w-full text-left"
+      (click)="onEditSettings($event)"
+    >
+      <app-svg-icon name="edit" class="text-text-strong shrink-0" />
+      <span class="text-label text-text-strong truncate">{{
+        'ADMIN.GLOSSARY.MENU.EDIT_SETTINGS' | translate
+      }}</span>
+    </button>
+  </div>
+
+  <!-- Divider -->
+  <hr class="border-border-weak my-1 mx-3" />
+
+  <!-- Danger action -->
+  <div class="flex flex-col gap-1">
+    <button
+      class="flex items-center gap-2 p-2 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
+      (click)="onDelete($event)"
+    >
+      <app-svg-icon name="delete" class="text-status-error shrink-0" />
+      <span class="text-label text-status-error truncate">{{
+        'ADMIN.GLOSSARY.MENU.DELETE' | translate
+      }}</span>
+    </button>
+  </div>
+</ng-template>

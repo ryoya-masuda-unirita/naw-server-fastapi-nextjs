@@ -1,0 +1,248 @@
+<!-- Title Dropdown Menu -->
+<div
+  class="dropdown-menu dropdown-menu--bordered"
+  role="menu"
+  [hidden]="!isTitleMenuOpen()"
+  [class.is-open]="isTitleMenuOpen()"
+  [style.top]="titleMenuStyle().top"
+  [style.left]="titleMenuStyle().left"
+  [style.width]="'280px'"
+  (click)="$event.stopPropagation()"
+>
+  <div class="dropdown-menu-full">
+    @for (doc of headerOptions(); track doc.id) {
+      <button
+        type="button"
+        class="flex items-center gap-2 h-9 w-full px-4 rounded-[4px] text-brand-secondary text-left"
+        role="menuitem"
+        [ngClass]="activeDoc().id === doc.id ? 'bg-bg-brand-weak' : 'hover:bg-bg-secondary'"
+        (click)="selectDocument(doc)"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-5 h-5 shrink-0"
+          [class.opacity-0]="activeDoc().id !== doc.id"
+          aria-hidden="true"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <path
+            d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+            fill="currentColor"
+            key="0"
+          ></path>
+        </svg>
+        <span class="flex-1 min-w-0 truncate text-[12px] leading-[1.4]">
+          {{ doc.title }}
+        </span>
+      </button>
+    }
+  </div>
+</div>
+
+<!-- More Options Dropdown Menu -->
+<div
+  class="dropdown-menu dropdown-menu--bordered"
+  role="menu"
+  [hidden]="!isMoreMenuOpen()"
+  [class.is-open]="isMoreMenuOpen()"
+  [style.top]="moreMenuStyle().top"
+  [style.left]="moreMenuStyle().left"
+  [style.width]="'280px'"
+  (click)="$event.stopPropagation()"
+>
+  <button
+    type="button"
+    class="dropdown-item"
+    role="menuitem"
+    (click)="openInNewTab()"
+    [ngClass]="{
+      hidden: isDetailPage() || isReadOnly(),
+    }"
+  >
+    <span class="dropdown-item-icon">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M4.5 17C4.0875 17 3.73437 16.8531 3.44062 16.5594C3.14687 16.2656 3 15.9125 3 15.5V4.5C3 4.0875 3.14687 3.73438 3.44062 3.44063C3.73437 3.14688 4.0875 3 4.5 3H10V4.5H4.5V15.5H15.5V10H17V15.5C17 15.9125 16.8531 16.2656 16.5594 16.5594C16.2656 16.8531 15.9125 17 15.5 17H4.5ZM8.0625 13L7 11.9375L14.4375 4.5H12V3H17V8H15.5V5.5625L8.0625 13Z"
+          fill="currentColor"
+          key="0"
+        ></path>
+      </svg>
+    </span>
+    {{ 'CHAT.VIEWER.OPEN_NEW_TAB' | translate }}
+  </button>
+
+  <div
+    class="dropdown-divider"
+    [ngClass]="{
+      hidden: isDetailPage() || isReadOnly(),
+    }"
+  ></div>
+
+  <button
+    type="button"
+    class="dropdown-item"
+    role="menuitem"
+    (click)="onSaveToLibrary()"
+    [disabled]="!canSaveLibrary()"
+    [ngClass]="{ hidden: isReadOnly() }"
+  >
+    <span class="dropdown-item-icon">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M5.99711 16.4984V7.49841C5.99711 7.08063 6.14294 6.72619 6.43461 6.43508C6.72627 6.14397 7.08044 5.99841 7.49711 5.99841H16.4971C16.9096 5.99841 17.2627 6.14528 17.5565 6.43903C17.8502 6.73278 17.9971 7.08591 17.9971 7.49841V13.9984L13.9971 17.9984H7.49711C7.08461 17.9984 6.73148 17.8515 6.43773 17.5578C6.14398 17.264 5.99711 16.9109 5.99711 16.4984ZM2.03877 5.35258C1.96933 4.9498 2.05613 4.5748 2.29919 4.22758C2.54225 3.88035 2.86516 3.67202 3.26794 3.60258L12.1221 2.01924C12.5249 1.9498 12.8964 2.0366 13.2367 2.27966C13.577 2.52271 13.7818 2.84563 13.8513 3.24841L14.0804 4.49841H12.5596L12.3721 3.49841L3.51794 5.08174L4.49711 10.5609V15.3109C4.27488 15.2137 4.08391 15.0673 3.92419 14.8717C3.76447 14.6762 3.66377 14.4545 3.62211 14.2067L2.03877 5.35258ZM7.49711 7.49841V16.4984H12.9971V12.9984H16.4971V7.49841H7.49711Z"
+          fill="currentColor"
+          key="0"
+        ></path>
+      </svg>
+    </span>
+    {{ 'CHAT.VIEWER.SAVE_LIBRARY' | translate }}
+  </button>
+
+  <button
+    type="button"
+    class="dropdown-item"
+    role="menuitem"
+    (click)="$event.stopPropagation(); onSaveToPdf()"
+    [ngClass]="{ hidden: isReadOnly() }"
+  >
+    <span class="dropdown-item-icon">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M10 13L6 9L7.0625 7.9375L9.25 10.125V3H10.75V10.125L12.9375 7.9375L14 9L10 13ZM5.49417 16C5.08139 16 4.72917 15.8531 4.4375 15.5594C4.14583 15.2656 4 14.9125 4 14.5V13H5.5V14.5H14.5V13H16V14.5C16 14.9125 15.8531 15.2656 15.5592 15.5594C15.2653 15.8531 14.9119 16 14.4992 16H5.49417Z"
+          fill="currentColor"
+          key="0"
+        ></path>
+      </svg>
+    </span>
+    {{ 'CHAT.VIEWER.SAVE_PDF' | translate }}
+  </button>
+</div>
+
+<!-- Header -->
+<div class="shrink-0 px-6 overflow-hidden!">
+  <div
+    class="flex items-center w-full h-14"
+    [ngClass]="{
+      'border-b border-border-weak': !isCollapsed(),
+      'justify-between pt-1': !isCollapsed(),
+      'justify-center': isCollapsed(),
+    }"
+  >
+    @if (!isCollapsed()) {
+      <div class="dropdown min-w-0">
+        <button
+          #titleMenuTrigger
+          type="button"
+          class="dropdown-trigger flex items-center gap-1 min-w-0 max-w-full px-2 py-1 rounded-md hover:bg-bg-secondary"
+          [attr.aria-label]="'CHAT.VIEWER.CHANGE_DOC' | translate"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="isTitleMenuOpen()"
+          (click)="$event.stopPropagation(); toggleTitleMenu()"
+        >
+          <span class="text-h2 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+            {{ activeDoc().title }}
+          </span>
+          <span class="flex justify-center items-center shrink-0 text-text-lighter">
+            <mat-icon class="text-text-medium! text-[20px]! w-5! h-5!">
+              keyboard_arrow_down
+            </mat-icon>
+          </span>
+        </button>
+      </div>
+    }
+
+    <div class="flex items-center gap-1 shrink-0">
+      @if (!isCollapsed() && !isReadOnly()) {
+        <button
+          #moreMenuTrigger
+          type="button"
+          class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-9 h-9"
+          [attr.aria-label]="'CHAT.VIEWER.MORE_OPTIONS' | translate"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="isMoreMenuOpen()"
+          (click)="$event.stopPropagation(); toggleMoreMenu()"
+        >
+          <mat-icon class="icon-20">more_vert</mat-icon>
+        </button>
+      }
+
+      @if (!isDetailPage()) {
+        <button
+          type="button"
+          class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-brand-primary hover:bg-bg-brand-weak hover:text-brand-secondary w-9 h-9"
+          [attr.aria-label]="(isCollapsed() ? 'CHAT.VIEWER.OPEN' : 'CHAT.VIEWER.CLOSE') | translate"
+          (click)="$event.stopPropagation(); toggleCollapse()"
+          [ngClass]="isCollapsed() ? 'bg-bg-brand-weak' : 'bg-transparent'"
+        >
+          <span class="flex justify-center items-center text-primary">
+            <mat-icon class="icon-20">dock_to_right</mat-icon>
+          </span>
+        </button>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Markdown Content -->
+@if (!isCollapsed()) {
+  <div
+    #markdownContent
+    class="w-full overflow-y-auto! flex-1 p-6 flex flex-col gap-6"
+    (click)="onMarkdownContentClick($event)"
+  >
+    @if (isListLoading()) {
+      <div class="flex flex-1 items-center justify-center">
+        <app-circular-loading />
+      </div>
+    } @else if (hasListLoadError()) {
+      <p class="text-sm text-text-medium text-center">
+        {{ 'CHAT.VIEWER.LOAD_ERROR' | translate }}
+      </p>
+    } @else if (isViewerEmpty()) {
+      <p class="text-sm text-text-medium text-center">
+        {{ 'CHAT.VIEWER.EMPTY' | translate }}
+      </p>
+    } @else if (hasContentLoadError()) {
+      <p class="text-sm text-text-medium text-center">
+        {{ 'CHAT.VIEWER.CONTENT_LOAD_ERROR' | translate }}
+      </p>
+    } @else {
+      @if (isContentLoading()) {
+        <div class="flex flex-1 items-center justify-center">
+          <app-circular-loading />
+        </div>
+      } @else {
+        <markdown
+          appChartBlocks
+          class="chat-message-bubble viewer-markdown"
+          [data]="markdownData"
+          [disableSanitizer]="true"
+        ></markdown>
+      }
+    }
+  </div>
+}

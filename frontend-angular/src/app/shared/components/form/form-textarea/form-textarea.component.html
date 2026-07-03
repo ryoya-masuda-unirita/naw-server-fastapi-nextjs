@@ -1,0 +1,37 @@
+<div class="block group">
+  @if (label()) {
+    <div class="fieldset-head mb-3">
+      <p class="fieldset-title">
+        {{ label() }}
+        @if (badgeText()) {
+          <span class="fieldset-any">{{ badgeText() }}</span>
+        }
+      </p>
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  <div class="relative flex w-full">
+    <textarea
+      [id]="textareaId()"
+      [value]="displayValue()"
+      (input)="onInput($event)"
+      (blur)="onBlur()"
+      [placeholder]="placeholder()"
+      [disabled]="isDisabled()"
+      [rows]="rows()"
+      [class.border-error]="error()"
+      [class.focus:border-[var(--color-primary)]]="!error()"
+      [style.minHeight.px]="areaHeight()"
+      class="w-full block px-4 py-3 border border-border rounded-lg text-sm text-text-default placeholder:text-text-lighter leading-[1.7] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all resize-vertical {{
+        textareaClass()
+      }}"
+    ></textarea>
+  </div>
+
+  @if (error()) {
+    <p class="text-xs text-error leading-[1.7]">{{ error() }}</p>
+  }
+</div>

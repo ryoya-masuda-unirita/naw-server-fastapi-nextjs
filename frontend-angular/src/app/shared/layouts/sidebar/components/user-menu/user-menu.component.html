@@ -1,0 +1,77 @@
+<!-- User button template -->
+<ng-template #userButtonTrigger>
+  <button
+    class="hover:bg-bg-brand-weak! w-56 md:w-60 rounded-lg py-1.5 flex justify-between transition-all duration-300"
+    [ngClass]="{
+      'px-2': !sidebarCollapsed(),
+      'px-1.5': sidebarCollapsed(),
+      'w-9': sidebarCollapsed(),
+    }"
+  >
+    <div class="flex items-center gap-2">
+      <img [src]="avatarUrl()" alt="User Avatar" class="w-6 h-6 rounded-full object-cover" />
+
+      <div
+        class="flex-1 min-w-0 transition-all duration-300"
+        [ngClass]="{
+          'opacity-0': sidebarCollapsed(),
+          invisible: sidebarCollapsed(),
+        }"
+      >
+        <span
+          class="block font-medium text-xs whitespace-nowrap overflow-hidden text-ellipsis transition-all duration-300 origin-left"
+        >
+          {{ userName() }}
+        </span>
+      </div>
+    </div>
+    <span
+      class="flex items-center justify-center text-text-lighter w-7! h-7! transition-all duration-300"
+      [ngClass]="{
+        'opacity-0': sidebarCollapsed(),
+        invisible: sidebarCollapsed(),
+      }"
+    >
+      <mat-icon class="icon-20">menu</mat-icon>
+    </span>
+  </button>
+</ng-template>
+
+<!-- Menu content template -->
+<ng-template #menuUserTpl>
+  @for (action of userMenuActions(); track action.action) {
+    @if (action.separator) {
+      <div class="w-full h-px bg-border-light my-1"></div>
+    }
+    <button
+      class="px-2 text-xs h-9! font-normal! w-full rounded-md hover:bg-gray-100 transition-colors text-left"
+      [ngClass]="{
+        'hover:bg-red-50': action.action === 'logout',
+        hidden: action.action === 'switch-role' && !canShowSwitchRole(),
+      }"
+      (click)="onMenuAction(action)"
+    >
+      <div
+        class="flex items-center justify-between gap-2"
+        [ngClass]="action.textClass || 'text-text-default!'"
+      >
+        <div class="flex items-center gap-2 font-medium">
+          <mat-icon class="icon-20" [ngClass]="action.iconClass || ''">
+            {{ action.icon }}
+          </mat-icon>
+          <span>{{ action.labelKey | translate }}</span>
+        </div>
+      </div>
+    </button>
+  }
+</ng-template>
+
+<!-- Context menu with user button trigger -->
+<app-context-menu
+  [menuTpl]="menuUserTpl"
+  [menuMinWidth]="'min-w-70'"
+  [customTrigger]="userButtonTrigger"
+  [overlayPositions]="[
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -4 },
+  ]"
+/>

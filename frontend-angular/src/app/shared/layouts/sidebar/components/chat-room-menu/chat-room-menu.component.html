@@ -1,0 +1,71 @@
+<!-- Backdrop overlay: click to close -->
+@if (isOpen() || visible()) {
+  <div
+    class="w-screen h-screen fixed inset-0 z-199 bg-bg-overlay md:bg-transparent!"
+    (click)="closeMenu.emit()"
+  ></div>
+}
+
+<!-- Menu panel -->
+<div
+  class="fixed left-0 bottom-0 w-screen rounded-tl-lg rounded-tr-lg md:bottom-auto! md:left-2! md:w-60 md:rounded-lg z-200 bg-white shadow-md p-4 flex flex-col gap-1 overflow-y-auto"
+  [class]="hostClasses()"
+  [style.top.px]="isDesktop() ? menuTopPx() : null"
+  [style.max-height.px]="isDesktop() ? desktopMaxHeightPx() : null"
+  (click)="$event.stopPropagation()"
+  (animationend)="onAnimationEnd()"
+>
+  <button
+    type="button"
+    class="w-full flex items-center gap-2 px-2 h-9 text-xs font-medium text-text-default hover:bg-surface-sidebar hover:rounded-lg transition-colors"
+    (click)="rename.emit(); closeMenu.emit()"
+  >
+    <mat-icon class="icon-20">border_color</mat-icon>
+    <span>{{ 'SIDEBAR.RENAME_CHAT' | translate }}</span>
+  </button>
+
+  <button
+    type="button"
+    class="w-full flex items-center gap-2 px-2 h-9 text-xs font-medium text-text-default hover:bg-surface-sidebar hover:rounded-lg transition-colors"
+    (click)="togglePin.emit(); closeMenu.emit()"
+  >
+    @if (isPinned()) {
+      <mat-icon
+        class="icon-20"
+        style="
+          font-variation-settings:
+            'FILL' 1,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 20;
+        "
+        >keep_off</mat-icon
+      >
+      <span>{{ 'SIDEBAR.UNPIN_CHAT' | translate }}</span>
+    } @else {
+      <mat-icon
+        class="icon-20"
+        style="
+          font-variation-settings:
+            'FILL' 1,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 20;
+        "
+        >push_pin</mat-icon
+      >
+      <span>{{ 'SIDEBAR.PIN_CHAT' | translate }}</span>
+    }
+  </button>
+
+  <hr class="border-border-light mx-2 my-1" />
+
+  <button
+    type="button"
+    class="w-full flex items-center gap-2 px-2 h-9 text-xs font-medium text-red-500 hover:bg-bg-error hover:rounded-lg transition-colors"
+    (click)="delete.emit(); closeMenu.emit()"
+  >
+    <mat-icon class="icon-20 text-red-500">delete</mat-icon>
+    <span>{{ 'SIDEBAR.DELETE_CHAT' | translate }}</span>
+  </button>
+</div>

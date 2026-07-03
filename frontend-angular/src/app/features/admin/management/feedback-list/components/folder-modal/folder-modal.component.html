@@ -1,0 +1,31 @@
+<div class="flex flex-col gap-4 md:gap-6">
+  <!-- Lightbulb info block -->
+  <div class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6">
+    <div class="flex gap-1 items-start md:gap-2">
+      <span class="shrink-0" aria-hidden="true">
+        <app-svg-icon name="lightbulb" class="w-5 h-5 text-brand-primary" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large md:text-label-x-large">
+        {{ 'FEEDBACK.ACCURACY_DESCRIPTION' | translate }}
+      </p>
+    </div>
+    <!-- <p class="text-body-small">
+      {{ 'FEEDBACK.FOLDER_MODAL_INFO_BODY' | translate }}
+    </p> -->
+  </div>
+
+  <!-- 学習先フォルダ選択 -->
+  <div class="flex flex-col gap-1">
+    <span class="text-label text-text-strong">{{
+      'FEEDBACK.FOLDER_MODAL_FOLDER_LABEL' | translate
+    }}</span>
+    <app-select-with-search
+      class="w-full"
+      [options]="folderOptions()"
+      [value]="getSelectedValue()"
+      [placeholder]="'FEEDBACK.FOLDER_MODAL_FOLDER_PLACEHOLDER' | translate"
+      [supportText]="'FEEDBACK.FOLDER_MODAL_FOLDER_SUPPORT' | translate"
+      (valueChange)="onFolderChange($event)"
+    />
+  </div>
+</div>

@@ -1,0 +1,10 @@
+<div class="dialog-body">
+  <div class="form-field">
+    <app-form-input
+      [label]="'ADMIN_CONSOLE.NAME' | translate"
+      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      [value]="value()"
+      (valueChange)="updateName($event)"
+    />
+  </div>
+</div>

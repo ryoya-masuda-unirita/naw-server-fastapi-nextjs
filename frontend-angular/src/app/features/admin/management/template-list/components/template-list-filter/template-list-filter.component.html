@@ -1,0 +1,63 @@
+<div class="library-filters">
+  <!-- 検索 -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="library-filter-label">
+      {{ 'TEMPLATES.SEARCH_LABEL' | translate }}
+    </span>
+    <app-search-input
+      class="md:w-40 w-full"
+      size="small"
+      [value]="searchQuery()"
+      [placeholder]="'TEMPLATES.SEARCH_PLACEHOLDER'"
+      (valueChange)="onSearchChange($event)"
+    />
+  </div>
+
+  <!-- フィルター -->
+  <div class="flex flex-col gap-1 items-start w-full md:w-auto">
+    <span class="library-filter-label">
+      {{ 'TEMPLATES.FILTER_LABEL' | translate }}
+    </span>
+    <app-select
+      class="md:w-40 w-full"
+      size="small"
+      [options]="teamOptions()"
+      [value]="filterTeam()"
+      (valueChange)="onTeamChange($event)"
+      [placeholder]="'TEMPLATES.ALL_TEAMS' | translate"
+    />
+  </div>
+
+  <!-- 並べ替え -->
+  <div class="library-filter-group">
+    <label for="template-list-sort" class="library-filter-label">
+      {{ 'TEMPLATES.SORT_LABEL' | translate }}
+    </label>
+    <div class="library-filter-group">
+      <app-form-sort-input
+        id="template-list-sort"
+        class="w-full md:w-40"
+        size="sm"
+        [fields]="sortFieldOptions()"
+        [orders]="sortOrderOptions()"
+        [selectedField]="sortField()"
+        [selectedOrder]="sortOrder()"
+        (fieldChange)="onSortFieldChange($event)"
+        (orderChange)="onSortOrderChange($event)"
+      />
+    </div>
+  </div>
+
+  <!-- 件数 + ページ送り (top) -->
+  <div class="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
+    <app-pagination
+      [totalPages]="totalPages()"
+      [useQueryParams]="false"
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [currentPageOverride]="pageIndex()"
+      [countDisplay]="countDisplay()"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>

@@ -1,0 +1,11 @@
+// All visual styling for chat-message-item is provided by the design-system CSS in styles.css.
+// (.chat-message, .chat-message--user, .chat-message--assistant, .chat-user-bubble,
+//  .chat-message-bubble, .chat-message-footer, .chat-message-actions, .chat-user-edit,
+//  .chat-pagination, .chat-edit-actions, .btn-edit-cancel, .btn-edit-send, etc.)
+//
+// The host uses `display: contents` (set inline via component decorator host:style) so the
+// custom element is transparent to the parent flex layout, allowing
+// `.chat-message--user { align-self: flex-end }` to work correctly.
+//
+// The assistant "more" dropdown uses `position: fixed` (from .dropdown-menu.is-open in
+// styles.css) with coordinates calculated from the trigger's getBoundingClientRect() in TS.

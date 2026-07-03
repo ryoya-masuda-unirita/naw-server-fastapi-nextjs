@@ -1,0 +1,20 @@
+import { Component, ChangeDetectionStrategy, input } from '@angular/core';
+
+@Component({
+  selector: 'app-library-book-icon',
+  standalone: true,
+  template: `
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M3.98148 14.5023V5.50232C3.98148 5.08454 4.12732 4.73009 4.41898 4.43898C4.71065 4.14787 5.06482 4.00232 5.48148 4.00232H14.4815C14.894 4.00232 15.2471 4.14919 15.5409 4.44294C15.8346 4.73669 15.9815 5.08982 15.9815 5.50232V12.0023L11.9815 16.0023H5.48148C5.06898 16.0023 4.71586 15.8554 4.42211 15.5617C4.12836 15.2679 3.98148 14.9148 3.98148 14.5023ZM0.0231481 3.35648C-0.0462963 2.9537 0.0405092 2.5787 0.283565 2.23148C0.52662 1.88426 0.849537 1.67593 1.25231 1.60648L10.1065 0.0231482C10.5093 -0.0462963 10.8808 0.0405093 11.2211 0.283565C11.5613 0.52662 11.7662 0.849537 11.8356 1.25231L12.0648 2.50232H10.544L10.3565 1.50232L1.50231 3.08565L2.48148 8.56482V13.3148C2.25926 13.2176 2.06829 13.0712 1.90856 12.8757C1.74884 12.6801 1.64815 12.4584 1.60648 12.2106L0.0231481 3.35648ZM5.48148 5.50232V14.5023H10.9815V11.0023H14.4815V5.50232H5.48148Z"
+        [attr.fill]="disabled() ? '#adadad' : 'currentColor'"
+        [attr.fill-opacity]="disabled() ? '0.6' : '1'"
+      />
+    </svg>
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'inline-flex' },
+})
+export class LibraryBookIconComponent {
+  readonly disabled = input<boolean>(false);
+}

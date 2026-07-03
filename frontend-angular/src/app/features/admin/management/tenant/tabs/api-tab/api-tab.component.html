@@ -1,0 +1,238 @@
+<!-- Info block -->
+<!-- <div class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6">
+  <div class="flex gap-1 items-start md:gap-2">
+    <span class="shrink-0" aria-hidden="true">
+      <app-svg-icon name="lightbulb" class="w-5 h-5 text-brand-primary" />
+    </span>
+    <p class="flex-1 min-w-0 text-label-large md:text-label-x-large">
+      {{ 'TENANT.API_INFO_TITLE' | translate }}
+    </p>
+  </div>
+  <p class="text-body-small">{{ 'TENANT.API_INFO_TEXT' | translate }}</p>
+</div> -->
+
+<!-- Add API button (sticky on mobile, inline on desktop) -->
+<div class="sp-fixed-btn">
+  <app-button
+    variant="solid"
+    size="lg"
+    (buttonClick)="onOpenAddApiDialog()"
+    class="w-full md:w-auto"
+    [classProps]="'w-full'"
+  >
+    <app-svg-icon name="addCircle" class="w-5 h-5" />
+    {{ 'TENANT.ADD_API' | translate }}
+  </app-button>
+</div>
+<!-- Configured API section -->
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+    <p class="text-h2">{{ 'TENANT.CONFIGURED_API' | translate }}</p>
+    <!-- Sort + count/arrows -->
+    <div class="library-filters">
+      <div class="library-filter-group">
+        <span class="library-filter-label">{{ 'TENANT.SORT_LABEL' | translate }}</span>
+        <div class="library-filter-selects">
+          <app-form-sort-input
+            size="sm"
+            class="w-full md:w-40"
+            [placeholder]="'TENANT.API_SORT_DEFAULT' | translate"
+            [(fields)]="apiSortFields"
+            [(selectedField)]="selectedSortField"
+            [(selectedOrder)]="selectedSortOrder"
+          />
+        </div>
+      </div>
+      <!-- Count + pagination arrows -->
+      <div class="library-page-info">
+        <span class="library-page-count">
+          {{ apiPageRangeStart() }}-{{ apiPageRangeEnd() }}件 / {{ apiConfigsTotal() }}件
+        </span>
+        <div class="library-page-arrows">
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="apiCurrentPage() <= 1"
+              [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+              (click)="onApiPageChange(1)"
+            >
+              <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="apiCurrentPage() <= 1"
+              [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+              (click)="onApiPageChange(apiCurrentPage() - 1)"
+            >
+              <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="apiCurrentPage() >= totalPagesApi()"
+              [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+              (click)="onApiPageChange(apiCurrentPage() + 1)"
+            >
+              <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="apiCurrentPage() >= totalPagesApi()"
+              [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+              (click)="onApiPageChange(totalPagesApi())"
+            >
+              <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API table -->
+  <app-table-list>
+    @if (apiConfigsFetching() || apiConfigsTotal() > 0) {
+      <!-- Header row -->
+      <app-table-list-item [isHeader]="true" [hasActions]="true" [showCheckbox]="false">
+        <span class="table-list-col-content table-list-label md:min-w-30">{{
+          'TENANT.API_COL_NAME' | translate
+        }}</span>
+        <span class="table-list-col-date table-list-label md:w-83.5">{{
+          'TENANT.API_COL_PORT' | translate
+        }}</span>
+        <span class="table-list-col-date table-list-label md:w-84">{{
+          'TENANT.API_COL_URL' | translate
+        }}</span>
+        <span class="table-list-col-date table-list-label md:w-20">{{
+          'TENANT.API_COL_KEY' | translate
+        }}</span>
+        <span
+          slot="right"
+          class="hidden md:inline-block w-9 h-9 invisible"
+          aria-hidden="true"
+        ></span>
+      </app-table-list-item>
+    }
+
+    <!-- Data rows -->
+    <div class="relative min-h-105 md:min-h-52.5">
+      @if (apiConfigsFetching()) {
+        <div class="absolute inset-0 flex items-center justify-center">
+          <app-circular-loading />
+        </div>
+      } @else {
+        @for (api of apiConfigs(); track api.id) {
+          <app-table-list-item [showCheckbox]="false" [hasActions]="isManageableEndpoint(api)">
+            <!-- APIの表示名 -->
+            <div class="table-list-col-content table-list-start-label md:min-w-30">
+              <p class="table-list-title text-label-large md:text-label-x-large">
+                {{ api.endpointName }}
+              </p>
+            </div>
+            <!-- 接続先 -->
+            <div class="table-list-row-date md:w-83.5">
+              <span class="table-list-label md:hidden w-30">{{
+                'TENANT.API_COL_PORT' | translate
+              }}</span>
+              <span
+                class="table-list-date flex-1 w-30 md:w-auto text-body-small font-normal md:text-body text-text-strong"
+                >{{ api.type }}</span
+              >
+            </div>
+            <!-- 接続先URL -->
+            <div class="table-list-row-date md:w-84">
+              <span class="table-list-label md:hidden w-30">{{
+                'TENANT.API_COL_URL' | translate
+              }}</span>
+              <span class="table-list-date flex-1 truncate">{{ api.endpoint }}</span>
+            </div>
+            <!-- APIキー -->
+            <div class="table-list-row-date md:w-20">
+              <span class="table-list-label md:hidden w-30">{{
+                'TENANT.API_COL_KEY' | translate
+              }}</span>
+              <span class="table-list-date flex-1">*****</span>
+            </div>
+            <!-- Settings menu (LOCAL_SERVER only) -->
+            <div slot="right">
+              @if (isManageableEndpoint(api)) {
+                <app-context-menu
+                  #contextMenu
+                  [menuTpl]="apiMenuTpl"
+                  [panelClass]="'dropdown-menu dropdown-menu--bordered w-[280px]'"
+                />
+                <ng-template #apiMenuTpl>
+                  <div class="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-secondary transition-colors w-full text-left"
+                      (click)="onOpenEditApiDialog(api); contextMenu.close()"
+                    >
+                      <app-svg-icon name="edit" class="w-5 h-5 text-text-strong shrink-0" />
+                      <span class="text-label text-text-strong truncate">{{
+                        'TENANT.EDIT_API_SETTING' | translate
+                      }}</span>
+                    </button>
+                  </div>
+                  <hr class="border-border-weak my-1" />
+                  <div class="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
+                      (click)="onOpenDeleteApiDialog(api); contextMenu.close()"
+                    >
+                      <app-svg-icon name="delete" class="w-5 h-5 text-status-error shrink-0" />
+                      <span class="text-label text-status-error truncate">{{
+                        'TENANT.DELETE_API' | translate
+                      }}</span>
+                    </button>
+                  </div>
+                </ng-template>
+              }
+            </div>
+          </app-table-list-item>
+        }
+
+        @if (apiConfigs().length === 0) {
+          <div
+            class="flex items-center justify-center h-full min-h-105 md:min-h-52.5 text-text-muted"
+          >
+            {{ 'TENANT.NO_DATA' | translate }}
+          </div>
+        }
+      }
+    </div>
+  </app-table-list>
+
+  <!-- Bottom pagination -->
+  @if (apiConfigsTotal() > 0) {
+    <div class="flex justify-center">
+      <app-pagination
+        [totalPages]="totalPagesApi()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="apiCurrentPage()"
+        (pageChange)="onApiPageChange($event)"
+      />
+    </div>
+  }
+</div>
+
+<!-- Dialog templates -->
+<ng-template #addApiTemplate>
+  <app-add-api-dialog [formData]="addApiForm()" (formDataChange)="addApiForm.set($event)" />
+</ng-template>
+
+<ng-template #editApiTemplate>
+  <app-add-api-dialog
+    [formData]="editApiForm()"
+    (formDataChange)="editApiForm.set($event)"
+    [isEdit]="true"
+  />
+</ng-template>

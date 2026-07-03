@@ -1,0 +1,56 @@
+:host {
+  display: block;
+}
+
+/* アシストフロー: 選択状態 */
+/* 単一選択: 選択時ハイライト */
+.assist-option[aria-selected='true'],
+.other-row[aria-selected='true'] {
+  background-color: var(--color-bg-brand-weak);
+}
+
+/* 単一選択: チェックアイコン（未選択は非表示） */
+.assist-option:not([aria-selected='true']) .check-icon,
+.other-row:not([aria-selected='true']) .check-icon {
+  opacity: 0;
+}
+
+.assist-option[aria-selected='true'] .check-icon,
+.other-row[aria-selected='true'] .check-icon {
+  opacity: 1;
+}
+
+/* チェックアイコン */
+.check-icon {
+  transition: opacity 0.15s ease;
+}
+
+/* チェックボックスアイコン */
+.input-checkbox-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-checkbox-icon-svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* 入力フィールド */
+.input-parts-field {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.input-parts-field:focus {
+  border-color: var(--color-brand-primary);
+  outline: none;
+}
+
+.other-row[aria-selected='true'] .input-parts-field {
+  border-color: var(--color-brand-primary);
+}

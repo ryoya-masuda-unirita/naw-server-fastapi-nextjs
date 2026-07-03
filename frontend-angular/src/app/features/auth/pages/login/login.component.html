@@ -1,0 +1,132 @@
+<div class="login-page flex min-h-screen flex-col justify-end">
+  <main
+    class="flex flex-1 flex-col items-center justify-center px-4 max-sm:justify-start! max-sm:py-10"
+  >
+    <div class="flex w-full max-w-158 flex-col items-center gap-8">
+      <img
+        src="/secuaigent-logo.png"
+        alt="SecuAIgent Logo"
+        class="h-[36.6px] w-60 max-w-full object-contain md:h-16 md:w-105"
+      />
+
+      <div
+        class="flex w-full max-w-150 flex-col gap-8 rounded-4xl bg-surface-white px-4 pb-8 pt-6 md:p-8!"
+      >
+        <form class="flex flex-col gap-4 md:gap-6" [formGroup]="form" (ngSubmit)="onSubmit()">
+          <header class="flex items-center py-[10.5px]">
+            <h1 class="text-h1 text-text-default">
+              {{ 'AUTH.LOGIN.TITLE' | translate }}
+            </h1>
+          </header>
+
+          <app-form-input
+            formControlName="username"
+            [label]="'AUTH.LOGIN.USER_ID_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.USER_ID_PLACEHOLDER' | translate"
+            [error]="usernameError()"
+            type="text"
+            autocomplete="username"
+          />
+
+          <app-form-input
+            formControlName="password"
+            [label]="'AUTH.LOGIN.PASSWORD_LABEL' | translate"
+            [supportText]="'AUTH.LOGIN.PASSWORD_SUPPORT' | translate"
+            [placeholder]="'AUTH.LOGIN.PASSWORD_PLACEHOLDER' | translate"
+            [error]="passwordError()"
+            [maxLength]="passwordMaxLength"
+            [asciiOnly]="true"
+            type="password"
+            autocomplete="current-password"
+            [showPasswordToggle]="true"
+          />
+
+          <app-button
+            type="submit"
+            [loading]="authApi.loginMutation.isPending()"
+            [fullWidth]="true"
+            iconPosition="left"
+          >
+            <mat-icon icon class="h-5! w-5! text-[20px]!">login</mat-icon>
+            {{ 'AUTH.LOGIN.SUBMIT' | translate }}
+          </app-button>
+        </form>
+
+        <!-- SSO未対応のためGoogle/Microsoftログインは非表示
+        <div class="flex flex-col items-center">
+          <div class="w-full h-px bg-border-strong md:my-2"></div>
+
+          <div class="flex w-full flex-col gap-4 md:flex-row pt-8">
+            <app-button
+              variant="outline"
+              [fullWidth]="true"
+              iconPosition="left"
+              class="md:flex-1"
+              (buttonClick)="loginWithGoogle()"
+            >
+              <img icon src="/icon-google.svg" alt="Google" class="w-5 h-5n shrink-0" />
+              {{ 'AUTH.LOGIN.GOOGLE' | translate }}
+            </app-button>
+            <app-button
+              variant="outline"
+              [fullWidth]="true"
+              iconPosition="left"
+              class="md:flex-1"
+              (buttonClick)="loginWithMicrosoft()"
+            >
+              <img icon src="/icon-microsoft.svg" alt="Microsoft" class="w-5 h-5" />
+              {{ 'AUTH.LOGIN.MICROSOFT' | translate }}
+            </app-button>
+          </div>
+        </div>
+        -->
+      </div>
+    </div>
+  </main>
+
+  <footer class="w-full bg-surface-footer px-4 py-4 md:px-8! md:py-6!">
+    <div class="flex w-full flex-col items-center gap-4 md:flex-row md:justify-between">
+      <div class="flex items-center justify-center gap-3 md:justify-start">
+        <a
+          href="https://www.unirita.co.jp/dcms_media/other/UNIRITA-Cloud-Service_SLA_support-policy.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-xs leading-[1.7] text-primary underline underline-offset-2"
+        >
+          <span class="">{{ 'AUTH.FOOTER.TERMS' | translate }}</span>
+          <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+        </a>
+        <a
+          href="https://www.unirita.co.jp/privacy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-xs leading-[1.7] text-primary underline underline-offset-2"
+        >
+          <span class="">{{ 'AUTH.FOOTER.PRIVACY' | translate }}</span>
+          <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+        </a>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 md:justify-end">
+        <div class="inline-flex items-center text-[10px]">
+          <p class="text-note-small text-text-medium">
+            {{ 'AUTH.FOOTER.COMPANY_LABEL' | translate }}：
+          </p>
+          <a
+            href="https://www.unirita.co.jp/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-[10px] leading-[1.4] text-primary underline underline-offset-2"
+          >
+            <span class="">{{ 'AUTH.FOOTER.COMPANY_NAME' | translate }}</span>
+            <mat-icon class="h-4! w-4! text-[16px]!">open_in_new</mat-icon>
+          </a>
+        </div>
+        <p class="text-[10px] font-bold leading-[1.4] text-text-muted">
+          {{ 'AUTH.FOOTER.COPYRIGHT' | translate }}
+        </p>
+      </div>
+    </div>
+  </footer>
+</div>

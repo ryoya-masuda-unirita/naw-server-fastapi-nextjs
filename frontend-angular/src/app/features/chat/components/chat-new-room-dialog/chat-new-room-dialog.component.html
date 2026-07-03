@@ -1,0 +1,59 @@
+<fieldset class="block">
+  <div class="fieldset-head mb-3">
+    <p class="fieldset-title">
+      {{ 'CHAT.INPUT.NEW_CHAT_DIALOG_TITLE' | translate }}
+    </p>
+    <p class="fieldset-support-text mt-1">
+      {{ 'CHAT.INPUT.NEW_CHAT_DIALOG_DESC' | translate }}
+    </p>
+  </div>
+
+  <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+    @if (isAssistantsLoading()) {
+      <app-skeleton-block [length]="4" />
+    } @else {
+      @for (assistant of assistants(); track assistant.id) {
+        <button
+          type="button"
+          class="dl-option dl-option--rich text-left"
+          role="option"
+          [attr.aria-selected]="isSelected(assistant.id)"
+          [attr.data-selected]="isSelected(assistant.id) ? 'true' : null"
+          (click)="selectAssistant(assistant.id)"
+        >
+          <div class="dl-option__body">
+            <div class="dl-option__head">
+              <span class="dl-option__check" aria-hidden="true">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="w-5 h-5"
+                  aria-hidden="true"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path
+                    d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+              <span class="flex-1 min-w-0 truncate text-note font-medium">{{
+                assistant.name
+              }}</span>
+            </div>
+            @if (assistant.description) {
+              <div class="dl-option__details">
+                <p class="dl-option__desc">{{ assistant.description }}</p>
+                @if (assistant.category) {
+                  <span class="dl-option__category">{{ assistant.category }}</span>
+                }
+              </div>
+            }
+          </div>
+        </button>
+      }
+    }
+  </div>
+</fieldset>

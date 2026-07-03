@@ -1,0 +1,17 @@
+<app-form-input
+  [label]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.NAME_LABEL' | translate"
+  [value]="name()"
+  (valueChange)="name.set($event)"
+  [placeholder]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.TAG_NAME_PLACEHOLDER' | translate"
+  [maxLength]="tagNameMaxLength"
+  [error]="nameError()"
+/>
+
+<app-form-textarea
+  [label]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.DESC_LABEL' | translate"
+  [badgeText]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.OPTIONAL' | translate"
+  [value]="description()"
+  (valueChange)="description.set($event)"
+  [placeholder]="'ADMIN.LIBRARY.TAGS.EDIT_SETTINGS.TAG_DESC_PLACEHOLDER' | translate"
+  [areaHeight]="144"
+/>

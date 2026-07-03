@@ -1,0 +1,362 @@
+<!-- Selection bar (Astro: data-word-selection-actions) -->
+@if (hasSelection()) {
+  <div class="sp-fixed-btn">
+    <div class="flex flex-col-reverse md:flex-row gap-3 w-full">
+      <app-button
+        variant="outline"
+        size="lg"
+        (buttonClick)="deselectAll()"
+        intent="cancel"
+        [fullWidth]="true"
+      >
+        {{ 'ADMIN.GLOSSARY.WORD_DESELECT' | translate }}
+      </app-button>
+      <app-button
+        variant="outline"
+        intent="delete"
+        size="lg"
+        [fullWidth]="true"
+        (buttonClick)="openDeleteSelected()"
+      >
+        <app-svg-icon name="delete" class="w-5 h-5" />
+        {{ 'COMMON.DELETE' | translate }}
+      </app-button>
+    </div>
+  </div>
+}
+
+@if (!hasSelection()) {
+  <div
+    class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+    data-word-info-block
+  >
+    <div class="flex gap-1 items-start md:gap-2">
+      <span class="shrink-0" aria-hidden="true">
+        <app-svg-icon name="lightbulb" class="w-5 h-5 text-brand-primary" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large md:text-label-x-large text-text-strong font-medium">
+        {{ 'ADMIN.GLOSSARY.WORD_INFO_TITLE' | translate }}
+      </p>
+    </div>
+    <p class="text-body-small">{{ 'ADMIN.GLOSSARY.WORD_INFO_BODY' | translate }}</p>
+  </div>
+}
+
+<div class="library-filters">
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.SEARCH_LABEL' | translate }}</span>
+    <app-search-input
+      class="library-search-field md:w-40"
+      size="small"
+      [placeholder]="'ADMIN.GLOSSARY.SEARCH_PLACEHOLDER' | translate"
+      [maxLength]="32"
+      [value]="searchQuery()"
+      (valueChange)="onSearch($event)"
+    />
+  </div>
+
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.FILTER_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-period-filter
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [value]="filterPeriod()"
+        [range]="filterPeriodRange()"
+        (selectionChange)="onPeriodChange($event)"
+      />
+      <app-select
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [options]="tagOptions"
+        [placeholder]="'ADMIN.GLOSSARY.ALL_TAGS' | translate"
+        [value]="tagFilter()"
+        (valueChange)="onTagChange($event)"
+      />
+    </div>
+  </div>
+
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.SORT_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-form-sort-input
+        class="library-sort-wrap library-combobox w-full md:w-40"
+        size="sm"
+        [fields]="sortFields"
+        [(selectedField)]="sortField"
+        [(selectedOrder)]="sortOrder"
+        [placeholder]="'ADMIN.GLOSSARY.WORD_SORT_UPDATED'"
+      />
+    </div>
+  </div>
+
+  <div class="library-page-info">
+    <span class="library-page-count">{{ countDisplay() }}</span>
+    <div class="library-page-arrows">
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(1)"
+          [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+        >
+          <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(pageIndex() - 1)"
+          [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(pageIndex() + 1)"
+          [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(totalPages())"
+          [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+        >
+          <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-table-list>
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="headerChecked()"
+    [indeterminate]="headerIndeterminate()"
+    (checkedChange)="onToggleSelectAll($event)"
+    class=""
+  >
+    <span class="table-list-col-content table-list-label">{{
+      'ADMIN.GLOSSARY.WORD_COL_TERM' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-30">{{
+      'ADMIN.GLOSSARY.WORD_COL_UPDATED' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-[24.8%]">{{
+      'ADMIN.GLOSSARY.TAGS' | translate
+    }}</span>
+    <div
+      class="dropdown hidden items-center justify-center flex-col md:flex-row gap-2 pointer-events-none md:flex md:invisible"
+      slot="right"
+    >
+      <span class="hidden md:inline-block w-9 h-9 invisible"></span>
+      <span class="hidden md:inline-block w-9 h-9 invisible"></span>
+    </div>
+  </app-table-list-item>
+
+  @for (row of pageSlice(); track row.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isRowSelected(row.id)"
+      (checkedChange)="onToggleRow(row.id, $event)"
+    >
+      <div class="table-list-col-content">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ row.name }}</p>
+        <p class="table-list-desc line-clamp-2">{{ row.description }}</p>
+      </div>
+      <div class="table-list-col-date md:w-30 font-medium">
+        <span class="table-list-date">{{ row.dateLabel }}</span>
+        <span class="table-list-date">{{ row.author }}</span>
+      </div>
+      <div class="library-tags md:w-[24.8%]">
+        @for (tag of row.tags; track $index) {
+          <span class="library-tag"><span class="library-tag-hash">#</span>{{ tag }}</span>
+        }
+      </div>
+      <div
+        class="dropdown flex items-center justify-center flex-col md:flex-row gap-2"
+        slot="right"
+      >
+        <ng-template #rowMenuTrigger>
+          <button
+            type="button"
+            class="icon-button icon-button-tertiary-gray w-7 h-7 md:w-9 md:h-9 dropdown-trigger flex items-center justify-center"
+            [attr.aria-label]="'ADMIN.GLOSSARY.WORD_ROW_SETTINGS' | translate"
+            [attr.aria-haspopup]="'menu'"
+          >
+            <app-svg-icon name="settings" class="w-5 h-5" />
+          </button>
+        </ng-template>
+
+        <ng-template #rowMenuTpl>
+          <button type="button" class="dropdown-item" role="menuitem" (click)="openEditWord(row)">
+            <span class="dropdown-item-icon">
+              <app-svg-icon name="edit" class="w-5 h-5" />
+            </span>
+            {{ 'ADMIN.GLOSSARY.EDIT_WORD_TITLE' | translate }}
+          </button>
+          <hr class="dropdown-divider" />
+          <button
+            type="button"
+            class="dropdown-item dropdown-item--danger"
+            role="menuitem"
+            (click)="openDeleteWord(row)"
+          >
+            <span class="dropdown-item-icon">
+              <app-svg-icon name="delete" class="w-5 h-5" />
+            </span>
+            {{ 'ADMIN.GLOSSARY.DELETE_WORDS_TITLE_LABEL' | translate }}
+          </button>
+        </ng-template>
+
+        <app-context-menu
+          [customTrigger]="rowMenuTrigger"
+          [menuTpl]="rowMenuTpl"
+          panelClass="dropdown-menu md:w-28"
+          menuMinWidth=""
+        />
+        <app-icon-button
+          variant="tertiary-gray"
+          class="w-7 h-7 md:w-9! md:h-9! dropdown-trigger flex items-center justify-center"
+          [ariaLabel]="'ADMIN.GLOSSARY.WORD_PREVIEW' | translate"
+          (click)="openPreview(row)"
+        >
+          <app-svg-icon name="arrowRight" class="w-5 h-5" />
+        </app-icon-button>
+      </div>
+    </app-table-list-item>
+  }
+</app-table-list>
+
+@if (pageSlice().length === 0) {
+  <div class="px-4 py-8 text-center text-text-muted">{{ 'COMMON.NO_DATA' | translate }}</div>
+}
+
+<div class="library-pagination pt-0">
+  <app-pagination
+    [totalPages]="totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [currentPageOverride]="pageIndex()"
+    (pageChange)="onPageChange($event)"
+  />
+</div>
+
+<!-- Preview modal body -->
+<ng-template #previewTpl>
+  @if (previewRow(); as row) {
+    <div class="flex flex-col gap-4 md:gap-6 items-start">
+      <div class="flex flex-wrap gap-1">
+        @for (tag of row.tags; track $index) {
+          <span class="library-tag"><span class="library-tag-hash">#</span>{{ tag }}</span>
+        }
+      </div>
+      <p class="text-body">{{ row.description }}</p>
+      <div class="w-full">
+        <img
+          src="/dummy-graph.jpg"
+          [alt]="'ADMIN.GLOSSARY.WORD_PREVIEW_IMAGE_ALT' | translate"
+          class="w-full h-auto"
+        />
+      </div>
+      <app-button variant="solid" size="lg" (buttonClick)="openEditFromPreview()">
+        <app-svg-icon name="edit" class="w-5 h-5" />
+        {{ 'ADMIN.GLOSSARY.WORD_PREVIEW_EDIT' | translate }}
+      </app-button>
+    </div>
+  }
+</ng-template>
+
+<ng-template #previewActions>
+  <app-button
+    variant="outline"
+    intent="cancel"
+    size="lg"
+    (buttonClick)="closeDialogs()"
+    class="md:w-auto! w-full!"
+    classProps="md:w-auto! w-full!"
+  >
+    {{ 'COMMON.CLOSE' | translate }}
+  </app-button>
+</ng-template>
+
+<ng-template #editWordTpl>
+  <div class="flex flex-col gap-4 md:gap-6">
+    <app-form-input
+      [label]="'ADMIN.GLOSSARY.WORD_EDIT_LABEL' | translate"
+      [value]="editWordName()"
+      (valueChange)="editWordName.set($event)"
+      [maxLength]="32"
+      [error]="editWordNameError()"
+    />
+    <app-form-textarea
+      [label]="'ADMIN.GLOSSARY.WORD_EDIT_DEF' | translate"
+      [value]="editWordDef()"
+      [textareaClass]="'min-h-36!'"
+      (valueChange)="editWordDef.set($event)"
+      [maxLength]="1000"
+      [error]="editWordDefError()"
+      [rows]="4"
+    />
+
+    <fieldset class="flex flex-col gap-3">
+      <div class="fieldset-head">
+        <div class="fieldset-title" for="edit-word-tags-multi-select">
+          {{ 'ADMIN.GLOSSARY.TAG_LABEL' | translate }}
+          <span class="fieldset-any">{{ 'COMMON.OPTIONAL' | translate }}</span>
+        </div>
+        <p class="fieldset-support-text">
+          {{ 'ADMIN.GLOSSARY.TAG_SUPPORT_TEXT' | translate }}
+        </p>
+      </div>
+      <app-multi-select
+        id="edit-word-tags-multi-select"
+        [placeholder]="'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TAGS_PLACEHOLDER' | translate"
+        [options]="tagOptions"
+        [value]="editWordTags()"
+        width="100%"
+        (valueChange)="editWordTags.set($event)"
+      />
+    </fieldset>
+  </div>
+</ng-template>
+
+<ng-template #editWordActions>
+  <div class="flex gap-3 md:justify-end">
+    <app-button
+      variant="outline"
+      intent="cancel"
+      size="lg"
+      (buttonClick)="closeDialogs()"
+      class="md:w-auto! w-full!"
+      classProps="md:w-auto! w-full!"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      (buttonClick)="saveEditWord()"
+      [disabled]="editWordSubmitted() && !canSaveEditWord()"
+      class="md:w-auto! w-full!"
+      classProps="md:w-auto! w-full!"
+    >
+      {{ 'COMMON.SAVE' | translate }}
+    </app-button>
+  </div>
+</ng-template>
+
+@if (hasSelection()) {
+  <div class="h-24 md:hidden"></div>
+}

@@ -1,0 +1,158 @@
+<!-- パターン1: デフォルト -->
+<article class="chat-message chat-message--assistant">
+  <div class="chat-message-bubble">
+    <p>
+      本文が入ります。本文が入ります。本文が入ります。本文が入ります。本文が入ります。本文が入ります。<br />
+      本文が入ります。本文が入ります。本文が入ります。本文が入ります。本文が入ります。本文が入ります。<a
+        href="#"
+        >文中のテキストリンク</a
+      >本文が入ります。<br /><br />この下にあるのは罫線です。
+    </p>
+    <hr class="my-6 border-border-weak" />
+    <h1>見出し h1</h1>
+    <h2>見出し h2</h2>
+    <h3>見出し h3</h3>
+    <h4>見出し h4</h4>
+    <h5>見出し h5</h5>
+    <h6>見出し h6</h6>
+  </div>
+  <app-chat-message-footer />
+</article>
+
+<!-- パターン2: ローディング -->
+<p class="text-label-small text-text-weak">ローディング</p>
+<article class="chat-message chat-message--assistant">
+  <div class="chat-message-bubble">
+    <app-circular-loading />
+  </div>
+</article>
+
+<!-- パターン3: 回答エラー -->
+<p class="text-label-small text-text-weak">回答エラー</p>
+<article class="chat-message chat-message--assistant">
+  <p class="chat-error-badge">回答エラー</p>
+  <div class="chat-message-bubble">
+    <app-chat-error
+      [title]="'エラーが発生しました'"
+      [message]="'サポートテキストが入ります。サポートテキストが入ります。サポートテキストが入ります。'"
+    />
+  </div>
+  <app-chat-message-footer />
+</article>
+
+<!-- パターン4: 参考資料付き -->
+<p class="text-label-small text-text-weak">参考資料付き</p>
+<article class="chat-message chat-message--assistant">
+  <div class="chat-message-bubble">
+    <p>
+      承知いたしました。売上DBの実績値と予算案データを結合し、第3四半期の<a href="#">予実対比分析</a
+      >を行いました。<br />
+      …
+    </p>
+    <div class="chat-ref-section">
+      <p class="chat-ref-title">参考資料</p>
+      <ul>
+        <li><a href="#">資料のリンク</a></li>
+        <li><a href="#">資料のリンク</a></li>
+      </ul>
+    </div>
+  </div>
+  <app-chat-message-footer />
+</article>
+
+<!-- パターン5: コード表示 -->
+<p class="text-label-small text-text-weak">コード表示</p>
+<article class="chat-message chat-message--assistant">
+  <div class="chat-message-bubble">
+    <div class="chat-code-line">短いコードはこれ</div>
+    <p>長いコード表示</p>
+    <div class="chat-code-block">
+      <div class="chat-code-header">
+        <button
+          type="button"
+          data-code-copy-btn
+          class="chat-code-copy-btn"
+          [class.is-copied]="isCodeCopied()"
+          (click)="handleCodeCopy()"
+        >
+          <span data-icon-default>コードをコピー</span>
+          <span data-icon-copied>コピーしました</span>
+          <span data-icon-default><app-svg-icon name="copy" class="w-3.5 h-3.5" /></span>
+          <span data-icon-copied><app-svg-icon name="check" class="w-3.5 h-3.5" /></span>
+        </button>
+      </div>
+      <div class="chat-code-body">
+        <pre><code>class MyClass &#123;
+  public static myValue: string;
+  constructor(init: string) &#123;
+    this.myValue = init;
+  &#125;
+&#125;
+
+import fs = require("fs");
+module MyModule &#123;
+  export interface MyInterface extends Other &#123;
+    myProperty: any;
+  &#125;
+&#125;
+
+declare magic:Number: number;
+myArray.forEach(() =&gt; &#123; &#125;); // fat arrow syntax</code></pre>
+      </div>
+    </div>
+  </div>
+  <app-chat-message-footer />
+</article>
+
+<!-- パターン6: その他テキストスタイル -->
+<p class="text-label-small text-text-weak">その他テキストスタイル</p>
+<article class="chat-message chat-message--assistant">
+  <div class="chat-message-bubble">
+    <p>箇条書き</p>
+    <ul>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>
+        テキストリスト
+        <ul>
+          <li>テキストリスト</li>
+          <ul>
+            <li>テキストリスト</li>
+          </ul>
+        </ul>
+      </li>
+    </ul>
+
+    <p>数字つきリスト</p>
+    <ol>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>テキストリスト</li>
+      <li>
+        テキストリスト
+        <ol>
+          <li>テキストリスト</li>
+          <ol>
+            <li>テキストリスト</li>
+          </ol>
+        </ol>
+      </li>
+    </ol>
+
+    <blockquote>
+      <p>引用のテキスト引用のテキスト</p>
+      <p>引用のテキスト引用のテキスト</p>
+    </blockquote>
+    <br />
+    <blockquote>
+      <p>引用のテキスト引用のテキスト</p>
+      <blockquote>
+        <p>入れ子入れ子入れ子</p>
+      </blockquote>
+    </blockquote>
+  </div>
+  <app-chat-message-footer />
+</article>

@@ -1,0 +1,53 @@
+<div class="flex flex-col gap-6">
+  <!-- Content Name -->
+  <app-form-input
+    [label]="'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.CONTENT_NAME_LABEL' | translate"
+    [supportText]="'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.CONTENT_NAME_SUPPORT' | translate"
+    [value]="actionBridge().contentName()"
+    (valueChange)="actionBridge().contentName.set($event)"
+  />
+
+  <!-- Tags (optional) -->
+  <fieldset class="flex flex-col gap-3">
+    <div class="fieldset-head">
+      <label class="fieldset-title" for="tags-multi-select">
+        {{ 'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TAGS_LABEL' | translate }}
+        <app-optional-label />
+      </label>
+      <p class="text-xs text-text-muted">
+        {{ 'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TAGS_SUPPORT' | translate }}
+      </p>
+    </div>
+    <app-combobox-multi
+      id="tags-multi-select"
+      name="tags-multi-select"
+      [options]="tagOptions()"
+      [placeholder]="'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TAGS_PLACEHOLDER' | translate"
+      [value]="actionBridge().selectedTagIds()"
+      (valueChange)="actionBridge().selectedTagIds.set($event)"
+      panelSize="full"
+    />
+  </fieldset>
+
+  <!-- Team -->
+  <fieldset class="flex flex-col gap-3">
+    <div class="fieldset-head">
+      <label class="fieldset-title" for="team-multi-select">
+        {{ 'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TEAM_LABEL' | translate }}
+      </label>
+      <p class="text-xs text-text-muted">
+        {{ 'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TEAM_SUPPORT' | translate }}
+      </p>
+    </div>
+    <app-combobox-multi
+      id="team-multi-select"
+      name="team-multi-select"
+      [options]="teamOptions()"
+      [placeholder]="'CHAT.VIEWER.SAVE_LIBRARY_DIALOG.TEAM_PLACEHOLDER' | translate"
+      [value]="actionBridge().selectedTeamIds()"
+      (valueChange)="actionBridge().selectedTeamIds.set($event)"
+      panelSize="full"
+      [searchHint]="'COMMON.LABELS.SEARCH_HINT' | translate"
+    />
+  </fieldset>
+</div>

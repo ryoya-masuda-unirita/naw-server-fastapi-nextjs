@@ -1,0 +1,26 @@
+<form [formGroup]="formGroup()" class="flex flex-col gap-6">
+  <!-- [supportText]="'ADMIN.RANABASE_ASSISTANT.SUPPORT_TEXT' | translate" -->
+  <app-form-input
+    formControlName="name"
+    [label]="'ADMIN.ASSISTANT.CATEGORY_NAME_LABEL' | translate"
+    [value]="getControlValue('name')"
+    (valueChange)="setControlValue('name', $event)"
+    (blurChange)="touchControl('name')"
+    [error]="nameError()"
+    [placeholder]="'ADMIN.ASSISTANT.CATEGORY_NAME_PLACEHOLDER' | translate"
+    autocomplete="off"
+  />
+
+  <!-- [supportText]="'ADMIN.RANABASE_ASSISTANT.SUPPORT_TEXT' | translate" -->
+  <app-form-textarea
+    formControlName="description"
+    [label]="'ADMIN.ASSISTANT.CATEGORY_DESCRIPTION_LABEL' | translate"
+    [value]="getControlValue('description')"
+    (valueChange)="setControlValue('description', $event)"
+    (blurChange)="touchControl('description')"
+    [error]="descError()"
+    [placeholder]="'ADMIN.ASSISTANT.CATEGORY_DESCRIPTION_PLACEHOLDER' | translate"
+    [rows]="5"
+    [badgeText]="'COMMON.OPTIONAL' | translate"
+  />
+</form>

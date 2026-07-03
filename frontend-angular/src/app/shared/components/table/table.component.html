@@ -1,0 +1,194 @@
+<!-- ===== Mobile View ===== -->
+<div class="flex flex-col md:hidden">
+  <!-- Mobile header: select-all checkbox only, no column titles -->
+  @if (selectable()) {
+    <div class="flex items-center gap-2 py-1.5">
+      <div class="flex items-center justify-center shrink-0">
+        <app-checkbox
+          [checked]="isAllSelected()"
+          (checkedChange)="masterToggle()"
+          [indeterminate]="selection.hasValue() && !isAllSelected()"
+          [isHeader]="true"
+        />
+      </div>
+    </div>
+  }
+
+  @for (row of data(); track row.id ?? row) {
+    <div
+      class="table-list-row table-list-row--data"
+      [ngClass]="[
+        selectable() ? hoverClass() : '',
+        selection.isSelected(row) ? selectedClass() : '',
+      ]"
+      tabindex="0"
+      role="button"
+      (click)="onRowClick(row)"
+      (keyup.enter)="onRowClick(row)"
+      (keyup.space)="onRowClick(row)"
+    >
+      @if (selectable()) {
+        <div class="flex items-center pt-px pl-px">
+          <app-checkbox
+            [checked]="selection.isSelected(row)"
+            (checkedChange)="toggleSelection(row)"
+            (click)="$event.stopPropagation()"
+          />
+        </div>
+      }
+
+      <div class="table-list-row-content">
+        @if (mobileRowTemplate()) {
+          <ng-container
+            *ngTemplateOutlet="mobileRowTemplate()!; context: { $implicit: row }"
+          ></ng-container>
+        } @else {
+          @for (col of columns(); track col.field; let i = $index) {
+            @if (col.template) {
+              <ng-container
+                *ngTemplateOutlet="col.template; context: { $implicit: row }"
+              ></ng-container>
+            } @else {
+              <div class="table-list-date flex-1 w-30 md:w-auto font-medium!">
+                {{ getCellValue(row, col.field) }}
+              </div>
+            }
+          }
+        }
+      </div>
+
+      @if (actionsTemplate()) {
+        <div class="table-list-actions">
+          <ng-container
+            *ngTemplateOutlet="actionsTemplate()!; context: { $implicit: row }"
+          ></ng-container>
+        </div>
+      }
+    </div>
+  }
+
+  @if (data().length === 0 && !isLoading()) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ emptyMessage() | translate }}
+    </div>
+  }
+</div>
+
+<!-- ===== Desktop View ===== -->
+<div class="hidden md:flex md:flex-col">
+  <!-- Header -->
+  <div class="flex items-center gap-6 px-2">
+    @if (selectable()) {
+      <div class="shrink-0 flex items-center justify-center" [ngClass]="selectionWidth()">
+        <app-checkbox
+          [checked]="isAllSelected()"
+          (checkedChange)="masterToggle()"
+          [indeterminate]="selection.hasValue() && !isAllSelected()"
+          [isHeader]="true"
+        />
+      </div>
+    }
+
+    @for (col of columns(); track col.field) {
+      <div
+        class="py-1.5 text-xs font-medium text-text-muted"
+        [class.flex-1]="!col.width"
+        [class.shrink-0]="!!col.width"
+        [class.cursor-pointer]="sortable() && col.sortable"
+        [class.text-left]="!col.align || col.align === 'left'"
+        [class.text-center]="col.align === 'center'"
+        [class.text-right]="col.align === 'right'"
+        [ngClass]="col.width"
+        (click)="onSort(col)"
+      >
+        <div class="flex items-center gap-1">
+          <span>{{ col.header | translate }}</span>
+          @if (sortable() && col.sortable) {
+            <app-mat-icon
+              [icon]="
+                currentSort.field === col.field && currentSort.direction === 'desc'
+                  ? 'arrow_downward'
+                  : 'arrow_upward'
+              "
+              class="text-base! leading-none transition-colors"
+              [class.text-primary]="currentSort.field === col.field"
+              [class.text-text-lighter]="currentSort.field !== col.field"
+            />
+          }
+        </div>
+      </div>
+    }
+
+    @if (actionsTemplate()) {
+      <div class="shrink-0" [ngClass]="actionsWidth()"></div>
+    }
+  </div>
+
+  <!-- Rows -->
+  @for (row of data(); track row.id ?? row) {
+    <div
+      class="flex items-center gap-6 px-2 py-3 border-b border-border-light transition-colors"
+      [ngClass]="[
+        selectable() ? hoverClass() : '',
+        selection.isSelected(row) ? selectedClass() : '',
+      ]"
+      (click)="onRowClick(row)"
+    >
+      @if (selectable()) {
+        <div class="shrink-0 flex items-center justify-center" [ngClass]="selectionWidth()">
+          <app-checkbox
+            [checked]="selection.isSelected(row)"
+            (checkedChange)="toggleSelection(row)"
+            (click)="$event.stopPropagation()"
+          />
+        </div>
+      }
+
+      @for (col of columns(); track col.field) {
+        <div
+          class="min-w-0"
+          [class.flex-1]="!col.width"
+          [class.shrink-0]="!!col.width"
+          [class.border-border-light]="col.hasBorder"
+          [class.self-stretch]="col.hasBorder"
+          [class.text-left]="!col.align || col.align === 'left'"
+          [class.text-center]="col.align === 'center'"
+          [class.text-right]="col.align === 'right'"
+          [ngClass]="col.width"
+        >
+          <div class="flex items-center h-full">
+            @if (col.template) {
+              <ng-container
+                *ngTemplateOutlet="col.template; context: { $implicit: row }"
+              ></ng-container>
+            } @else {
+              <span class="text-xs font-medium text-text-muted truncate block">
+                {{ getCellValue(row, col.field) }}
+              </span>
+            }
+          </div>
+        </div>
+      }
+
+      @if (actionsTemplate()) {
+        <div class="shrink-0 flex items-center gap-2" [ngClass]="actionsWidth()">
+          <ng-container
+            *ngTemplateOutlet="actionsTemplate()!; context: { $implicit: row }"
+          ></ng-container>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Empty State -->
+  @if (data().length === 0 && !isLoading()) {
+    <div class="px-8 py-16 text-center text-text-muted">
+      {{ emptyMessage() | translate }}
+    </div>
+  }
+</div>
+
+<!-- Loading -->
+@if (isLoading()) {
+  <div class="p-4 text-center text-text-muted">Loading...</div>
+}

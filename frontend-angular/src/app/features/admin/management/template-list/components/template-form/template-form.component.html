@@ -1,0 +1,52 @@
+<form [formGroup]="formGroup()" class="flex flex-col gap-4 md:gap-6">
+  <app-form-input
+    formControlName="name"
+    [label]="'TEMPLATES.NAME_LABEL' | translate"
+    [placeholder]="'TEMPLATES.NAME_PLACEHOLDER' | translate"
+    [error]="nameError()"
+  />
+
+  <app-form-textarea
+    [label]="'TEMPLATES.SYSTEM_PROMPT' | translate"
+    [placeholder]="'TEMPLATES.SYSTEM_PROMPT_PLACEHOLDER' | translate"
+    [value]="systemPromptValue()"
+    [error]="systemPromptError()"
+    (valueChange)="setSystemPrompt($event)"
+    (formBlur)="touchSystemPrompt()"
+  />
+
+  <app-form-textarea
+    [label]="'TEMPLATES.DESCRIPTION' | translate"
+    [badgeText]="'COMMON.OPTIONAL' | translate"
+    [placeholder]="'TEMPLATES.DESCRIPTION_PLACEHOLDER' | translate"
+    [value]="descriptionValue()"
+    [error]="descriptionError()"
+    (valueChange)="setDescription($event)"
+    (formBlur)="touchDescription()"
+  />
+
+  <div class="flex flex-col">
+    <div class="fieldset-head mb-3">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-sm font-medium text-text-default leading-[1.4]">
+          {{ 'TEMPLATES.TEAMS' | translate }}
+        </span>
+        <span class="bg-bg-secondary text-text-muted text-[10px] px-1 py-0.5 rounded leading-none">
+          {{ 'COMMON.OPTIONAL' | translate }}
+        </span>
+      </div>
+      <!-- <p class="text-xs text-text-muted leading-[1.4]">
+        {{ 'ADMIN_CONSOLE.SUPPORT_TEXT' | translate }}
+      </p> -->
+    </div>
+    <app-combobox-multi
+      id="groups-multi-select"
+      name="groups-multi-select"
+      formControlName="groups"
+      [options]="teamOptions()"
+      [placeholder]="'TEMPLATES.TEAMS_PLACEHOLDER' | translate"
+      [searchHint]="'TEMPLATES.TEAMS_SEARCH_HINT' | translate"
+      panelSize="full"
+    />
+  </div>
+</form>

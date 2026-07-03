@@ -1,0 +1,12 @@
+@if (isLoading()) {
+  <div class="chat-main">
+    <app-loading />
+  </div>
+} @else {
+  <app-chat-window
+    [isLoading]="isLoading()"
+    [messages]="messages()"
+    [roomId]="roomId()"
+    [isChatExamList]="true"
+  />
+}

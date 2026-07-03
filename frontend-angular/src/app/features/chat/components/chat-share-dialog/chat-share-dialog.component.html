@@ -1,0 +1,44 @@
+<div class="flex flex-col">
+  <div class="mb-3">
+    <h3 class="mb-1 text-sm font-medium text-text-default">
+      {{ 'CHAT.SHARE_DIALOG.SHARE_TEAMS' | translate }}
+    </h3>
+  </div>
+
+  <app-combobox-multi
+    id="share-teams"
+    name="share-teams"
+    [options]="teamsOptions()"
+    [placeholder]="'CHAT.SHARE_DIALOG.SEARCH_HINT' | translate"
+    [supportText]="'CHAT.SHARE_DIALOG.SEARCH_HINT' | translate"
+    [value]="selectedTeamIds()"
+    (valueChange)="selectedTeamIds.set($event)"
+    [disabled]="isReadOnly()"
+    panelSize="full"
+    [searchHint]="'COMMON.LABELS.SEARCH_HINT' | translate"
+  />
+
+  @if (showShareLinkActions()) {
+    <div class="mt-4 flex flex-wrap items-center gap-4 border-t border-border-weak pt-4">
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        (click)="handleCopyShareLink()"
+        [attr.aria-label]="'CHAT.SHARE_DIALOG.COPY_LINK' | translate"
+      >
+        <span class="material-symbols-outlined text-lg">link</span>
+        {{ 'CHAT.SHARE_DIALOG.COPY_LINK' | translate }}
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-danger hover:underline disabled:cursor-not-allowed disabled:text-text-muted disabled:no-underline"
+        (click)="openUnshareConfirmDialog()"
+        [disabled]="isUnsharing()"
+        [attr.aria-label]="'CHAT.SHARE_DIALOG.UNSHARE' | translate"
+      >
+        <span class="material-symbols-outlined text-lg">link_off</span>
+        {{ 'CHAT.SHARE_DIALOG.UNSHARE' | translate }}
+      </button>
+    </div>
+  }
+</div>

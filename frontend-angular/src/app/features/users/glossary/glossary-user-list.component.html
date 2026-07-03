@@ -1,0 +1,171 @@
+<app-page-header
+  title=""
+  [titleKey]="'USER_GLOSSARY.TITLE'"
+  [showSidebarToggle]="true"
+  [showActions]="false"
+  [showBackButton]="false"
+  [showLanguageToggle]="true"
+/>
+
+<div
+  class="flex flex-col gap-8 p-4 pb-25.75! md:gap-6 md:p-6 md:pb-6! overflow-auto max-h-[calc(100vh-105px)] md:max-h-[calc(100vh-115px)]"
+>
+  <!-- Filters -->
+  <div class="md:flex md:justify-between">
+    <div class="flex flex-col gap-3 md:flex-row md:gap-6 md:items-end w-full">
+      <!-- Search -->
+      <div class="flex flex-col gap-1">
+        <span class="text-label font-medium text-text-medium">{{
+          'ADMIN.GLOSSARY.SEARCH_LABEL' | translate
+        }}</span>
+        <app-search-input
+          id="user-glossary-search"
+          [placeholder]="'ADMIN.GLOSSARY.SEARCH_PLACEHOLDER' | translate"
+          size="small"
+          class="gap-0 md:w-40"
+          [value]="searchInput()"
+          (valueChange)="onSearchQuery($event)"
+        />
+      </div>
+
+      <!-- Sort -->
+      <div class="flex flex-col gap-1">
+        <span class="text-label font-medium text-text-medium">{{
+          'ADMIN.GLOSSARY.SORT_LABEL' | translate
+        }}</span>
+        <app-form-sort-input
+          id="user-glossary-sort"
+          size="sm"
+          class="md:w-40"
+          [fields]="sortFields()"
+          [placeholder]="'USER_GLOSSARY.SORT_PLACEHOLDER' | translate"
+          [(selectedField)]="sortField"
+          [(selectedOrder)]="sortOrder"
+        />
+      </div>
+
+      <!-- Count + Page arrows -->
+      <div class="flex items-center justify-center gap-3 md:justify-end md:ml-auto">
+        <span class="text-label font-medium text-text-medium whitespace-nowrap">{{
+          countDisplay()
+        }}</span>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="currentPage() <= 1"
+              (click)="onPageChange(1)"
+              [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+            >
+              <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="currentPage() <= 1"
+              (click)="onPageChange(currentPage() - 1)"
+              [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+            >
+              <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="currentPage() >= totalPages()"
+              (click)="onPageChange(currentPage() + 1)"
+              [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+            >
+              <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="flex items-center justify-center w-7 h-7 text-text-medium rounded-full border border-border-weak bg-white cursor-pointer hover:bg-bg-brand-weak disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="currentPage() >= totalPages()"
+              (click)="onPageChange(totalPages())"
+              [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+            >
+              <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div class="flex flex-col gap-8 md:gap-6">
+    @if (isLoading()) {
+      <div class="px-4 py-8 text-center text-text-muted">
+        {{ 'USER_GLOSSARY.LOADING' | translate }}
+      </div>
+    } @else if (paginatedItems().length > 0) {
+      @for (item of paginatedItems(); track item.id) {
+        <div
+          class="flex flex-col gap-4 p-6 bg-bg-tertiary rounded-xl border border-border-weak text-text-strong md:p-8"
+        >
+          <!-- Card head -->
+          <div class="text-h2 font-semibold">{{ item.name }}</div>
+          <!-- Card body -->
+          <div class="relative flex flex-col md:pr-43">
+            <!-- Description row -->
+            <div
+              class="flex flex-col gap-1 py-2 border-b border-border-weak md:flex-row md:items-center md:gap-6 md:py-3 md:px-2"
+            >
+              <div class="text-label-large md:w-40 md:text-label-x-large font-medium">
+                {{ 'ADMIN.GLOSSARY.DESCRIPTION' | translate }}
+              </div>
+              <div class="text-body-small line-clamp-2 md:flex-1 md:text-body">
+                {{ item.definition }}
+              </div>
+            </div>
+            <!-- Assigned assistant row -->
+            <div
+              class="flex flex-col gap-1 py-2 border-b border-border-weak md:flex-row md:items-center md:gap-6 md:py-3 md:px-2"
+            >
+              <div class="text-label-large md:w-40 md:text-label-x-large font-medium">
+                {{ 'ADMIN.GLOSSARY.ASSIGNED_ASSISTANT' | translate }}
+              </div>
+              <div class="text-body-small md:flex-1 md:text-body">
+                {{ item.assistant ?? '' }}
+              </div>
+            </div>
+            <!-- Actions -->
+            <div class="term-card-actions">
+              <app-button
+                variant="outline"
+                (buttonClick)="onView(item)"
+                classProps="button button-secondary h-13.5! px-8! text-btn-large!"
+                size="largePcDefault"
+              >
+                <span class="text-border-brand">{{ 'USER_GLOSSARY.VIEW' | translate }}</span>
+              </app-button>
+            </div>
+          </div>
+        </div>
+      }
+    } @else {
+      <div
+        class="flex items-center justify-center py-16 text-text-medium text-label bg-white rounded-xl border border-border-weak"
+      >
+        {{ 'COMMON.NO_DATA' | translate }}
+      </div>
+    }
+  </div>
+
+  <!-- Bottom pagination -->
+  @if (!isLoading() && filteredItems().length > 0) {
+    <div class="flex justify-center">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+      />
+    </div>
+  }
+</div>

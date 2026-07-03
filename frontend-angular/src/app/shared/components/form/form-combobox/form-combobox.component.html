@@ -1,0 +1,196 @@
+<div class="block group">
+  @if (label()) {
+    <div class="fieldset-head mb-3">
+      <p class="fieldset-title">
+        {{ label() }}
+        @if (badgeText()) {
+          <span class="fieldset-any">{{ badgeText() }}</span>
+        }
+      </p>
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  <!-- Trigger -->
+  <div
+    cdkOverlayOrigin
+    #trigger="cdkOverlayOrigin"
+    class="min-h-12 w-full border border-text-lighter/90 bg-white transition-all overflow-hidden rounded-lg"
+    [class.border-error]="error()"
+    [class.opacity-50]="isDisabled()"
+    [class.cursor-not-allowed]="isDisabled()"
+    [class.cursor-pointer]="!isDisabled()"
+  >
+    <div
+      class="flex items-center w-full min-h-12 p-1.5"
+      tabindex="0"
+      role="button"
+      (click)="toggleDropdown()"
+      (keydown)="onTriggerKeydown($event)"
+      [attr.aria-disabled]="isDisabled()"
+      [attr.aria-expanded]="isOpen()"
+    >
+      <div class="flex-1 flex flex-wrap gap-1.5 pl-2 items-center min-h-8.5">
+        @if (selectedOptions().length === 0) {
+          <span class="text-sm text-text-lighter">{{ placeholder() }}</span>
+        } @else {
+          @for (option of selectedOptions(); track option.value) {
+            <span
+              class="inline-flex items-center gap-0.5 bg-white border border-text-lighter/90 rounded-full px-2 py-0.5 text-xs text-text-muted leading-none"
+            >
+              {{ option.label }}
+              <mat-icon
+                class="text-[16px]! w-4! h-4! text-text-default!"
+                style="
+                  font-variation-settings:
+                    'FILL' 1,
+                    'GRAD' 0,
+                    'opsz' 16,
+                    'wght' 400;
+                "
+                (click)="removeOption($event, option)"
+                >cancel</mat-icon
+              >
+            </span>
+          }
+        }
+      </div>
+
+      <!-- Divider -->
+      <div class="w-px h-8 bg-text-lighter/30 mx-1 shrink-0"></div>
+
+      <div class="w-8 shrink-0 flex items-center justify-center text-text-lighter">
+        <mat-icon
+          class="text-[24px]! w-6! h-6! transition-transform duration-200"
+          [class.rotate-180]="isOpen()"
+          >arrow_drop_down</mat-icon
+        >
+      </div>
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="text-xs text-error leading-[1.7]">{{ error() }}</p>
+  }
+</div>
+
+<!-- Dropdown Overlay -->
+<ng-template
+  cdkConnectedOverlay
+  [cdkConnectedOverlayOrigin]="trigger"
+  [cdkConnectedOverlayOpen]="isOpen()"
+  [cdkConnectedOverlayHasBackdrop]="true"
+  cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+  (backdropClick)="closeDropdown()"
+>
+  <div
+    class="bg-white rounded-xl shadow-lg border border-border mt-1 flex flex-col overflow-hidden w-full max-h-80"
+    [style.width.px]="trigger.elementRef.nativeElement.offsetWidth"
+  >
+    <!-- Search Input
+    <div class="p-3 border-b border-border border-solid bg-white sticky top-0 z-10 shrink-0">
+      <div class="relative flex items-center">
+        <mat-icon class="absolute left-3 text-[18px]! w-3.5! h-3.5! text-text-lighter">search</mat-icon>
+        <input type="text"
+          class="h-10 w-full rounded-md border border-border pl-9 pr-3 text-sm text-text-default placeholder:text-text-lighter focus:outline-none focus:border-primary"
+          [placeholder]="searchPlaceholder()" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)"
+          (click)="$event.stopPropagation()" />
+      </div>
+    </div> -->
+
+    <!-- Options List -->
+    <div class="flex-1 overflow-y-auto py-1">
+      @if (filteredOptions().length > 0) {
+        <!-- Select All -->
+        <div
+          class="flex items-center px-4 py-2 hover:bg-surface-light cursor-pointer transition-colors"
+          tabindex="0"
+          role="button"
+          (click)="toggleAll()"
+          (keydown)="onSelectAllKeydown($event)"
+        >
+          <div class="relative flex items-center justify-center w-3.75 h-3.75 mr-3 shrink-0">
+            <div
+              class="w-full h-full rounded-[3px] border flex items-center justify-center transition-colors"
+              [class.border-[#C2C2C2]]="!isAllSelected() && !isIndeterminate()"
+              [class.bg-white]="!isAllSelected() && !isIndeterminate()"
+              [class.border-[var(--color-primary)]]="isAllSelected() || isIndeterminate()"
+              [class.bg-[var(--color-primary)]]="isAllSelected() || isIndeterminate()"
+            >
+              @if (isAllSelected() || isIndeterminate()) {
+                <mat-icon
+                  class="text-white! text-[14px]! w-3.5! h-3.5! flex items-center justify-center leading-none"
+                >
+                  {{ isIndeterminate() && !isAllSelected() ? 'remove' : 'check' }}
+                </mat-icon>
+              }
+            </div>
+          </div>
+          <span class="text-sm text-primary">すべて選択</span>
+        </div>
+
+        <!-- Option Items -->
+        @for (option of filteredOptions(); track option.value) {
+          <div
+            class="flex px-4 py-2.5 hover:bg-surface-light transition-colors"
+            [class.items-center]="!option.description && !option.tag"
+            [class.items-start]="option.description || option.tag"
+            [class.cursor-pointer]="!option.disabled"
+            [class.cursor-not-allowed]="option.disabled"
+            [class.opacity-60]="option.disabled"
+            (click)="toggleOption(option)"
+            tabindex="0"
+            role="button"
+            (keydown)="onOptionKeydown($event, option)"
+          >
+            <div
+              class="relative flex items-center justify-center w-3.75 h-3.75 mr-3 shrink-0"
+              [class.mt-0.5]="option.description || option.tag"
+            >
+              <div
+                class="w-full h-full rounded-[3px] border flex items-center justify-center transition-colors"
+                [class.border-[#C2C2C2]]="!isOptionSelected(option)"
+                [class.bg-white]="!isOptionSelected(option)"
+                [class.border-[var(--color-primary)]]="isOptionSelected(option)"
+                [class.bg-[var(--color-primary)]]="isOptionSelected(option)"
+              >
+                @if (isOptionSelected(option)) {
+                  <mat-icon
+                    class="text-white! text-sm! w-3.5! h-3.5! flex items-center justify-center leading-none"
+                    >check</mat-icon
+                  >
+                }
+              </div>
+            </div>
+            <div class="flex flex-col w-full" [class.gap-1.5]="option.description || option.tag">
+              <span
+                class="text-sm text-text-default leading-[1.4]"
+                [class.font-medium]="option.description || option.tag"
+                >{{ option.label }}</span
+              >
+              @if (option.description) {
+                <p
+                  class="text-[10px] text-text-muted leading-[1.4] whitespace-normal wrap-break-word"
+                >
+                  {{ option.description }}
+                </p>
+              }
+              @if (option.tag) {
+                <div class="flex mt-0.5">
+                  <span
+                    class="text-[10px] text-text-muted border border-text-lighter/90 rounded px-1 py-0.5 leading-[1.4]"
+                    >{{ option.tag }}</span
+                  >
+                </div>
+              }
+            </div>
+          </div>
+        }
+      } @else {
+        <div class="px-4 py-6 text-center text-sm text-text-muted">検索結果がありません</div>
+      }
+    </div>
+  </div>
+</ng-template>

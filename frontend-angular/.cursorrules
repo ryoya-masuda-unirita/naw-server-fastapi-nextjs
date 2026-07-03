@@ -1,0 +1,210 @@
+# Angular 21 AI Assistant Chat Application - Copilot Instructions
+
+You are an expert Senior Frontend Engineer specializing in **Angular 21**, **Tailwind CSS**, **Internationalization (i18n)**, and **Clean Architecture**. Follow these instructions strictly.
+
+## 1. Tech Stack & Core Dependencies
+
+- **Framework:** Angular 21 (Standalone Components).
+- **Styling:** Tailwind CSS (Utility-first).
+- **UI Kit:** Angular Material (Interaction/Logic only - No default styles).
+- **Icons:** Angular Material Icons (`MatIconModule`).
+- **Internationalization:** `ngx-translate`.
+- **State Management:** **NGRX Signals (SignalStore)** is preferred over manual services.
+
+## 2. Project Structure (Clean Architecture)
+
+```text
+src/
+├── app/
+│   ├── core/                           # 🟢 SINGLETON SERVICES (Load once)
+│   │   ├── auth/
+│   │   │   ├── auth.service.ts
+│   │   │   ├── auth.guard.ts
+│   │   │   └── auth.interceptor.ts
+│   │   ├── config/
+│   │   │   └── app-config.service.ts
+│   │   ├── services/
+│   │   │   ├── api.service.ts          # Base HTTP Service
+│   │   │   ├── toast.service.ts
+│   │   │   └── logger.service.ts
+│   │   └── utils/
+│   │       └── error-handler.ts
+│   │
+│   ├── shared/                         # 🟡 REUSABLE UI
+│   │   ├── components/
+│   │   │   ├── ui/                     # Dumb Components
+│   │   │   │   ├── avatar/
+│   │   │   │   ├── button/
+│   │   │   │   ├── icon/
+│   │   │   │   └── spinner/
+│   │   │   ├── markdown-renderer/      # 👈 Renders AI Markdown response
+│   │   │   └── code-block/
+│   │   ├── directives/
+│   │   │   ├── auto-focus.directive.ts
+│   │   │   └── drag-drop-file.directive.ts
+│   │   ├── pipes/
+│   │   │   ├── time-ago.pipe.ts
+│   │   │   └── file-size.pipe.ts
+│   │   └── layouts/
+│   │       ├── main-layout/
+│   │       └── empty-layout/
+│   │
+│   ├── features/                       # 🔴 FEATURE MODULES
+│   │   ├── chat/
+│   │   │   ├── components/             # Feature Components
+│   │   │   │   ├── chat-sidebar/       # Room list
+│   │   │   │   ├── chat-window/        # Main chat area
+│   │   │   │   ├── chat-message-list/
+│   │   │   │   ├── chat-message-item/  # Handles User vs AI layout
+│   │   │   │   ├── chat-input/         # Input & Upload
+│   │   │   │   ├── chat-ai-response/   # 👈 Handles Charts/Tables/Markdown
+│   │   │   │   └── chat-file-viewer/   # Right panel file preview
+│   │   │   ├── pages/
+│   │   │   │   └── chat-shell/         # 👈 Layout Container (Page)
+│   │   │   ├── services/
+│   │   │   │   └── chat-api.service.ts
+│   │   │   ├── stores/
+│   │   │   │   ├── chat.store.ts       # 👈 SignalStore
+│   │   │   │   └── chat.selectors.ts
+│   │   │   └── chat.routes.ts
+│   │   │
+│   │   └── dashboard/
+│   │
+│   ├── app.component.ts
+│   ├── app.config.ts
+│   └── app.routes.ts
+│
+├── assets/
+├── types/                              # 🟣 GLOBAL TYPES
+│   ├── api-response.type.ts
+│   └── chat/
+│       ├── message.type.ts
+│       └── chat-room.type.ts
+├── theme/
+│   ├── tailwind.css
+│   └── styles.scss
+├── tsconfig.json
+└── angular.json
+```
+
+### Component Location Rules
+
+| Component Type       | Location                              | Reusable? |
+| :------------------- | :------------------------------------ | :-------- |
+| **Shared UI**        | `src/app/shared/components/`          | ✅ Yes    |
+| **Feature-specific** | `src/app/features/[name]/components/` | ❌ No     |
+| **Page**             | `src/app/features/[name]/pages/`      | ❌ No     |
+
+## 3. Import Paths & Aliases (MANDATORY)
+
+**STRICT RULE:** NEVER use relative paths like `../../../`. ALWAYS use TypeScript aliases.
+
+| Alias Prefix  | Target Directory     |
+| :------------ | :------------------- |
+| `@core/*`     | `src/app/core/*`     |
+| `@shared/*`   | `src/app/shared/*`   |
+| `@features/*` | `src/app/features/*` |
+| `@types/*`    | `src/types/*`        |
+| `@env/*`      | `src/environments/*` |
+
+## 4. File Separation & Naming
+
+- **Separate Files (MANDATORY):** NEVER use inline templates.
+- **Pattern:** `name.component.ts`, `name.component.html`, `name.component.scss`.
+
+## 5. Angular 21 Modern Syntax Rules (CRITICAL)
+
+- **Change Detection:** ALWAYS set `changeDetection: ChangeDetectionStrategy.OnPush`.
+- **Inputs/Outputs:** Use `input.required<T>()`, `output<T>()`, `model<T>()`.
+- **Computed:** Use `computed()` for derived state.
+- **Dependency Injection:** ALWAYS use `inject()` function (No constructor injection).
+- **Control Flow:** ALWAYS use `@if`, `@for`, `@switch`, `@defer`.
+- **RxJS Interop:** Avoid `.subscribe()` in components. Use `toSignal()` or `AsyncPipe` if absolutely necessary.
+- **Host Binding:** Use `host: { class: '...' }` in component metadata instead of `@HostBinding`.
+
+## 6. Styling & Layout (Tailwind CSS)
+
+- **Utility-First:** Write classes directly in `.html`.
+- **Responsive:** Use `md:`, `lg:` prefixes.
+- **No Magic Numbers:** Use Tailwind spacing (e.g., `p-4`, `gap-2`).
+
+## 7. Internationalization (i18n) Rules
+
+- **NO Hardcoded Text:** NEVER write raw text in `.html`.
+- **Use Pipes:** `{{ 'HOME.TITLE' | translate }}`.
+
+## 8. State Management (SignalStore)
+
+- Use `patchState` for updates.
+- Encapsulate logic using `withMethods`.
+- Expose data using `withComputed`.
+
+## 9. Code Examples
+
+### Example: Feature Component (`src/app/features/chat/components/chat-message/chat-message.component.ts`)
+
+```typescript
+import { Component, input, output, computed, ChangeDetectionStrategy, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
+import { MatIconModule } from '@angular/material/icon';
+import { Message } from '@types/message.types';
+
+@Component({
+  selector: 'app-chat-message',
+  standalone: true,
+  imports: [CommonModule, TranslateModule, MatIconModule],
+  templateUrl: './chat-message.component.html',
+  styleUrl: './chat-message.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush, // ⭐ MANDATORY
+  host: {
+    class: 'flex gap-3 p-4 hover:bg-gray-50', // ⭐ Tailwind classes on host
+  },
+})
+export class ChatMessageComponent {
+  // Inputs
+  readonly message = input.required<Message>();
+  readonly isLast = input<boolean>(false);
+
+  // Outputs
+  readonly retry = output<string>();
+
+  // Computed
+  readonly isAi = computed(() => this.message().role === 'assistant');
+
+  handleRetry() {
+    this.retry.emit(this.message().id);
+  }
+}
+```
+
+### Example: Signal Store (src/app/features/chat/stores/chat.store.ts)
+
+```typescript
+import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
+import { Message } from '@types/message.types';
+import { inject } from '@angular/core';
+import { ChatService } from '../services/chat.service';
+
+type ChatState = {
+  messages: Message[];
+  isLoading: boolean;
+};
+
+const initialState: ChatState = {
+  messages: [],
+  isLoading: false,
+};
+
+export const ChatStore = signalStore(
+  { providedIn: 'root' },
+  withState(initialState),
+  withMethods((store, chatService = inject(ChatService)) => ({
+    sendMessage: async (content: string) => {
+      patchState(store, { isLoading: true });
+      // Logic call API...
+      patchState(store, { isLoading: false });
+    },
+  })),
+);
+```

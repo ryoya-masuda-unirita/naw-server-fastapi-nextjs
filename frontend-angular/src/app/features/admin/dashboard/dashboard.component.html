@@ -1,0 +1,40 @@
+<div class="w-full h-full mt-[100px] relative">
+  <button
+    type="button"
+    class="lg:hidden fixed top-2 left-2 z-50 p-2 rounded-lg hover:bg-slate-100 shrink-0"
+    (click)="toggleSidebar()"
+    [title]="'HEADER.SIDEBAR_TOGGLE' | translate"
+  >
+    <img
+      src="/icon-side-navigation.png"
+      [alt]="'HEADER.SIDEBAR_TOGGLE' | translate"
+      class="w-5 h-5"
+    />
+  </button>
+
+  <div class="flex-1 flex flex-col items-center justify-center px-8">
+    <div class="mb-6">
+      <img src="/logo-short.png" alt="SecuRiGent Logo" class="w-auto" />
+    </div>
+
+    <h3 class="mb-1 text-center font-semibold">
+      {{ 'CHAT.EMPTY.TITLE' | translate }}
+    </h3>
+
+    <p class="text-sm mb-6 text-center">
+      {{ 'CHAT.EMPTY.DESCRIPTION' | translate }}
+    </p>
+  </div>
+
+  <div class="chat-input">
+    <!-- <app-chat-alert
+      [title]="'見出しダミー：1日のクレジット上限の80%に達しています'"
+      [message]="'テキストが入ります。テキストが入ります。テキストが入ります。テキストが入ります。テキストが入ります。テキストが入ります。'"
+      (dismissed)="onAlertDismissed()"
+    /> -->
+
+    <div class="">
+      <app-chat-input hostClass="" />
+    </div>
+  </div>
+</div>

@@ -1,0 +1,66 @@
+<div class="block group">
+  @if (label()) {
+    <div class="fieldset-head mb-3">
+      <p class="fieldset-title">
+        {{ label() }}
+        @if (badgeText()) {
+          <span class="fieldset-any">{{ badgeText() }}</span>
+        }
+      </p>
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  @if (warning()) {
+    <div class="flex items-center gap-1 mb-3 text-status-caution">
+      <mat-icon class="icon-20">warning</mat-icon>
+      <p class="text-xs font-normal leading-[1.4]">{{ warning() }}</p>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="flex items-center gap-1 mb-3 text-status-error">
+      <mat-icon class="icon-20">warning</mat-icon>
+      <p class="text-xs font-normal leading-[1.4]">{{ error() }}</p>
+    </div>
+  }
+
+  <div
+    class="flex w-full"
+    [ngClass]="[
+      layout() === 'horizontal' ? 'flex-row flex-wrap' : 'flex-col',
+      classOption() ? classOption() : layout() === 'horizontal' ? 'gap-4' : 'gap-3',
+    ]"
+  >
+    @for (option of options(); track option.value) {
+      <label
+        [class]="'input-radio' + (inputClass() ? ' ' + inputClass() : '')"
+        [class.opacity-50]="isDisabled() || option.disabled"
+        [class.cursor-not-allowed]="isDisabled() || option.disabled"
+      >
+        @if (displayValue() === option.value) {
+          <app-svg-icon
+            name="radioOn"
+            class="w-5 h-5"
+            [ngClass]="isDisabled() || option.disabled ? 'text-text-medium' : 'text-brand-primary'"
+          />
+        } @else {
+          <app-svg-icon name="radioOff" class="w-5 h-5 text-text-medium" />
+        }
+        <input
+          type="radio"
+          [name]="name() || uniqueName"
+          [value]="option.value"
+          [checked]="displayValue() === option.value"
+          [disabled]="isDisabled() || option.disabled"
+          (change)="onSelect(option.value)"
+          (blur)="onBlur()"
+          class="hidden"
+        />
+        <span class="text-sm text-text-default leading-[1.4] font-medium">{{ option.label }}</span>
+      </label>
+    }
+  </div>
+</div>

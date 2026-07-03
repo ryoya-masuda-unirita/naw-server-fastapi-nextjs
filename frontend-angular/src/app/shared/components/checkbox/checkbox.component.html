@@ -1,0 +1,27 @@
+<input
+  type="checkbox"
+  class="input-checkbox-input"
+  [checked]="checked()"
+  [indeterminate]="indeterminate() && !checked()"
+  (change)="$event.preventDefault()"
+/>
+<span class="input-checkbox-visual">
+  <span class="input-checkbox-icon-false" aria-hidden="true">
+    <app-svg-icon name="selectedFlase" class="input-checkbox-icon-svg" />
+  </span>
+  <span class="input-checkbox-icon-true" aria-hidden="true">
+    <app-svg-icon name="selectedTrue" class="input-checkbox-icon-svg" />
+  </span>
+  <span class="input-checkbox-icon-indeterminate" aria-hidden="true">
+    <app-svg-icon
+      [name]="isHeader() ? 'checkboxAll' : 'selectedIndeterminate'"
+      class="input-checkbox-icon-svg"
+    />
+  </span>
+</span>
+
+@if (label()) {
+  <span class="select-none text-sm">
+    {{ label() | translate }}
+  </span>
+}

@@ -1,0 +1,7 @@
+<p class="chat-error-badge">回答エラー</p>
+<div class="chat-message-bubble">
+  <app-chat-error
+    [title]="'COMMON.MESSAGES.ERROR.GENERAL' | translate"
+    [message]="errorMessage() || ('COMMON.MESSAGES.ERROR.SUPPORT_TEXT' | translate)"
+  />
+</div>

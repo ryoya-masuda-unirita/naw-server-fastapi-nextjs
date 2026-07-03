@@ -1,0 +1,43 @@
+<div class="block group">
+  @if (label()) {
+    <div class="fieldset-head mb-3">
+      <p class="fieldset-title">
+        {{ label() }}
+        @if (badgeText()) {
+          <span class="fieldset-any">{{ badgeText() }}</span>
+        }
+      </p>
+      @if (supportText()) {
+        <p class="fieldset-support-text">{{ supportText() }}</p>
+      }
+    </div>
+  }
+
+  @if (warning()) {
+    <div class="flex items-center gap-1 md:mt-1 text-status-caution mb-3">
+      <app-mat-icon icon="warning" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ warning() }}</p>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="flex items-center gap-1 md:mt-1 text-status-error mb-3">
+      <app-mat-icon icon="warning" class="text-xl!" />
+      <p class="text-xs font-normal leading-[1.4]">{{ error() }}</p>
+    </div>
+  }
+
+  <div class="form-select-wrapper w-full" [class.has-error]="!!error()">
+    <app-select
+      [options]="options()"
+      [placeholder]="placeholder()"
+      [disabled]="isDisabled()"
+      [size]="size()"
+      [width]="width()"
+      [supportText]="dropdownSupportText()"
+      [value]="activeValue()"
+      (valueChange)="onSelectChange($event)"
+      [classNameInputSelect]="classNameInputSelect()"
+    ></app-select>
+  </div>
+</div>

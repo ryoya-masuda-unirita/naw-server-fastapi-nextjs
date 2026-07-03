@@ -1,0 +1,36 @@
+<button
+  [type]="type()"
+  [class]="buttonClass()"
+  [style.height.px]="heightPx() ?? null"
+  [disabled]="disabled() || loading()"
+  (click)="onClick($event)"
+>
+  @if (loading()) {
+    <span class="absolute inset-0 inline-flex items-center justify-center" aria-hidden="true">
+      <svg class="size-5 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-dasharray="31.4 31.4"
+        />
+      </svg>
+    </span>
+  }
+
+  <span class="inline-flex items-center gap-1" [class.invisible]="loading()">
+    <span
+      class="button-icon-slot inline-flex size-5 items-center justify-center empty:hidden [&_svg]:size-full"
+      [class.order-0]="iconPosition() === 'left'"
+      [class.order-2]="iconPosition() === 'right'"
+    >
+      <ng-content select="[icon]" />
+    </span>
+    <span class="inline-flex items-center order-1 gap-1">
+      <ng-content />
+    </span>
+  </span>
+</button>

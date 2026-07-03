@@ -1,0 +1,48 @@
+<!-- Mobile-only copy link (desktop version is in headerTrailing) -->
+<button class="copy-link-btn relative -top-2 mt-0 md:hidden" (click)="onCopyLink()">
+  <app-mat-icon [icon]="linkCopied() ? 'check' : 'link'" class="text-xl! leading-none" />
+  <span class="text-label-large">{{ 'ADMIN.LIBRARY.MENU.COPY_LINK' | translate }}</span>
+</button>
+
+<!-- Field: Content Name -->
+<app-form-input
+  [label]="'ADMIN.LIBRARY.EDIT_SETTINGS.NAME_LABEL' | translate"
+  [supportText]="'ADMIN.LIBRARY.EDIT_SETTINGS.NAME_SUPPORT' | translate"
+  [value]="name()"
+  (valueChange)="name.set($event)"
+/>
+
+<!-- Field: Tags -->
+<div class="flex flex-col gap-3">
+  <div class="fieldset-head">
+    <p class="fieldset-title">
+      {{ 'ADMIN.LIBRARY.EDIT_SETTINGS.TAGS_LABEL' | translate }}
+      <span class="fieldset-any">{{ 'ADMIN.LIBRARY.EDIT_SETTINGS.OPTIONAL' | translate }}</span>
+    </p>
+    <p class="fieldset-support-text">
+      {{ 'ADMIN.LIBRARY.EDIT_SETTINGS.TAGS_SUPPORT' | translate }}
+    </p>
+  </div>
+  <app-multi-select
+    [options]="tagOptions()"
+    [(value)]="selectedTags"
+    [placeholder]="'ADMIN.LIBRARY.EDIT_SETTINGS.TAGS_PLACEHOLDER' | translate"
+    width="100%"
+  />
+</div>
+
+<!-- Field: Share Team -->
+<div class="flex flex-col gap-3">
+  <div class="fieldset-head">
+    <p class="fieldset-title">{{ 'ADMIN.LIBRARY.EDIT_SETTINGS.TEAMS_LABEL' | translate }}</p>
+    <p class="fieldset-support-text">
+      {{ 'ADMIN.LIBRARY.EDIT_SETTINGS.TEAMS_SUPPORT' | translate }}
+    </p>
+  </div>
+  <app-multi-select
+    [options]="teamOptions()"
+    [(value)]="selectedTeams"
+    [placeholder]="'ADMIN.LIBRARY.EDIT_SETTINGS.TEAMS_PLACEHOLDER' | translate"
+    width="100%"
+  />
+</div>

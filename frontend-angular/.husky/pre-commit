@@ -1,0 +1,2 @@
+# Format only staged files
+npx lint-staged

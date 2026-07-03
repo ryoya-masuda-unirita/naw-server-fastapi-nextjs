@@ -1,0 +1,113 @@
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="!allSelected() && someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange.emit($event)"
+  >
+    <span class="table-list-col-content table-list-label">
+      {{ 'GROUPS.USER_DISPLAY_NAME' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-80.5">
+      {{ 'GROUPS.PERMISSION' | translate }}
+    </span>
+    <span class="table-list-col-date table-list-label md:w-80.5">
+      {{ 'GROUPS.USED_CREDITS' | translate }}
+    </span>
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
+  </app-table-list-item>
+
+  <!-- Data rows -->
+  @for (item of items(); track item.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(item.id)"
+      (checkedChange)="itemSelectChange.emit({ id: item.id, checked: $event })"
+    >
+      <div class="table-list-col-content table-list-start-label">
+        <p class="table-list-title text-label-large md:text-label-x-large">
+          {{ item.displayName }}
+        </p>
+      </div>
+
+      <div class="table-list-row-date md:w-80.5">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'GROUPS.PERMISSION' | translate }}
+        </span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-body-small md:text-body text-text-strong"
+        >
+          {{ roleLabelKey(item) | translate }}
+        </span>
+      </div>
+
+      <div class="table-list-row-date md:w-80.5">
+        <span class="table-list-label md:hidden w-30 md:w-auto">
+          {{ 'GROUPS.USED_CREDITS' | translate }}
+        </span>
+        <span
+          class="table-list-date flex-1 w-30 md:w-auto text-body-small md:text-body text-text-strong"
+        >
+          {{ formatCredits(item.totalCredits) }}
+        </span>
+      </div>
+
+      <div slot="right" class="relative">
+        <app-icon-button
+          variant="tertiary-gray"
+          size="largePc"
+          [disabled]="isCurrentUser(item)"
+          [ariaLabel]="'GROUPS.SETTINGS' | translate"
+          (buttonClick)="toggleMenu.emit(item.id); $event.stopPropagation()"
+        >
+          <app-svg-icon name="settings" class="w-5 h-5" />
+        </app-icon-button>
+
+        @if (openMenuId() === item.id && !isCurrentUser(item)) {
+          <div
+            class="flex flex-col absolute right-0 top-full mt-1 p-4 gap-1 z-40 min-w-72 bg-white rounded-lg shadow-default border border-border-strong overflow-hidden animate-fade-in"
+            role="menu"
+            (click)="$event.stopPropagation()"
+          >
+            <button
+              type="button"
+              class="dl-option w-full"
+              role="menuitem"
+              (click)="editRole.emit(item); toggleMenu.emit(item.id)"
+            >
+              <span class="inline-flex w-5 h-5 shrink-0 items-center justify-center">
+                <app-svg-icon name="edit" class="w-5 h-5" />
+              </span>
+              <span class="min-w-0 truncate">
+                {{ 'GROUPS.EDIT_ROLE_ACTION' | translate }}
+              </span>
+            </button>
+            <hr class="my-1 border-border-weak" />
+            <button
+              type="button"
+              class="dropdown-item dropdown-item--danger w-full px-4"
+              role="menuitem"
+              (click)="removeUser.emit(item); toggleMenu.emit(item.id)"
+            >
+              <span class="inline-flex w-5 h-5 shrink-0 items-center justify-center">
+                <app-svg-icon name="delete" class="w-5 h-5" />
+              </span>
+              <span class="min-w-0 truncate">
+                {{ 'GROUPS.REMOVE_USER_ACTION' | translate }}
+              </span>
+            </button>
+          </div>
+        }
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (items().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'GROUPS.NO_USERS' | translate }}
+    </div>
+  }
+</app-table-list>

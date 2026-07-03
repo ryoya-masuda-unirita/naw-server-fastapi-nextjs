@@ -1,0 +1,81 @@
+<div class="flex flex-col gap-4 md:gap-6">
+  <!-- Info box -->
+  <div class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary">
+    <div class="flex gap-1 items-start">
+      <span class="shrink-0" aria-hidden="true">
+        <app-svg-icon name="lightbulb" class="w-5 h-5 text-brand-primary" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large">
+        {{ 'USAGE_LIMIT.INFO_HEADING' | translate }}
+      </p>
+    </div>
+    <div class="text-body-small">
+      <p>{{ 'USAGE_LIMIT.INFO_LIGHT' | translate }}</p>
+      <p>{{ 'USAGE_LIMIT.INFO_STANDARD' | translate }}</p>
+      <p>{{ 'USAGE_LIMIT.INFO_ENTERPRISE' | translate }}</p>
+    </div>
+  </div>
+
+  <!-- Limit input -->
+  @if (isDaily()) {
+    <app-form-input
+      type="number"
+      [label]="'USAGE_LIMIT.DAILY_LIMIT_LABEL' | translate"
+      badgeText="任意"
+      [supportText]="'USAGE_LIMIT.DAILY_LIMIT_SUPPORT' | translate"
+      [placeholder]="'USAGE_LIMIT.DAILY_LIMIT_PLACEHOLDER' | translate"
+      [value]="formData().dailyLimit"
+      [error]="limitError()"
+      (valueChange)="updateLimit($event)"
+    />
+  } @else {
+    <app-form-input
+      type="number"
+      [label]="'USAGE_LIMIT.MONTHLY_LIMIT_LABEL' | translate"
+      badgeText="任意"
+      [supportText]="'USAGE_LIMIT.MONTHLY_LIMIT_SUPPORT' | translate"
+      [placeholder]="'USAGE_LIMIT.MONTHLY_LIMIT_PLACEHOLDER' | translate"
+      [value]="formData().monthlyLimit"
+      [error]="limitError()"
+      (valueChange)="updateLimit($event)"
+    />
+  }
+
+  <!-- Alert section -->
+  <div class="flex flex-col gap-1">
+    <div class="flex items-center gap-1">
+      <span class="text-label-large font-medium text-text-strong">
+        @if (isDaily()) {
+          {{ 'USAGE_LIMIT.DAILY_ALERT_LABEL' | translate }}
+        } @else {
+          {{ 'USAGE_LIMIT.MONTHLY_ALERT_LABEL' | translate }}
+        }
+      </span>
+      <span class="text-label text-text-medium">{{ 'USAGE_LIMIT.OPTIONAL' | translate }}</span>
+    </div>
+    <p class="text-body-small text-text-medium">
+      @if (isDaily()) {
+        {{ 'USAGE_LIMIT.DAILY_ALERT_SUPPORT' | translate }}
+      } @else {
+        {{ 'USAGE_LIMIT.MONTHLY_ALERT_SUPPORT' | translate }}
+      }
+    </p>
+    <div class="flex items-center gap-2 mt-1">
+      <app-select
+        class="flex-1 min-w-0"
+        [options]="alertOptions()"
+        [placeholder]="
+          (isDaily()
+            ? 'USAGE_LIMIT.DAILY_ALERT_PLACEHOLDER'
+            : 'USAGE_LIMIT.MONTHLY_ALERT_PLACEHOLDER'
+          ) | translate
+        "
+        [value]="isDaily() ? formData().dailyAlertPercentage : formData().alertPercentage"
+        (selectionChange)="updateAlertPercentage($event)"
+      />
+      <span class="text-label-large text-text-strong shrink-0">
+        {{ 'USAGE_LIMIT.NOTIFY_ON_REACH' | translate }}
+      </span>
+    </div>
+  </div>
+</div>

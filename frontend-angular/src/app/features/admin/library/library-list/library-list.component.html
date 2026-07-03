@@ -1,0 +1,20 @@
+<app-page-header
+  title=""
+  [titleKey]="'ADMIN.LIBRARY.TITLE'"
+  [showSidebarToggle]="true"
+  [showActions]="false"
+  [showLanguageToggle]="true"
+  [showBackButton]="false"
+  [tabs]="tabs()"
+  [activeTabId]="activeTabId()"
+  (tabChange)="onTabChange($event)"
+/>
+
+<!-- ===================== CONTENT ===================== -->
+@if (activeTabId() === 'contents') {
+  <app-library-content-tab />
+}
+
+@if (activeTabId() === 'tags') {
+  <app-library-tags-tab />
+}

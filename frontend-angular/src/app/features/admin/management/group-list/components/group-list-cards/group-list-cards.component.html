@@ -1,0 +1,45 @@
+<div class="term-cards">
+  @for (item of items(); track item.id) {
+    <div class="term-card">
+      <div class="flex items-center justify-between">
+        <div class="term-card-name">{{ item.name }}</div>
+      </div>
+      <div class="term-card-body">
+        <div class="term-card-row">
+          <div class="term-card-label">{{ 'GROUPS.ADMINISTRATOR' | translate }}</div>
+          <div class="term-card-text">{{ formatNames(item.adminUserNames) }}</div>
+        </div>
+        <div class="term-card-row">
+          <div class="term-card-label">{{ 'GROUPS.ASSIGNED_USERS' | translate }}</div>
+          <div class="term-card-text">{{ formatNames(item.userNames) }}</div>
+        </div>
+        <div class="term-card-row">
+          <div class="term-card-label">{{ 'GROUPS.ASSIGNED_ASSISTANTS' | translate }}</div>
+          <div class="term-card-text">{{ formatNames(item.assistants) }}</div>
+        </div>
+        <div class="term-card-row">
+          <div class="term-card-label">{{ 'GROUPS.ASSIGNED_TEMPLATES' | translate }}</div>
+          <div class="term-card-text">{{ formatNames(item.templates) }}</div>
+        </div>
+        @if (item.updatedAt) {
+          <div class="term-card-row">
+            <div class="term-card-label">{{ 'GROUPS.UPDATED_AT' | translate }}</div>
+            <div class="term-card-text">{{ item.updatedAt | date: 'yyyy/MM/dd HH:mm' }}</div>
+          </div>
+        }
+        <div class="term-card-actions">
+          <app-button variant="outline" size="lg" type="button" [routerLink]="detailLink(item.id)">
+            <app-svg-icon name="edit" class="w-5 h-5" />
+            {{ 'GROUPS.VIEW_AND_EDIT' | translate }}
+          </app-button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (items().length === 0) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'GROUPS.NO_DATA' | translate }}
+    </div>
+  }
+</div>

@@ -1,0 +1,57 @@
+<style>
+  .dialog-body {
+    padding: 0;
+  }
+
+  .form-field {
+    margin-bottom: 16px;
+  }
+
+  .form-field:last-child {
+    margin-bottom: 0;
+  }
+</style>
+
+<div class="flex flex-col gap-4">
+  <!-- Info Box -->
+  <div class="bg-surface-light rounded-lg p-6 flex flex-col gap-4">
+    <div class="flex items-center gap-2 font-medium text-text-default">
+      <span class="text-primary"><mat-icon>texture</mat-icon></span>
+      {{ 'LEARNING_DATA.INFO_TITLE' | translate }}
+    </div>
+    <div class="text-sm text-normal text-text-muted leading-relaxed">
+      {{ 'LEARNING_DATA.INFO_TEXT' | translate }}
+    </div>
+  </div>
+
+  <!-- File Name -->
+  <div class="form-field">
+    <app-form-input
+      [label]="'LEARNING_DATA.FILE_NAME' | translate"
+      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      [value]="fileName()"
+      (valueChange)="updateFileName($event)"
+    />
+  </div>
+
+  <!-- Display Name -->
+  <div class="form-field">
+    <app-form-input
+      [label]="'LEARNING_DATA.DISPLAY_NAME' | translate"
+      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      [value]="displayName()"
+      (valueChange)="updateDisplayName($event)"
+    />
+  </div>
+
+  <!-- Link -->
+  <div class="form-field">
+    <app-form-textarea
+      [label]="'LEARNING_DATA.LINK' | translate"
+      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      [value]="link()"
+      [rows]="4"
+      (valueChange)="updateLink($event)"
+    />
+  </div>
+</div>

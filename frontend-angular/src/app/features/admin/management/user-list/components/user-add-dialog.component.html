@@ -1,0 +1,65 @@
+<form [formGroup]="formGroup()" class="flex flex-col gap-6">
+  <app-form-input
+    formControlName="displayName"
+    [label]="'ADMIN.USER_MANAGEMENT.USER_DISPLAY_NAME' | translate"
+    [supportText]="'ADMIN.USER_MANAGEMENT.SUPPORT_TEXT_DISPLAY_NAME' | translate"
+    [value]="getControlValue('displayName')"
+    (valueChange)="setControlValue('displayName', $event)"
+    (blurChange)="touchControl('displayName')"
+    [error]="displayNameError()"
+    autocomplete="off"
+    [placeholder]="'ADMIN.USER_MANAGEMENT.PLACEHOLDER_DISPLAY_NAME' | translate"
+  />
+
+  <app-form-input
+    formControlName="userId"
+    [label]="'ADMIN.USER_MANAGEMENT.USER_ID' | translate"
+    [supportText]="'ADMIN.USER_MANAGEMENT.SUPPORT_TEXT_USER_ID' | translate"
+    [value]="getControlValue('userId')"
+    (valueChange)="setControlValue('userId', $event)"
+    (blurChange)="touchControl('userId')"
+    [error]="userIdError()"
+    [warning]="'ADMIN.USER_MANAGEMENT.WARNING_TEXT' | translate"
+    [placeholder]="'ADMIN.USER_MANAGEMENT.PLACEHOLDER_USER_ID' | translate"
+  />
+
+  <app-form-input
+    formControlName="loginKey"
+    [label]="'ADMIN.USER_MANAGEMENT.LOGIN_KEY' | translate"
+    [value]="getControlValue('loginKey')"
+    [readonly]="true"
+    [error]="loginKeyError()"
+    autocomplete="off"
+    [endAdornment]="loginKeyActions"
+  />
+  <ng-template #loginKeyActions>
+    <div class="flex items-center gap-2">
+      <app-button variant="outline" size="md" (buttonClick)="regenerateLoginKey()">
+        {{ 'ADMIN.USER_MANAGEMENT.GENERATE_LOGIN_KEY' | translate }}
+      </app-button>
+      <app-button
+        variant="outline"
+        size="md"
+        [disabled]="!getControlValue('loginKey')"
+        (buttonClick)="copyLoginKey()"
+      >
+        {{
+          (loginKeyCopied()
+            ? 'ADMIN.USER_MANAGEMENT.LOGIN_KEY_COPIED'
+            : 'ADMIN.USER_MANAGEMENT.COPY_LOGIN_KEY'
+          ) | translate
+        }}
+      </app-button>
+    </div>
+  </ng-template>
+
+  <app-form-radio
+    formControlName="role"
+    [label]="'ADMIN.USER_MANAGEMENT.ROLE' | translate"
+    [supportText]="'ADMIN.USER_MANAGEMENT.SUPPORT_TEXT_ROLE' | translate"
+    [value]="getControlValue('role')"
+    (valueChange)="setControlValue('role', $event)"
+    [options]="roleOptions()"
+    layout="vertical"
+  />
+</form>

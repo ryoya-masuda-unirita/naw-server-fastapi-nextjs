@@ -1,0 +1,160 @@
+<div class="flex flex-col gap-6" [formGroup]="form()">
+  <!-- Info Section -->
+  <div
+    class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+  >
+    <div class="flex gap-1 items-start md:gap-2">
+      <span class="shrink-0 h-5" aria-hidden="true">
+        <app-svg-icon name="lightbulb" class="icon-20 text-brand-primary" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large md:text-label-x-large font-medium text-text-strong">
+        {{ 'LEARNING_DATA.CHUNK_INFO_TITLE' | translate }}
+      </p>
+    </div>
+    <p class="text-body-small text-text-strong">
+      {{ 'LEARNING_DATA.CHUNK_INFO_TEXT' | translate }}
+    </p>
+  </div>
+
+  <!-- Upload Section -->
+  <app-file-upload variant="full" (filesSelected)="filesSelected.emit($event)" />
+
+  <!-- Table Section (Visible when files are selected) -->
+  @if (filesArray.length > 0) {
+    <div class="flex flex-col">
+      <div class="flex flex-col w-full" formArrayName="files">
+        <!-- Table Header -->
+        <div class="table-list-row table-list-row--header">
+          <div class="table-list-row-content">
+            <span class="table-list-col-content table-list-label">
+              {{ 'LEARNING_DATA.UPLOAD_FILE_NAME' | translate }}
+            </span>
+            <span class="table-list-col-date table-list-label md:w-60">
+              {{ 'LEARNING_DATA.UPLOAD_COLUMN_DISPLAY_NAME' | translate }}
+            </span>
+            <span class="table-list-col-date table-list-label md:w-60">
+              {{ 'LEARNING_DATA.UPLOAD_COLUMN_LINK_NAME' | translate }}
+            </span>
+            <span class="table-list-col-date table-list-label md:w-30">
+              {{ 'LEARNING_DATA.UPLOAD_COLUMN_CHUNK_SIZE' | translate }}
+            </span>
+            <span class="table-list-col-date table-list-label md:w-30">
+              {{ 'LEARNING_DATA.UPLOAD_STATUS' | translate }}
+            </span>
+          </div>
+          <div class="table-list-actions">
+            <div class="w-9 h-9"></div>
+          </div>
+        </div>
+
+        <!-- Table Body -->
+        @for (ctrl of filesArray.controls; track $index; let i = $index) {
+          <div
+            [formGroupName]="i"
+            class="table-list-row table-list-row--data hover:bg-bg-secondary/30 transition-colors border-b border-border-weak items-start"
+          >
+            <div class="table-list-row-content items-start">
+              <div class="table-list-col-content">
+                <div class="h-9 flex items-center">
+                  <span
+                    class="text-label text-text-medium truncate"
+                    [title]="ctrl.get('file')?.value?.name"
+                  >
+                    {{ ctrl.get('file')?.value?.name }}
+                  </span>
+                </div>
+              </div>
+              <div class="table-list-col-date md:w-60 flex flex-col gap-1">
+                <input
+                  type="text"
+                  formControlName="displayName"
+                  class="input-parts-field h-9 px-3 py-2 rounded-lg border border-border-strong bg-white focus:outline-none focus:border-brand-primary text-label text-text-strong w-full"
+                  [class.!border-status-error]="getAddError(i, 'displayName')"
+                />
+                @if (getAddError(i, 'displayName')) {
+                  <span class="text-[10px] text-status-error leading-tight px-1">
+                    {{ getAddError(i, 'displayName') }}
+                  </span>
+                }
+              </div>
+              <div class="table-list-col-date md:w-60 flex flex-col gap-1">
+                <input
+                  type="text"
+                  formControlName="linkName"
+                  class="input-parts-field h-9 px-3 py-2 rounded-lg border border-border-strong bg-white focus:outline-none focus:border-brand-primary text-label text-text-strong w-full"
+                  [class.!border-status-error]="getAddError(i, 'linkName')"
+                />
+                @if (getAddError(i, 'linkName')) {
+                  <span class="text-[10px] text-status-error leading-tight px-1">
+                    {{ getAddError(i, 'linkName') }}
+                  </span>
+                }
+              </div>
+              <div class="table-list-col-date md:w-30 flex flex-col gap-1">
+                <app-chunk-select
+                  size="small"
+                  formControlName="chunkSize"
+                  class="w-full"
+                  [error]="getAddError(i, 'chunkSize') ? ' ' : ''"
+                />
+                @if (getAddError(i, 'chunkSize')) {
+                  <span class="text-[10px] text-status-error leading-tight px-1">
+                    {{ getAddError(i, 'chunkSize') }}
+                  </span>
+                }
+              </div>
+              <div class="table-list-col-date md:w-30">
+                <div class="h-9 flex items-center">
+                  <span class="text-label text-text-medium whitespace-nowrap font-medium">
+                    {{ 'LEARNING_DATA.WAITING' | translate }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="table-list-actions items-start">
+              <app-icon-button
+                variant="tertiary-gray"
+                size="large"
+                (buttonClick)="removeFileFromUpload.emit(i)"
+              >
+                <app-svg-icon name="delete" class="icon-20 w-5 h-5 text-text-medium" />
+              </app-icon-button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Link Prefix Section (Aligned with Astro Design) -->
+      <div class="flex gap-3 items-end mt-6">
+        <div class="flex-1 min-w-0 flex flex-col gap-3">
+          <div class="flex flex-col">
+            <label
+              for="link-prefix-input"
+              class="text-label-large font-medium text-text-strong mb-1"
+            >
+              {{ 'LEARNING_DATA.LINK_PREFIX_LABEL' | translate }}
+            </label>
+            <!-- <span class="text-label text-text-medium">
+              {{ 'LEARNING_DATA.LINK_PREFIX_SUPPORT' | translate }}
+            </span> -->
+          </div>
+          <input
+            id="link-prefix-input"
+            type="text"
+            formControlName="linkPrefix"
+            [placeholder]="'LEARNING_DATA.LINK_PREFIX_PLACEHOLDER' | translate"
+            class="input-parts-field h-12 w-full px-4 rounded-lg border border-border-strong bg-bg-primary text-body text-text-strong focus:outline-none focus:border-brand-primary"
+          />
+        </div>
+        <app-button
+          variant="outline"
+          size="lg"
+          (buttonClick)="applyLinkPrefix.emit()"
+          class="shrink-0 h-13.5 text-xs! font-bold!"
+        >
+          {{ 'LEARNING_DATA.APPLY_ALL' | translate }}
+        </app-button>
+      </div>
+    </div>
+  }
+</div>

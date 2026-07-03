@@ -1,0 +1,50 @@
+<div class="flex flex-col h-full">
+  @if (isLoading()) {
+    <div class="flex justify-center py-3">
+      <app-circular-loading class="[&_svg]:h-6 [&_svg]:w-6" />
+    </div>
+  } @else {
+    <app-table
+      class="flex-1 min-h-0 overflow-y-auto mt-6"
+      [data]="rooms()"
+      [columns]="columns()"
+      [selectable]="true"
+      [mobileRowTemplate]="mobileRowTpl()"
+      (selectionChange)="onSelectionChange($event)"
+    />
+
+    <div class="flex shrink-0 justify-center pt-4">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+      />
+    </div>
+
+    <ng-template #dateColTpl let-row>
+      <span class="text-xs text-text-muted">{{ formatDate(row.lastMessageTime) }}</span>
+    </ng-template>
+
+    <ng-template #nameColTpl let-row>
+      <div class="flex flex-col gap-1 min-w-0">
+        <span class="text-sm font-medium text-text-default truncate">{{ row.name }}</span>
+        @if (row.lastMessage) {
+          <span class="text-xs text-text-muted truncate">{{ row.lastMessage }}</span>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #mobileRowTplDef let-row>
+      <div class="flex flex-col gap-1 min-w-0">
+        <span class="text-xs text-text-muted">{{ formatDate(row.lastMessageTime) }}</span>
+        <span class="text-sm font-medium text-text-default truncate">{{ row.name }}</span>
+        @if (row.lastMessage) {
+          <span class="text-xs text-text-muted truncate">{{ row.lastMessage }}</span>
+        }
+      </div>
+    </ng-template>
+  }
+</div>

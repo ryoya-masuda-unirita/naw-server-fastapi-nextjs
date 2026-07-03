@@ -1,0 +1,65 @@
+<div class="flex flex-col gap-4 md:gap-6">
+  <app-search-input
+    [value]="query()"
+    (valueChange)="query.set($event)"
+    [placeholder]="'CHAT.SEARCH_MODAL.PLACEHOLDER'"
+    [ariaLabel]="'CHAT.SEARCH_MODAL.PLACEHOLDER'"
+    [inputClass]="'md:w-full'"
+  />
+
+  @if (!!query()) {
+    <div class="flex flex-col">
+      @if (isSearchLoading()) {
+        <div class="flex justify-center py-3">
+          <app-circular-loading class="[&_svg]:h-6 [&_svg]:w-6" />
+        </div>
+      } @else {
+        @for (room of results(); track room.id) {
+          <button
+            type="button"
+            class="w-full flex items-center gap-6 py-3 px-2 text-left border-b border-border-light hover:bg-surface-light transition-colors"
+            (click)="openRoom(room)"
+          >
+            <div class="hidden sm:block w-20 shrink-0 text-xs font-medium text-text-muted">
+              {{ formatDay(room.lastMessageTime) }}
+            </div>
+            <div class="flex-1 min-w-0 flex flex-col gap-1">
+              <div class="sm:hidden text-xs font-medium text-text-muted">
+                {{ formatDay(room.lastMessageTime) }}
+              </div>
+              <div class="text-base font-medium text-text-default truncate">{{ room.name }}</div>
+              @if (room.lastMessage) {
+                <div class="text-xs text-text-muted truncate">{{ room.lastMessage }}</div>
+              }
+            </div>
+            <span class="shrink-0 flex items-center justify-center">
+              <app-mat-icon
+                icon="arrow_forward_ios"
+                class="text-[16px]! text-text-lighter leading-none"
+              />
+            </span>
+          </button>
+        }
+
+        @if (results().length === 0) {
+          <div class="py-3 text-label text-center text-text-medium">
+            {{ 'CHAT.SEARCH_MODAL.EMPTY' | translate }}
+          </div>
+        }
+
+        @if (results().length > 0) {
+          <div class="flex shrink-0 justify-center pt-4">
+            <app-pagination
+              [totalPages]="totalPages()"
+              [useQueryParams]="false"
+              [showPageSize]="false"
+              [showFirstLast]="false"
+              [currentPageOverride]="currentPage()"
+              (pageChange)="onPageChange($event)"
+            />
+          </div>
+        }
+      }
+    </div>
+  }
+</div>

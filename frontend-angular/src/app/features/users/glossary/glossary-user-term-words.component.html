@@ -1,0 +1,203 @@
+<div
+  class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+  data-word-info-block
+>
+  <div class="flex gap-1 items-start md:gap-2">
+    <span class="shrink-0" aria-hidden="true">
+      <app-svg-icon name="lightbulb" class="w-5 h-5 text-brand-primary" />
+    </span>
+    <p class="flex-1 min-w-0 text-label-large md:text-label-x-large text-text-strong font-medium">
+      {{ 'ADMIN.GLOSSARY.WORD_INFO_TITLE' | translate }}
+    </p>
+  </div>
+  <p class="text-body-small">{{ 'ADMIN.GLOSSARY.WORD_INFO_BODY' | translate }}</p>
+</div>
+
+<div class="library-filters">
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.SEARCH_LABEL' | translate }}</span>
+    <app-search-input
+      class="library-search-field md:w-40"
+      size="small"
+      [placeholder]="'ADMIN.GLOSSARY.SEARCH_PLACEHOLDER' | translate"
+      [maxLength]="32"
+      [value]="searchQuery()"
+      (valueChange)="onSearch($event)"
+    />
+  </div>
+
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.FILTER_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-period-filter
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [value]="filterPeriod()"
+        [range]="filterPeriodRange()"
+        (selectionChange)="onPeriodChange($event)"
+      />
+      <app-select
+        class="library-combobox md:w-40 w-full"
+        size="small"
+        [options]="tagOptions"
+        [placeholder]="'ADMIN.GLOSSARY.ALL_TAGS' | translate"
+        [value]="tagFilter()"
+        (valueChange)="onTagChange($event)"
+      />
+    </div>
+  </div>
+
+  <div class="library-filter-group">
+    <span class="library-filter-label">{{ 'ADMIN.GLOSSARY.SORT_LABEL' | translate }}</span>
+    <div class="library-filter-selects">
+      <app-form-sort-input
+        class="library-sort-wrap library-combobox w-full md:w-40"
+        size="sm"
+        [fields]="sortFields"
+        [(selectedField)]="sortField"
+        [(selectedOrder)]="sortOrder"
+        [placeholder]="'ADMIN.GLOSSARY.WORD_SORT_UPDATED'"
+      />
+    </div>
+  </div>
+
+  <div class="library-page-info">
+    <span class="library-page-count">{{ countDisplay() }}</span>
+    <div class="library-page-arrows">
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(1)"
+          [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+        >
+          <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() <= 1"
+          (click)="onPageChange(pageIndex() - 1)"
+          [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+      <div class="flex gap-1">
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(pageIndex() + 1)"
+          [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+        >
+          <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+        </button>
+        <button
+          type="button"
+          class="library-page-arrow"
+          [disabled]="pageIndex() >= totalPages()"
+          (click)="onPageChange(totalPages())"
+          [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+        >
+          <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-table-list>
+  <app-table-list-item [isHeader]="true" [showCheckbox]="false" class="hidden md:flex">
+    <span class="table-list-col-content table-list-label">{{
+      'ADMIN.GLOSSARY.WORD_COL_TERM' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-30">{{
+      'ADMIN.GLOSSARY.WORD_COL_UPDATED' | translate
+    }}</span>
+    <span class="table-list-col-date table-list-label md:w-60">{{
+      'ADMIN.GLOSSARY.TAGS' | translate
+    }}</span>
+    <div
+      class="dropdown hidden items-center justify-center flex-col md:flex-row gap-2 pointer-events-none md:flex md:invisible"
+      slot="right"
+    >
+      <app-icon-button variant="tertiary-gray" class="md:w-9! md:h-9! invisible" [ariaLabel]="''">
+        <app-svg-icon name="arrowRight" class="w-5 h-5" />
+      </app-icon-button>
+    </div>
+  </app-table-list-item>
+
+  @for (row of pageSlice(); track row.id) {
+    <app-table-list-item [showCheckbox]="false">
+      <div class="table-list-col-content">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ row.name }}</p>
+        <p class="table-list-desc line-clamp-2">{{ row.description }}</p>
+      </div>
+      <div class="table-list-col-date md:w-30 font-medium">
+        <span class="table-list-date">{{ row.dateLabel }}</span>
+        <span class="table-list-date">{{ row.author }}</span>
+      </div>
+      <div class="library-tags md:w-60">
+        @for (tag of row.tags; track $index) {
+          <span class="library-tag"><span class="library-tag-hash">#</span>{{ tag }}</span>
+        }
+      </div>
+      <div
+        class="dropdown flex items-center justify-center flex-col md:flex-row gap-2"
+        slot="right"
+      >
+        <app-icon-button
+          variant="tertiary-gray"
+          class="w-7 h-7 md:w-9! md:h-9! flex items-center justify-center"
+          [ariaLabel]="'ADMIN.GLOSSARY.WORD_PREVIEW' | translate"
+          (click)="openPreview(row)"
+        >
+          <app-svg-icon name="arrowRight" class="w-5 h-5" />
+        </app-icon-button>
+      </div>
+    </app-table-list-item>
+  }
+</app-table-list>
+
+@if (pageSlice().length === 0) {
+  <div class="px-4 py-8 text-center text-text-muted">{{ 'COMMON.NO_DATA' | translate }}</div>
+}
+
+<div class="library-pagination pt-0">
+  <app-pagination
+    [totalPages]="totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [currentPageOverride]="pageIndex()"
+    (pageChange)="onPageChange($event)"
+  />
+</div>
+
+<ng-template #previewTpl>
+  @if (previewRow(); as row) {
+    <div class="flex flex-col gap-4 md:gap-6 items-start">
+      <div class="flex flex-wrap gap-1">
+        @for (tag of row.tags; track $index) {
+          <span class="library-tag"><span class="library-tag-hash">#</span>{{ tag }}</span>
+        }
+      </div>
+      <p class="text-body">{{ row.description }}</p>
+      <div class="w-full">
+        <img
+          src="/dummy-graph.jpg"
+          [alt]="'ADMIN.GLOSSARY.WORD_PREVIEW_IMAGE_ALT' | translate"
+          class="w-full h-auto"
+        />
+      </div>
+    </div>
+  }
+</ng-template>
+
+<ng-template #previewActions>
+  <app-button variant="outline" intent="cancel" size="lg" (buttonClick)="closeDialogs()">
+    {{ 'COMMON.CLOSE' | translate }}
+  </app-button>
+</ng-template>

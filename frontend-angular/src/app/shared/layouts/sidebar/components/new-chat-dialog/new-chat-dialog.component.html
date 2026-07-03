@@ -1,0 +1,15 @@
+<div class="flex flex-col gap-1 max-sm:pt-4">
+  <p class="text-sm leading-[1.4] text-text-default font-medium">
+    {{ 'CHAT.INPUT.NEW_CHAT_DIALOG_TITLE' | translate }}
+  </p>
+  <p class="text-xs text-text-muted leading-[1.4] mb-2">
+    {{ 'CHAT.INPUT.NEW_CHAT_DIALOG_DESC' | translate }}
+  </p>
+  <app-select-with-search
+    [options]="assistantOptions()"
+    [value]="getSelected()"
+    [supportText]="'CHAT.INPUT.ASSISTANT_SEARCH_HINT' | translate"
+    (selectionChange)="setSelected($event)"
+    [placeholder]="'CHAT.INPUT.NEW_CHAT_PLACEHOLDER' | translate"
+  />
+</div>

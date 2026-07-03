@@ -1,0 +1,58 @@
+<app-admin-page-shell [titleKey]="'GROUPS.TITLE'">
+  <!-- Action bar (mobile-fixed via .sp-fixed-btn) -->
+  <div class="md:flex md:justify-between">
+    @if (canCreateTeam()) {
+      <div class="sp-fixed-btn">
+        <app-button
+          variant="solid"
+          size="lg"
+          type="button"
+          [fullWidth]="true"
+          (buttonClick)="onAddTeam()"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="addCircle" class="w-5 h-5" />
+          <span>
+            {{ 'GROUPS.CREATE_TEAM' | translate }}
+          </span>
+        </app-button>
+      </div>
+    }
+
+    <!-- Filters row -->
+    <app-group-list-filter
+      [pageIndex]="store.filter().pageIndex"
+      [totalPages]="store.totalPages()"
+      [countDisplay]="countDisplay()"
+      (pageIndexChange)="store.updatePageIndex($event)"
+      (filterChange)="onFilterChange($event)"
+    />
+  </div>
+
+  <!-- Cards -->
+  @if (store.isLoading()) {
+    <div class="flex justify-center p-8">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  } @else {
+    <app-group-list-cards [items]="store.items()" />
+
+    @if (store.totalItems() > 0) {
+      <div class="flex justify-center">
+        <app-pagination
+          [totalPages]="store.totalPages()"
+          [useQueryParams]="false"
+          [showPageSize]="false"
+          [showFirstLast]="false"
+          [currentPageOverride]="store.filter().pageIndex"
+          (pageChange)="store.updatePageIndex($event)"
+        />
+      </div>
+    }
+  }
+</app-admin-page-shell>
+
+<!-- Add team dialog content -->
+<ng-template #addTeamContent>
+  <app-group-form [formGroup]="addForm" />
+</ng-template>

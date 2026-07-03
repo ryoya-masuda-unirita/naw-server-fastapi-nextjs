@@ -1,0 +1,169 @@
+<!-- ---- Create button / Selection actions (desktop only) ---- -->
+<div class="sp-fixed-btn">
+  @if (selectedCategories().length > 0) {
+    <div class="flex flex-col-reverse md:flex-row gap-3">
+      <app-button
+        variant="outline"
+        intent="cancel"
+        size="lg"
+        (buttonClick)="onDeselectAll()"
+        class="w-full md:w-36.5 inline-grid"
+        [heightPx]="54"
+      >
+        {{ 'ADMIN.ASSISTANT.CLEAR_SELECTION' | translate }}
+      </app-button>
+      <app-button
+        variant="outline"
+        size="lg"
+        intent="delete"
+        (buttonClick)="onDeleteSelected()"
+        class="w-full md:w-30.5 inline-grid"
+        [heightPx]="54"
+      >
+        <app-svg-icon name="delete" class="w-5 h-5" /> {{ 'COMMON.DELETE' | translate }}
+      </app-button>
+    </div>
+  } @else {
+    <div data-assistant-create-wrap>
+      <app-button
+        variant="solid"
+        size="lg"
+        iconPosition="right"
+        [fullWidth]="true"
+        class="w-full md:w-auto"
+        (buttonClick)="onAddCategory()"
+      >
+        <div class="flex items-center gap-1 justify-center leading-normal">
+          <app-svg-icon name="addCircle" class="text-xl!" />
+          <span> {{ 'ADMIN.ASSISTANT.CREATE_CATEGORY' | translate }} </span>
+        </div>
+      </app-button>
+    </div>
+  }
+</div>
+
+<!-- 検索・フィルター・並べ替え -->
+<div class="library-filters">
+  <!-- 並べ替え -->
+  <div class="library-filter-group">
+    <span class="library-filter-label"> {{ 'ADMIN.LIBRARY.SORT_LABEL' | translate }} </span>
+    <div class="library-filter-selects">
+      <app-form-sort-input
+        size="sm"
+        [fields]="sortFieldOptions"
+        [selectedField]="store.filter().sortField!"
+        [selectedOrder]="store.filter().sortOrder!"
+        (fieldChange)="onSortChange($event, store.filter().sortOrder!)"
+        (orderChange)="onSortChange(store.filter().sortField!, $event)"
+        placeholder="{{ 'ADMIN.ASSISTANT.SORT_UPDATED_AT' | translate }}"
+        class="library-combobox library-sort-wrap"
+      />
+    </div>
+  </div>
+  <!-- 件数 + ページ送り -->
+  <div class="library-page-info">
+    <app-pagination
+      [showPageSize]="false"
+      [showPageNumbers]="false"
+      [useQueryParams]="false"
+      [countDisplay]="store.countDisplay()"
+      [totalPages]="store.totalPages()"
+      [currentPageOverride]="store.filter().pageIndex + 1"
+      (pageChange)="onPageChange($event)"
+    />
+  </div>
+</div>
+
+<app-table-list>
+  <!-- Header (PC only) -->
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="someSelected()"
+    class="hidden md:flex"
+    (checkedChange)="selectAllChange($event)"
+  >
+    <span class="table-list-col-date table-list-label md:w-30">
+      {{ 'ADMIN.ASSISTANT.UPDATED_AT' | translate }}
+    </span>
+
+    <span class="table-list-col-content table-list-label">
+      {{ 'ADMIN.ASSISTANT.CATEGORY_NAME' | translate }}
+    </span>
+
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
+  </app-table-list-item>
+
+  <app-table-list-item
+    [isHeader]="true"
+    [showCheckbox]="true"
+    [checked]="allSelected()"
+    [indeterminate]="someSelected()"
+    class="flex md:hidden"
+    (checkedChange)="selectAllChange($event)"
+  >
+    <span class="table-list-label">{{ 'COMMON.SELECT_ALL' | translate }}</span>
+  </app-table-list-item>
+
+  <!-- Data rows -->
+  @for (item of store.items(); track item.id) {
+    <app-table-list-item
+      [showCheckbox]="true"
+      [checked]="isSelected(item.id)"
+      (checkedChange)="toggleItemSelection(item, $event)"
+    >
+      <div class="table-list-col-date md:w-30">
+        <span class="table-list-date font-medium">
+          {{ item.updatedAt | date: 'yyyy/MM/dd HH:mm' }}</span
+        >
+      </div>
+
+      <div class="table-list-col-content">
+        <p class="table-list-title text-label-large md:text-label-x-large">{{ item.name }}</p>
+        <p class="table-list-desc">{{ item.description }}</p>
+      </div>
+
+      <div slot="right" class="relative">
+        <app-category-tab-menu
+          [item]="item"
+          (editCategory)="onEditCategory($event)"
+          (deleteCategory)="onDeleteCategory($event)"
+        />
+      </div>
+    </app-table-list-item>
+  }
+
+  @if (store.items().length === 0 && !store.isLoading()) {
+    <div class="px-4 py-8 text-center text-text-muted">
+      {{ 'ADMIN.ASSISTANT.CATEGORY_NO_DATA' | translate }}
+    </div>
+  }
+</app-table-list>
+
+<div class="flex justify-center">
+  <app-pagination
+    [totalPages]="store.totalPages()"
+    [useQueryParams]="false"
+    [showPageSize]="false"
+    [showFirstLast]="false"
+    [currentPageOverride]="store.filter().pageIndex + 1"
+    (pageChange)="onPageChange($event)"
+  />
+</div>
+
+<!-- ---- Dialog Contents ---- -->
+
+<ng-template #addCategoryContent>
+  <app-category-add-dialog [formGroup]="addForm" />
+</ng-template>
+
+<ng-template #editCategoryContent>
+  <app-category-edit-dialog [formGroup]="editForm" />
+</ng-template>
+
+<ng-template #deleteMessageContent>
+  <p class="modal-delete-confirm-message pt-1">
+    {{ 'ADMIN.ASSISTANT.DELETE_CATEGORY_MESSAGE' | translate }}
+  </p>
+</ng-template>

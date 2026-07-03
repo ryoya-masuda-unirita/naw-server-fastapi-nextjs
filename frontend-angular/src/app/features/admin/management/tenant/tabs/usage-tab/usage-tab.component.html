@@ -1,0 +1,293 @@
+<!-- Panel 1: 利用プラン情報 -->
+<div class="credit-panel">
+  <p class="text-h2">{{ 'TENANT.PLAN_INFO' | translate }}</p>
+  <div class="flex flex-col md:flex-row gap-6 md:gap-10 items-center">
+    <!-- Donut chart -->
+    <div class="credit-donut">
+      <svg viewBox="0 0 200 200" class="w-50 h-50 -rotate-90 pointer-events-none">
+        <circle
+          cx="100"
+          cy="100"
+          r="88"
+          fill="none"
+          stroke="rgba(21,129,154,0.2)"
+          stroke-width="20"
+        />
+        <circle
+          cx="100"
+          cy="100"
+          r="88"
+          fill="none"
+          stroke="var(--color-brand-primary)"
+          stroke-width="20"
+          [attr.stroke-dasharray]="donutDashArray()"
+          [attr.stroke-dashoffset]="donutDashOffset()"
+          stroke-linecap="round"
+        />
+      </svg>
+      <div class="credit-donut__center">
+        <p class="text-label-small text-text-disabled">
+          {{ 'TENANT.THIS_MONTH_TOTAL' | translate }}
+        </p>
+        <div class="flex flex-col items-center gap-1">
+          <p class="text-xl font-medium">{{ monthlyUsage() | number }}</p>
+          <hr class="border-border-strong w-full" />
+          <p class="text-xl font-medium text-text-disabled">{{ monthlyTokenLimit() | number }}</p>
+        </div>
+      </div>
+    </div>
+    <!-- Info list -->
+    <dl class="credit-info-list">
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.CONTRACT_PLAN' | translate }}</dt>
+        <dd class="credit-info-desc">
+          {{ planName() ?? ('TENANT.PLAN_NAME' | translate) }}
+          <span class="credit-info-desc-note">{{ 'TENANT.PLAN_CHANGE_NOTE' | translate }}</span>
+        </dd>
+      </div>
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.THIS_MONTH_STATUS' | translate }}</dt>
+        <dd class="credit-info-desc">
+          {{ monthlyUsage() | number }} / {{ monthlyTokenLimit() | number }}
+          {{ 'TENANT.CREDIT_UNIT' | translate }}
+          <span class="credit-info-desc-note">{{ 'TENANT.CREDIT_EXCEED_NOTE' | translate }}</span>
+        </dd>
+      </div>
+    </dl>
+  </div>
+</div>
+
+<!-- Panel 2: ワークスペースの利用制限 -->
+<!-- <div class="credit-panel">
+  <p class="text-h2">{{ 'TENANT.WS_LIMIT' | translate }}</p>
+  <div class="flex flex-col md:flex-row gap-6 md:gap-10 items-center">
+    <dl class="credit-info-list flex-1">
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.WS_MONTHLY_LIMIT' | translate }}</dt>
+        <dd class="credit-info-desc">
+          月合計 {{ monthlyTokenLimit() | number }}
+          {{ 'TENANT.CREDIT_UNIT' | translate }}で利用を制限
+        </dd>
+      </div>
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.WS_MONTHLY_ALERT' | translate }}</dt>
+        <dd class="credit-info-desc">
+          @if (!!alertThreshold()) {
+            上限の {{ alertThreshold() }} % 到達時に通知
+          } @else {
+            -
+          }
+        </dd>
+      </div>
+    </dl>
+
+    <app-button
+      variant="outline"
+      size="lg"
+      iconPosition="left"
+      (buttonClick)="onOpenWsLimitDialog()"
+    >
+      <app-svg-icon icon name="edit" class="icon-20 leading-none"></app-svg-icon>
+      <span>{{ 'TENANT.EDIT' | translate }}</span>
+    </app-button>
+  </div>
+</div> -->
+
+<!-- Panel 3: ユーザーの利用制限 -->
+<!-- <div class="credit-panel">
+  <p class="text-h2">{{ 'TENANT.USER_LIMIT' | translate }}</p>
+  <div class="flex flex-col md:flex-row gap-6 md:gap-10 items-center">
+    <dl class="credit-info-list flex-1">
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.USER_DAILY_LIMIT' | translate }}</dt>
+        <dd class="credit-info-desc">
+          1人あたり 1日 {{ todayLimit() | number }}
+          {{ 'TENANT.CREDIT_UNIT' | translate }}で利用を制限
+        </dd>
+      </div>
+      <div class="credit-info-row">
+        <dt class="credit-info-term">{{ 'TENANT.USER_DAILY_ALERT' | translate }}</dt>
+        <dd class="credit-info-desc">
+          @if (!!todayAlertThreshold()) {
+            上限の {{ todayAlertThreshold() }} % 到達時にユーザーに通知
+          } @else {
+            -
+          }
+        </dd>
+      </div>
+    </dl>
+    <app-button
+      variant="outline"
+      size="lg"
+      iconPosition="left"
+      (buttonClick)="onOpenUserLimitDialog()"
+    >
+      <app-svg-icon icon name="edit" class="icon-20 leading-none"></app-svg-icon>
+      <span>{{ 'TENANT.EDIT' | translate }}</span>
+    </app-button>
+  </div>
+</div> -->
+
+<!-- Monthly history section -->
+<div class="flex flex-col gap-6">
+  <div class="md:flex md:items-center md:justify-between gap-4">
+    <p class="text-h2 shrink-0">{{ 'TENANT.MONTHLY_HISTORY' | translate }}</p>
+    <div class="library-filters">
+      <!-- Filter by user -->
+      <div class="library-filter-group">
+        <span class="library-filter-label">{{ 'TENANT.FILTER' | translate }}</span>
+        <div class="library-filter-selects">
+          <app-select
+            class="md:w-40 w-full"
+            size="small"
+            [options]="userOptions()"
+            [placeholder]="'COMMON.PLACEHOLDERS.ALL_USERS' | translate"
+            (selectionChange)="onUserFilterChange($event)"
+          />
+        </div>
+      </div>
+      <!-- Sort -->
+      <div class="library-filter-group">
+        <span class="library-filter-label">{{ 'TENANT.SORT_LABEL' | translate }}</span>
+        <div class="library-filter-selects">
+          <app-form-sort-input
+            size="sm"
+            class="w-full md:w-40"
+            [placeholder]="'TENANT.SORT_DEFAULT' | translate"
+            [(fields)]="usageSortFields"
+            [(selectedField)]="selectedSortField"
+            [(selectedOrder)]="selectedSortOrder"
+          />
+        </div>
+      </div>
+      <!-- Count + pagination arrows -->
+      <div class="library-page-info">
+        <span class="library-page-count">
+          {{ usagePageRangeStart() }}-{{ usagePageRangeEnd() }}件 / {{ usageHistoryTotal() }}件
+        </span>
+        <div class="library-page-arrows">
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="usageCurrentPage() <= 1"
+              [attr.aria-label]="'COMMON.FIRST_PAGE' | translate"
+              (click)="onUsagePageChange(1)"
+            >
+              <app-svg-icon name="firstPage" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="usageCurrentPage() <= 1"
+              [attr.aria-label]="'COMMON.PREV_PAGE' | translate"
+              (click)="onUsagePageChange(usageCurrentPage() - 1)"
+            >
+              <app-svg-icon name="arrowLeft" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="usageCurrentPage() >= totalPagesUsage()"
+              [attr.aria-label]="'COMMON.NEXT_PAGE' | translate"
+              (click)="onUsagePageChange(usageCurrentPage() + 1)"
+            >
+              <app-svg-icon name="arrowRight" class="w-5 h-5 text-text-weak" />
+            </button>
+            <button
+              type="button"
+              class="library-page-arrow"
+              [disabled]="usageCurrentPage() >= totalPagesUsage()"
+              [attr.aria-label]="'COMMON.LAST_PAGE' | translate"
+              (click)="onUsagePageChange(totalPagesUsage())"
+            >
+              <app-svg-icon name="lastPage" class="w-5 h-5 text-text-weak" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage history table -->
+  <div class="workspace-usage-table">
+    <div class="workspace-usage-row workspace-usage-row--header">
+      <span class="workspace-usage-col workspace-usage-col--date">{{
+        'TENANT.HISTORY_DATE' | translate
+      }}</span>
+      <span class="workspace-usage-col workspace-usage-col--amount">{{
+        'TENANT.HISTORY_AMOUNT' | translate
+      }}</span>
+      <span class="workspace-usage-col workspace-usage-col--user">{{
+        'TENANT.HISTORY_USER' | translate
+      }}</span>
+    </div>
+    <!-- Table body with fixed height to prevent layout shift -->
+    <div class="relative min-h-105 md:min-h-52.5">
+      @if (usageHistoryFetching()) {
+        <div class="absolute inset-0 flex items-center justify-center">
+          <app-circular-loading />
+        </div>
+      } @else {
+        @for (item of usageHistoryData(); track item.id) {
+          <div class="workspace-usage-row">
+            <div class="workspace-usage-col workspace-usage-col--date">
+              <span class="workspace-usage-label">{{ 'TENANT.HISTORY_DATE' | translate }}</span>
+              <span class="workspace-usage-value">{{
+                item.datetime | date: 'yyyy/MM/dd HH:mm'
+              }}</span>
+            </div>
+            <div class="workspace-usage-col workspace-usage-col--amount">
+              <span class="workspace-usage-label">{{ 'TENANT.HISTORY_AMOUNT' | translate }}</span>
+              <span class="workspace-usage-value">{{ item.amount | number }}</span>
+            </div>
+            <div class="workspace-usage-col workspace-usage-col--user">
+              <span class="workspace-usage-label">{{ 'TENANT.HISTORY_USER' | translate }}</span>
+              <span class="workspace-usage-value">{{ item.user }}</span>
+            </div>
+          </div>
+        }
+        @if (usageHistoryData().length === 0) {
+          <div
+            class="flex items-center justify-center h-full min-h-105 md:min-h-52.5 text-text-muted"
+          >
+            {{ 'TENANT.NO_DATA' | translate }}
+          </div>
+        }
+      }
+    </div>
+  </div>
+
+  <!-- Bottom pagination -->
+  @if (usageHistoryTotal() > 0) {
+    <div class="flex justify-center">
+      <app-pagination
+        [totalPages]="totalPagesUsage()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="usageCurrentPage()"
+        (pageChange)="onUsagePageChange($event)"
+      />
+    </div>
+  }
+</div>
+
+<!-- Dialog templates -->
+<ng-template #wsLimitTemplate>
+  <app-usage-limit-dialog
+    mode="monthly"
+    [formData]="usageLimitForm()"
+    (formDataChange)="usageLimitForm.set($event)"
+  />
+</ng-template>
+
+<ng-template #userLimitTemplate>
+  <app-usage-limit-dialog
+    mode="daily"
+    [formData]="userLimitForm()"
+    (formDataChange)="userLimitForm.set($event)"
+  />
+</ng-template>

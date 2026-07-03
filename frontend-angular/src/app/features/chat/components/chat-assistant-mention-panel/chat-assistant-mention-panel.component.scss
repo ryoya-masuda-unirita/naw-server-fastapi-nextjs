@@ -1,0 +1,24 @@
+.mention-panel {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-default);
+  border-radius: 12px;
+  padding: 17px 1px;
+  min-width: 320px;
+  max-width: 100%;
+}
+
+.mention-panel__empty {
+  text-align: center;
+}
+
+.mention-option {
+  &[data-active='true'],
+  &:focus-visible {
+    background: var(--color-bg-brand-weak);
+  }
+}
+
+.mention-option__check {
+  opacity: 1;
+}

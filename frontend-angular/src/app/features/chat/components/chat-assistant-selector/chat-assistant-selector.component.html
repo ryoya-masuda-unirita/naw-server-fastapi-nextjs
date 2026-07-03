@@ -1,0 +1,96 @@
+<div
+  class="block relative min-w-0"
+  data-dl-variant="chat"
+  [attr.data-open]="isAssistantOpen() ? 'true' : 'false'"
+>
+  <button
+    type="button"
+    class="dl-trigger text-sm! dl-trigger--chat hover:bg-bg-brand-weak!"
+    [ngClass]="{
+      'bg-bg-brand-weak!': isAssistantOpen(),
+    }"
+    [attr.aria-expanded]="isAssistantOpen()"
+    aria-haspopup="listbox"
+    (click)="$event.stopPropagation(); toggleAssistantMenu()"
+  >
+    <span class="dl-trigger__value">{{ selectedAssistant()?.name || '' }}</span>
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      class="dl-trigger__chevron"
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <path
+        d="M6.175 6.91406L10 10.7307L13.825 6.91406L15 8.08906L10 13.0891L5 8.08906L6.175 6.91406Z"
+        fill="currentColor"
+      />
+    </svg>
+  </button>
+
+  <div class="dl-panel dl-panel--up" role="listbox" [hidden]="!isAssistantOpen()">
+    <div class="flex flex-col min-w-0">
+      <div class="flex flex-col overflow-y-auto">
+        @for (assistant of assistants(); track assistant.id) {
+          <button
+            type="button"
+            class="dl-option dl-option--rich flex h-auto gap-1 items-start cursor-pointer w-full px-4 py-2 text-left rounded-sm text-(length:--text-note) text-text-strong transition-colors duration-150 shrink-0 hover:bg-bg-brand-weak"
+            role="option"
+            [attr.aria-selected]="selectedAssistant()?.id === assistant.id"
+            [attr.data-selected]="selectedAssistant()?.id === assistant.id ? 'true' : null"
+            (click)="selectAssistant(assistant)"
+          >
+            <div class="flex flex-col gap-1 flex-1 min-w-0">
+              <div class="flex items-start gap-2 w-full">
+                <span
+                  class="dl-option__check flex opacity-0 h-5 w-5 shrink-0 justify-center items-center"
+                  aria-hidden="true"
+                  [ngClass]="{
+                    'opacity-0': !selectedAssistant() || selectedAssistant()?.id !== assistant.id,
+                  }"
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    class="w-5 h-5"
+                    aria-hidden="true"
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path
+                      d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </span>
+                <span
+                  class="flex-1 min-w-0 truncate text-note"
+                  [ngClass]="{
+                    'text-primary': selectedAssistant() && selectedAssistant()?.id === assistant.id,
+                  }"
+                  >{{ assistant.name }}</span
+                >
+              </div>
+              <div class="flex flex-col gap-1 items-start w-full pl-7">
+                <p
+                  class="text-(length:--text-note-small) leading-[1.4] text-text-medium line-clamp-2 w-full"
+                >
+                  {{ assistant.description }}
+                </p>
+                @if (assistant.category) {
+                  <span
+                    class="inline-flex rounded-sm border border-border-strong px-1 py-0.5 text-(length:--text-note-small) font-medium whitespace-nowrap text-text-medium self-start"
+                    >{{ assistant.category }}</span
+                  >
+                }
+              </div>
+            </div>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+</div>

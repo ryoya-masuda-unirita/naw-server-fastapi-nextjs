@@ -1,0 +1,161 @@
+<app-training-data-action-bar
+  [selectedFiles]="selectedFiles()"
+  [isRenamingMode]="isRenamingMode()"
+  [showDownload]="true"
+  (downloadSelected)="onDownloadSelected()"
+  (addData)="onAddData()"
+  (addDataSp)="onAddDataSp()"
+  (deselectAll)="onDeselectAll()"
+  (deleteSelected)="onDeleteSelected()"
+  (editName)="onEditName()"
+  (saveRename)="onSaveRename()"
+/>
+
+<app-training-data-filters
+  [query]="filesFilter().query ?? ''"
+  [userOptions]="userOptions()"
+  [selectedUser]="filesFilter().userId || null"
+  [periodOptions]="periodOptions()"
+  [selectedPeriod]="filesFilter().selectedPeriod ?? null"
+  [filterPeriodRange]="filesFilter().filterPeriodRange ?? null"
+  [statusOptions]="statusOptions()"
+  [selectedStatus]="filesFilter().selectedStatus ?? null"
+  [sortOptions]="sortOptions"
+  [sortField]="filesFilter().sortField ?? null"
+  [sortOrder]="filesFilter().sortOrder ?? null"
+  [countDisplay]="countDisplay()"
+  [totalPages]="totalPages()"
+  [currentPage]="filesFilter().pageIndex"
+  (searchQuery)="onSearch($event)"
+  (userChange)="onUserChange($event)"
+  (periodChange)="onPeriodChange($event)"
+  (statusChange)="onStatusChange($event)"
+  (sortFieldChange)="onSortFieldChange($event)"
+  (sortOrderChange)="onSortOrderChange($event)"
+  (pageChange)="onPageChange($event)"
+/>
+
+<!-- Training Data List Table -->
+<div class="relative flex-1 min-h-40">
+  @if (isFilesLoading()) {
+    <div class="absolute inset-0 z-10 flex items-center justify-center bg-bg-primary/60">
+      <app-circular-loading />
+    </div>
+  }
+  <app-training-data-table
+    [files]="paginatedFiles()"
+    [selectedFiles]="selectedFiles()"
+    [isRenamingMode]="isRenamingMode()"
+    [editingNames]="editingNames()"
+    [showDownload]="true"
+    [totalPages]="totalPages()"
+    [currentPage]="filesFilter().pageIndex"
+    (selectAllChange)="selectAllChange($event)"
+    (toggleItemSelection)="toggleItemSelection($event.row, $event.checked)"
+    (updateEditingValue)="updateEditingValue($event.id, $event.field, $event.value)"
+    (rowClick)="onRowClick($event)"
+    (download)="onDownload($event)"
+    (preview)="onPreview($event)"
+    (editLearningData)="onEditLearningData($event)"
+    (toggleLearning)="onToggleLearning($event)"
+    (deleteFile)="onDeleteFile($event)"
+    (pageChange)="onPageChange($event)"
+  />
+</div>
+
+@if (isPreviewOpen()) {
+  <div
+    class="fixed inset-0 z-1000 bg-black/60 flex items-center justify-center"
+    (click)="closePreview()"
+  >
+    <div class="relative w-full max-w-[519px] mx-4 md:mx-0" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="hidden md:flex absolute -top-7 -right-7 w-7 h-7 rounded-full bg-text-strong items-center justify-center text-text-white cursor-pointer"
+        (click)="closePreview()"
+        aria-label="閉じる"
+      >
+        <app-svg-icon name="close" class="icon-20" />
+      </button>
+      <img [src]="editFilePreview() || 'dummy-image01.jpg'" alt="表データ" class="w-full h-auto" />
+    </div>
+  </div>
+}
+
+<ng-template #addDataForm>
+  <app-training-data-add-modal
+    [form]="addFilesForm"
+    [formTick]="formTick()"
+    [submitted]="submitted()"
+    (filesSelected)="onFilesSelected($event)"
+    (removeFileFromUpload)="onRemoveFileFromUpload($event)"
+    (applyLinkPrefix)="onApplyLinkPrefix()"
+  />
+</ng-template>
+
+<ng-template #addDataActions>
+  <div class="flex justify-center gap-3 w-full">
+    <app-button
+      variant="outline"
+      size="lg"
+      intent="cancel"
+      class="flex-1"
+      [fullWidth]="true"
+      [disabled]="isAddSubmitting()"
+      (buttonClick)="addDataDialogRef?.close()"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      class="flex-1"
+      [fullWidth]="true"
+      [disabled]="!isAddFilesValid() || isAddSubmitting()"
+      [loading]="isAddSubmitting()"
+      (buttonClick)="onSubmitAddData()"
+    >
+      {{ 'COMMON.COMPLETE' | translate }}
+    </app-button>
+  </div>
+</ng-template>
+
+<!-- ===== Edit Learning Data Modal Templates ===== -->
+<ng-template #editDataForm>
+  <app-training-data-edit-modal
+    [form]="editFileForm"
+    [formTick]="formTick()"
+    [submitted]="submitted()"
+    [editingFile]="editingFile()"
+    [editFilePreview]="editFilePreview()"
+    (editFileChange)="onEditFileChange($event)"
+    (removePreview)="editFilePreview.set(null)"
+  />
+</ng-template>
+
+<ng-template #editDataActions>
+  <div class="flex justify-center gap-3 w-full">
+    <app-button
+      variant="outline"
+      size="lg"
+      intent="cancel"
+      class="flex-1"
+      [fullWidth]="true"
+      [disabled]="isEditSubmitting()"
+      (buttonClick)="editDataDialogRef?.close()"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </app-button>
+    <app-button
+      variant="solid"
+      size="lg"
+      class="flex-1"
+      [fullWidth]="true"
+      [loading]="isEditSubmitting()"
+      [disabled]="isEditSubmitting()"
+      (buttonClick)="onSubmitEditData()"
+    >
+      {{ (editingFile() ? 'COMMON.SAVE' : 'COMMON.COMPLETE') | translate }}
+    </app-button>
+  </div>
+</ng-template>

@@ -1,0 +1,72 @@
+<div class="flex h-full min-h-0 max-h-[calc(100vh-380px)] flex-col gap-6">
+  @if (isSearchLoading()) {
+    <!-- Skeleton Loading -->
+    <section>
+      <app-skeleton variant="text" width="6rem" height="1rem" class="mb-2" />
+      <app-skeleton-block [length]="2" />
+    </section>
+    <section>
+      <app-skeleton variant="text" width="6rem" height="1rem" class="mb-2" />
+      <app-skeleton-block [length]="3" />
+    </section>
+  } @else {
+    <!-- Pinned Chats Section -->
+    <section class="max-h-40 shrink-0 overflow-hidden">
+      <h3 class="text-sm font-semibold text-gray-500 mb-2">
+        {{ 'SIDEBAR.PINNED_CHATS' | translate }}
+      </h3>
+      <div class="flex max-h-28 flex-col gap-0 overflow-y-auto">
+        @for (room of pinnedRooms(); track room.id) {
+          <div
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:bg-gray-50 cursor-grab active:cursor-grabbing transition-colors"
+          >
+            <app-svg-icon name="dragIndicator" class="icon-20 cursor-grab" />
+            <span class="flex-1 text-sm text-gray-800 truncate">{{ room.title }}</span>
+            <button
+              type="button"
+              class="flex items-center justify-center w-5 h-5 transition-colors text-text-weak"
+              (click)="togglePin(room)"
+            >
+              <app-svg-icon name="push_pin" class="icon-20 cursor-grab" />
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Unpinned Chats Section -->
+    <section class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <h3 class="text-sm font-semibold text-gray-500 mb-2">
+        {{ 'SIDEBAR.UNPINNED_CHATS' | translate }}
+      </h3>
+      <div class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto">
+        @for (room of unpinnedRooms(); track room.id) {
+          <div
+            class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:bg-gray-50 cursor-grab active:cursor-grabbing transition-colors"
+          >
+            <app-svg-icon name="dragIndicator" class="icon-20 cursor-grab" />
+            <span class="flex-1 text-sm text-gray-800 truncate">{{ room.title }}</span>
+            <button
+              type="button"
+              class="flex items-center justify-center w-5 h-5 text-text-weak transition-colors"
+              (click)="togglePin(room)"
+            >
+              <app-svg-icon name="unpin" class="icon-20 cursor-grab" />
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <div class="flex shrink-0 justify-center">
+      <app-pagination
+        [totalPages]="totalPages()"
+        [useQueryParams]="false"
+        [showPageSize]="false"
+        [showFirstLast]="false"
+        [currentPageOverride]="currentPage()"
+        (pageChange)="onPageChange($event)"
+      />
+    </div>
+  }
+</div>

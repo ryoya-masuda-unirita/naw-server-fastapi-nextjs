@@ -1,0 +1,175 @@
+<div
+  class="trigger-wrapper relative flex items-center w-full pl-3 pr-4 rounded-lg text-sm transition-all duration-200 overflow-hidden cursor-pointer select-none"
+  [class.h-12]="size() === 'md'"
+  [class.h-9]="size() === 'sm'"
+  [class.bg-bg-brand-weak]="selectedField() && !isMenuOpen()"
+  [class.bg-white]="!selectedField() || isMenuOpen()"
+  [class.has-value]="selectedField() && !isMenuOpen()"
+  [class.is-open]="isMenuOpen()"
+  [class.opacity-60]="disabled()"
+  [class.cursor-not-allowed]="disabled()"
+  [class.pointer-events-none]="disabled()"
+  [matMenuTriggerFor]="disabled() || isMobile() ? null : sortMenu"
+  (menuOpened)="onMenuOpened()"
+  (menuClosed)="onMenuClosed()"
+  (click)="onTriggerClick()"
+>
+  <span
+    class="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium max-w-70 md:max-w-21"
+    [class.text-sm]="size() === 'md'"
+    [class.text-xs]="size() === 'sm'"
+    [class.text-text-default]="selectedField()"
+    [class.text-text-lighter]="!selectedField()"
+    [class.text-brand-secondary!]="selectedField() && !isMenuOpen()"
+  >
+    {{ selectedField() ? (activeFieldLabel() | translate) : (placeholder() | translate) }}
+  </span>
+
+  @if (selectedField()) {
+    <button type="button" class="combobox-clear right-10" (click)="onClear($event)">
+      <app-svg-icon
+        name="close"
+        class="shrink-0 w-3! h-3! transition-colors! duration-200 text-text-white!"
+      />
+    </button>
+  }
+
+  <app-svg-icon
+    name="newsort"
+    class="text-[20px]! -mr-1 shrink-0 text-text-weak transition-colors duration-200 ml-auto"
+    [class.text-brand-secondary!]="isMenuOpen() || !!selectedField()"
+  />
+</div>
+
+<!-- Desktop Menu -->
+<mat-menu
+  #sortMenu="matMenu"
+  class="sort-menu bg-white! rounded-xl! border! border-border-strong! shadow-lg! min-w-50! mt-1! w-60"
+>
+  <div class="dl-body py-4">
+    @for (field of fields(); track field.value) {
+      <button
+        (click)="onSelectField(field.value)"
+        class="dl-option hover:bg-bg-brand-weak"
+        [class.bg-bg-brand-weak!]="selectedField() === field.value"
+        [class.text-brand-secondary]="selectedField() === field.value"
+      >
+        <div class="w-5 h-5 flex items-center justify-center shrink-0">
+          @if (selectedField() === field.value) {
+            <app-svg-icon name="newCheck" class="w-5 h-5 text-primary" />
+          }
+        </div>
+        <span
+          class="flex-1 min-w-0 truncate"
+          [class.text-[var(--color-primary)]]="selectedField() === field.value"
+          [class.text-gray-800]="selectedField() !== field.value"
+        >
+          {{ field.label | translate }}
+        </span>
+      </button>
+    }
+  </div>
+
+  <!-- Divider -->
+  <div class="w-full h-px! bg-text-lighter/30!"></div>
+
+  <div class="py-4">
+    @for (order of orders(); track order.value) {
+      <button
+        (click)="onSelectOrder(order.value)"
+        class="dl-option"
+        [class.bg-bg-brand-weak!]="selectedOrder() === order.value"
+      >
+        <div class="w-5 h-5 flex items-center justify-center shrink-0">
+          @if (selectedOrder() === order.value) {
+            <app-svg-icon name="newCheck" class="w-5 h-5 text-primary" />
+
+            <!-- <app-mat-icon icon="check" class="icon-size text-primary!" /> -->
+          }
+        </div>
+        <span
+          class="flex-1 min-w-0 truncate"
+          [class.text-[var(--color-primary)]]="selectedOrder() === order.value"
+          [class.text-gray-800]="selectedOrder() !== order.value"
+        >
+          {{ order.label | translate }}
+        </span>
+      </button>
+    }
+  </div>
+</mat-menu>
+
+<!-- Mobile Bottom Drawer -->
+@if (isMobile() && isDrawerVisible()) {
+  <div
+    class="fixed inset-0 z-50 flex flex-col justify-end transition-opacity duration-200"
+    [class.opacity-0]="!isMenuOpen()"
+    [class.pointer-events-none]="!isMenuOpen()"
+    (click)="closeDrawer(); $event.stopPropagation()"
+  >
+    <div class="absolute inset-0 bg-bg-overlay"></div>
+
+    <div
+      class="relative bg-white rounded-t-xl shadow-default flex flex-col max-h-[80vh] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      [class.translate-y-full]="!isMenuOpen()"
+      (click)="$event.stopPropagation()"
+    >
+      <!-- Fields section -->
+      <div class="py-4">
+        @for (field of fields(); track field.value) {
+          <button
+            type="button"
+            class="flex items-center gap-2 w-full px-4 py-2 text-sm text-left border-none cursor-pointer transition-colors duration-150"
+            [class]="
+              selectedField() === field.value
+                ? 'bg-secondary text-primary'
+                : 'bg-transparent text-text-default hover:bg-secondary'
+            "
+            (click)="onSelectField(field.value); closeDrawer()"
+          >
+            <span class="flex items-center justify-center w-5 h-5 shrink-0">
+              @if (selectedField() === field.value) {
+                <app-mat-icon icon="check" class="text-[22px]! text-brand-primary" />
+              }
+            </span>
+            <span
+              class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium"
+              [class.text-brand-secondary]="selectedField() === field.value"
+              >{{ field.label | translate }}</span
+            >
+          </button>
+        }
+      </div>
+
+      <!-- Divider -->
+      <div class="w-full h-px bg-text-lighter/30"></div>
+
+      <!-- Orders section -->
+      <div class="py-4">
+        @for (order of orders(); track order.value) {
+          <button
+            type="button"
+            class="flex items-center gap-3 w-full px-4 py-2 text-sm text-left border-none cursor-pointer transition-colors duration-150"
+            [class]="
+              selectedOrder() === order.value
+                ? 'bg-secondary text-primary'
+                : 'bg-transparent text-text-default hover:bg-secondary'
+            "
+            (click)="onSelectOrder(order.value); closeDrawer()"
+          >
+            <span class="flex items-center justify-center w-5 h-5 shrink-0">
+              @if (selectedOrder() === order.value) {
+                <app-mat-icon icon="check" class="text-[22px]! text-brand-primary" />
+              }
+            </span>
+            <span
+              class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium"
+              [class.text-brand-secondary]="selectedOrder() === order.value"
+              >{{ order.label | translate }}</span
+            >
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,72 @@
+<app-admin-page-shell [customHeader]="true">
+  <div class="flex flex-col h-full">
+    <app-page-header
+      shellHeader
+      [title]="groupName()"
+      [showBackButton]="false"
+      [showBackButtonInMobile]="true"
+      (backClick)="goBack()"
+      [showActions]="false"
+      [showLanguageToggle]="true"
+      [tabs]="tabs()"
+      [activeTabId]="activeTabId()"
+    >
+      <div pageHeaderActions>
+        <button
+          #menuTrigger
+          type="button"
+          class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-text-lighter transition-colors"
+          (click)="$event.stopPropagation(); toggleMenu()"
+          [title]="'GROUPS.SETTINGS' | translate"
+          [attr.aria-haspopup]="'true'"
+          [attr.aria-expanded]="isMenuOpen()"
+        >
+          <app-svg-icon name="edit" class="w-5 h-5" />
+        </button>
+        <div
+          class="dropdown-menu dropdown-menu--bordered flex flex-col p-4 gap-1 min-w-72 animate-fade-in"
+          role="menu"
+          [hidden]="!isMenuOpen()"
+          [class.is-open]="isMenuOpen()"
+          [style.top]="menuStyle().top"
+          [style.left]="menuStyle().left"
+          [style.width.px]="288"
+          (click)="$event.stopPropagation()"
+        >
+          <button
+            type="button"
+            class="dropdown-item dl-option w-full"
+            role="menuitem"
+            (click)="openEditDialog()"
+          >
+            <span class="inline-flex w-5 h-5 shrink-0 items-center justify-center">
+              <app-svg-icon name="edit" class="w-5 h-5" />
+            </span>
+            {{ 'GROUPS.EDIT_TEAM_TITLE' | translate }}
+          </button>
+          @if (!authStore.isGroupAdminOnly()) {
+            <div class="my-1 dropdown-divider"></div>
+            <button
+              type="button"
+              class="dropdown-item dropdown-item--danger w-full px-4"
+              role="menuitem"
+              (click)="openDeleteDialog()"
+            >
+              <span class="dropdown-item-icon">
+                <app-svg-icon class="w-5 h-5" name="delete" />
+              </span>
+              {{ 'GROUPS.DELETE_GROUP' | translate }}
+            </button>
+          }
+        </div>
+      </div>
+    </app-page-header>
+    <div class="px-4 md:px-6">
+      <router-outlet />
+    </div>
+  </div>
+</app-admin-page-shell>
+
+<ng-template #editTeamContent>
+  <app-group-form [formGroup]="editForm" />
+</ng-template>

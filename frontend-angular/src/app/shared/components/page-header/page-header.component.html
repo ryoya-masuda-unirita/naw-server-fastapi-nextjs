@@ -1,0 +1,182 @@
+<!-- class="bg-white flex flex-col" -->
+<header
+  class="shrink-0 flex flex-col bg-bg-primary z-30 border-b border-border-strong"
+  [class.sticky]="sticky()"
+  [class.top-0]="sticky()"
+  [class.z-50]="sticky()"
+>
+  <div class="flex items-center px-2 py-2 md:px-6 md:py-3">
+    @if (showSidebarToggle()) {
+      <button
+        class="lg:p-2 rounded-lg hover:bg-slate-100 shrink-0 md:hidden p-1"
+        (click)="toggleSidebar()"
+        [title]="'HEADER.SIDEBAR_TOGGLE' | translate"
+      >
+        <img
+          src="/icons/icon-side-navigation.svg"
+          [alt]="'HEADER.SIDEBAR_TOGGLE' | translate"
+          class="size-5"
+        />
+      </button>
+    }
+
+    @if (showBackButtonInMobile()) {
+      <button
+        class="w-7 h-7 rounded-full hover:bg-slate-100 shrink-0 mr-2 flex items-center justify-center"
+        (click)="backClick.emit()"
+        [title]="'HEADER.BACK' | translate"
+      >
+        <mat-icon class="icon-20 text-text-lighter!">chevron_left</mat-icon>
+      </button>
+    }
+
+    <div class="ml-3 md:ml-0 items-center gap-1 flex">
+      @if (showBackButton()) {
+        <button
+          class="rounded-lg hover:bg-slate-100 shrink-0 lg:hidden block text-text-lighter relative top-0.75"
+          (click)="goBack()"
+          [title]="'HEADER.BACK' | translate"
+        >
+          <app-mat-icon icon="chevron_left" class="text-[30px]!" />
+        </button>
+      }
+      <div class="flex items-center gap-1 min-w-0">
+        <h2 class="min-h-9 pt-1 text-h1 truncate">
+          {{ getTitle() }}
+        </h2>
+        @if (showTitleEdit()) {
+          <button
+            type="button"
+            class="mt-1 p-1 rounded hover:bg-slate-100 text-text-lighter"
+            (click)="renameClick.emit()"
+          >
+            <mat-icon class="icon-16">edit</mat-icon>
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      @if (showActions()) {
+        @if (showShareButton()) {
+          <button
+            type="button"
+            class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-text-lighter transition-colors"
+            (click)="shareClick.emit()"
+            [title]="'HEADER.SHARE' | translate"
+          >
+            <mat-icon class="icon-20">share</mat-icon>
+          </button>
+        }
+
+        @if (showLikeButton()) {
+          <button
+            type="button"
+            class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-text-lighter transition-colors"
+            (click)="likeClick.emit()"
+            [title]="'HEADER.LIKE' | translate"
+          >
+            <mat-icon class="icon-20">thumb_up</mat-icon>
+          </button>
+        }
+
+        <!-- @if (showSettingsButton()) { -->
+        @if (settingsIcon() === 'more_vert') {
+          <div class="relative" [class.lg:hidden]="showSettingsMobileOnly()">
+            <button
+              type="button"
+              class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-text-lighter transition-colors"
+              (click)="$event.stopPropagation(); toggleMoreMenu()"
+              [title]="'HEADER.SETTINGS' | translate"
+              [attr.aria-haspopup]="'true'"
+              [attr.aria-expanded]="isMoreMenuOpen()"
+            >
+              <mat-icon class="icon-20">more_vert</mat-icon>
+            </button>
+            <div
+              class="dropdown-menu dropdown-menu--bordered"
+              role="menu"
+              [hidden]="!isMoreMenuOpen()"
+              [class.is-open]="isMoreMenuOpen()"
+            >
+              <button type="button" class="dropdown-item" role="menuitem" (click)="handleRename()">
+                <span class="dropdown-item-icon">
+                  <mat-icon class="w-5! h-5! text-xl!">drive_file_rename_outline</mat-icon>
+                </span>
+                {{ 'HEADER.RENAME' | translate }}
+              </button>
+              <button
+                type="button"
+                class="dropdown-item"
+                role="menuitem"
+                (click)="handleMoreSettings()"
+              >
+                <span class="dropdown-item-icon">
+                  <mat-icon class="w-5! h-5! text-xl!">dock_to_right</mat-icon>
+                </span>
+                {{ 'HEADER.OPEN_VIEWER' | translate }}
+              </button>
+              <div class="dropdown-divider"></div>
+              <button
+                type="button"
+                class="dropdown-item"
+                role="menuitem"
+                (click)="handleMoreShare()"
+              >
+                <span class="dropdown-item-icon">
+                  <mat-icon class="w-5! h-5! text-xl!">share</mat-icon>
+                </span>
+                {{ 'HEADER.SHARE' | translate }}
+              </button>
+              <button
+                type="button"
+                class="dropdown-item"
+                role="menuitem"
+                (click)="handleMoreLike()"
+              >
+                <span class="dropdown-item-icon">
+                  <mat-icon class="w-5! h-5! text-xl!">thumb_up</mat-icon>
+                </span>
+                {{ 'HEADER.RATE' | translate }}
+              </button>
+            </div>
+          </div>
+        } @else {
+          <button
+            type="button"
+            class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-text-lighter transition-colors"
+            [class.lg:hidden]="showSettingsMobileOnly()"
+            (click)="settingsClick.emit()"
+            [title]="'HEADER.SETTINGS' | translate"
+          >
+            <mat-icon class="icon-20">{{ settingsIcon() }}</mat-icon>
+          </button>
+        }
+        <!-- } -->
+      }
+
+      <ng-content select="[pageHeaderActions]" />
+
+      @if (showLanguageToggle() && showLanguageToggleInMobile()) {
+        <button
+          type="button"
+          class="px-2 py-1 rounded-lg hover:bg-slate-100 text-text-lighter transition-colors text-xs font-medium"
+          (click)="toggleLanguage()"
+          [title]="'HEADER.LANGUAGE_TOGGLE' | translate"
+        >
+          {{ getCurrentLanguageDisplay() }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (tabs() && tabs()!.length > 0) {
+    <div class="mt-1 md:mt-0 flex items-center gap-1 overflow-hidden">
+      <app-tab
+        [tabs]="tabs()!"
+        [activeTabId]="activeTabId() || ''"
+        (tabChange)="tabChange.emit($event)"
+      />
+    </div>
+  }
+</header>

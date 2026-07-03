@@ -1,0 +1,61 @@
+<!-- Custom trigger or default button -->
+@if (customTrigger()) {
+  <div cdkOverlayOrigin #triggerOrigin="cdkOverlayOrigin" (click)="toggle($event)">
+    <ng-container *ngTemplateOutlet="customTrigger()!" />
+  </div>
+} @else {
+  <button
+    cdkOverlayOrigin
+    #triggerOrigin="cdkOverlayOrigin"
+    class="flex items-center justify-center p-1 rounded-full hover:bg-bg-brand-weak transition-colors"
+    [class.md:p-2!]="hasPaddingButton()"
+    (click)="toggle($event)"
+  >
+    @if (triggerIcon()) {
+      <app-mat-icon [icon]="triggerIcon()!" class="text-[20px]! text-text-lighter" />
+    } @else {
+      <app-svg-icon name="settings" class="w-5 h-5 text-text-lighter" />
+    }
+  </button>
+}
+
+<!-- Desktop dropdown -->
+@if (!isMobile()) {
+  <ng-template
+    cdkConnectedOverlay
+    [cdkConnectedOverlayOrigin]="triggerOrigin"
+    [cdkConnectedOverlayOpen]="isOpen()"
+    [cdkConnectedOverlayHasBackdrop]="true"
+    cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+    [cdkConnectedOverlayPositions]="overlayPositions()"
+    (backdropClick)="close()"
+  >
+    <div [class]="panelClass()" [ngClass]="menuMinWidth()" (click)="onContentClick($event)">
+      <ng-container *ngTemplateOutlet="menuTpl()" />
+    </div>
+  </ng-template>
+}
+
+<!-- Mobile bottom drawer -->
+@if (isMobile() && isVisible()) {
+  <div
+    class="fixed w-screen inset-0 z-200 flex flex-col justify-end transition-opacity duration-200"
+    [class.opacity-0]="!isOpen()"
+    [class.pointer-events-none]="!isOpen()"
+    (click)="close(); $event.stopPropagation()"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-bg-overlay"></div>
+
+    <!-- Drawer panel -->
+    <div
+      class="relative bg-bg-primary rounded-t-2xl shadow-default flex flex-col pb-safe transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      [class.translate-y-full]="!isOpen()"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="flex flex-col gap-1 md:gap-2 p-4 text-xs font-medium">
+        <ng-container *ngTemplateOutlet="menuTpl()" />
+      </div>
+    </div>
+  </div>
+}

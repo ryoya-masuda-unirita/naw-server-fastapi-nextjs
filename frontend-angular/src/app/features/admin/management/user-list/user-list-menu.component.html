@@ -1,0 +1,38 @@
+<app-context-menu #contextMenu [menuTpl]="menuTpl" />
+
+<ng-template #menuTpl>
+  <!-- Primary actions -->
+  <div class="flex flex-col gap-1">
+    <button
+      class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-secondary transition-colors w-full text-left"
+      (click)="onEditUser($event); contextMenu.close()"
+    >
+      <app-mat-icon
+        icon="border_color"
+        class="text-text-strong shrink-0"
+        style="font-size: 20px; line-height: 1"
+      />
+      <span class="text-label text-text-strong truncate">{{
+        'ADMIN.USER_MANAGEMENT.EDIT_USER_SETTINGS' | translate
+      }}</span>
+    </button>
+  </div>
+
+  <!-- Divider -->
+  <hr class="border-border-weak" />
+
+  <!-- Danger action -->
+  <div class="flex flex-col gap-1">
+    <button
+      class="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
+      (click)="onDelete($event); contextMenu.close()"
+    >
+      <app-mat-icon
+        icon="delete"
+        class="text-status-error shrink-0"
+        style="font-size: 20px; line-height: 1"
+      />
+      <span class="text-label text-status-error truncate">{{ 'COMMON.DELETE' | translate }}</span>
+    </button>
+  </div>
+</ng-template>

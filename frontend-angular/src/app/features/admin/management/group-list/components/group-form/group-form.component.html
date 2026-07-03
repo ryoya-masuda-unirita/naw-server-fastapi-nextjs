@@ -1,0 +1,80 @@
+<form [formGroup]="formGroup()" class="flex flex-col gap-4 md:gap-6">
+  <app-form-input
+    formControlName="name"
+    [label]="'GROUPS.NAME_LABEL' | translate"
+    [placeholder]="'GROUPS.NAME_PLACEHOLDER' | translate"
+    [error]="nameError()"
+  />
+
+  <!--
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-text-default leading-[1.4]">
+      {{ 'GROUPS.ADMINS_LABEL' | translate }}
+    </span>
+    <p class="text-xs text-text-muted leading-[1.4]">
+      {{ 'GROUPS.ADMINS_SUPPORT' | translate }}
+    </p>
+    <app-form-combobox
+      label=""
+      formControlName="adminUserIds"
+      [options]="adminOptions()"
+      [placeholder]="'GROUPS.ADMINS_PLACEHOLDER' | translate"
+    />
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-text-default leading-[1.4]">
+      {{ 'GROUPS.MEMBERS_LABEL' | translate }}
+    </span>
+    <p class="text-xs text-text-muted leading-[1.4]">
+      {{ 'ADMIN_CONSOLE.SUPPORT_TEXT' | translate }}
+    </p>
+    <app-form-combobox
+      label=""
+      formControlName="users"
+      [options]="userOptions()"
+      [placeholder]="'GROUPS.MEMBERS_PLACEHOLDER' | translate"
+    />
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-text-default leading-[1.4]">
+        {{ 'GROUPS.ASSISTANTS_LABEL' | translate }}
+      </span>
+      <span class="bg-bg-secondary text-text-muted text-[10px] px-1 py-0.5 rounded leading-none">
+        {{ 'COMMON.OPTIONAL' | translate }}
+      </span>
+    </div>
+    <p class="text-xs text-text-muted leading-[1.4]">
+      {{ 'ADMIN_CONSOLE.SUPPORT_TEXT' | translate }}
+    </p>
+    <app-form-combobox
+      label=""
+      formControlName="assistants"
+      [options]="assistantOptions()"
+      [placeholder]="'GROUPS.ASSISTANTS_PLACEHOLDER' | translate"
+    />
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-text-default leading-[1.4]">
+        {{ 'GROUPS.TEMPLATES_LABEL' | translate }}
+      </span>
+      <span class="bg-bg-secondary text-text-muted text-[10px] px-1 py-0.5 rounded leading-none">
+        {{ 'COMMON.OPTIONAL' | translate }}
+      </span>
+    </div>
+    <p class="text-xs text-text-muted leading-[1.4]">
+      {{ 'ADMIN_CONSOLE.SUPPORT_TEXT' | translate }}
+    </p>
+    <app-form-combobox
+      label=""
+      formControlName="promptTemplates"
+      [options]="templateOptions()"
+      [placeholder]="'GROUPS.TEMPLATES_PLACEHOLDER' | translate"
+    />
+  </div>
+  -->
+</form>

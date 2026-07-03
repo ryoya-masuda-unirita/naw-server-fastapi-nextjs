@@ -1,0 +1,25 @@
+<label class="input-radio my-1">
+  <input
+    type="radio"
+    [name]="name()"
+    [value]="value()"
+    [checked]="checked()"
+    [disabled]="disabled()"
+    (change)="handleChangeEvent()"
+    class="input-radio-input"
+  />
+  <span class="input-radio-visual">
+    <span class="input-radio-icon-false" aria-hidden="true">
+      <app-svg-icon name="radioOff" class="input-radio-icon-svg" />
+    </span>
+    <span class="input-radio-icon-true" aria-hidden="true">
+      <app-svg-icon name="radioOn" class="input-radio-icon-svg" />
+    </span>
+  </span>
+  <span class="input-radio-label">
+    <ng-content></ng-content>
+    @if (label()) {
+      {{ label() }}
+    }
+  </span>
+</label>

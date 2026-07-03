@@ -1,0 +1,76 @@
+<!-- Header with back button (optional) -->
+@if (showBackButton()) {
+  <div class="flex items-center mb-4 px-4">
+    <button
+      type="button"
+      class="dropdown-back"
+      role="button"
+      [attr.aria-label]="'HEADER.BACK' | translate"
+      (click)="$event.stopPropagation(); onBack()"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <path
+          d="M12.175 15L7.175 10L12.175 5L13.25 6.075L9.325 10L13.25 13.925L12.175 15Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+  </div>
+}
+
+<!-- Preview image area (optional) -->
+@if (showPreviewImage()) {
+  <div class="px-4 mb-4">
+    <div class="w-full h-40 bg-bg-weak rounded-lg"></div>
+  </div>
+}
+
+<!-- Template cards list -->
+<div class="flex flex-col max-h-75 overflow-y-auto w-full">
+  @for (tpl of templates(); track tpl.value) {
+    <button
+      type="button"
+      class="flex items-start gap-1 px-4 py-2 bg-transparent cursor-pointer text-left w-full transition-colors duration-150 hover:bg-bg-brand-weak"
+      [class.bg-bg-brand-strong]="activeTemplate()?.value === tpl.value"
+      role="menuitem"
+      (click)="onSelectTemplate(tpl)"
+    >
+      <span
+        [ngClass]="{
+          'opacity-100': activeTemplate()?.value === tpl.value,
+          'opacity-0': activeTemplate()?.value !== tpl.value,
+        }"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-5 h-5 shrink-0 text-brand-primary"
+          aria-hidden="true"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <path
+            d="M7.33021 13.2307L3.85521 9.75573L2.67188 10.9307L7.33021 15.5891L17.3302 5.58906L16.1552 4.41406L7.33021 13.2307Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+
+      <div class="flex-1 min-w-0 flex flex-col gap-1">
+        <span
+          class="text-label-small font-semibold text-text-strong leading-snug px-1 rounded-sm inline box-decoration-clone"
+          >{{ tpl.label }}</span
+        >
+        <span class="text-label text-text-weak leading-normal line-clamp-2">{{ tpl.desc }}</span>
+      </div>
+    </button>
+  }
+</div>

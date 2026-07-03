@@ -1,0 +1,148 @@
+<div class="modal-content">
+  <div
+    class="modal-header shrink-0 pb-2 md:flex md:items-center md:py-2 md:max-h-[51.8px] justify-between"
+  >
+    <h2 class="text-h1 py-[2.5px] text-text-strong" [ngClass]="data.titleClass">
+      {{ data.title }}
+    </h2>
+    <div class="flex shrink-0 items-center gap-2 md:min-h-13 min-w-0 justify-end">
+      @if (data.headerTrailing) {
+        <ng-container *ngTemplateOutlet="data.headerTrailing" />
+      }
+      @if (data.showClose) {
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-text-muted hover:bg-black/5"
+          (click)="close()"
+          aria-label="Close"
+        >
+          <mat-icon class="h-5 w-5 text-[20px]">close</mat-icon>
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="modal-body" [ngClass]="data.contentClass">
+    @if (data.message) {
+      <p class="modal-delete-confirm-message text-text-strong">{{ data.message }}</p>
+    }
+    @if (data.contentComponent) {
+      <ng-container
+        *ngComponentOutlet="data.contentComponent; inputs: data.contentComponentInputs"
+      />
+    } @else if (data.content) {
+      <ng-container *ngTemplateOutlet="data.content" />
+    }
+  </div>
+</div>
+
+@if (data.customActions || showDefaultActions) {
+  <div
+    class="flex shrink-0 flex-wrap gap-3 max-sm:justify-center px-0 pt-8 md:pt-12"
+    [ngClass]="{
+      'justify-between items-center': data.bottomLeftContent || data.leftActionText,
+      'justify-end':
+        !data.bottomLeftContent && !data.leftActionText && data.buttonAlign === 'right',
+      'justify-center':
+        !data.bottomLeftContent &&
+        !data.leftActionText &&
+        (data.buttonAlign === 'center' || !data.buttonAlign),
+    }"
+  >
+    @if (data.customActions) {
+      <div class="max-sm:w-full">
+        <ng-container *ngTemplateOutlet="data.customActions" />
+      </div>
+    }
+
+    @if (showDefaultActions && !data.customActions) {
+      <div
+        class="flex w-full flex-wrap items-center gap-3 max-sm:flex-col max-sm:items-stretch"
+        [ngClass]="{
+          'justify-between': data.bottomLeftContent || data.leftActionText,
+          'justify-end':
+            !data.bottomLeftContent && !data.leftActionText && data.buttonAlign === 'right',
+          'justify-center':
+            !data.bottomLeftContent &&
+            !data.leftActionText &&
+            (data.buttonAlign === 'center' || !data.buttonAlign),
+        }"
+      >
+        @if (!!data.bottomLeftContent || !!data.leftActionText) {
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-sm:w-full">
+            @if (data.bottomLeftContent) {
+              <ng-container *ngTemplateOutlet="data.bottomLeftContent" />
+            }
+            @if (data.leftActionText) {
+              <app-button
+                [variant]="data.leftActionDanger ? 'danger' : 'outline'"
+                size="md"
+                [heightPx]="54"
+                iconPosition="left"
+                [fullWidth]="true"
+                class="max-sm:w-full"
+                [loading]="
+                  data.leftActionLoadingSignal
+                    ? data.leftActionLoadingSignal()
+                    : (data.leftActionLoading ?? false)
+                "
+                (buttonClick)="handleLeftActionClick()"
+              >
+                @if (data.leftActionIcon) {
+                  <mat-icon icon class="h-5 w-5 text-[20px]">{{ data.leftActionIcon }}</mat-icon>
+                }
+                {{ data.leftActionText }}
+              </app-button>
+            }
+          </div>
+        }
+        <div class="flex flex-wrap justify-end gap-3 max-sm:w-full">
+          @if (data.showCancel) {
+            <app-button
+              variant="outline"
+              intent="cancel"
+              size="largePcDefault"
+              [heightPx]="54"
+              class="dialog-cancel-btn min-w-36.5 max-sm:flex-1"
+              [fullWidth]="true"
+              (buttonClick)="handleCancelClick()"
+              [ngClass]="{
+                'md:w-auto w-full': !data.showConfirm,
+              }"
+              [heightPx]="54"
+            >
+              {{ data.cancelText || 'キャンセル' }}
+            </app-button>
+          }
+          @if (data.showConfirm) {
+            <app-button
+              [variant]="data.confirmDanger ? 'danger' : 'solid'"
+              size="largePcDefault"
+              [heightPx]="54"
+              [iconPosition]="data.confirmIcon ? 'left' : 'right'"
+              [class]="(data.confirmMinWidth ?? 'min-w-30.5') + ' max-sm:flex-1'"
+              [fullWidth]="true"
+              [loading]="
+                data.confirmLoadingSignal
+                  ? data.confirmLoadingSignal()
+                  : (data.confirmLoading ?? false)
+              "
+              [disabled]="data.confirmDisabledSignal ? data.confirmDisabledSignal() : false"
+              (buttonClick)="handleConfirmClick()"
+              [heightPx]="54"
+            >
+              @if (data.confirmIcon) {
+                @if (data.confirmIcon === 'delete') {
+                  <app-svg-icon name="delete" class="text-xl! leading-none" />
+                } @else {
+                  <app-mat-icon icon [icon]="data.confirmIcon!" class="text-xl! leading-none" />
+                }
+              }
+              {{ data.confirmText || '確認' }}
+            </app-button>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}

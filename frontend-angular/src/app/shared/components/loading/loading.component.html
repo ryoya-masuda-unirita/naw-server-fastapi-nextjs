@@ -1,0 +1,11 @@
+<div class="flex flex-col items-center md:pt-10 mt-14" [ngClass]="getGapClass()">
+  <!-- Logo Image -->
+  <img [src]="logoSrc()" alt="Loading" [width]="48" [height]="48" class="w-12! h-12!" />
+
+  <!-- Loading Message -->
+  @if (showMessage()) {
+    <h3 class="text-h5 text-text-medium font-medium">
+      {{ message() | translate }}
+    </h3>
+  }
+</div>

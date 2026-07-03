@@ -1,0 +1,110 @@
+<div class="sp-fixed-btn">
+  @if (selectedFiles().length === 0) {
+    <!-- Default Actions -->
+    <div data-learning-create-wrap>
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        @if (showSync()) {
+          <app-button
+            variant="outline"
+            size="lg"
+            (buttonClick)="sync.emit()"
+            [fullWidth]="true"
+            class="w-full md:w-auto"
+          >
+            <app-svg-icon name="sync" class="icon-20" />
+            <span>{{ 'LEARNING_DATA.BULK_SYNC' | translate }}</span>
+          </app-button>
+        }
+
+        <!-- Mobile Add Button -->
+        <app-button
+          variant="solid"
+          size="lg"
+          (buttonClick)="addDataSp.emit()"
+          [fullWidth]="true"
+          class="w-full md:hidden z-1"
+        >
+          <app-svg-icon name="addCircle" class="icon-20" />
+          <span>{{ 'LEARNING_DATA.ADD_TRAINING_DATA' | translate }}</span>
+        </app-button>
+
+        <!-- Desktop Add Button -->
+        <app-button
+          variant="solid"
+          size="lg"
+          (buttonClick)="addData.emit()"
+          class="hidden! md:flex! md:w-auto"
+        >
+          <app-svg-icon name="addCircle" class="icon-20" />
+          <span>{{ 'LEARNING_DATA.ADD_TRAINING_DATA' | translate }}</span>
+        </app-button>
+      </div>
+    </div>
+  } @else if (isRenamingMode()) {
+    <!-- Rename Mode -->
+    <div data-namechange-actions>
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        <app-button
+          variant="outline"
+          intent="cancel"
+          size="lg"
+          (buttonClick)="deselectAll.emit()"
+          [fullWidth]="true"
+          class="w-full md:w-auto"
+        >
+          <span>{{ 'COMMON.DESELECT' | translate }}</span>
+        </app-button>
+        <app-button
+          variant="solid"
+          size="lg"
+          (buttonClick)="saveRename.emit()"
+          [fullWidth]="true"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="edit" class="icon-20" />
+          <span>{{ 'COMMON.EDIT_NAME' | translate }}</span>
+        </app-button>
+      </div>
+    </div>
+  } @else {
+    <!-- Selection Mode -->
+    <div data-learning-selection-actions>
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        <app-button
+          variant="outline"
+          intent="cancel"
+          size="lg"
+          (buttonClick)="deselectAll.emit()"
+          [fullWidth]="true"
+          class="w-full md:w-auto"
+        >
+          <span>{{ 'COMMON.DESELECT' | translate }}</span>
+        </app-button>
+
+        <app-button
+          variant="outline"
+          intent="delete"
+          size="lg"
+          (buttonClick)="deleteSelected.emit()"
+          [fullWidth]="true"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="delete" class="icon-20" />
+          <span>{{ 'COMMON.DELETE' | translate }}</span>
+        </app-button>
+
+        <app-button
+          variant="outline"
+          size="lg"
+          (buttonClick)="editName.emit()"
+          [disabled]="selectedFiles().length === 0"
+          [fullWidth]="true"
+          class="w-full md:w-auto"
+        >
+          <app-svg-icon name="edit" class="icon-20" />
+          <span>{{ 'COMMON.EDIT_NAME' | translate }}</span>
+        </app-button>
+      </div>
+    </div>
+  }
+</div>

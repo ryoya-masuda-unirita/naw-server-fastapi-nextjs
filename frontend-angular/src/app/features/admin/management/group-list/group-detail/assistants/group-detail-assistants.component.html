@@ -1,0 +1,122 @@
+<div class="flex flex-col grow min-h-0 gap-8 md:gap-6 py-4 md:py-6">
+  <!-- Info block -->
+  <!-- <div
+    class="flex flex-col gap-2 p-4 rounded-xl bg-bg-secondary md:gap-2 md:p-6 md:text-label-x-large"
+    data-word-info-block
+  >
+    <div class="flex gap-1 items-start md:gap-2">
+      <span class="shrink-0 leading-0" aria-hidden="true">
+        <app-svg-icon class="w-5 h-5 text-brand-primary" name="lightbulb" />
+      </span>
+      <p class="flex-1 min-w-0 text-label-large md:text-label-x-large">
+        {{ 'TEAM.ASSISTANT.INFO_TITLE' | translate }}
+      </p>
+    </div>
+    <p class="text-body-small">
+      {{ 'TEAM.ASSISTANT.INFO_DESCRIPTION' | translate }}
+    </p>
+  </div> -->
+
+  <!-- Action bar -->
+  <div class="sp-fixed-btn">
+    @if (store.someSelected()) {
+      <div class="flex flex-col-reverse md:flex-row gap-3">
+        <app-button
+          variant="outline"
+          intent="cancel"
+          size="lg"
+          type="button"
+          (buttonClick)="store.clearSelection()"
+        >
+          {{ 'COMMON.DESELECT' | translate }}
+        </app-button>
+        <app-button
+          variant="outline"
+          intent="delete"
+          size="lg"
+          type="button"
+          (buttonClick)="openDeleteSelectedModal()"
+        >
+          <mat-icon class="w-5 h-5">delete</mat-icon>
+          {{ 'TEAM.ASSISTANT.REMOVE_FROM_TEAM' | translate }}
+        </app-button>
+      </div>
+    } @else {
+      <app-button
+        variant="solid"
+        size="lg"
+        type="button"
+        [fullWidth]="true"
+        (buttonClick)="openAddAssistantModal()"
+        class="w-full md:w-auto"
+      >
+        <app-svg-icon class="w-5 h-5" name="add_circle" />
+        {{ 'TEAM.ASSISTANT.ADD_ASSISTANT' | translate }}
+      </app-button>
+    }
+  </div>
+
+  <!-- Filters -->
+  <app-group-assistants-filter
+    [pageIndex]="store.filter().pageIndex"
+    [totalPages]="store.totalPages()"
+    [countDisplay]="countDisplay()"
+    (filterChange)="onFilterChange($event)"
+    (pageIndexChange)="store.updatePageIndex($event)"
+  />
+
+  <!-- Loading state -->
+  @if (store.isLoading()) {
+    <div class="flex justify-center p-8">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+  } @else {
+    <app-group-assistants-table
+      [items]="store.items()"
+      [selectedIds]="store.selectedIds()"
+      [allSelected]="store.allSelected()"
+      [someSelected]="store.someSelected()"
+      (selectAllChange)="onSelectAll($event)"
+      (itemSelectChange)="onItemSelect($event)"
+      (deleteItem)="deleteAssistant($event)"
+    />
+
+    @if (store.totalItems() > 0) {
+      <div class="flex justify-center">
+        <app-pagination
+          [totalPages]="store.totalPages()"
+          [currentPageOverride]="store.filter().pageIndex"
+          [useQueryParams]="false"
+          [showPageSize]="false"
+          [showFirstLast]="false"
+          (pageChange)="store.updatePageIndex($event)"
+        />
+      </div>
+    }
+  }
+</div>
+
+<!-- Add assistant dialog content -->
+<ng-template #addAssistantContent>
+  <div class="flex flex-col gap-1">
+    <span class="text-sm font-medium text-text-default leading-[1.4]">
+      {{ 'GROUPS.ASSISTANTS_LABEL' | translate }}
+    </span>
+    <p class="text-xs text-text-muted leading-[1.4] mb-2">
+      {{ 'GROUPS.ADD_ASSISTANT_SUPPORT' | translate }}
+    </p>
+    <app-form-combobox
+      label=""
+      formControlName="assistant"
+      [value]="selectedAssistants()"
+      [options]="assistantOptions"
+      (valueChange)="selectedAssistants.set($event)"
+      [placeholder]="'GROUPS.ASSISTANTS_PLACEHOLDER' | translate"
+    />
+  </div>
+</ng-template>
+
+<!-- Delete assistant confirmation dialog content -->
+<ng-template #deleteAssistantContent>
+  <p class="modal-delete-confirm-message">{{ 'GROUPS.DELETE_ASSISTANT_MESSAGE' | translate }}</p>
+</ng-template>

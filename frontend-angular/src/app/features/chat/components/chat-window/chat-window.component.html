@@ -1,0 +1,64 @@
+<!-- @if ((showHeader() && activeRoom()) || isChatExamList()) { -->
+<app-chat-header
+  [title]="activeRoom() ? activeRoom()!.name : '受信メッセージパターン'"
+  (renameClick)="openRenameDialog()"
+  (newChatClick)="createNewChat()"
+  (shareClick)="openShareDialog()"
+  (likeClick)="openRatingDialog()"
+  (settingsClick)="toggleDataPanel()"
+  [isReadOnly]="isReadOnly() ?? false"
+  [isHideName]="!(showHeader() && !!activeRoom()) || isChatExamList()"
+/>
+<!-- } -->
+@if (!isChatExamList()) {
+  <app-chat-message-list
+    [messages]="messages()"
+    [isLoading]="isLoading()"
+    (copyMessage)="handleCopy($event)"
+    (regenerate)="handleRegenerate($event)"
+    (retry)="handleRetry($event)"
+    (delete)="handleDelete($event)"
+    (rate)="handleRate($event)"
+    (editSubmit)="handleEditSubmit($event)"
+    [isReadOnly]="isReadOnly() ?? false"
+    [isNewChat]="!activeRoom()"
+    [assistantDescription]="assistantDescription()"
+  />
+} @else {
+  <div class="chat-page-messages">
+    <app-chat-assistant-exam />
+  </div>
+}
+
+@if (!isReadOnly()) {
+  <app-chat-input
+    [roomId]="roomId() ?? activeRoom()?.id ?? null"
+    [defaultAssistantId]="activeRoom()?.defaultAssistantId ?? null"
+    (send)="handleSend($event)"
+    [isAlert]="isAlert()"
+    [isError]="isError()"
+  />
+}
+
+@if (showDataPanel()) {
+  <div
+    class="fixed inset-0 z-50 md:hidden"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="'CHAT.VIEWER.TITLE' | translate"
+  >
+    <div class="absolute inset-0 bg-black/20" aria-hidden="true" (click)="toggleDataPanel()"></div>
+
+    <div
+      class="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-white flex flex-col overflow-hidden"
+      style="height: calc(100dvh - 44px); box-shadow: var(--shadow-half-modal)"
+    >
+      <app-chat-summary
+        [chatId]="viewerRoomId()"
+        [headerOptions]="headerOptions()"
+        [isReadOnly]="isReadOnly() ?? false"
+        (collapseChange)="onMobileViewerCollapseChange($event)"
+      />
+    </div>
+  </div>
+}
