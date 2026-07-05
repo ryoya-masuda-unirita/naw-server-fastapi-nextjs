@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_cors_settings
-from app.routers import health, auth
+from app.routers import health, auth, groups
 from app.routers.users import admin_router, user_router
 
 app = FastAPI(title="naw-server FastAPI", version="0.1.0")
@@ -27,3 +27,6 @@ app.include_router(auth.router)
 app.include_router(auth.api_router)
 app.include_router(admin_router)
 app.include_router(user_router)
+app.include_router(groups.group_router)
+app.include_router(groups.admin_group_router)
+app.include_router(groups.admin_all_groups_router)
