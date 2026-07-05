@@ -9,7 +9,7 @@ description: Use when preparing a pull request for naw-server-fastapi-nextjs, in
 
 ## PR 作成前チェック
 
-- ベースブランチが `develop` か確認する
+- ベースブランチを確認する（下記「ベースブランチ」参照）
 - 変更概要を 3 点以内で要約する
 - テスト結果を記録する
 - 実機またはコマンドベースの確認結果をまとめる
@@ -17,29 +17,78 @@ description: Use when preparing a pull request for naw-server-fastapi-nextjs, in
 - PR 作成後は `.github/workflows/project-status-sync.yml` により対応 Issue が `Review` へ自動反映される前提で確認する
 - `Closes #XX` により、PR マージ時に Issue がクローズされ GitHub Projects の `Done` へ自動反映される前提で確認する
 
+## ベースブランチ
+
+`gh pr create` のベースブランチは、そのブランチを切り出した元ブランチを指定する。
+
+- `develop` から切ったブランチ → `--base develop`
+- 別のフィーチャーブランチから切ったブランチ → `--base <元のフィーチャーブランチ名>`
+
+## タイトルフォーマット
+
+```
+#{番号} issue-{番号} NAW-XXXX 変更概要（日本語）
+```
+
+- NAW チケットがない場合は `NAW-XXXX` を省略する
+- 技術的な実装詳細ではなく、何を実現したかを書く
+- 70文字以内
+
 ## PR 本文の基本形
 
 ```markdown
-## 概要
-- 変更点
+# 変更概要
+- 変更点1
+- 変更点2
 
-## テスト
-- 実行コマンドと結果
+# テスト結果
 
-## 動作確認
-- 確認内容と結果
+（テストコマンドの実際の出力結果を貼ること。生成・推測禁止）
+
+# 動作確認
+
+## Step N: {確認内容のタイトル}
+
+（実際の操作結果。生成・推測禁止）
+
+✅ {確認できた点}
 
 Closes #XX
 ```
 
+ドキュメントは `docs/issue-X/` または `docs/issue-X-NAW-XXXX/` に git 管理されているため、PR Description から参照してもよい。
+
 ## `code-review.md`
 
-レビュー指摘の記録が必要なら `docs/issue-*/code-review.md` を作成し、以下を残す。
+`/code-review` 実行後、結果を `docs/issue-X/code-review.md`（NAW チケットあり: `docs/issue-X-NAW-XXXX/code-review.md`）にまとめる。各指摘に対して対応した場合はその説明、対応しない場合はその理由を記載する。
 
-- 指摘内容
-- 影響範囲
-- 対応方針
-- 再テスト結果
+```markdown
+# code-review 結果
+
+## 指摘一覧
+
+| # | 重大度 | ファイル | 指摘内容 | 対応 |
+|---|---|---|---|---|
+| 1 | 🔴 致命的 | `path/to/file.py` | 〇〇の問題 | 対応済み |
+| 2 | 🟡 注意 | `path/to/file.py` | 〇〇の懸念 | 対応しない |
+| 3 | 🔵 提案 | `path/to/file.py` | 〇〇の改善案 | 対応済み |
+
+## 詳細
+
+### 1. 〇〇の問題（🔴 致命的）→ 対応済み
+
+（何をどう修正したかを説明）
+
+### 2. 〇〇の懸念（🟡 注意）→ 対応しない
+
+（なぜ対応しないかの理由を説明）
+
+### 3. 〇〇の改善案（🔵 提案）→ 対応済み
+
+（何をどう修正したかを説明）
+```
+
+指摘への対応方針: 🔴 致命的は必ず修正、🟡 注意・🔵 提案は AI が判断する。
 
 ## 動作確認のスクリーンショット
 

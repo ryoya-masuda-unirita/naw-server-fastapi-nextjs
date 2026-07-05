@@ -31,6 +31,47 @@ description: Use when working on a GitHub Issue in this repository, including is
 - バックエンド: `~/Documents/naw-server`
 - フロントエンド: `~/Documents/secuaigent-client`
 
+## Issue 起票手順
+
+Issue 起票は必ず以下の手順を順番に行う。
+
+```bash
+# Step 1: Issue 作成（返ってきた URL から番号を取得する）
+gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body "..."
+
+# Step 2: プロジェクトボードに追加（Todo 状態で登録される）
+gh project item-add 3 --owner ryoya-masuda-unirita \
+  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+
+# Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
+
+# Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
+mkdir -p docs/issue-{番号}           # NAW なし
+mkdir -p docs/issue-{番号}-NAW-XXXX  # NAW あり
+# 00_チケット内容.md を作成（テンプレート参照）
+git add docs/ && git commit -m "#{番号} issue-{番号} 00_チケット内容.md を作成"
+git push -u origin feature/issue-{番号}
+```
+
+- プロジェクト番号: `3`
+- オーナー: `ryoya-masuda-unirita`
+
+### NAW チケットとの対応
+
+GitHub Issue の番号と NAW チケット番号（`NAW-XXXX`）は一致しない。移植元の NAW チケットがある場合は Issue 本文に参照として記載する。
+
+```markdown
+## 概要
+NAW-XXXX の移植。〇〇機能を FastAPI / React で実装する。
+
+## 参照
+- 元チケット: NAW-XXXX
+- 移植元（バックエンド）: `~/Documents/naw-server/src/...`
+- 移植元（フロントエンド）: `~/Documents/secuaigent-client/src/...`
+```
+
 ## ブランチ規約
 
 ```text
@@ -79,14 +120,33 @@ Issue 対応は、デフォルトで以下の承認フローに従う。
 
 ### Human in the Loop
 
-- 各実装タスクの実行前に都度承認を得る
-- 実行後は `06_タスクリスト.md` を即時更新する
+各チェックリスト項目を実行する前に必ずユーザーの承認を得ること。
+
+```
+【次のタスク】
+- 何をやるか: （具体的な変更内容）
+- なぜやるか: （目的・理由）
+- 期待結果: （実行後に何が変わるか）
+
+進めてよいですか？
+```
+
+- 承認後に実行し、完了後に `06_タスクリスト.md` の該当項目を即時 `- [x]` にチェックする（まとめてチェックするのは禁止）
 - **コミット・プッシュはどちらもユーザーの承認を得た後にのみ行う。**
 
 ### 全自動
 
-- 第2承認で `全自動` が選択された場合のみ、実装フェーズ以降を止まらず進める
-- 調査・実装・テスト・動作確認・PR・レビュー対応まで継続して進める
+第2承認で `全自動` が選択された場合のみ、実装フェーズ（コードの変更・生成）以降を、ユーザーに一度も操作させずに以下のサイクルで完遂する。
+
+1. 実装（`06_タスクリスト.md` のタスクを順番に実行）
+2. テスト実行
+3. 動作確認（サーバー起動手順をユーザーに案内し、操作結果を受け取る）
+4. PR 作成
+5. `/code-review` の実行
+6. `code-review.md` の作成（[naw-pr-workflow](../naw-pr-workflow/SKILL.md) のフォーマットに従う）
+7. 指摘修正 → 再テスト → 再動作確認 → PR 修正
+
+code-review 指摘への対応: 🔴 致命的は必ず修正、🟡 注意・🔵 提案は AI が判断する。
 
 ## Command 的に使う補助スクリプト
 
@@ -127,27 +187,6 @@ bash .claude/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12-N
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、`Closes #XX` を含む PR の対応 Issue を `Review` へ自動更新する
 - PR が merge されたら、同 workflow により対応 Issue を `Done` へ自動更新する
 - Codex は PR 本文に必ず `Closes #XX` を入れ、自動反映の前提を満たすこと
-
-## HITL
-
-HITL 指定時は次で止まること。
-
-1. `01_要件定義.md` と `02_基本設計.md` 完了後
-2. `03_詳細設計.md` 〜 `05_テスト詳細設計.md` 完了後
-3. 実装・テスト完了後、PR 作成前
-
-`06_タスクリスト.md` は、タスク完了のたびに即時更新すること。
-
-## 全自動
-
-全自動指定時は、第2承認で `全自動` が選択された後に、判断が分かれる点だけ確認し、それ以外は止まらず進める。
-
-1. 調査
-2. ドキュメント作成
-3. 実装
-4. テスト
-5. `08_動作確認.md` 記録
-6. PR 作成
 
 ## コミット規約
 
