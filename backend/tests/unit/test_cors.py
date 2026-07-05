@@ -1,82 +1,55 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from httpx import ASGITransport, AsyncClient
 
+from app.main import app
 
-def _build_test_app(allowed_origins: list[str]) -> FastAPI:
-    """CORSMiddleware のみを組み込んだ検証用アプリを作る。
 
-    app.main の実アプリは Settings 経由で DB 接続設定等も要求するため、
-    CORS 設定単体の振る舞いを確認するにはミドルウェアの組み込みロジックを
-    そのまま再現した最小アプリを使うほうが単体テストとして安定する。
+async def _preflight(origin: str, request_headers: str = "content-type") -> object:
+    """指定オリジン・ヘッダーでのプリフライトリクエストを実アプリに送る。
+
+    Args:
+        origin: `Origin` ヘッダーに設定する値。
+        request_headers: `Access-Control-Request-Headers` に設定する値。
+
+    Returns:
+        アプリからのレスポンス。
     """
-    app = FastAPI()
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
-    )
-
-    @app.get("/api/auth")
-    async def get_auth() -> dict[str, str]:
-        return {"status": "ok"}
-
-    return app
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        return await client.options(
+            "/api/auth",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": request_headers,
+            },
+        )
 
 
 class TestCorsMiddleware:
     async def test_allows_configured_origin(self):
         """許可オリジンからのプリフライトリクエストにAccess-Control-Allow-Originが返ること"""
-        app = _build_test_app(["http://localhost:5173"])
+        response = await _preflight("http://localhost:5173")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.options(
-                "/api/auth",
-                headers={
-                    "Origin": "http://localhost:5173",
-                    "Access-Control-Request-Method": "GET",
-                },
-            )
-
-        assert (
-            response.headers["access-control-allow-origin"]
-            == "http://localhost:5173"
-        )
+        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert response.headers["access-control-allow-credentials"] == "true"
 
     async def test_rejects_unconfigured_origin(self):
         """許可されていないオリジンからのプリフライトリクエストには許可ヘッダーが付与されないこと"""
-        app = _build_test_app(["http://localhost:5173"])
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.options(
-                "/api/auth",
-                headers={
-                    "Origin": "http://evil.example.com",
-                    "Access-Control-Request-Method": "GET",
-                },
-            )
+        response = await _preflight("http://evil.example.com")
 
         assert "access-control-allow-origin" not in response.headers
 
-    async def test_allows_credentials(self):
-        """Access-Control-Allow-Credentials: trueが返ること"""
-        app = _build_test_app(["http://localhost:5173"])
+    async def test_allows_custom_tenant_header(self):
+        """アプリが実際に送るX-Tenant-IDヘッダーがプリフライトで許可されること
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            response = await client.options(
-                "/api/auth",
-                headers={
-                    "Origin": "http://localhost:5173",
-                    "Access-Control-Request-Method": "GET",
-                },
-            )
+        api-client.ts はテナントID判明後の全リクエストに X-Tenant-ID を付与し、
+        バックエンドの認証系エンドポイントはこれを必須としている。CORS 側で
+        この独自ヘッダーが許可されていないと、ブラウザがプリフライトの時点で
+        リクエストをブロックしてしまう。
+        """
+        response = await _preflight(
+            "http://localhost:5173", request_headers="content-type,x-tenant-id"
+        )
 
-        assert response.headers["access-control-allow-credentials"] == "true"
+        assert response.status_code == 200

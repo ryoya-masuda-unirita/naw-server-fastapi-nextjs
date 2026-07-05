@@ -1,20 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import get_settings
+from app.core.config import get_cors_settings
 from app.routers import health, auth
 from app.routers.users import admin_router, user_router
 
 app = FastAPI(title="naw-server FastAPI", version="0.1.0")
 
-settings = get_settings()
+cors_settings = get_cors_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allowed_origins,
-    allow_origin_regex=settings.cors_allowed_origin_regex,
+    allow_origins=cors_settings.cors_allowed_origins,
+    allow_origin_regex=cors_settings.cors_allowed_origin_regex,
+    # Cookie等の資格情報を伴うリクエスト（frontend/frontend-angular とも
+    # credentials: 'include' / withCredentials: true を使用）を許可するため True にする。
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    # 移植元（Spring Boot）の CorsConfiguration も addAllowedMethod("*") /
+    # addAllowedHeader("*") で全許可しており、新しいルーターやカスタムヘッダー
+    # （例: X-Tenant-ID）が増えるたびに個別追加が必要にならないよう合わせる。
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(health.router)

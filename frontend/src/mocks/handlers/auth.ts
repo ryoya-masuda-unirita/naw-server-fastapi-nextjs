@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from 'msw';
 
-const BASE_URL = 'http://localhost:8001/api';
+const BASE_URL = 'http://localhost:8000';
 
 export const authHandlers = [
   http.post(`${BASE_URL}/auth/login`, async ({ request }) => {
@@ -63,7 +63,7 @@ export const authHandlers = [
     });
   }),
 
-  http.get(`${BASE_URL}/auth`, () => {
+  http.get(`${BASE_URL}/api/auth`, () => {
     return HttpResponse.json({
       id: 'user1',
       name: 'Test User',
