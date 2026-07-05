@@ -107,6 +107,15 @@ class Assistant(SQLModel, table=True):
     tenant_id: uuid.UUID
 ```
 
+### 中間テーブル・Entity化されていないテーブルも必ずDBモデル化する
+
+移植元（Spring Boot）では、中間テーブル（`@JoinTable`のみで定義されるM2M関連）や、Liquibaseのchangelogにしか定義がなくJPA Entityクラスが存在しないテーブルが存在する。
+
+FastAPI側では、こうしたテーブルも省略せず、すべて `SQLModel(table=True)` のモデルクラスとして `models/` 配下に定義すること。
+
+- 追加カラムを持つ中間テーブル（例: グループ所属ユーザーの管理者フラグ等）はもちろん、追加カラムのない単純なM2M中間テーブルも、SQLModelには「Entityなしで暗黙的にJoinTableを扱う」というSpring同等の省略記法がないため、明示的なモデルクラスとして定義する
+- 移植対象のテーブルにSpring側のEntityクラスが存在しない場合でも、対応するLiquibaseのchangelog（`~/Documents/naw-server/src/main/resources/liquibase/changelog/`）を確認し、カラム構成を正しく再現したモデルを作成すること
+
 ### RLS（テナント分離）のパターン
 
 PostgreSQL の RLS をそのまま使用する。FastAPI の `Depends` でセッション開始時にテナント ID を設定する。

@@ -36,6 +36,7 @@ core/         設定、DI、共通処理
 - sync な DB アクセスは禁止
 - 型ヒントは全関数・全メソッドの引数と戻り値に付ける
 - `Optional` は使わず `X | None` を使う
+- 移植元（Spring Boot）で `@JoinTable` のみで実体化されていない中間テーブルや、Liquibase changelogにしかなくJPA Entityが存在しないテーブルも、省略せず `models/` に `SQLModel(table=True)` として定義する。カラム構成は対応するLiquibase changelog（`~/Documents/naw-server/src/main/resources/liquibase/changelog/`）で確認する
 
 ## 実装パターン
 
