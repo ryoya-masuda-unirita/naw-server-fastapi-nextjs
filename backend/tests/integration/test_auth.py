@@ -109,3 +109,65 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 401
+
+    async def test_post_auth_login_sets_access_token_cookie(self, client, test_tenant, test_user_with_password):
+        """POST /auth/login 成功時にaccess_token Cookieが発行されること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert "access_token" in response.cookies
+
+    async def test_post_auth_login_requires_password_reset_does_not_set_cookie(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """初回パスワードリセットが必要な場合はaccess_token Cookieが発行されないこと"""
+        test_user_with_password["user"].is_required_password_reset = True
+
+        async with client as c:
+            response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.json()["loginStatus"] == "REQUIRES_PASSWORD_RESET"
+        assert "access_token" not in response.cookies
+
+    async def test_post_auth_logout_clears_access_token_cookie(self, client):
+        """POST /auth/logout でaccess_token Cookieが失効すること"""
+        async with client as c:
+            response = await c.post("/auth/logout")
+
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "access_token=" in set_cookie_header
+
+    async def test_get_api_auth_with_cookie_only(self, client, test_tenant, valid_jwt_token):
+        """GET /api/auth をCookieのみで認証できること"""
+        async with client as c:
+            c.cookies.set("access_token", valid_jwt_token)
+            response = await c.get(
+                "/api/auth",
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+
+    async def test_get_api_auth_without_cookie_or_header_returns_401(self, client, test_tenant):
+        """GET /api/auth をCookie・Authorizationヘッダーどちらも無しで呼ぶと401になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/auth",
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 401

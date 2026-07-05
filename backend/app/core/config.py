@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     database_url: str
     secret_key: str
+    cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
 
 
 class CorsSettings(BaseSettings):

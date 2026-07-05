@@ -2,10 +2,11 @@ import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
+from app.core.config import get_settings
 from app.core.database import get_session
 from app.models.user import User, UserRole
 from app.repositories.user_repository import UserRepository
@@ -15,9 +16,13 @@ SECRET_KEY = "your-secret-key-change-in-production"
 ALGORITHM = "HS512"
 ACCESS_TOKEN_EXPIRE_HOURS = 5
 
+# 認証トークンCookie設定
+ACCESS_TOKEN_COOKIE_NAME = "access_token"
+
 # パスワードハッシュ設定
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
+# Cookie優先・Authorizationヘッダーフォールバックのため、ここではエラーにしない
+security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -74,22 +79,32 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    access_token: str | None = Cookie(default=None, alias=ACCESS_TOKEN_COOKIE_NAME),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """認証済みユーザーを取得（/api/** の保護に使用）。
 
+    Cookie（`access_token`）を優先して認証し、Cookieが無い場合は
+    `Authorization: Bearer <token>` ヘッダーにフォールバックする。移植元
+    （Spring Boot + Spring Session）がCookieセッション認証を採用しており、
+    ブラウザ側もCookie送信前提のため、Cookieを優先経路とする。
+
     Args:
-        credentials: Authorization ヘッダーから取得した Bearer トークン。
+        credentials: Authorization ヘッダーから取得した Bearer トークン（任意）。
+        access_token: Cookie から取得したトークン（任意）。
         session: 非同期DBセッション。
 
     Returns:
         認証済みの User オブジェクト。
 
     Raises:
-        HTTPException: トークンが不正、またはユーザーが存在しない場合 401 を返す。
+        HTTPException: トークンが存在しない・不正、またはユーザーが存在しない場合 401 を返す。
     """
-    token = credentials.credentials
+    token = access_token or (credentials.credentials if credentials else None)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
     payload = decode_token(token)
     login_id = payload.get("sub")
     tenant_id = payload.get("tenantId")
@@ -102,6 +117,37 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return user
+
+
+def set_access_token_cookie(response: Response, token: str) -> None:
+    """認証トークンをHttpOnly Cookieとしてレスポンスに設定する。
+
+    移植元（Spring Boot + Spring Session）がCookieセッション認証を採用しており、
+    frontend-angular側もCookie送信（withCredentials）前提で作られているため、
+    ブラウザ経由の認証を成立させるにはCookie発行が必要になる。
+
+    Args:
+        response: Cookieを設定する対象のレスポンス。
+        token: 設定するJWT文字列。
+    """
+    settings = get_settings()
+    response.set_cookie(
+        key=ACCESS_TOKEN_COOKIE_NAME,
+        value=token,
+        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
+
+
+def clear_access_token_cookie(response: Response) -> None:
+    """認証トークンのCookieを削除する（ログアウト時に使用）。
+
+    Args:
+        response: Cookieを削除する対象のレスポンス。
+    """
+    response.delete_cookie(key=ACCESS_TOKEN_COOKIE_NAME)
 
 
 def get_tenant_id_from_header(x_tenant_id: str) -> str:

@@ -279,3 +279,15 @@ class TestProfile:
             )
 
         assert response.status_code == 200
+
+    async def test_get_profile_with_cookie_only(self, client, user_token, tenant, normal_user):
+        """GET /api/users/profile をCookieのみで認証できること"""
+        async with client as c:
+            c.cookies.set("access_token", user_token)
+            response = await c.get(
+                "/api/users/profile",
+                headers={"X-Tenant-ID": tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["loginId"] == normal_user.login_id

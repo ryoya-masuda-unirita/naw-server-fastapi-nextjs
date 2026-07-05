@@ -44,8 +44,8 @@ gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
 
 # Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
 
 # Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
 mkdir -p docs/issue-{番号}           # NAW なし
@@ -153,8 +153,8 @@ code-review 指摘への対応: 🔴 致命的は必ず修正、🟡 注意・�
 Issue 開始時は次を優先して使う。
 
 ```bash
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-12
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-12-NAW-1234
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-12
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-12-NAW-1234
 ```
 
 このスクリプトは以下を行う。
@@ -167,13 +167,13 @@ bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-12-NAW-1234
 `docs/issue-*` の雛形だけ先に作るときは次を使う。
 
 ```bash
-bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12
+bash .claude/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12
 ```
 
 NAW チケット付き:
 
 ```bash
-bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12-NAW-1234
+bash .claude/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12-NAW-1234
 ```
 
 このスクリプトは以下を行う。
