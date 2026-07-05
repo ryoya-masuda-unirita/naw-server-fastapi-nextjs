@@ -18,6 +18,18 @@
 
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。
 
+`frontend-angular/` は `secuaigent-client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
+
+### 現在の開発方針
+
+しばらくはバックエンド（`backend/`）優先で開発を進める。
+
+- Issue 起票・実装対応は `backend/` を優先し、`frontend/`（React 移植）は後回しにする
+- バックエンドの動作確認（ブラウザ操作）には `frontend/` ではなく `frontend-angular/`（`http://localhost:4201`）を使う
+- `frontend/`（React）は当面不問とする。動作確認・code review 等で `frontend/` 側の不具合を発見しても、その場で新規 Issue を起票したり修正したりしない。気づいた点があれば会話内で一言触れる程度に留め、対応要否の判断はユーザーに委ねる
+- フロントエンド側の対応が必要な Issue が来た場合は、優先順位についてユーザーに確認すること
+- 新しいチケットに着手する際は、作業を始める前に必ず「今回もバックエンド（FastAPI実装）でいいですか？」とユーザーに確認すること
+
 ### 参照リポジトリの注意点
 
 - `~/Documents/naw-server` は最初から git 管理されており、`develop` ブランチがある
@@ -27,13 +39,15 @@
 
 ```text
 naw-server-fastapi-nextjs/
-├── frontend/    # React 実装
-├── backend/     # FastAPI 実装
-└── infra/       # Terraform（存在する場合）
+├── frontend/          # React 実装（移植先）
+├── frontend-angular/  # Angular 実装（secuaigent-client を取り込んだもの。バックエンド動作確認用）
+├── backend/           # FastAPI 実装
+└── infra/             # Terraform（存在する場合）
 ```
 
 - 全体方針はこの `AGENTS.md`
 - フロントエンド固有ルールは `frontend/AGENTS.md`
+- Angular（動作確認用）固有ルールは `frontend-angular/AGENTS.md`
 - バックエンド固有ルールは `backend/AGENTS.md`
 
 ## Skills / Commands

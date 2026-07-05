@@ -11,6 +11,8 @@
 | Angular → `~/Documents/secuaigent-client` | React（Vite + React Router） → `frontend/` |
 | Spring Boot → `~/Documents/naw-server` | FastAPI → `backend/` |
 
+`frontend-angular/` は `secuaigent-client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
+
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
 ポート作業を行う際は、対応する参照リポジトリのコミット履歴（`git log`）を確認し、何がどの粒度で実装されたかを把握した上でチケット・実装方針を決めること。複数のコミットをまとめてポートしてもよい。
@@ -28,7 +30,9 @@
 
 **しばらくはバックエンド（`backend/`）優先で開発を進める。**
 
-- Issue 起票・実装対応は `backend/` を優先し、`frontend/` は後回しにする
+- Issue 起票・実装対応は `backend/` を優先し、`frontend/`（React 移植）は後回しにする
+- バックエンドの動作確認（ブラウザ操作）には `frontend/` ではなく `frontend-angular/`（`http://localhost:4201`）を使う
+- **`frontend/`（React）は当面不問とする。動作確認・code review 等で `frontend/` 側の不具合を発見しても、その場で新規 Issue を起票したり修正したりしない。気づいた点があれば会話内で一言触れる程度に留め、対応要否の判断はユーザーに委ねる**
 - フロントエンド側の対応が必要な Issue が来た場合は、優先順位についてユーザーに確認すること
 - **新しいチケットに着手する際は、作業を始める前に必ず「今回もバックエンド（FastAPI実装）でいいですか？」とユーザーに確認すること**
 
