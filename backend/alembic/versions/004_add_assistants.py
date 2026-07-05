@@ -22,7 +22,7 @@ def upgrade() -> None:
         "assistants",
         sa.Column("id", sa.String(32), nullable=False),
         sa.Column("tenant_id", sa.String(32), nullable=False),
-        sa.Column("type", sa.String(32), nullable=False),
+        sa.Column("type", sa.Enum("SECURE", "SAAS_CHAT", "SAAS_RAG", name="assistanttype"), nullable=False),
         sa.Column("index_id", sa.String(32), nullable=True),
         sa.Column("name", sa.String(32), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -56,3 +56,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("groups_assistants")
     op.drop_table("assistants")
+    op.execute("DROP TYPE IF EXISTS assistanttype")
