@@ -73,6 +73,17 @@ alembic upgrade head
 - ユーザー: `root`
 - パスワード: `root`
 
+## シードデータ
+
+動作確認に必要なデータは `backend/seed.sql` に定義してDBに格納する。既存データを使い回さず、そのIssue対応で新たに必要になったデータはIssue対応の中で `seed.sql` に追記する。
+
+```bash
+docker exec -i naw-fastapi-postgres psql -U root -d postgres < backend/seed.sql
+```
+
+- `ON CONFLICT DO NOTHING` 等で冪等に書く
+- 追加内容は `03_詳細設計.md`（または `06_タスクリスト.md`）に明記する
+
 ## テスト / HITL 補足
 
 - HITL モードでは、バックエンド実装やテストを1まとまり終えるごとに `docs/issue-*/06_タスクリスト.md` を即時更新する

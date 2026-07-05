@@ -210,6 +210,17 @@ cd backend
 alembic upgrade head
 ```
 
+### シードデータ
+
+動作確認（ブラウザ操作・API直叩き）に必要なデータは `backend/seed.sql` に定義してDBに格納する。既存データを使い回すのではなく、そのチケット・Issue対応で新たに必要になったデータ（新しいロールのユーザー、複数人操作の検証用ユーザー等）は該当Issue対応の中で `seed.sql` に追記すること。
+
+```bash
+docker exec -i naw-fastapi-postgres psql -U root -d postgres < backend/seed.sql
+```
+
+- 既存データを壊さないよう `ON CONFLICT DO NOTHING` 等で冪等に書く
+- 追加したシードデータは `03_詳細設計.md`（または `06_タスクリスト.md`）に変更内容を明記する
+
 ---
 
 ## コーディング規約
