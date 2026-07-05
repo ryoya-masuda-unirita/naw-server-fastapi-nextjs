@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import escape_like_pattern
 from app.models.group import GroupUser
 from app.models.user import User
 
@@ -145,9 +146,10 @@ class GroupUserRepository:
         )
 
         if search_text:
-            pattern = f"%{search_text.lower()}%"
+            pattern = escape_like_pattern(search_text.lower())
             stmt = stmt.where(
-                func.lower(User.name).like(pattern) | func.lower(User.login_id).like(pattern)
+                func.lower(User.name).like(pattern, escape="\\")
+                | func.lower(User.login_id).like(pattern, escape="\\")
             )
 
         if role == "ADMIN":

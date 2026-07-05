@@ -66,6 +66,24 @@ class GroupService:
         return group
 
     @staticmethod
+    def _parse_user_uuid(user_id: str) -> UUID:
+        """ユーザーIDをUUIDにパースする。不正な形式の場合は404を送出する。
+
+        Args:
+            user_id: パース対象のユーザーID文字列。
+
+        Returns:
+            パースされたUUID。
+
+        Raises:
+            HTTPException: UUID形式でない場合 404 を返す。
+        """
+        try:
+            return UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    @staticmethod
     def _assert_not_self(target_user_id: UUID, current_user: User) -> None:
         """テナント管理者以外が自分自身を操作しようとしていないか確認する。
 
@@ -352,10 +370,7 @@ class GroupService:
         await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
 
         for raw_id in set(user_ids):
-            try:
-                target_uuid = UUID(raw_id)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            target_uuid = GroupService._parse_user_uuid(raw_id)
 
             user = await UserRepository.find_by_id_and_tenant_id(target_uuid, tenant_id, session)
             if not user:
@@ -388,7 +403,7 @@ class GroupService:
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
 
-        target_uuid = UUID(target_user_id)
+        target_uuid = GroupService._parse_user_uuid(target_user_id)
         GroupService._assert_not_self(target_uuid, current_user)
 
         group_user = await GroupUserRepository.find_one(group_id, tenant_id, target_uuid, session)
@@ -421,7 +436,7 @@ class GroupService:
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
 
-        target_uuid = UUID(target_user_id)
+        target_uuid = GroupService._parse_user_uuid(target_user_id)
         GroupService._assert_not_self(target_uuid, current_user)
 
         group_user = await GroupUserRepository.find_one(group_id, tenant_id, target_uuid, session)

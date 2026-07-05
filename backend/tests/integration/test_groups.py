@@ -332,6 +332,51 @@ class TestGroupUsers:
 
         assert response.status_code == 404
 
+    async def test_add_malformed_user_id_returns_404(self, client, admin_headers, group):
+        """UUID形式でないユーザーIDの追加は404になること（500にならない）"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/users",
+                json={"userIds": ["not-a-uuid"]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_remove_malformed_user_id_returns_404(self, client, admin_headers, group):
+        """UUID形式でないユーザーIDの削除は404になること（500にならない）"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}/users/not-a-uuid", headers=admin_headers
+            )
+
+        assert response.status_code == 404
+
+    async def test_update_role_malformed_user_id_returns_404(self, client, admin_headers, group):
+        """UUID形式でないユーザーIDのロール更新は404になること（500にならない）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/groups/{group.id}/users/not-a-uuid",
+                json={"groupAdmin": True},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_search_with_percent_is_treated_as_literal(
+        self, client, admin_headers, group_with_admin_member, member_user
+    ):
+        """検索文字列の%が特殊文字として展開されずリテラル扱いされること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                params={"searchText": "%"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["totalElements"] == 0
+
     async def test_remove_user_from_group(self, client, admin_headers, group_with_admin_member, member_user):
         """ユーザーをグループから削除できること"""
         async with client as c:

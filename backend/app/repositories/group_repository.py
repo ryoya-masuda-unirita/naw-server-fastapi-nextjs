@@ -1,6 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import escape_like_pattern
 from app.models.group import Group
 
 
@@ -72,8 +73,8 @@ class GroupRepository:
             stmt = stmt.where(Group.id.in_(allowed_group_ids))
 
         if name_search:
-            pattern = f"%{name_search.lower()}%"
-            stmt = stmt.where(func.lower(Group.name).like(pattern))
+            pattern = escape_like_pattern(name_search.lower())
+            stmt = stmt.where(func.lower(Group.name).like(pattern, escape="\\"))
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
