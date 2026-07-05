@@ -73,4 +73,4 @@ Spring Boot版は起動時に例外を投げるが、これを追加すると指
 
 上記対応後、Reactフロントエンドで実ログインを再検証したところ、`POST /auth/login` が404から422（Unprocessable Content）に変化した。原因は、Reactの `resolveTenantId()`（`frontend/src/lib/api-client.ts`）が `sessionStorage` のみを参照し、Angular版（`frontend-angular`）のようなサブドメインからのテナントID解決手段を持たないため、初回ログイン時に `X-Tenant-ID` ヘッダーを一切送信できないこと。バックエンドはこのヘッダーを必須としており、ログインが成立しない。
 
-この問題は今回のcode-reviewの10件の指摘には含まれておらず、CORS・パス不整合とは別種の新規バグのため、別Issueとして起票する。
+この問題は今回のcode-reviewの10件の指摘には含まれておらず、CORS・パス不整合とは別種の新規バグである。現在の開発方針（`frontend/` は当面不問）に基づき、Issue化はせずここに記録のみ残す。
