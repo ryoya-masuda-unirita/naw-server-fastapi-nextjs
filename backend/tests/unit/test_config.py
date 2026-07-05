@@ -1,4 +1,4 @@
-from app.core.config import CorsSettings
+from app.core.config import CorsSettings, Settings
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
@@ -12,6 +12,20 @@ def _build_cors_settings(**env_overrides: str) -> CorsSettings:
         `.env` に依存しない `CorsSettings` インスタンス。
     """
     return CorsSettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
+
+
+def _build_settings(**env_overrides: str) -> Settings:
+    """テスト用に `.env` を読み込まずに `Settings` を組み立てる。
+
+    Args:
+        **env_overrides: `Settings` のエイリアス名をキーとした環境変数の上書き値。
+
+    Returns:
+        `.env` に依存しない `Settings` インスタンス。
+    """
+    base = {"database_url": "postgresql+asyncpg://test", "secret_key": "test-secret"}
+    base.update(env_overrides)
+    return Settings(_env_file=None, **base)  # type: ignore[arg-type]
 
 
 class TestCorsAllowedOrigins:
@@ -64,6 +78,20 @@ class TestCorsAllowedOriginRegex:
         )
 
         assert settings.cors_allowed_origin_regex == r"https://.*\.example\.com$"
+
+
+class TestCookieSecure:
+    def test_defaults_to_false_when_unset(self):
+        """COOKIE_SECURE未設定時はFalseになること"""
+        settings = _build_settings()
+
+        assert settings.cookie_secure is False
+
+    def test_reflects_true_when_set(self):
+        """COOKIE_SECURE=trueの場合Trueになること"""
+        settings = _build_settings(COOKIE_SECURE="true")
+
+        assert settings.cookie_secure is True
 
 
 class TestSettingsImportIndependence:
