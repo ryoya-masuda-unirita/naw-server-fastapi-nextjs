@@ -94,7 +94,7 @@ naw-server-fastapi-nextjs/
 - Issue 番号がそのままチケット番号になる（`#1`, `#2`, ...）
 - GitHub Projects でステータス管理（起票・進行中・レビュー中・完了）
 - PR 説明に `Closes #XX` を書くとマージ時に Issue が自動クローズされる
-- Issue 着手時は、原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
+- Issue 着手時は、原則 `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、対応 Issue を GitHub Projects の `Review` に自動反映する前提で運用する
 - PR が `develop` にマージされたら、`Closes #XX` と `.github/workflows/project-status-sync.yml` により GitHub Projects の `Done` まで自動反映される前提で運用する
 
@@ -111,8 +111,8 @@ gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
 
 # Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}-NAW-XXXX  # NAW あり
 
 # Step 4: docs ディレクトリと 00_チケット内容.md を作成してコミット
 mkdir -p docs/issue-{番号}           # NAW なし
@@ -184,10 +184,10 @@ feature/issue-X
 
 ### Issue 対応開始時の確認手順
 
-1. 原則 `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X` を使って開始する
+1. 原則 `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-X` を使って開始する
 
 ```bash
-bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
+bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
 ```
 
 2. 依存する未マージ PR がないかを `gh pr list` で確認する
