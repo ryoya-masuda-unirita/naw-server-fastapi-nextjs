@@ -78,3 +78,43 @@ WHERE NOT EXISTS (
     SELECT 1 FROM password_histories
     WHERE user_id = '00000000-0000-4000-8000-000000000003'
 );
+
+-- 動作確認用グループ (id 固定: アシスタント機能の動作確認用)
+INSERT INTO groups (id, tenant_id, name)
+VALUES (
+    '20000000000040008000000000000001',
+    'test-tenant',
+    '動作確認用グループ'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- user01を動作確認用グループに追加
+INSERT INTO groups_users (group_id, tenant_id, user_id, is_admin)
+VALUES (
+    '20000000000040008000000000000001',
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000002',
+    false
+)
+ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
+
+-- アシスタント (id 固定: 動作確認用)
+INSERT INTO assistants (id, tenant_id, type, name, description, include_history)
+VALUES (
+    '10000000000040008000000000000001',
+    'test-tenant',
+    'SAAS_CHAT',
+    '汎用アシスタント',
+    '一般的な質問に回答するアシスタント',
+    true
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 動作確認用グループにアシスタントを紐付け
+INSERT INTO groups_assistants (group_id, assistant_id, tenant_id)
+VALUES (
+    '20000000000040008000000000000001',
+    '10000000000040008000000000000001',
+    'test-tenant'
+)
+ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;

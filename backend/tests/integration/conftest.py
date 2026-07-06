@@ -59,7 +59,15 @@ async def session(engine):
         # IntegrityError 等でセッションが中断された場合に備えてロールバックで回復する
         from sqlalchemy import text
         await sess.rollback()
-        tables = ["groups_users", "groups", "password_histories", "users", "tenants"]
+        tables = [
+            "groups_assistants",
+            "assistants",
+            "groups_users",
+            "groups",
+            "password_histories",
+            "users",
+            "tenants",
+        ]
         for table in tables:
             await sess.execute(text(f"DELETE FROM {table}"))
         await sess.commit()
