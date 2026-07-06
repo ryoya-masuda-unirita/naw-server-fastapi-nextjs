@@ -4,9 +4,10 @@ from uuid import uuid4
 
 from app.core.security import create_access_token
 from app.main import app
-from app.models.assistant import Assistant, AssistantType, GroupAssistant
+from app.models.assistant import Assistant, AssistantEndpoint, AssistantType, GroupAssistant
 from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
+from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
 
 
@@ -88,6 +89,33 @@ async def group_with_assistant(session, tenant, member_user, assistant):
     session.add(GroupAssistant(group_id=g.id, tenant_id=tenant.id, assistant_id=assistant.id))
     await session.commit()
     return g
+
+
+@pytest.fixture
+async def tenant_endpoint(session, tenant):
+    """テスト用テナントエンドポイント"""
+    e = TenantEndpoint(
+        tenant_id=tenant.id,
+        type=EndpointType.AZURE_OPENAI_CHAT,
+        endpoint_name="Azure",
+        endpoint="https://example.openai.azure.com",
+        api_key="secret-key",
+    )
+    session.add(e)
+    await session.commit()
+    await session.refresh(e)
+    return e
+
+
+@pytest.fixture
+async def assistant_with_endpoint(session, tenant, assistant, tenant_endpoint):
+    """assistantにtenant_endpointを紐付ける"""
+    ae = AssistantEndpoint(
+        assistant_id=assistant.id, endpoint_id=tenant_endpoint.id, tenant_id=tenant.id, model="gpt-4o"
+    )
+    session.add(ae)
+    await session.commit()
+    return assistant
 
 
 def _headers(login_id, tenant_id):
@@ -196,3 +224,117 @@ class TestGetAssistants:
             response = await c.get("/api/assistants", headers={"X-Tenant-ID": tenant.id})
 
         assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+class TestGetAssistantsEndpoints:
+    """GET /api/assistants のendpoints項目"""
+
+    async def test_returns_endpoint_details(
+        self, client, member_headers, group_with_assistant, assistant_with_endpoint, tenant_endpoint
+    ):
+        """紐づくエンドポイント情報が返ること"""
+        async with client as c:
+            response = await c.get("/api/assistants", headers=member_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        endpoints = body[0]["endpoints"]
+        assert len(endpoints) == 1
+        assert endpoints[0]["id"] == tenant_endpoint.id
+        assert endpoints[0]["model"] == "gpt-4o"
+        assert endpoints[0]["type"] == "AZURE_OPENAI_CHAT"
+        assert endpoints[0]["url"] == "https://example.openai.azure.com"
+        assert "label" not in endpoints[0]
+        assert "apiKey" not in endpoints[0]
+
+    async def test_returns_empty_endpoints_when_not_linked(self, client, member_headers, group_with_assistant):
+        """エンドポイントが紐づいていない場合は空配列が返ること（issue-26の既存挙動を維持）"""
+        async with client as c:
+            response = await c.get("/api/assistants", headers=member_headers)
+
+        assert response.status_code == 200
+        assert response.json()[0]["endpoints"] == []
+
+    async def test_returns_multiple_endpoints(
+        self, client, session, tenant, member_headers, group_with_assistant, assistant, tenant_endpoint
+    ):
+        """複数エンドポイントが紐づく場合すべて返ること"""
+        second_endpoint = TenantEndpoint(
+            tenant_id=tenant.id,
+            type=EndpointType.CLAUDE_CHAT,
+            endpoint_name="Claude",
+            endpoint="https://api.anthropic.com",
+            api_key="claude-key",
+        )
+        session.add(second_endpoint)
+        await session.commit()
+        await session.refresh(second_endpoint)
+
+        session.add(
+            AssistantEndpoint(
+                assistant_id=assistant.id, endpoint_id=tenant_endpoint.id, tenant_id=tenant.id, model="gpt-4o"
+            )
+        )
+        session.add(
+            AssistantEndpoint(
+                assistant_id=assistant.id,
+                endpoint_id=second_endpoint.id,
+                tenant_id=tenant.id,
+                model="claude-3-opus",
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/assistants", headers=member_headers)
+
+        assert len(response.json()[0]["endpoints"]) == 2
+
+    async def test_excludes_endpoint_belonging_to_different_tenant(
+        self, client, session, tenant, member_headers, group_with_assistant, assistant
+    ):
+        """assistants_endpointsのtenant_idとtenant_endpointsのtenant_idが食い違う場合、
+        他テナントのエンドポイントが結果に含まれないこと（テナント分離の防御的チェック）"""
+        other_tenant = Tenant(
+            id="tenant-assistants-other",
+            name="Other Tenant",
+            owner="admin",
+            pw_policy_min_length=8,
+            pw_policy_use_uppercase=True,
+            pw_policy_use_lowercase=True,
+            pw_policy_use_digits=True,
+            pw_policy_use_symbols=True,
+            pw_policy_valid_symbols="!@#$",
+            pw_validity_period_days=90,
+            pw_histories_limit=3,
+        )
+        session.add(other_tenant)
+        await session.commit()
+
+        other_tenant_endpoint = TenantEndpoint(
+            tenant_id=other_tenant.id,
+            type=EndpointType.OPENAI_CHAT,
+            endpoint_name="Other Tenant Endpoint",
+            endpoint="https://api.openai.com",
+            api_key="other-tenant-key",
+        )
+        session.add(other_tenant_endpoint)
+        await session.commit()
+        await session.refresh(other_tenant_endpoint)
+
+        # assistants_endpoints.tenant_id は自テナントだが、endpoint_id は他テナントのエンドポイントを指す不整合データ
+        session.add(
+            AssistantEndpoint(
+                assistant_id=assistant.id,
+                endpoint_id=other_tenant_endpoint.id,
+                tenant_id=tenant.id,
+                model="gpt-4o",
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/assistants", headers=member_headers)
+
+        assert response.json()[0]["endpoints"] == []

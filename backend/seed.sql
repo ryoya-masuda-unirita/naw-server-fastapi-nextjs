@@ -118,3 +118,25 @@ VALUES (
     'test-tenant'
 )
 ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;
+
+-- 動作確認用テナントエンドポイント (id 固定)
+INSERT INTO tenant_endpoints (id, tenant_id, type, endpoint_name, endpoint, api_key)
+VALUES (
+    '30000000000040008000000000000001',
+    'test-tenant',
+    'AZURE_OPENAI_CHAT',
+    'Azure OpenAI (動作確認用)',
+    'https://example.openai.azure.com',
+    'dummy-api-key-for-seed'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 動作確認用アシスタントとエンドポイントの紐付け
+INSERT INTO assistants_endpoints (assistant_id, endpoint_id, tenant_id, model)
+VALUES (
+    '10000000000040008000000000000001',
+    '30000000000040008000000000000001',
+    'test-tenant',
+    'gpt-4o'
+)
+ON CONFLICT (assistant_id, endpoint_id) DO NOTHING;

@@ -60,6 +60,7 @@ async def session(engine):
         from sqlalchemy import text
         await sess.rollback()
         tables = [
+            "assistants_endpoints",
             "tenant_endpoints",
             "groups_assistants",
             "assistants",

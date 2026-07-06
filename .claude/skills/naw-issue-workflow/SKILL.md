@@ -186,7 +186,7 @@ bash .claude/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-12-N
 
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、`Closes #XX` を含む PR の対応 Issue を `Review` へ自動更新する
 - PR が merge されたら、同 workflow により対応 Issue を `Done` へ自動更新する
-- Codex は PR 本文に必ず `Closes #XX` を入れ、自動反映の前提を満たすこと
+- Claude は PR 本文に必ず `Closes #XX` を入れ、自動反映の前提を満たすこと
 
 ## コミット規約
 

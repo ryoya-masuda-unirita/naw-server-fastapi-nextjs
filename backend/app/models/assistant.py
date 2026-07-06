@@ -65,3 +65,31 @@ class GroupAssistant(SQLModel, table=True):
             sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()
         ),
     )
+
+
+class AssistantEndpoint(SQLModel, table=True):
+    """アシスタントとテナントエンドポイントの中間テーブル。
+
+    `GroupAssistant`等と異なり、主キーは`(assistant_id, endpoint_id)`で`tenant_id`を含まない
+    （移植元の最終スキーマに準拠）。
+    """
+
+    __tablename__ = "assistants_endpoints"
+
+    assistant_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32), sa.ForeignKey("assistants.id", ondelete="CASCADE"), primary_key=True, nullable=False
+        ),
+    )
+    endpoint_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32),
+            sa.ForeignKey("tenant_endpoints.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    tenant_id: str = Field(
+        sa_column=sa.Column(sa.String(32), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
+    )
+    model: str = Field(max_length=32)
