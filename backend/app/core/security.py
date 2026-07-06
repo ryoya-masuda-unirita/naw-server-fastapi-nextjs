@@ -197,4 +197,29 @@ async def get_verified_tenant_id(
     """
     if x_tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+
     return x_tenant_id
+
+
+async def require_admin_for_tenant_path(
+    tenant_id: str,
+    current_user: User = Depends(require_admin),
+) -> str:
+    """パスパラメータのtenant_idが認証済みテナント管理者の所属テナントと一致することを確認する。
+
+    移植元の`ensureTenantMatchesContext`相当。テナントIDをパスパラメータに含むエンドポイント
+    （`/api/admin/tenants/{tenant_id}/...`）で使用する。
+
+    Args:
+        tenant_id: パスパラメータのテナントID。
+        current_user: テナント管理者であることを確認済みのユーザー。
+
+    Returns:
+        検証済みのテナントID。
+
+    Raises:
+        HTTPException: パスのtenant_idが認証済みユーザーのテナントと一致しない場合 403 を返す。
+    """
+    if tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+    return tenant_id
