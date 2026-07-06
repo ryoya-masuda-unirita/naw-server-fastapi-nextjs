@@ -30,7 +30,7 @@ cd "$(git rev-parse --show-toplevel)"
 if [ -n "$(git status --porcelain -- backend)" ]; then
   echo "[pre-push] Ruff made changes. Amending them into the current commit..."
   git add -A -- backend
-  git commit --amend --no-edit
+  git commit --amend --no-edit -- backend
   echo "[pre-push] Amended. Continuing push with the fixed code."
 fi
 
