@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# git push 実行時にGitが自動的に呼び出すフック。
+# backend/ 配下のPythonコードに対してRuffのフォーマッター・リンターを適用し、
+# 修正が入った場合は直前のコミットに畳み込んでからpushを継続する。
+#
+# 有効化するには、リポジトリのクローン後に1回だけ以下を実行する。
+#   git config core.hooksPath .githooks
+
+BACKEND_DIR="$(git rev-parse --show-toplevel)/backend"
+
+if [ ! -d "$BACKEND_DIR" ]; then
+  exit 0
+fi
+
+cd "$BACKEND_DIR"
+
+echo "[pre-push] Running ruff format..."
+uv run ruff format .
+
+echo "[pre-push] Running ruff check --fix..."
+if ! uv run ruff check --fix .; then
+  echo "[pre-push] ruff check found issues that could not be auto-fixed. Please fix them manually and try again."
+  exit 1
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -n "$(git status --porcelain -- backend)" ]; then
+  echo "[pre-push] Ruff made changes. Amending them into the current commit..."
+  git add -A -- backend
+  git commit --amend --no-edit
+  echo "[pre-push] Amended. Continuing push with the fixed code."
+fi
+
+exit 0

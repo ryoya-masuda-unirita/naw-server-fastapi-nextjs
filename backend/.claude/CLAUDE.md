@@ -193,6 +193,16 @@ mypy app/
 ruff check app/
 ```
 
+### Gitフックの初期設定（初回のみ）
+
+`git push`時にRuffのフォーマッター・リンターを自動適用するフックを使うため、クローン後に1回だけ実行する。
+
+```bash
+git config core.hooksPath .githooks
+```
+
+設定すると、`git push`のたびに`.githooks/pre-push`が自動実行され、`ruff format`・`ruff check --fix`を適用する。修正が入った場合は直前のコミットに`amend`されてからpushされる（新しいコミットは作られない）。開発中（保存のたび等）には走らないため、実装途中の未使用importがあっても妨げられない。
+
 ---
 
 ## ローカル開発環境のDB
