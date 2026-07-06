@@ -7,7 +7,6 @@ from app.schemas.assistant import AssistantEndpointItemResponse
 
 
 class AssistantEndpointRepository:
-
     @staticmethod
     async def find_endpoints_grouped_by_assistant_id(
         assistant_ids: list[str], tenant_id: str, session: AsyncSession

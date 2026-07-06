@@ -95,7 +95,9 @@ async def group(session, tenant):
 @pytest.fixture
 async def group_with_admin_member(session, tenant, group, member_user):
     """member_userをグループ内管理者として所属させたグループ"""
-    gu = GroupUser(group_id=group.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=True)
+    gu = GroupUser(
+        group_id=group.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=True
+    )
     session.add(gu)
     await session.commit()
     return group
@@ -130,7 +132,9 @@ def client(override_get_session):
 class TestGetGroups:
     """GET /api/groups"""
 
-    async def test_returns_all_groups_when_not_belonged(self, client, admin_headers, group):
+    async def test_returns_all_groups_when_not_belonged(
+        self, client, admin_headers, group
+    ):
         """isBelonged未指定の場合テナント内の全グループが返ること"""
         async with client as c:
             response = await c.get("/api/groups", headers=admin_headers)
@@ -148,7 +152,9 @@ class TestGetGroups:
         await session.commit()
 
         async with client as c:
-            response = await c.get("/api/groups", params={"isBelonged": "true"}, headers=member_headers)
+            response = await c.get(
+                "/api/groups", params={"isBelonged": "true"}, headers=member_headers
+            )
 
         assert response.status_code == 200
         ids = [g["id"] for g in response.json()]
@@ -206,7 +212,9 @@ class TestAllGroups:
 
         assert response.status_code == 200
 
-    async def test_group_admin_gets_403(self, client, member_headers, group_with_admin_member):
+    async def test_group_admin_gets_403(
+        self, client, member_headers, group_with_admin_member
+    ):
         """グループ管理者（テナント管理者でない）は403になること"""
         async with client as c:
             response = await c.get("/api/admin/all-groups", headers=member_headers)
@@ -221,7 +229,9 @@ class TestGroupCrud:
     async def test_tenant_admin_creates_group(self, client, admin_headers):
         """テナント管理者はグループを作成できること"""
         async with client as c:
-            response = await c.post("/api/admin/groups", json={"name": "New Group"}, headers=admin_headers)
+            response = await c.post(
+                "/api/admin/groups", json={"name": "New Group"}, headers=admin_headers
+            )
 
         assert response.status_code == 200
         assert response.json()["name"] == "New Group"
@@ -229,18 +239,24 @@ class TestGroupCrud:
     async def test_group_admin_cannot_create_group(self, client, member_headers):
         """グループ管理者はグループを作成できないこと"""
         async with client as c:
-            response = await c.post("/api/admin/groups", json={"name": "New Group"}, headers=member_headers)
+            response = await c.post(
+                "/api/admin/groups", json={"name": "New Group"}, headers=member_headers
+            )
 
         assert response.status_code == 403
 
     async def test_get_nonexistent_group_returns_404(self, client, admin_headers):
         """存在しないグループの取得は404になること"""
         async with client as c:
-            response = await c.get("/api/admin/groups/nonexistent", headers=admin_headers)
+            response = await c.get(
+                "/api/admin/groups/nonexistent", headers=admin_headers
+            )
 
         assert response.status_code == 404
 
-    async def test_group_admin_updates_own_group(self, client, member_headers, group_with_admin_member):
+    async def test_group_admin_updates_own_group(
+        self, client, member_headers, group_with_admin_member
+    ):
         """グループ管理者は自分の管理グループを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -252,11 +268,15 @@ class TestGroupCrud:
         assert response.status_code == 200
         assert response.json()["name"] == "Renamed"
 
-    async def test_unrelated_user_cannot_update_group(self, client, other_headers, group):
+    async def test_unrelated_user_cannot_update_group(
+        self, client, other_headers, group
+    ):
         """無関係な一般ユーザーはグループを更新できないこと"""
         async with client as c:
             response = await c.patch(
-                f"/api/admin/groups/{group.id}", json={"name": "Renamed"}, headers=other_headers
+                f"/api/admin/groups/{group.id}",
+                json={"name": "Renamed"},
+                headers=other_headers,
             )
 
         assert response.status_code == 403
@@ -264,15 +284,20 @@ class TestGroupCrud:
     async def test_tenant_admin_deletes_group(self, client, admin_headers, group):
         """テナント管理者はグループを削除できること"""
         async with client as c:
-            response = await c.delete(f"/api/admin/groups/{group.id}", headers=admin_headers)
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}", headers=admin_headers
+            )
 
         assert response.status_code == 204
 
-    async def test_group_admin_cannot_delete_group(self, client, member_headers, group_with_admin_member):
+    async def test_group_admin_cannot_delete_group(
+        self, client, member_headers, group_with_admin_member
+    ):
         """グループ管理者はグループを削除できないこと"""
         async with client as c:
             response = await c.delete(
-                f"/api/admin/groups/{group_with_admin_member.id}", headers=member_headers
+                f"/api/admin/groups/{group_with_admin_member.id}",
+                headers=member_headers,
             )
 
         assert response.status_code == 403
@@ -288,7 +313,8 @@ class TestGroupUsers:
         """所属ユーザー一覧がcontent/totalElements/number/size形式で返ること"""
         async with client as c:
             response = await c.get(
-                f"/api/admin/groups/{group_with_admin_member.id}/users", headers=admin_headers
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
             )
 
         assert response.status_code == 200
@@ -332,7 +358,9 @@ class TestGroupUsers:
 
         assert response.status_code == 404
 
-    async def test_add_malformed_user_id_returns_404(self, client, admin_headers, group):
+    async def test_add_malformed_user_id_returns_404(
+        self, client, admin_headers, group
+    ):
         """UUID形式でないユーザーIDの追加は404になること（500にならない）"""
         async with client as c:
             response = await c.post(
@@ -343,7 +371,9 @@ class TestGroupUsers:
 
         assert response.status_code == 404
 
-    async def test_remove_malformed_user_id_returns_404(self, client, admin_headers, group):
+    async def test_remove_malformed_user_id_returns_404(
+        self, client, admin_headers, group
+    ):
         """UUID形式でないユーザーIDの削除は404になること（500にならない）"""
         async with client as c:
             response = await c.delete(
@@ -352,7 +382,9 @@ class TestGroupUsers:
 
         assert response.status_code == 404
 
-    async def test_update_role_malformed_user_id_returns_404(self, client, admin_headers, group):
+    async def test_update_role_malformed_user_id_returns_404(
+        self, client, admin_headers, group
+    ):
         """UUID形式でないユーザーIDのロール更新は404になること（500にならない）"""
         async with client as c:
             response = await c.patch(
@@ -377,7 +409,9 @@ class TestGroupUsers:
         assert response.status_code == 200
         assert response.json()["totalElements"] == 0
 
-    async def test_remove_user_from_group(self, client, admin_headers, group_with_admin_member, member_user):
+    async def test_remove_user_from_group(
+        self, client, admin_headers, group_with_admin_member, member_user
+    ):
         """ユーザーをグループから削除できること"""
         async with client as c:
             response = await c.delete(
@@ -387,16 +421,21 @@ class TestGroupUsers:
 
         assert response.status_code == 204
 
-    async def test_remove_non_member_is_idempotent(self, client, admin_headers, group, other_user):
+    async def test_remove_non_member_is_idempotent(
+        self, client, admin_headers, group, other_user
+    ):
         """既に非所属のユーザーを削除してもエラーにならないこと"""
         async with client as c:
             response = await c.delete(
-                f"/api/admin/groups/{group.id}/users/{other_user.id}", headers=admin_headers
+                f"/api/admin/groups/{group.id}/users/{other_user.id}",
+                headers=admin_headers,
             )
 
         assert response.status_code == 204
 
-    async def test_update_group_user_role(self, client, admin_headers, group_with_admin_member, member_user):
+    async def test_update_group_user_role(
+        self, client, admin_headers, group_with_admin_member, member_user
+    ):
         """グループ内管理者フラグを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -436,13 +475,16 @@ class TestGroupUsers:
         self, client, admin_headers, admin_user, tenant, session, group
     ):
         """テナント管理者は自分自身をグループから削除できること（自己操作禁止の対象外）"""
-        gu = GroupUser(group_id=group.id, tenant_id=tenant.id, user_id=admin_user.id, is_admin=True)
+        gu = GroupUser(
+            group_id=group.id, tenant_id=tenant.id, user_id=admin_user.id, is_admin=True
+        )
         session.add(gu)
         await session.commit()
 
         async with client as c:
             response = await c.delete(
-                f"/api/admin/groups/{group.id}/users/{admin_user.id}", headers=admin_headers
+                f"/api/admin/groups/{group.id}/users/{admin_user.id}",
+                headers=admin_headers,
             )
 
         assert response.status_code == 204

@@ -193,6 +193,23 @@ mypy app/
 ruff check app/
 ```
 
+### Gitフックの初期設定（初回のみ）
+
+`git commit`時にRuffのフォーマッター・リンターを自動適用するため、`pre-commit`フレームワークを使用する。クローン後に1回だけ実行する。
+
+```bash
+cd backend && uv sync
+uv run pre-commit install
+```
+
+設定すると、`git commit`のたびに`.pre-commit-config.yaml`で定義したRuffのフォーマット・自動修正（`backend/`配下のみ対象）が実行される。修正が入った場合はそのコミットが失敗するので、変更内容を確認して`git add`し直し、再度`git commit`する（`pre-commit`フレームワークの標準動作）。開発中（保存のたび等）には走らないため、実装途中の未使用importがあっても妨げられない。
+
+なお、以前使用していた`.githooks/pre-push`（`git config core.hooksPath .githooks`）は、amend後の内容が実際にはpushされないという致命的な欠陥が判明したため廃止した。過去にこの設定を行った環境では、以下で設定を解除すること。
+
+```bash
+git config --unset core.hooksPath
+```
+
 ---
 
 ## ローカル開発環境のDB

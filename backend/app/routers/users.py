@@ -83,4 +83,6 @@ async def update_profile(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UserResponse:
-    return await UserService.update_profile(current_user.login_id, req, x_tenant_id, session)
+    return await UserService.update_profile(
+        current_user.login_id, req, x_tenant_id, session
+    )

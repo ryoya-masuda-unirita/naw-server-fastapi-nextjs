@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, AsyncMock as AM
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from uuid import uuid4
 
@@ -13,16 +13,25 @@ REPO_PATH = "app.services.auth_service.PasswordHistoryRepository"
 class TestAuthServiceLogin:
     """ログイン処理テスト（モック使用）"""
 
-    async def test_login_with_valid_credentials(self, test_tenant, test_user_with_password):
+    async def test_login_with_valid_credentials(
+        self, test_tenant, test_user_with_password
+    ):
         """有効な認証情報でログインできること"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         session.execute = AsyncMock(return_value=mock_user_result)
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )):
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=test_user_with_password["hashed_password"]
+                )
+            ),
+        ):
             response = await AuthService.login(
                 test_user_with_password["user"].login_id,
                 test_user_with_password["plain_password"],
@@ -34,16 +43,25 @@ class TestAuthServiceLogin:
         assert response.loginStatus == "SUCCESS"
         assert response.token is not None
 
-    async def test_login_with_invalid_password(self, test_tenant, test_user_with_password):
+    async def test_login_with_invalid_password(
+        self, test_tenant, test_user_with_password
+    ):
         """パスワード不一致でHTTPException 401 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         session.execute = AsyncMock(return_value=mock_user_result)
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )):
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=test_user_with_password["hashed_password"]
+                )
+            ),
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await AuthService.login(
                     test_user_with_password["user"].login_id,
@@ -96,9 +114,12 @@ class TestAuthServiceLogin:
         mock_user_result.scalars.return_value.first.return_value = user
         session.execute = AsyncMock(return_value=mock_user_result)
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=hash_password("TestPassword123!"))
-        )):
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(password=hash_password("TestPassword123!"))
+            ),
+        ):
             response = await AuthService.login(
                 user.login_id, "TestPassword123!", test_tenant.id, session
             )
@@ -111,16 +132,25 @@ class TestAuthServiceLogin:
 class TestAuthServicePasswordReset:
     """パスワードリセット処理テスト（モック使用）"""
 
-    async def test_reset_password_with_invalid_old_password(self, test_tenant, test_user_with_password):
+    async def test_reset_password_with_invalid_old_password(
+        self, test_tenant, test_user_with_password
+    ):
         """旧パスワード不一致でHTTPException 403 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         session.execute = AsyncMock(return_value=mock_user_result)
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )):
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=test_user_with_password["hashed_password"]
+                )
+            ),
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await AuthService.reset_password(
                     test_user_with_password["user"].login_id,
@@ -146,18 +176,27 @@ class TestAuthServicePasswordReset:
 
         assert exc_info.value.status_code == 403
 
-    async def test_reset_password_when_too_short(self, test_tenant, test_user_with_password):
+    async def test_reset_password_when_too_short(
+        self, test_tenant, test_user_with_password
+    ):
         """最小長未満の新パスワードはHTTPException 400 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         mock_tenant_result = MagicMock()
         mock_tenant_result.scalars.return_value.first.return_value = test_tenant
         session.execute = AsyncMock(side_effect=[mock_user_result, mock_tenant_result])
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )):
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=test_user_with_password["hashed_password"]
+                )
+            ),
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await AuthService.reset_password(
                     test_user_with_password["user"].login_id,
@@ -169,20 +208,35 @@ class TestAuthServicePasswordReset:
 
         assert exc_info.value.status_code == 400
 
-    async def test_reset_password_when_new_password_reused(self, test_tenant, test_user_with_password):
+    async def test_reset_password_when_new_password_reused(
+        self, test_tenant, test_user_with_password
+    ):
         """過去パスワードを再利用した場合、HTTPException 400 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         mock_tenant_result = MagicMock()
         mock_tenant_result.scalars.return_value.first.return_value = test_tenant
         session.execute = AsyncMock(side_effect=[mock_user_result, mock_tenant_result])
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )), patch(f"{REPO_PATH}.get_recent_hashes", new=AsyncMock(
-            return_value=[test_user_with_password["hashed_password"]]
-        )):
+        with (
+            patch(
+                f"{REPO_PATH}.get_latest",
+                new=AsyncMock(
+                    return_value=MagicMock(
+                        password=test_user_with_password["hashed_password"]
+                    )
+                ),
+            ),
+            patch(
+                f"{REPO_PATH}.get_recent_hashes",
+                new=AsyncMock(
+                    return_value=[test_user_with_password["hashed_password"]]
+                ),
+            ),
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await AuthService.reset_password(
                     test_user_with_password["user"].login_id,
@@ -194,20 +248,31 @@ class TestAuthServicePasswordReset:
 
         assert exc_info.value.status_code == 400
 
-    async def test_reset_password_calls_save(self, test_tenant, test_user_with_password):
+    async def test_reset_password_calls_save(
+        self, test_tenant, test_user_with_password
+    ):
         """パスワードリセット成功時に新パスワードの履歴が保存されること"""
         session = AsyncMock()
         mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = test_user_with_password["user"]
+        mock_user_result.scalars.return_value.first.return_value = (
+            test_user_with_password["user"]
+        )
         mock_tenant_result = MagicMock()
         mock_tenant_result.scalars.return_value.first.return_value = test_tenant
         session.execute = AsyncMock(side_effect=[mock_user_result, mock_tenant_result])
 
-        with patch(f"{REPO_PATH}.get_latest", new=AsyncMock(
-            return_value=MagicMock(password=test_user_with_password["hashed_password"])
-        )), patch(f"{REPO_PATH}.get_recent_hashes", new=AsyncMock(return_value=[])), patch(
-            f"{REPO_PATH}.save", new=AsyncMock()
-        ) as mock_save:
+        with (
+            patch(
+                f"{REPO_PATH}.get_latest",
+                new=AsyncMock(
+                    return_value=MagicMock(
+                        password=test_user_with_password["hashed_password"]
+                    )
+                ),
+            ),
+            patch(f"{REPO_PATH}.get_recent_hashes", new=AsyncMock(return_value=[])),
+            patch(f"{REPO_PATH}.save", new=AsyncMock()) as mock_save,
+        ):
             await AuthService.reset_password(
                 test_user_with_password["user"].login_id,
                 test_user_with_password["plain_password"],

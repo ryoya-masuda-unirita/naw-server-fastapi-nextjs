@@ -7,7 +7,9 @@ from sqlmodel import Field, SQLModel
 class Tenant(SQLModel, table=True):
     __tablename__ = "tenants"
     __table_args__ = (
-        sa.CheckConstraint("pw_histories_limit >= 1", name="ck_tenants_pw_histories_limit"),
+        sa.CheckConstraint(
+            "pw_histories_limit >= 1", name="ck_tenants_pw_histories_limit"
+        ),
     )
 
     id: str = Field(max_length=32, primary_key=True)
@@ -54,7 +56,9 @@ class Tenant(SQLModel, table=True):
         sa_column=sa.Column(sa.SmallInteger, nullable=False, server_default="1"),
     )
     created_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     updated_at: datetime = Field(
         sa_column=sa.Column(

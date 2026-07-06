@@ -7,7 +7,11 @@ from app.core.security import hash_password
 from app.services.user_service import UserService
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
-from app.schemas.user import UserCreateRequest, UserUpdateRequest, UserProfileUpdateRequest
+from app.schemas.user import (
+    UserCreateRequest,
+    UserUpdateRequest,
+    UserProfileUpdateRequest,
+)
 
 REPO_PATH = "app.services.user_service.PasswordHistoryRepository"
 
@@ -25,7 +29,6 @@ def admin_user(test_tenant):
 
 
 class TestGetUsers:
-
     async def test_returns_paged_users(self, test_tenant, test_user):
         """テナント内ユーザーを返すこと"""
         session = AsyncMock()
@@ -78,7 +81,6 @@ class TestGetUsers:
 
 
 class TestCreateUser:
-
     async def test_creates_user_with_initial_password(self, test_tenant):
         """ユーザーを作成し初期パスワードが返ること"""
         session = AsyncMock()
@@ -108,7 +110,9 @@ class TestCreateUser:
         mock_dup.scalars.return_value.first.return_value = test_user
         session.execute = AsyncMock(return_value=mock_dup)
 
-        req = UserCreateRequest(loginId=test_user.login_id, name="Dup", role=UserRole.USER)
+        req = UserCreateRequest(
+            loginId=test_user.login_id, name="Dup", role=UserRole.USER
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             await UserService.create_user(req, test_tenant.id, session)
@@ -134,7 +138,6 @@ class TestCreateUser:
 
 
 class TestUpdateUser:
-
     async def test_updates_name_and_role(self, test_tenant, test_user):
         """name・role・loginKey を更新できること"""
         session = AsyncMock()
@@ -166,7 +169,9 @@ class TestUpdateUser:
         req = UserUpdateRequest(resetPassword=True)
 
         with patch(f"{REPO_PATH}.save", new=AsyncMock()):
-            result = await UserService.update_user(test_user.login_id, req, test_tenant.id, session)
+            result = await UserService.update_user(
+                test_user.login_id, req, test_tenant.id, session
+            )
 
         assert result.initialPassword is not None
         assert result.passwordExpiredAt is not None
@@ -181,13 +186,14 @@ class TestUpdateUser:
         session.execute = AsyncMock(return_value=mock_user)
 
         with pytest.raises(HTTPException) as exc_info:
-            await UserService.update_user("nonexistent", UserUpdateRequest(), test_tenant.id, session)
+            await UserService.update_user(
+                "nonexistent", UserUpdateRequest(), test_tenant.id, session
+            )
 
         assert exc_info.value.status_code == 404
 
 
 class TestDeleteUser:
-
     async def test_deletes_existing_user(self, test_tenant, test_user):
         """存在するユーザーを削除できること"""
         session = AsyncMock()
@@ -216,7 +222,6 @@ class TestDeleteUser:
 
 
 class TestGetProfile:
-
     async def test_returns_user_profile(self, test_tenant, test_user):
         """自分のプロフィールを取得できること"""
         session = AsyncMock()
@@ -225,7 +230,9 @@ class TestGetProfile:
         mock_user.scalars.return_value.first.return_value = test_user
         session.execute = AsyncMock(return_value=mock_user)
 
-        result = await UserService.get_profile(test_user.login_id, test_tenant.id, session)
+        result = await UserService.get_profile(
+            test_user.login_id, test_tenant.id, session
+        )
 
         assert result.loginId == test_user.login_id
 
@@ -244,7 +251,6 @@ class TestGetProfile:
 
 
 class TestUpdateProfile:
-
     async def test_updates_password_and_clears_reset_flag(self, test_tenant, test_user):
         """パスワード変更後 is_required_password_reset が false になること"""
         session = AsyncMock()
@@ -260,15 +266,22 @@ class TestUpdateProfile:
 
         req = UserProfileUpdateRequest(password="NewPassword123!")
 
-        with patch(f"{REPO_PATH}.save", new=AsyncMock()), patch(
-            "app.core.password_policy.PasswordHistoryRepository.get_recent_hashes",
-            new=AsyncMock(return_value=[]),
+        with (
+            patch(f"{REPO_PATH}.save", new=AsyncMock()),
+            patch(
+                "app.core.password_policy.PasswordHistoryRepository.get_recent_hashes",
+                new=AsyncMock(return_value=[]),
+            ),
         ):
-            await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+            await UserService.update_profile(
+                test_user.login_id, req, test_tenant.id, session
+            )
 
         assert test_user.is_required_password_reset is False
 
-    async def test_returns_user_without_update_when_password_is_none(self, test_tenant, test_user):
+    async def test_returns_user_without_update_when_password_is_none(
+        self, test_tenant, test_user
+    ):
         """password が None の場合ユーザー情報をそのまま返すこと"""
         session = AsyncMock()
 
@@ -277,7 +290,9 @@ class TestUpdateProfile:
         session.execute = AsyncMock(return_value=mock_user)
 
         req = UserProfileUpdateRequest(password=None)
-        result = await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+        result = await UserService.update_profile(
+            test_user.login_id, req, test_tenant.id, session
+        )
 
         assert result.loginId == test_user.login_id
         session.commit.assert_not_called()
@@ -295,7 +310,9 @@ class TestUpdateProfile:
         req = UserProfileUpdateRequest(password="short")
 
         with pytest.raises(HTTPException) as exc_info:
-            await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+            await UserService.update_profile(
+                test_user.login_id, req, test_tenant.id, session
+            )
 
         assert exc_info.value.status_code == 400
 
@@ -316,13 +333,14 @@ class TestUpdateProfile:
             new=AsyncMock(return_value=[hash_password("ReusedPassword123!")]),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await UserService.update_profile(test_user.login_id, req, test_tenant.id, session)
+                await UserService.update_profile(
+                    test_user.login_id, req, test_tenant.id, session
+                )
 
         assert exc_info.value.status_code == 400
 
 
 class TestGenerateInitialPassword:
-
     def test_meets_policy_length(self, test_tenant):
         """生成パスワードがポリシーの最小長を満たすこと"""
         password = UserService._generate_initial_password(test_tenant)
@@ -345,7 +363,6 @@ class TestGenerateInitialPassword:
 
 
 class TestEscapeLikePattern:
-
     def test_escapes_percent(self):
         """%をエスケープすること"""
         result = UserService._escape_like_pattern("100%")
@@ -363,7 +380,6 @@ class TestEscapeLikePattern:
 
 
 class TestResolveSortColumn:
-
     def test_resolves_snake_case(self):
         """スネークケースの許可列名を解決できること"""
         assert UserService._resolve_sort_column("created_at") is User.created_at
@@ -378,7 +394,6 @@ class TestResolveSortColumn:
 
 
 class TestIssueInitialPassword:
-
     async def test_generates_password_and_saves_history(self, test_tenant, test_user):
         """初期パスワードを生成し、パスワード履歴が1回保存されること"""
         session = AsyncMock()

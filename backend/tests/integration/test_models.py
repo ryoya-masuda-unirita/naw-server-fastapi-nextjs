@@ -36,7 +36,9 @@ class TestTenantModel:
         @pytest.mark.asyncio
         async def test_check_constraint_pw_histories_limit_zero(self, session):
             """pw_histories_limit が 0 で CHECK 制約違反になること"""
-            tenant = Tenant(id="t3", name="テナント3", owner="owner3", pw_histories_limit=0)
+            tenant = Tenant(
+                id="t3", name="テナント3", owner="owner3", pw_histories_limit=0
+            )
             session.add(tenant)
             with pytest.raises(sqlalchemy.exc.IntegrityError):
                 await session.commit()
@@ -123,8 +125,20 @@ class TestUserModel:
             session.add(tenant)
             await session.commit()
 
-            u1 = User(login_id="dup", tenant_id="uc1", name="U1", password="p", role=UserRole.USER)
-            u2 = User(login_id="dup", tenant_id="uc1", name="U2", password="p", role=UserRole.USER)
+            u1 = User(
+                login_id="dup",
+                tenant_id="uc1",
+                name="U1",
+                password="p",
+                role=UserRole.USER,
+            )
+            u2 = User(
+                login_id="dup",
+                tenant_id="uc1",
+                name="U2",
+                password="p",
+                role=UserRole.USER,
+            )
             session.add(u1)
             await session.commit()
             session.add(u2)
@@ -152,7 +166,13 @@ class TestUserModel:
             session.add(tenant)
             await session.commit()
 
-            user = User(login_id="u", tenant_id="uc2", name="U", password="p", role=UserRole.USER)
+            user = User(
+                login_id="u",
+                tenant_id="uc2",
+                name="U",
+                password="p",
+                role=UserRole.USER,
+            )
             session.add(user)
             await session.commit()
             user_id = user.id

@@ -24,21 +24,33 @@ class TestAssertCanManageGroup:
 
     async def test_tenant_admin_is_allowed(self):
         """テナント管理者は常に許可されること"""
-        await GroupService._assert_can_manage_group("g1", "tenant-1", _user(UserRole.ADMIN), session=None)
+        await GroupService._assert_can_manage_group(
+            "g1", "tenant-1", _user(UserRole.ADMIN), session=None
+        )
 
-    @patch("app.services.group_service.GroupUserRepository.is_group_admin", new_callable=AsyncMock)
+    @patch(
+        "app.services.group_service.GroupUserRepository.is_group_admin",
+        new_callable=AsyncMock,
+    )
     async def test_group_admin_is_allowed(self, mock_is_admin):
         """グループ内管理者は許可されること"""
         mock_is_admin.return_value = True
-        await GroupService._assert_can_manage_group("g1", "tenant-1", _user(UserRole.USER), session=None)
+        await GroupService._assert_can_manage_group(
+            "g1", "tenant-1", _user(UserRole.USER), session=None
+        )
 
-    @patch("app.services.group_service.GroupUserRepository.is_group_admin", new_callable=AsyncMock)
+    @patch(
+        "app.services.group_service.GroupUserRepository.is_group_admin",
+        new_callable=AsyncMock,
+    )
     async def test_non_manager_raises_403(self, mock_is_admin):
         """いずれの権限も持たない場合403相当の例外になること"""
         mock_is_admin.return_value = False
 
         with pytest.raises(HTTPException) as exc_info:
-            await GroupService._assert_can_manage_group("g1", "tenant-1", _user(UserRole.USER), session=None)
+            await GroupService._assert_can_manage_group(
+                "g1", "tenant-1", _user(UserRole.USER), session=None
+            )
 
         assert exc_info.value.status_code == 403
 

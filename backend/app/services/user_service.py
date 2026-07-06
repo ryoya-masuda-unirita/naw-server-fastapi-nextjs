@@ -28,7 +28,6 @@ from app.schemas.user import (
 
 
 class UserService:
-
     # SQLModelはMapped[]注釈を使わないため、クラス属性アクセス（User.created_at等）は
     # mypy上InstrumentedAttributeではなくPydanticフィールド型として解釈される。
     # 実行時の型（InstrumentedAttribute）とは一致しないためAnyとする。
@@ -149,9 +148,15 @@ class UserService:
             生成した平文パスワードと有効期限のタプル。
         """
         plain_password = UserService._generate_initial_password(tenant)
-        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
+        expired_at = datetime.now(timezone.utc) + timedelta(
+            days=tenant.pw_validity_period_days
+        )
         await PasswordHistoryRepository.save(
-            user.id, tenant.id, hash_password(plain_password), session, expired_at=expired_at
+            user.id,
+            tenant.id,
+            hash_password(plain_password),
+            session,
+            expired_at=expired_at,
         )
         return plain_password, expired_at
 
@@ -174,7 +179,9 @@ class UserService:
         Raises:
             HTTPException: loginId が既に存在する場合 400 を返す。
         """
-        existing = await UserRepository.find_by_login_id(req.loginId, tenant_id, session)
+        existing = await UserRepository.find_by_login_id(
+            req.loginId, tenant_id, session
+        )
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -194,7 +201,9 @@ class UserService:
         session.add(user)
         await session.flush()
 
-        plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
+        plain_password, expired_at = await UserService._issue_initial_password(
+            user, tenant, session
+        )
         await session.commit()
         await session.refresh(user)
 
@@ -239,7 +248,9 @@ class UserService:
 
         if req.resetPassword:
             tenant = await UserService._get_tenant(tenant_id, session)
-            plain_password, expired_at = await UserService._issue_initial_password(user, tenant, session)
+            plain_password, expired_at = await UserService._issue_initial_password(
+                user, tenant, session
+            )
             user.is_required_password_reset = True
 
         session.add(user)
@@ -267,7 +278,9 @@ class UserService:
             await session.commit()
 
     @staticmethod
-    async def get_profile(login_id: str, tenant_id: str, session: AsyncSession) -> UserResponse:
+    async def get_profile(
+        login_id: str, tenant_id: str, session: AsyncSession
+    ) -> UserResponse:
         """ログインユーザー自身のプロフィールを取得する。
 
         Args:
@@ -281,7 +294,9 @@ class UserService:
         Raises:
             HTTPException: ユーザーが存在しない場合 404 を返す。
         """
-        return UserResponse.from_user(await UserService._get_user(login_id, tenant_id, session))
+        return UserResponse.from_user(
+            await UserService._get_user(login_id, tenant_id, session)
+        )
 
     @staticmethod
     async def update_profile(
@@ -338,7 +353,9 @@ class UserService:
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
         return user
 
     @staticmethod
@@ -357,7 +374,9 @@ class UserService:
         """
         tenant = await TenantRepository.find_by_id(tenant_id, session)
         if not tenant:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found"
+            )
         return tenant
 
     @staticmethod
@@ -390,7 +409,9 @@ class UserService:
             pool += tenant.pw_policy_valid_symbols
 
         if not pool:
-            raise ValueError("パスワードポリシーが無効です: 少なくとも1つの文字種を有効にする必要があります")
+            raise ValueError(
+                "パスワードポリシーが無効です: 少なくとも1つの文字種を有効にする必要があります"
+            )
 
         length = max(tenant.pw_policy_min_length, len(required))
         chars = required + [secrets.choice(pool) for _ in range(length - len(required))]

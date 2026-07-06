@@ -7,9 +7,10 @@ from app.models.user import User
 
 
 class UserRepository:
-
     @staticmethod
-    async def find_by_login_id(login_id: str, tenant_id: str, session: AsyncSession) -> User | None:
+    async def find_by_login_id(
+        login_id: str, tenant_id: str, session: AsyncSession
+    ) -> User | None:
         """loginId と tenantId でユーザーを取得する。
 
         Args:
@@ -20,7 +21,9 @@ class UserRepository:
         Returns:
             該当する User。存在しない場合は None。
         """
-        stmt = select(User).where(User.login_id == login_id, User.tenant_id == tenant_id)
+        stmt = select(User).where(
+            User.login_id == login_id, User.tenant_id == tenant_id
+        )
         result = await session.execute(stmt)
         return result.scalars().first()
 

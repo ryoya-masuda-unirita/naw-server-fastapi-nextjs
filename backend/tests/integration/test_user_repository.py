@@ -15,7 +15,6 @@ async def other_tenant(session):
 
 
 class TestFindByLoginId:
-
     async def test_returns_user_when_found(self, session, test_user, test_tenant):
         """存在するloginId・tenantIdでUserを取得できること"""
         result = await UserRepository.find_by_login_id(
@@ -25,7 +24,9 @@ class TestFindByLoginId:
         assert result is not None
         assert result.id == test_user.id
 
-    async def test_returns_none_when_tenant_mismatched(self, session, test_user, other_tenant):
+    async def test_returns_none_when_tenant_mismatched(
+        self, session, test_user, other_tenant
+    ):
         """存在するloginIdでも異なるtenantIdではNoneを返すこと（テナント分離）"""
         result = await UserRepository.find_by_login_id(
             test_user.login_id, other_tenant.id, session

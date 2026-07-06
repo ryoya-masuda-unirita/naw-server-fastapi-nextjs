@@ -5,7 +5,9 @@ import pytest
 class TestAuthAPI:
     """認証 API エンドポイントテスト"""
 
-    async def test_post_auth_login_success(self, client, test_tenant, test_user_with_password):
+    async def test_post_auth_login_success(
+        self, client, test_tenant, test_user_with_password
+    ):
         """POST /auth/login 成功ケース"""
         async with client as c:
             response = await c.post(
@@ -21,7 +23,9 @@ class TestAuthAPI:
         assert response.json()["loginStatus"] == "SUCCESS"
         assert response.json()["token"] is not None
 
-    async def test_post_auth_login_missing_header(self, client, test_user_with_password):
+    async def test_post_auth_login_missing_header(
+        self, client, test_user_with_password
+    ):
         """POST /auth/login X-Tenant-ID ヘッダーなし"""
         async with client as c:
             response = await c.post(
@@ -42,7 +46,9 @@ class TestAuthAPI:
         assert response.status_code == 200
         assert "Logout successful" in response.json()["message"]
 
-    async def test_post_auth_password_reset_success(self, client, test_tenant, test_user_with_password):
+    async def test_post_auth_password_reset_success(
+        self, client, test_tenant, test_user_with_password
+    ):
         """POST /auth/password/reset 成功ケース"""
         async with client as c:
             response = await c.post(
@@ -84,7 +90,9 @@ class TestAuthAPI:
 
         assert response.status_code == 401
 
-    async def test_get_api_auth_with_expired_token(self, client, test_tenant, expired_jwt_token):
+    async def test_get_api_auth_with_expired_token(
+        self, client, test_tenant, expired_jwt_token
+    ):
         """GET /api/auth JWT 有効期限切れ"""
         async with client as c:
             response = await c.get(
@@ -97,7 +105,9 @@ class TestAuthAPI:
 
         assert response.status_code == 401
 
-    async def test_get_api_auth_with_invalid_token(self, client, test_tenant, invalid_jwt_token):
+    async def test_get_api_auth_with_invalid_token(
+        self, client, test_tenant, invalid_jwt_token
+    ):
         """GET /api/auth JWT が不正"""
         async with client as c:
             response = await c.get(
@@ -110,7 +120,9 @@ class TestAuthAPI:
 
         assert response.status_code == 401
 
-    async def test_post_auth_login_sets_access_token_cookie(self, client, test_tenant, test_user_with_password):
+    async def test_post_auth_login_sets_access_token_cookie(
+        self, client, test_tenant, test_user_with_password
+    ):
         """POST /auth/login 成功時にaccess_token Cookieが発行されること"""
         async with client as c:
             response = await c.post(
@@ -151,7 +163,9 @@ class TestAuthAPI:
         set_cookie_header = response.headers.get("set-cookie", "")
         assert "access_token=" in set_cookie_header
 
-    async def test_get_api_auth_with_cookie_only(self, client, test_tenant, valid_jwt_token):
+    async def test_get_api_auth_with_cookie_only(
+        self, client, test_tenant, valid_jwt_token
+    ):
         """GET /api/auth をCookieのみで認証できること"""
         async with client as c:
             c.cookies.set("access_token", valid_jwt_token)
@@ -162,7 +176,9 @@ class TestAuthAPI:
 
         assert response.status_code == 200
 
-    async def test_get_api_auth_without_cookie_or_header_returns_401(self, client, test_tenant):
+    async def test_get_api_auth_without_cookie_or_header_returns_401(
+        self, client, test_tenant
+    ):
         """GET /api/auth をCookie・Authorizationヘッダーどちらも無しで呼ぶと401になること"""
         async with client as c:
             response = await c.get(

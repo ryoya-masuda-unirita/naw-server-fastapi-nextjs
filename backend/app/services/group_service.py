@@ -20,7 +20,6 @@ from app.schemas.group import (
 
 
 class GroupService:
-
     @staticmethod
     def _is_tenant_admin(current_user: User) -> bool:
         return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
@@ -42,11 +41,17 @@ class GroupService:
         """
         if GroupService._is_tenant_admin(current_user):
             return
-        if not await GroupUserRepository.is_group_admin(group_id, tenant_id, current_user.id, session):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied")
+        if not await GroupUserRepository.is_group_admin(
+            group_id, tenant_id, current_user.id, session
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
+            )
 
     @staticmethod
-    async def _get_group_or_404(group_id: str, tenant_id: str, session: AsyncSession) -> Group:
+    async def _get_group_or_404(
+        group_id: str, tenant_id: str, session: AsyncSession
+    ) -> Group:
         """グループIDとテナントIDでグループを取得する。存在しない場合は404を送出する。
 
         Args:
@@ -60,9 +65,13 @@ class GroupService:
         Raises:
             HTTPException: グループが存在しない場合 404 を返す。
         """
-        group = await GroupRepository.find_by_id_and_tenant_id(group_id, tenant_id, session)
+        group = await GroupRepository.find_by_id_and_tenant_id(
+            group_id, tenant_id, session
+        )
         if not group:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Group not found"
+            )
         return group
 
     @staticmethod
@@ -81,7 +90,9 @@ class GroupService:
         try:
             return UUID(user_id)
         except ValueError:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
 
     @staticmethod
     def _assert_not_self(target_user_id: UUID, current_user: User) -> None:
@@ -94,11 +105,18 @@ class GroupService:
         Raises:
             HTTPException: グループ管理者が自分自身を操作しようとした場合 403 を返す。
         """
-        if not GroupService._is_tenant_admin(current_user) and target_user_id == current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify self")
+        if (
+            not GroupService._is_tenant_admin(current_user)
+            and target_user_id == current_user.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify self"
+            )
 
     @staticmethod
-    async def _to_list_item(group: Group, session: AsyncSession) -> GroupListItemResponse:
+    async def _to_list_item(
+        group: Group, session: AsyncSession
+    ) -> GroupListItemResponse:
         """GroupをGroupListItemResponseに変換する（所属ユーザーを結合して取得する）。
 
         Args:
@@ -108,7 +126,9 @@ class GroupService:
         Returns:
             グループ一覧の1件分のレスポンス。
         """
-        rows = await GroupUserRepository.find_by_group(group.id, group.tenant_id, session)
+        rows = await GroupUserRepository.find_by_group(
+            group.id, group.tenant_id, session
+        )
         users = [user for _, user in rows]
         admins = [user for group_user, user in rows if group_user.is_admin]
         return GroupListItemResponse(
@@ -137,11 +157,15 @@ class GroupService:
         Returns:
             グループ一覧。
         """
-        groups = await GroupRepository.find_all_by_tenant_ordered_by_name(tenant_id, session)
+        groups = await GroupRepository.find_all_by_tenant_ordered_by_name(
+            tenant_id, session
+        )
 
         if is_belonged:
             belonging_ids = set(
-                await GroupUserRepository.find_belonging_group_ids(tenant_id, current_user.id, session)
+                await GroupUserRepository.find_belonging_group_ids(
+                    tenant_id, current_user.id, session
+                )
             )
             groups = [g for g in groups if g.id in belonging_ids]
 
@@ -187,7 +211,14 @@ class GroupService:
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
 
         groups, total = await GroupRepository.find_page(
-            tenant_id, search, allowed_group_ids, sort_col_name, sort_dir, page, size, session
+            tenant_id,
+            search,
+            allowed_group_ids,
+            sort_col_name,
+            sort_dir,
+            page,
+            size,
+            session,
         )
 
         return GroupListPageResponse(
@@ -216,13 +247,20 @@ class GroupService:
             HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
         """
         group = await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
         return GroupDetailResponse(
-            id=group.id, name=group.name, tenantId=group.tenant_id, updatedAt=group.updated_at
+            id=group.id,
+            name=group.name,
+            tenantId=group.tenant_id,
+            updatedAt=group.updated_at,
         )
 
     @staticmethod
-    async def create_group(req: GroupCreateRequest, tenant_id: str, session: AsyncSession) -> GroupDetailResponse:
+    async def create_group(
+        req: GroupCreateRequest, tenant_id: str, session: AsyncSession
+    ) -> GroupDetailResponse:
         """グループを新規作成する（テナント管理者専用、呼び出し側でロールを検証すること）。
 
         Args:
@@ -237,19 +275,28 @@ class GroupService:
             HTTPException: グループ名が空の場合 400 を返す。
         """
         if not req.name:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="name is required")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="name is required"
+            )
 
         group = Group(tenant_id=tenant_id, name=req.name)
         session.add(group)
         await session.commit()
         await session.refresh(group)
         return GroupDetailResponse(
-            id=group.id, name=group.name, tenantId=group.tenant_id, updatedAt=group.updated_at
+            id=group.id,
+            name=group.name,
+            tenantId=group.tenant_id,
+            updatedAt=group.updated_at,
         )
 
     @staticmethod
     async def update_group(
-        group_id: str, req: GroupUpdateRequest, tenant_id: str, current_user: User, session: AsyncSession
+        group_id: str,
+        req: GroupUpdateRequest,
+        tenant_id: str,
+        current_user: User,
+        session: AsyncSession,
     ) -> GroupDetailResponse:
         """グループ名を更新する。
 
@@ -267,7 +314,9 @@ class GroupService:
             HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
         """
         group = await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
 
         if req.name is not None:
             group.name = req.name
@@ -275,11 +324,16 @@ class GroupService:
         await session.commit()
         await session.refresh(group)
         return GroupDetailResponse(
-            id=group.id, name=group.name, tenantId=group.tenant_id, updatedAt=group.updated_at
+            id=group.id,
+            name=group.name,
+            tenantId=group.tenant_id,
+            updatedAt=group.updated_at,
         )
 
     @staticmethod
-    async def delete_group(group_id: str, tenant_id: str, session: AsyncSession) -> None:
+    async def delete_group(
+        group_id: str, tenant_id: str, session: AsyncSession
+    ) -> None:
         """グループを削除する（テナント管理者専用、呼び出し側でロールを検証すること）。存在しない場合は何もしない。
 
         Args:
@@ -287,7 +341,9 @@ class GroupService:
             tenant_id: テナントID。
             session: 非同期DBセッション。
         """
-        group = await GroupRepository.find_by_id_and_tenant_id(group_id, tenant_id, session)
+        group = await GroupRepository.find_by_id_and_tenant_id(
+            group_id, tenant_id, session
+        )
         if group:
             await GroupRepository.delete(group, session)
 
@@ -323,14 +379,24 @@ class GroupService:
             HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
 
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
 
         rows, total = await GroupUserRepository.find_page_by_group(
-            group_id, tenant_id, search, role, sort_col_name, sort_dir, page, size, session
+            group_id,
+            tenant_id,
+            search,
+            role,
+            sort_col_name,
+            sort_dir,
+            page,
+            size,
+            session,
         )
 
         content = [
@@ -344,11 +410,17 @@ class GroupService:
             )
             for gu, u in rows
         ]
-        return PagedGroupMemberResponse(content=content, totalElements=total, number=page, size=size)
+        return PagedGroupMemberResponse(
+            content=content, totalElements=total, number=page, size=size
+        )
 
     @staticmethod
     async def add_group_users(
-        group_id: str, tenant_id: str, user_ids: list[str], current_user: User, session: AsyncSession
+        group_id: str,
+        tenant_id: str,
+        user_ids: list[str],
+        current_user: User,
+        session: AsyncSession,
     ) -> None:
         """グループにユーザーを一括追加する。既存所属はスキップする。
 
@@ -364,19 +436,29 @@ class GroupService:
                 権限がない場合403、対象ユーザーが存在しない場合404を返す。
         """
         if not user_ids:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="userIds is required")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="userIds is required"
+            )
 
         await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
 
         for raw_id in set(user_ids):
             target_uuid = GroupService._parse_user_uuid(raw_id)
 
-            user = await UserRepository.find_by_id_and_tenant_id(target_uuid, tenant_id, session)
+            user = await UserRepository.find_by_id_and_tenant_id(
+                target_uuid, tenant_id, session
+            )
             if not user:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+                )
 
-            existing = await GroupUserRepository.find_one(group_id, tenant_id, target_uuid, session)
+            existing = await GroupUserRepository.find_one(
+                group_id, tenant_id, target_uuid, session
+            )
             if existing:
                 continue
             GroupUserRepository.add(group_id, tenant_id, target_uuid, session)
@@ -385,7 +467,11 @@ class GroupService:
 
     @staticmethod
     async def remove_group_user(
-        group_id: str, tenant_id: str, target_user_id: str, current_user: User, session: AsyncSession
+        group_id: str,
+        tenant_id: str,
+        target_user_id: str,
+        current_user: User,
+        session: AsyncSession,
     ) -> None:
         """グループからユーザーを除外する。既に非所属なら何もしない。
 
@@ -401,12 +487,16 @@ class GroupService:
                 グループ管理者が自分自身を除外しようとした場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
 
         target_uuid = GroupService._parse_user_uuid(target_user_id)
         GroupService._assert_not_self(target_uuid, current_user)
 
-        group_user = await GroupUserRepository.find_one(group_id, tenant_id, target_uuid, session)
+        group_user = await GroupUserRepository.find_one(
+            group_id, tenant_id, target_uuid, session
+        )
         if group_user:
             await GroupUserRepository.remove(group_user, session)
 
@@ -434,14 +524,20 @@ class GroupService:
                 権限がない場合403、グループ管理者が自分自身のロールを変更しようとした場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
-        await GroupService._assert_can_manage_group(group_id, tenant_id, current_user, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
 
         target_uuid = GroupService._parse_user_uuid(target_user_id)
         GroupService._assert_not_self(target_uuid, current_user)
 
-        group_user = await GroupUserRepository.find_one(group_id, tenant_id, target_uuid, session)
+        group_user = await GroupUserRepository.find_one(
+            group_id, tenant_id, target_uuid, session
+        )
         if not group_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in group")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found in group"
+            )
 
         group_user.is_admin = group_admin
         session.add(group_user)
