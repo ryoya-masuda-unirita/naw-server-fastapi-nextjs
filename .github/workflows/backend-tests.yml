@@ -1,0 +1,124 @@
+# GitHub Actions のワークフロー定義ファイル。
+# 「特定のイベント（プッシュ等）が起きたら、GitHub が用意した仮想マシン上で
+#  決められた手順（テスト実行など）を自動で行う」という仕組みを定義している。
+# ファイルの置き場所は固定で、リポジトリ直下の .github/workflows/*.yml。
+# ここに置いた .yml は置いた瞬間からGitHubに認識され、対象イベントが起きるたびに自動実行される。
+
+# ワークフロー全体の名前。GitHubのActionsタブの一覧に表示される見出し。
+name: Backend Tests
+
+# --- どんな時にこのワークフローを動かすか（トリガー） ---
+on:
+  push:
+    # push イベント＝ブランチに何かコミットがプッシュされた時（PRのマージも「developへのpush」として扱われる）。
+    # paths を指定すると、そのパターンに一致する変更を含むpushの時だけ実行される。
+    # 例えばフロントエンドだけ変更したpushではこのワークフローは走らない（無駄な実行・時間・お金の節約）。
+    paths:
+      - "backend/**" # backend/配下のファイルが変更された場合
+      - ".github/workflows/backend-tests.yml" # このワークフロー自身を直した場合（設定ミスにすぐ気づけるように）
+
+# --- 実行する仕事（ジョブ）の定義 ---
+# 1つのワークフローの中に複数の jobs を持てる。
+# 各ジョブはデフォルトでは並列・独立した別々の仮想マシン上で動く（今回は2つのジョブがある）。
+jobs:
+  # 1つ目のジョブ：軽量な単体テストのみを実行する。
+  # プッシュのたびに毎回走らせても待ち時間が短く済むように、こちらだけ常時実行する構成にしている。
+  unit-tests:
+    # runs-on: このジョブをどんなOS環境（仮想マシンのイメージ）で動かすか。
+    # ubuntu-latest は GitHub がホストしてくれる使い捨てのUbuntu仮想マシン。
+    # ジョブが始まるたびに新品の状態で用意され、終わったら破棄される（ローカルPCやサーバーには一切影響しない）。
+    runs-on: ubuntu-latest
+
+    # defaults.run.working-directory: 以降の `run:` ステップを実行する際のカレントディレクトリ。
+    # このリポジトリは backend/ 配下にPythonプロジェクトがあるモノレポ構成なので、
+    # 毎回 `cd backend && ...` と書く代わりにここで一括指定している。
+    defaults:
+      run:
+        working-directory: backend
+
+    # steps: ジョブの中で上から順番に実行される作業の一覧。
+    steps:
+      # 「uses」は誰かが作った再利用可能な処理（Action）を呼び出す。今回のように自作しなくても、
+      # GitHubやコミュニティが公開している定番のActionを組み合わせるのがCI設定の基本スタイル。
+      #
+      # actions/checkout: このリポジトリのコードを仮想マシンに git clone してくる。
+      # これがないと、まっさらな仮想マシンにはソースコードが一切存在しない。
+      - uses: actions/checkout@v4
+
+      # astral-sh/setup-uv: Pythonのパッケージ管理ツール「uv」を仮想マシンにインストールする。
+      # enable-cache: true にすると、依存パッケージのダウンロード結果をGitHub側にキャッシュしてくれて、
+      # 2回目以降の実行が速くなる（毎回ゼロからダウンロードしなくて済む）。
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      # actions/setup-python: 指定バージョンのPython本体をインストールする。
+      # backend/pyproject.toml の requires-python（3.12以上）に合わせている。
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 「run」は仮想マシン上でシェルコマンドをそのまま実行するステップ（uses ではなく自前のコマンド）。
+      #
+      # アプリの設定は環境変数（.envファイル）から読み込む作りになっているが、
+      # 本物の .env（DBのパスワード等）はセキュリティ上リポジトリに含めていない（.gitignore対象）。
+      # そのためCI環境には .env が存在しない。
+      # 代わりに、ダミー値だけが入ったテンプレート .env.example をコピーして使う。
+      # これはこの使い捨て仮想マシンの中だけの一時ファイルで、実行が終われば消える。
+      - name: Prepare .env
+        run: cp .env.example .env
+
+      # uv sync: pyproject.toml / uv.lock に書かれた依存パッケージを実際にインストールする。
+      # --locked を付けると「uv.lock の内容が pyproject.toml と一致していること」を検証し、
+      # ズレがあれば（依存関係を変えたのに uv lock し忘れた等）ここでエラーにして気づかせてくれる。
+      # 付けない場合は黙って uv.lock を書き換えてしまい、ズレに気づけないまま進んでしまう。
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # 実際にテストを実行するステップ。ここが失敗すると、このジョブ全体が「失敗」として赤くなり、
+      # PR画面にも「チェックが失敗しています」という表示が出る。
+      # tests/unit は外部依存（DB等）なしで完結する軽量なテストのみ。
+      - name: Run unit tests
+        run: uv run pytest tests/unit -q
+
+  # 2つ目のジョブ：単体テストに加えて、より重い結合テスト（DBアクセスを伴うテスト）も実行する。
+  # 毎回のプッシュで結合テストまで走らせると時間がかかるため、
+  # 「developブランチへの反映（＝PRがマージされた時）」という節目だけに絞って実行する構成にしている。
+  integration-tests:
+    # if: このジョブを実行する条件式。ここが false の場合、ジョブ自体はスキップ扱いになる
+    #（失敗ではなく「実行しなかった」という状態で、GitHub Actions の一覧に "skipped" と表示される）。
+    #
+    # github.ref はプッシュされたブランチ（の完全な参照名）。
+    # 通常のブランチは 'refs/heads/<ブランチ名>' という形式になる。
+    # PRがdevelopにマージされると、develop自体に新しいコミットがpushされた扱いになるため、
+    # この条件に一致してこのジョブも動く。
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare .env
+        run: cp .env.example .env
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # tests/unit と tests/integration の両方を実行する
+      #（developへの反映時は「念のため単体テストも含めてフルセットで再確認する」という考え方）。
+      - name: Run unit and integration tests
+        run: uv run pytest tests/unit tests/integration -q
