@@ -1,5 +1,10 @@
 # code-review（Issue #34 / PR #35）
 
+> **注意**: 本レビューは旧方式（`.githooks/pre-push`でのamend）を対象に実施したものであり、その後の実機検証で
+> pre-pushフック自体が「amendしても実際にはpushされない」という致命的な設計欠陥を持つことが判明したため、
+> この方式は撤去し`pre-commit`フレームワーク方式に再設計した（詳細は`01_要件定義.md`〜`03_詳細設計.md`参照）。
+> 以下の指摘・検証内容は旧方式に関する記録として残すが、新方式に対しては`/code-review`を再実施する。
+
 ## レビュー対象
 
 `git diff origin/develop...HEAD`（43 files changed, 1022 insertions(+), 313 deletions(-)）

@@ -16,7 +16,7 @@
 #34 issue-34 03_詳細設計.md〜07_gitコミット.md を作成
 ```
 
-### 2. 既存コードのクリーンアップ
+### 2. 既存コードのクリーンアップ（済）
 
 ```
 #34 issue-34 既存コードにRuffのフォーマット・自動修正を適用
@@ -25,16 +25,25 @@
     - ruff check --fix . で未使用importを解消
 ```
 
-### 3. 実装
+### 3. 設計変更（pre-pushフック方式の破綻を受けた再設計）
 
 ```
-#34 issue-34 Ruffのpre-pushフックとCIチェックを追加
-    - .githooks/pre-pushを新規作成しpush時にruff format・ruff check --fixを自動実行してamendする
-    - backend-tests.ymlにlintジョブ（--fixなしの検証のみ）を追加
-    - backend/.claude/CLAUDE.mdにフックの初期設定手順を追記
+#34 issue-34 00〜07のドキュメントをpre-commitフレームワーク方式に書き直す
+    - pre-pushフックはamend後の内容が実際にはpushされない致命的な欠陥があると実機で判明したため
+    - コミット時にRuffを自動適用するpre-commitフレームワーク方式に設計変更
 ```
 
-### 4. 動作確認・code-review反映（動作確認・レビュー完了後）
+### 4. 旧実装の撤去・新実装
+
+```
+#34 issue-34 pre-pushフックを撤去しpre-commitフレームワークに置き換える
+    - .githooks/pre-pushを削除
+    - .pre-commit-config.yamlを新規作成（ruff-format・ruff --fix、backend/限定）
+    - backend/pyproject.tomlのdev依存にpre-commitを追加
+    - backend/.claude/CLAUDE.mdのフック初期設定手順をpre-commit向けに書き換え
+```
+
+### 5. 動作確認・code-review反映（動作確認・レビュー完了後）
 
 ```
 #34 issue-34 08_動作確認.md を作成
@@ -49,3 +58,4 @@
 ## 備考
 
 - 実装中に発見した追加修正が発生した場合はコミットを分けて記録する
+- 動作確認では`git log`だけでなく`git ls-remote`でリモートの実態を必ず確認する（旧方式で見落とした反省を踏まえる）
