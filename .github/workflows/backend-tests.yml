@@ -124,9 +124,10 @@ jobs:
         run: uv run pytest tests/unit tests/integration -q
 
   # 3つ目のジョブ：コードのフォーマット・リンター（Ruff）を検証する。
-  # ローカルの pre-push フック（.githooks/pre-push）でも同じチェックを自動修正込みで行っているが、
-  # フックを未設定の開発者や `--no-verify` でのpush等、フックを経由しない変更を確実に検出するための
-  # 多層防御としてCI側にも用意する。こちらは `--fix` を付けず、検証のみ行う。
+  # ローカルの pre-commit フック（.pre-commit-config.yaml、コミット時に自動修正込みで実行）でも
+  # 同じチェックを行っているが、フックを未導入の開発者や `--no-verify` でのコミット等、
+  # フックを経由しない変更を確実に検出するための多層防御としてCI側にも用意する。
+  # こちらは `--fix` を付けず、検証のみ行う。
   lint:
     runs-on: ubuntu-latest
     defaults:
