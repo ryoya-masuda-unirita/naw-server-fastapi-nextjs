@@ -30,7 +30,10 @@ cd "$(git rev-parse --show-toplevel)"
 if [ -n "$(git status --porcelain -- backend)" ]; then
   echo "[pre-push] Ruff made changes. Amending them into the current commit..."
   git add -A -- backend
-  git commit --amend --no-edit -- backend
+  # --allow-empty: ruffの修正でbackend側の内容が親コミットと完全に一致する場合でも
+  # （元のコミットの変更点がフォーマット崩れのみだった等）、「空コミットになる」という
+  # gitの拒否でpushが止まらないようにする。
+  git commit --amend --no-edit --allow-empty -- backend
   echo "[pre-push] Amended. Continuing push with the fixed code."
 fi
 
