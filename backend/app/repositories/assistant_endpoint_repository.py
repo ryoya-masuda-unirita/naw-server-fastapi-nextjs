@@ -30,7 +30,11 @@ class AssistantEndpointRepository:
         stmt = (
             select(AssistantEndpoint, TenantEndpoint)
             .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
-            .where(AssistantEndpoint.assistant_id.in_(assistant_ids), AssistantEndpoint.tenant_id == tenant_id)
+            .where(
+                AssistantEndpoint.assistant_id.in_(assistant_ids),
+                AssistantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.tenant_id == tenant_id,
+            )
         )
         result = await session.execute(stmt)
 
