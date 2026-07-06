@@ -1,4 +1,4 @@
-name: Project Status Sync
+name: プロジェクトステータス同期
 
 on:
   pull_request:
@@ -15,12 +15,13 @@ permissions:
 
 jobs:
   move-to-review:
+    name: Reviewへ移動
     # Projects v2 requires a PAT with `project` scope (github.token cannot get it)
     if: github.event.action != 'closed' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Move linked issue to Review
+      - name: 紐づくIssueをReviewへ移動
         env:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -30,11 +31,12 @@ jobs:
             --status "Review"
 
   move-to-done:
+    name: Doneへ移動
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Move linked issue to Done
+      - name: 紐づくIssueをDoneへ移動
         env:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
