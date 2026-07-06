@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_user_repository import GroupUserRepository
@@ -29,8 +30,12 @@ class AssistantService:
         )
         assistants = await AssistantRepository.find_by_ids_and_tenant_id(assistant_ids, tenant_id, session)
 
+        assistant_id_list = [a.id for a in assistants]
         groups_by_assistant_id = await GroupAssistantRepository.find_group_ids_grouped_by_assistant_id(
-            [a.id for a in assistants], tenant_id, session
+            assistant_id_list, tenant_id, session
+        )
+        endpoints_by_assistant_id = await AssistantEndpointRepository.find_endpoints_grouped_by_assistant_id(
+            assistant_id_list, tenant_id, session
         )
 
         return [
@@ -38,7 +43,7 @@ class AssistantService:
                 id=a.id,
                 tenantId=a.tenant_id,
                 type=a.type,
-                endpoints=[],
+                endpoints=endpoints_by_assistant_id.get(a.id, []),
                 name=a.name,
                 indexId=a.index_id,
                 groups=groups_by_assistant_id.get(a.id, []),
