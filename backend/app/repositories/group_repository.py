@@ -6,9 +6,10 @@ from app.models.group import Group
 
 
 class GroupRepository:
-
     @staticmethod
-    async def find_by_id_and_tenant_id(group_id: str, tenant_id: str, session: AsyncSession) -> Group | None:
+    async def find_by_id_and_tenant_id(
+        group_id: str, tenant_id: str, session: AsyncSession
+    ) -> Group | None:
         """グループIDとテナントIDでグループを取得する。
 
         Args:
@@ -24,7 +25,9 @@ class GroupRepository:
         return result.scalars().first()
 
     @staticmethod
-    async def find_all_by_tenant_ordered_by_name(tenant_id: str, session: AsyncSession) -> list[Group]:
+    async def find_all_by_tenant_ordered_by_name(
+        tenant_id: str, session: AsyncSession
+    ) -> list[Group]:
         """テナント内の全グループを名前昇順で取得する（isBelonged=false用）。
 
         Args:
@@ -34,7 +37,9 @@ class GroupRepository:
         Returns:
             グループ一覧。
         """
-        stmt = select(Group).where(Group.tenant_id == tenant_id).order_by(Group.name.asc())
+        stmt = (
+            select(Group).where(Group.tenant_id == tenant_id).order_by(Group.name.asc())
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 

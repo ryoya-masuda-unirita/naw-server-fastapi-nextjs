@@ -24,7 +24,9 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ) -> AuthResponse:
     """ログイン"""
-    auth_response = await AuthService.login(request.username, request.password, x_tenant_id, session)
+    auth_response = await AuthService.login(
+        request.username, request.password, x_tenant_id, session
+    )
     if auth_response.token:
         set_access_token_cookie(response, auth_response.token)
     return auth_response

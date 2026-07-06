@@ -4,7 +4,12 @@ from uuid import uuid4
 
 from app.core.security import create_access_token
 from app.main import app
-from app.models.assistant import Assistant, AssistantEndpoint, AssistantType, GroupAssistant
+from app.models.assistant import (
+    Assistant,
+    AssistantEndpoint,
+    AssistantType,
+    GroupAssistant,
+)
 from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
@@ -70,7 +75,12 @@ async def unaffiliated_user(session, tenant):
 @pytest.fixture
 async def assistant(session, tenant):
     """テスト用アシスタント"""
-    a = Assistant(tenant_id=tenant.id, type=AssistantType.SAAS_CHAT, name="Assistant1", include_history=True)
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SAAS_CHAT,
+        name="Assistant1",
+        include_history=True,
+    )
     session.add(a)
     await session.commit()
     await session.refresh(a)
@@ -85,8 +95,14 @@ async def group_with_assistant(session, tenant, member_user, assistant):
     await session.commit()
     await session.refresh(g)
 
-    session.add(GroupUser(group_id=g.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=False))
-    session.add(GroupAssistant(group_id=g.id, tenant_id=tenant.id, assistant_id=assistant.id))
+    session.add(
+        GroupUser(
+            group_id=g.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=False
+        )
+    )
+    session.add(
+        GroupAssistant(group_id=g.id, tenant_id=tenant.id, assistant_id=assistant.id)
+    )
     await session.commit()
     return g
 
@@ -111,7 +127,10 @@ async def tenant_endpoint(session, tenant):
 async def assistant_with_endpoint(session, tenant, assistant, tenant_endpoint):
     """assistantにtenant_endpointを紐付ける"""
     ae = AssistantEndpoint(
-        assistant_id=assistant.id, endpoint_id=tenant_endpoint.id, tenant_id=tenant.id, model="gpt-4o"
+        assistant_id=assistant.id,
+        endpoint_id=tenant_endpoint.id,
+        tenant_id=tenant.id,
+        model="gpt-4o",
     )
     session.add(ae)
     await session.commit()
@@ -169,7 +188,14 @@ class TestGetAssistants:
         assert response.json() == []
 
     async def test_deduplicates_assistant_shared_by_two_groups(
-        self, client, session, tenant, member_headers, member_user, assistant, group_with_assistant
+        self,
+        client,
+        session,
+        tenant,
+        member_headers,
+        member_user,
+        assistant,
+        group_with_assistant,
     ):
         """同じアシスタントが2つのグループ経由で見えても重複排除されること"""
         second_group = Group(tenant_id=tenant.id, name="Group2")
@@ -178,9 +204,18 @@ class TestGetAssistants:
         await session.refresh(second_group)
 
         session.add(
-            GroupUser(group_id=second_group.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=False)
+            GroupUser(
+                group_id=second_group.id,
+                tenant_id=tenant.id,
+                user_id=member_user.id,
+                is_admin=False,
+            )
         )
-        session.add(GroupAssistant(group_id=second_group.id, tenant_id=tenant.id, assistant_id=assistant.id))
+        session.add(
+            GroupAssistant(
+                group_id=second_group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
         await session.commit()
 
         async with client as c:
@@ -189,7 +224,9 @@ class TestGetAssistants:
         assert response.status_code == 200
         body = response.json()
         assert len(body) == 1
-        assert sorted(body[0]["groups"]) == sorted([group_with_assistant.id, second_group.id])
+        assert sorted(body[0]["groups"]) == sorted(
+            [group_with_assistant.id, second_group.id]
+        )
 
     async def test_excludes_assistant_from_unrelated_group(
         self, client, session, tenant, member_headers, group_with_assistant
@@ -201,14 +238,21 @@ class TestGetAssistants:
         await session.refresh(other_group)
 
         other_assistant = Assistant(
-            tenant_id=tenant.id, type=AssistantType.SAAS_CHAT, name="Other", include_history=False
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="Other",
+            include_history=False,
         )
         session.add(other_assistant)
         await session.commit()
         await session.refresh(other_assistant)
 
         session.add(
-            GroupAssistant(group_id=other_group.id, tenant_id=tenant.id, assistant_id=other_assistant.id)
+            GroupAssistant(
+                group_id=other_group.id,
+                tenant_id=tenant.id,
+                assistant_id=other_assistant.id,
+            )
         )
         await session.commit()
 
@@ -221,7 +265,9 @@ class TestGetAssistants:
     async def test_unauthenticated_returns_401(self, client, tenant):
         """未認証は401になること"""
         async with client as c:
-            response = await c.get("/api/assistants", headers={"X-Tenant-ID": tenant.id})
+            response = await c.get(
+                "/api/assistants", headers={"X-Tenant-ID": tenant.id}
+            )
 
         assert response.status_code == 401
 
@@ -231,7 +277,12 @@ class TestGetAssistantsEndpoints:
     """GET /api/assistants のendpoints項目"""
 
     async def test_returns_endpoint_details(
-        self, client, member_headers, group_with_assistant, assistant_with_endpoint, tenant_endpoint
+        self,
+        client,
+        member_headers,
+        group_with_assistant,
+        assistant_with_endpoint,
+        tenant_endpoint,
     ):
         """紐づくエンドポイント情報が返ること"""
         async with client as c:
@@ -248,7 +299,9 @@ class TestGetAssistantsEndpoints:
         assert "label" not in endpoints[0]
         assert "apiKey" not in endpoints[0]
 
-    async def test_returns_empty_endpoints_when_not_linked(self, client, member_headers, group_with_assistant):
+    async def test_returns_empty_endpoints_when_not_linked(
+        self, client, member_headers, group_with_assistant
+    ):
         """エンドポイントが紐づいていない場合は空配列が返ること（issue-26の既存挙動を維持）"""
         async with client as c:
             response = await c.get("/api/assistants", headers=member_headers)
@@ -257,7 +310,14 @@ class TestGetAssistantsEndpoints:
         assert response.json()[0]["endpoints"] == []
 
     async def test_returns_multiple_endpoints(
-        self, client, session, tenant, member_headers, group_with_assistant, assistant, tenant_endpoint
+        self,
+        client,
+        session,
+        tenant,
+        member_headers,
+        group_with_assistant,
+        assistant,
+        tenant_endpoint,
     ):
         """複数エンドポイントが紐づく場合すべて返ること"""
         second_endpoint = TenantEndpoint(
@@ -273,7 +333,10 @@ class TestGetAssistantsEndpoints:
 
         session.add(
             AssistantEndpoint(
-                assistant_id=assistant.id, endpoint_id=tenant_endpoint.id, tenant_id=tenant.id, model="gpt-4o"
+                assistant_id=assistant.id,
+                endpoint_id=tenant_endpoint.id,
+                tenant_id=tenant.id,
+                model="gpt-4o",
             )
         )
         session.add(

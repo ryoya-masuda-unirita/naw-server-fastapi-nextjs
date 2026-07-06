@@ -23,10 +23,25 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), nullable=False),
         sa.Column("tenant_id", sa.String(32), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_groups"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE", name="fk_groups_tenant_id"),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            ondelete="CASCADE",
+            name="fk_groups_tenant_id",
+        ),
     )
 
     op.create_table(
@@ -35,11 +50,33 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("tenant_id", sa.String(32), nullable=False),
         sa.Column("is_admin", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.PrimaryKeyConstraint("group_id", "user_id", "tenant_id", name="pk_groups_users"),
-        sa.ForeignKeyConstraint(["group_id"], ["groups.id"], ondelete="CASCADE", name="fk_groups_users_group_id"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE", name="fk_groups_users_user_id"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], ondelete="CASCADE", name="fk_groups_users_tenant_id"),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.PrimaryKeyConstraint(
+            "group_id", "user_id", "tenant_id", name="pk_groups_users"
+        ),
+        sa.ForeignKeyConstraint(
+            ["group_id"],
+            ["groups.id"],
+            ondelete="CASCADE",
+            name="fk_groups_users_group_id",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name="fk_groups_users_user_id",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            ondelete="CASCADE",
+            name="fk_groups_users_tenant_id",
+        ),
     )
 
 

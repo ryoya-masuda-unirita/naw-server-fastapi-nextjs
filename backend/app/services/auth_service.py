@@ -15,7 +15,9 @@ class AuthService:
     """認証サービス"""
 
     @staticmethod
-    async def login(username: str, password: str, tenant_id: str, session: AsyncSession) -> AuthResponse:
+    async def login(
+        username: str, password: str, tenant_id: str, session: AsyncSession
+    ) -> AuthResponse:
         """ログイン処理を行い認証レスポンスを返す。
 
         Args:
@@ -32,14 +34,20 @@ class AuthService:
         """
         user = await UserRepository.find_by_login_id(username, tenant_id, session)
         if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            )
 
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
         if not latest:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            )
 
         if not await verify_password_async(password, latest.password):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            )
 
         if user.is_required_password_reset:
             return AuthResponse(
@@ -64,7 +72,11 @@ class AuthService:
 
     @staticmethod
     async def reset_password(
-        login_id: str, old_password: str, new_password: str, tenant_id: str, session: AsyncSession
+        login_id: str,
+        old_password: str,
+        new_password: str,
+        tenant_id: str,
+        session: AsyncSession,
     ) -> AuthResponse:
         """初回ログイン時のパスワードリセット処理を行い認証レスポンスを返す。
 
@@ -84,19 +96,33 @@ class AuthService:
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not found")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="User not found"
+            )
 
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
         if not latest or not await verify_password_async(old_password, latest.password):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid old password")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid old password"
+            )
 
         tenant = await TenantRepository.find_by_id(tenant_id, session)
         if not tenant:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found"
+            )
         verify_password_strength(new_password, tenant)
         await check_password_not_reused(user.id, new_password, tenant, session)
-        expired_at = datetime.now(timezone.utc) + timedelta(days=tenant.pw_validity_period_days)
-        await PasswordHistoryRepository.save(user.id, tenant_id, hash_password(new_password), session, expired_at=expired_at)
+        expired_at = datetime.now(timezone.utc) + timedelta(
+            days=tenant.pw_validity_period_days
+        )
+        await PasswordHistoryRepository.save(
+            user.id,
+            tenant_id,
+            hash_password(new_password),
+            session,
+            expired_at=expired_at,
+        )
 
         user.is_required_password_reset = False
         session.add(user)

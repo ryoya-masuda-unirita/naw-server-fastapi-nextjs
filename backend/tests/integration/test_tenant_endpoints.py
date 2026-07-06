@@ -148,7 +148,9 @@ class TestGetEndpoints:
     ):
         """テナント管理者は全タイプのエンドポイントを取得できること"""
         async with client as c:
-            response = await c.get(f"/api/admin/tenants/{tenant.id}/endpoints", headers=admin_headers)
+            response = await c.get(
+                f"/api/admin/tenants/{tenant.id}/endpoints", headers=admin_headers
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -158,14 +160,20 @@ class TestGetEndpoints:
     async def test_normal_user_gets_403(self, client, user_headers, tenant):
         """一般ユーザーは403になること"""
         async with client as c:
-            response = await c.get(f"/api/admin/tenants/{tenant.id}/endpoints", headers=user_headers)
+            response = await c.get(
+                f"/api/admin/tenants/{tenant.id}/endpoints", headers=user_headers
+            )
 
         assert response.status_code == 403
 
-    async def test_path_tenant_mismatch_returns_403(self, client, admin_headers, other_tenant):
+    async def test_path_tenant_mismatch_returns_403(
+        self, client, admin_headers, other_tenant
+    ):
         """パスのtenantIdが自分のテナントと異なる場合403になること"""
         async with client as c:
-            response = await c.get(f"/api/admin/tenants/{other_tenant.id}/endpoints", headers=admin_headers)
+            response = await c.get(
+                f"/api/admin/tenants/{other_tenant.id}/endpoints", headers=admin_headers
+            )
 
         assert response.status_code == 403
 
@@ -179,7 +187,9 @@ class TestGetEndpointsByType:
     ):
         """指定タイプのエンドポイントのみ返ること"""
         async with client as c:
-            response = await c.get("/api/admin/tenants/endpoints/AZURE_OPENAI_CHAT", headers=admin_headers)
+            response = await c.get(
+                "/api/admin/tenants/endpoints/AZURE_OPENAI_CHAT", headers=admin_headers
+            )
 
         assert response.status_code == 200
         body = response.json()
@@ -245,7 +255,9 @@ class TestCreateEndpoint:
 class TestUpdateEndpoint:
     """PATCH /api/admin/tenants/{tenantId}/endpoints/{endpointId}"""
 
-    async def test_updates_local_server_endpoint(self, client, admin_headers, tenant, local_server_endpoint):
+    async def test_updates_local_server_endpoint(
+        self, client, admin_headers, tenant, local_server_endpoint
+    ):
         """LOCAL_SERVERエンドポイントを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -298,7 +310,9 @@ class TestUpdateEndpoint:
 
         assert response.status_code == 400
 
-    async def test_update_nonexistent_endpoint_returns_404(self, client, admin_headers, tenant):
+    async def test_update_nonexistent_endpoint_returns_404(
+        self, client, admin_headers, tenant
+    ):
         """存在しないエンドポイントの更新は404になること"""
         async with client as c:
             response = await c.patch(
@@ -314,11 +328,14 @@ class TestUpdateEndpoint:
 class TestDeleteEndpoint:
     """DELETE /api/admin/tenants/{tenantId}/endpoints/{endpointId}"""
 
-    async def test_deletes_local_server_endpoint(self, client, admin_headers, tenant, local_server_endpoint):
+    async def test_deletes_local_server_endpoint(
+        self, client, admin_headers, tenant, local_server_endpoint
+    ):
         """LOCAL_SERVERエンドポイントを削除できること"""
         async with client as c:
             response = await c.delete(
-                f"/api/admin/tenants/{tenant.id}/endpoints/{local_server_endpoint.id}", headers=admin_headers
+                f"/api/admin/tenants/{tenant.id}/endpoints/{local_server_endpoint.id}",
+                headers=admin_headers,
             )
 
         assert response.status_code == 204
@@ -329,16 +346,20 @@ class TestDeleteEndpoint:
         """LOCAL_SERVER以外のエンドポイントの削除は400になること"""
         async with client as c:
             response = await c.delete(
-                f"/api/admin/tenants/{tenant.id}/endpoints/{azure_endpoint.id}", headers=admin_headers
+                f"/api/admin/tenants/{tenant.id}/endpoints/{azure_endpoint.id}",
+                headers=admin_headers,
             )
 
         assert response.status_code == 400
 
-    async def test_delete_nonexistent_endpoint_returns_404(self, client, admin_headers, tenant):
+    async def test_delete_nonexistent_endpoint_returns_404(
+        self, client, admin_headers, tenant
+    ):
         """存在しないエンドポイントの削除は404になること"""
         async with client as c:
             response = await c.delete(
-                f"/api/admin/tenants/{tenant.id}/endpoints/nonexistent", headers=admin_headers
+                f"/api/admin/tenants/{tenant.id}/endpoints/nonexistent",
+                headers=admin_headers,
             )
 
         assert response.status_code == 404

@@ -31,7 +31,9 @@ class TestCorsMiddleware:
         """許可オリジンからのプリフライトリクエストにAccess-Control-Allow-Originが返ること"""
         response = await _preflight("http://localhost:5173")
 
-        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        assert (
+            response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        )
         assert response.headers["access-control-allow-credentials"] == "true"
 
     async def test_rejects_unconfigured_origin(self):

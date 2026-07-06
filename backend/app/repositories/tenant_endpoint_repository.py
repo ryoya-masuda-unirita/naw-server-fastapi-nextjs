@@ -5,9 +5,10 @@ from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 
 
 class TenantEndpointRepository:
-
     @staticmethod
-    async def find_by_tenant_id(tenant_id: str, session: AsyncSession) -> list[TenantEndpoint]:
+    async def find_by_tenant_id(
+        tenant_id: str, session: AsyncSession
+    ) -> list[TenantEndpoint]:
         """テナント内の全エンドポイントを取得する。
 
         Args:

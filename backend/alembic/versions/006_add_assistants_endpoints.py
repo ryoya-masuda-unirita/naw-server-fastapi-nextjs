@@ -24,15 +24,26 @@ def upgrade() -> None:
         sa.Column("endpoint_id", sa.String(32), nullable=False),
         sa.Column("tenant_id", sa.String(32), nullable=False),
         sa.Column("model", sa.String(32), nullable=False),
-        sa.PrimaryKeyConstraint("assistant_id", "endpoint_id", name="pk_assistants_endpoints"),
-        sa.ForeignKeyConstraint(
-            ["assistant_id"], ["assistants.id"], ondelete="CASCADE", name="fk_assistants_endpoints_assistant_id"
+        sa.PrimaryKeyConstraint(
+            "assistant_id", "endpoint_id", name="pk_assistants_endpoints"
         ),
         sa.ForeignKeyConstraint(
-            ["endpoint_id"], ["tenant_endpoints.id"], ondelete="CASCADE", name="fk_assistants_endpoints_endpoint_id"
+            ["assistant_id"],
+            ["assistants.id"],
+            ondelete="CASCADE",
+            name="fk_assistants_endpoints_assistant_id",
         ),
         sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenants.id"], ondelete="CASCADE", name="fk_assistants_endpoints_tenant_id"
+            ["endpoint_id"],
+            ["tenant_endpoints.id"],
+            ondelete="CASCADE",
+            name="fk_assistants_endpoints_endpoint_id",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            ondelete="CASCADE",
+            name="fk_assistants_endpoints_tenant_id",
         ),
     )
 

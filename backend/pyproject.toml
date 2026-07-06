@@ -37,5 +37,10 @@ asyncio_default_test_loop_scope = "session"
 [tool.ruff]
 line-length = 88
 
+[tool.ruff.lint.per-file-ignores]
+# sys.path.insert() を先に実行してからimportする意図的な構造のため、
+# 「モジュールレベルのimportがファイル先頭にない」という指摘を無効化する。
+"tests/unit/conftest.py" = ["E402"]
+
 [tool.mypy]
 plugins = ["pydantic.mypy"]

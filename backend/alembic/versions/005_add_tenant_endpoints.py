@@ -42,7 +42,10 @@ def upgrade() -> None:
         sa.Column("api_key", sa.Text(), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_tenant_endpoints"),
         sa.ForeignKeyConstraint(
-            ["tenant_id"], ["tenants.id"], ondelete="CASCADE", name="fk_tenant_endpoints_tenant_id"
+            ["tenant_id"],
+            ["tenants.id"],
+            ondelete="CASCADE",
+            name="fk_tenant_endpoints_tenant_id",
         ),
     )
 

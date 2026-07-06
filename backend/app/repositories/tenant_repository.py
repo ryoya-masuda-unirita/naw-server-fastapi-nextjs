@@ -5,7 +5,6 @@ from app.models.tenant import Tenant
 
 
 class TenantRepository:
-
     @staticmethod
     async def find_by_id(tenant_id: str, session: AsyncSession) -> Tenant | None:
         """テナントIDでテナントを取得する。

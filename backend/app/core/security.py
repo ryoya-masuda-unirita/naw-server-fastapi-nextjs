@@ -55,6 +55,7 @@ async def verify_password_async(plain_password: str, hashed_password: str) -> bo
 def create_access_token(login_id: str, tenant_id: str) -> str:
     """JWT トークンを生成"""
     from datetime import timezone
+
     now = datetime.now(timezone.utc)
     expire = now + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
@@ -73,9 +74,13 @@ def decode_token(token: str) -> dict:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
 
 async def get_current_user(
@@ -103,18 +108,24 @@ async def get_current_user(
     """
     token = access_token or (credentials.credentials if credentials else None)
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
 
     payload = decode_token(token)
     login_id = payload.get("sub")
     tenant_id = payload.get("tenantId")
 
     if not login_id or not tenant_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
     user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
 
     return user
 
@@ -153,7 +164,10 @@ def clear_access_token_cookie(response: Response) -> None:
 def get_tenant_id_from_header(x_tenant_id: str) -> str:
     """X-Tenant-ID ヘッダーを検証"""
     if not x_tenant_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="X-Tenant-ID header is required")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Tenant-ID header is required",
+        )
     return x_tenant_id
 
 
@@ -172,7 +186,9 @@ async def require_admin(
         HTTPException: ロールが ADMIN/SYSTEM 以外の場合 403 を返す。
     """
     if current_user.role not in (UserRole.ADMIN, UserRole.SYSTEM):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
+        )
     return current_user
 
 
@@ -196,7 +212,9 @@ async def get_verified_tenant_id(
         HTTPException: ヘッダーと JWT の tenant_id が一致しない場合 403 を返す。
     """
     if x_tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch"
+        )
 
     return x_tenant_id
 
@@ -221,5 +239,7 @@ async def require_admin_for_tenant_path(
         HTTPException: パスのtenant_idが認証済みユーザーのテナントと一致しない場合 403 を返す。
     """
     if tenant_id != current_user.tenant_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch"
+        )
     return tenant_id

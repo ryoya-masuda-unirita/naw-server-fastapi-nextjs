@@ -14,7 +14,6 @@ import jwt
 from app.core.security import hash_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
-from app.models.password_history import PasswordHistory
 
 
 @pytest.fixture

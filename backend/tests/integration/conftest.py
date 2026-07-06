@@ -58,6 +58,7 @@ async def session(engine):
         # テスト後にテーブルをクリア
         # IntegrityError 等でセッションが中断された場合に備えてロールバックで回復する
         from sqlalchemy import text
+
         await sess.rollback()
         tables = [
             "assistants_endpoints",

@@ -5,7 +5,6 @@ from app.models.assistant import Assistant
 
 
 class AssistantRepository:
-
     @staticmethod
     async def find_by_ids_and_tenant_id(
         assistant_ids: list[str], tenant_id: str, session: AsyncSession

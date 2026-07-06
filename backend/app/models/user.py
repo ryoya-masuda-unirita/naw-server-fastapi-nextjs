@@ -15,7 +15,9 @@ class UserRole(str, Enum):
 class User(SQLModel, table=True):
     __tablename__ = "users"
     __table_args__ = (
-        sa.UniqueConstraint("login_id", "tenant_id", name="uq_users_login_id_tenant_id"),
+        sa.UniqueConstraint(
+            "login_id", "tenant_id", name="uq_users_login_id_tenant_id"
+        ),
     )
 
     id: uuid.UUID = Field(
@@ -48,7 +50,9 @@ class User(SQLModel, table=True):
         sa_column=sa.Column(sa.Boolean, nullable=False, server_default=sa.true()),
     )
     created_at: datetime = Field(
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     updated_at: datetime = Field(
         sa_column=sa.Column(

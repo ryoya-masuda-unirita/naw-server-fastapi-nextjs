@@ -8,9 +8,10 @@ from app.models.password_history import PasswordHistory
 
 
 class PasswordHistoryRepository:
-
     @staticmethod
-    async def get_latest(user_id: uuid.UUID, session: AsyncSession) -> PasswordHistory | None:
+    async def get_latest(
+        user_id: uuid.UUID, session: AsyncSession
+    ) -> PasswordHistory | None:
         stmt = (
             select(PasswordHistory)
             .where(PasswordHistory.user_id == user_id)

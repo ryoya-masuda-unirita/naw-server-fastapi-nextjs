@@ -9,9 +9,10 @@ from app.models.user import User
 
 
 class GroupUserRepository:
-
     @staticmethod
-    async def is_group_admin(group_id: str, tenant_id: str, user_id: UUID, session: AsyncSession) -> bool:
+    async def is_group_admin(
+        group_id: str, tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> bool:
         """指定ユーザーが指定グループのグループ内管理者かどうかを判定する。
 
         Args:
@@ -33,7 +34,9 @@ class GroupUserRepository:
         return result.scalars().first() is not None
 
     @staticmethod
-    async def find_admin_group_ids_for_user(tenant_id: str, user_id: UUID, session: AsyncSession) -> list[str]:
+    async def find_admin_group_ids_for_user(
+        tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> list[str]:
         """指定ユーザーがグループ内管理者になっているグループID一覧を取得する。
 
         Args:
@@ -53,7 +56,9 @@ class GroupUserRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def find_belonging_group_ids(tenant_id: str, user_id: UUID, session: AsyncSession) -> list[str]:
+    async def find_belonging_group_ids(
+        tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> list[str]:
         """指定ユーザーが所属する全グループID一覧を取得する（isBelonged=true用）。
 
         Args:
@@ -71,7 +76,9 @@ class GroupUserRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def find_by_group(group_id: str, tenant_id: str, session: AsyncSession) -> list[tuple[GroupUser, User]]:
+    async def find_by_group(
+        group_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[tuple[GroupUser, User]]:
         """グループ所属ユーザー一覧を取得する（Userを結合して1クエリで取得しN+1を避ける）。
 
         Args:
@@ -106,7 +113,9 @@ class GroupUserRepository:
             該当する GroupUser。存在しない場合は None。
         """
         stmt = select(GroupUser).where(
-            GroupUser.group_id == group_id, GroupUser.tenant_id == tenant_id, GroupUser.user_id == user_id
+            GroupUser.group_id == group_id,
+            GroupUser.tenant_id == tenant_id,
+            GroupUser.user_id == user_id,
         )
         result = await session.execute(stmt)
         return result.scalars().first()
@@ -173,7 +182,9 @@ class GroupUserRepository:
         return [(row[0], row[1]) for row in rows], total
 
     @staticmethod
-    def add(group_id: str, tenant_id: str, user_id: UUID, session: AsyncSession) -> None:
+    def add(
+        group_id: str, tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> None:
         """グループにユーザーを追加する（セッションに登録するのみ。コミットは呼び出し側で行う）。
 
         Args:
@@ -182,7 +193,11 @@ class GroupUserRepository:
             user_id: 追加するユーザーID。
             session: 非同期DBセッション。
         """
-        session.add(GroupUser(group_id=group_id, tenant_id=tenant_id, user_id=user_id, is_admin=False))
+        session.add(
+            GroupUser(
+                group_id=group_id, tenant_id=tenant_id, user_id=user_id, is_admin=False
+            )
+        )
 
     @staticmethod
     async def remove(group_user: GroupUser, session: AsyncSession) -> None:

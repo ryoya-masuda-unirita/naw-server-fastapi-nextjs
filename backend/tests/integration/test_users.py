@@ -105,7 +105,6 @@ def client(override_get_session):
 
 
 class TestGetUsers:
-
     async def test_admin_can_get_users(self, client, admin_headers, admin_user):
         """管理者がユーザー一覧を取得できること"""
         async with client as c:
@@ -125,7 +124,10 @@ class TestGetUsers:
 
     async def test_tenant_header_mismatch_gets_403(self, client, admin_token):
         """JWT と異なる X-Tenant-ID を指定すると 403 になること"""
-        headers = {"Authorization": f"Bearer {admin_token}", "X-Tenant-ID": "other-tenant"}
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "X-Tenant-ID": "other-tenant",
+        }
         async with client as c:
             response = await c.get("/api/admin/users", headers=headers)
 
@@ -133,18 +135,25 @@ class TestGetUsers:
 
 
 class TestGetUsersSearchAndSort:
-
     async def test_percent_in_search_text_is_treated_as_literal(
         self, client, admin_headers, session, tenant
     ):
         """検索文字列中の%がワイルドカードとして機能しないこと"""
         literal_user = User(
-            id=uuid4(), tenant_id=tenant.id, login_id="literal-user",
-            name="ab%c", role=UserRole.USER, is_required_password_reset=False,
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="literal-user",
+            name="ab%c",
+            role=UserRole.USER,
+            is_required_password_reset=False,
         )
         plain_user = User(
-            id=uuid4(), tenant_id=tenant.id, login_id="plain-user",
-            name="abc", role=UserRole.USER, is_required_password_reset=False,
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="plain-user",
+            name="abc",
+            role=UserRole.USER,
+            is_required_password_reset=False,
         )
         session.add_all([literal_user, plain_user])
         await session.commit()
@@ -159,15 +168,25 @@ class TestGetUsersSearchAndSort:
         assert "ab%c" in names
         assert "abc" not in names
 
-    async def test_sort_by_camel_case_field(self, client, admin_headers, session, tenant):
+    async def test_sort_by_camel_case_field(
+        self, client, admin_headers, session, tenant
+    ):
         """移植元フロントエンドが実際に送信するキャメルケースのsort値でソートできること"""
         user_a = User(
-            id=uuid4(), tenant_id=tenant.id, login_id="user-a",
-            name="Alpha", role=UserRole.USER, is_required_password_reset=False,
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="user-a",
+            name="Alpha",
+            role=UserRole.USER,
+            is_required_password_reset=False,
         )
         user_z = User(
-            id=uuid4(), tenant_id=tenant.id, login_id="user-z",
-            name="Zulu", role=UserRole.USER, is_required_password_reset=False,
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="user-z",
+            name="Zulu",
+            role=UserRole.USER,
+            is_required_password_reset=False,
         )
         session.add_all([user_z, user_a])
         await session.commit()
@@ -185,14 +204,15 @@ class TestGetUsersSearchAndSort:
         """許可リスト外のsort値を指定してもエラーにならず既定列にフォールバックすること"""
         async with client as c:
             response = await c.get(
-                "/api/admin/users", headers=admin_headers, params={"sort": "login_key,asc"}
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"sort": "login_key,asc"},
             )
 
         assert response.status_code == 200
 
 
 class TestCreateUser:
-
     async def test_creates_user_with_initial_password(self, client, admin_headers):
         """ユーザーを作成でき initialPassword が返ること"""
         async with client as c:
@@ -207,7 +227,9 @@ class TestCreateUser:
         assert body["loginId"] == "newuser"
         assert body["initialPassword"] is not None
 
-    async def test_raises_400_on_duplicate_login_id(self, client, admin_headers, admin_user):
+    async def test_raises_400_on_duplicate_login_id(
+        self, client, admin_headers, admin_user
+    ):
         """重複 loginId で 400 になること"""
         async with client as c:
             response = await c.post(
@@ -220,7 +242,6 @@ class TestCreateUser:
 
 
 class TestUpdateUser:
-
     async def test_updates_user(self, client, admin_headers, normal_user):
         """ユーザーを更新できること"""
         async with client as c:
@@ -247,7 +268,6 @@ class TestUpdateUser:
 
 
 class TestDeleteUser:
-
     async def test_deletes_user(self, client, admin_headers, normal_user):
         """ユーザーを削除できること"""
         async with client as c:
@@ -260,7 +280,6 @@ class TestDeleteUser:
 
 
 class TestProfile:
-
     async def test_get_profile(self, client, user_headers, normal_user):
         """認証ユーザーが自分のプロフィールを取得できること"""
         async with client as c:
@@ -280,7 +299,9 @@ class TestProfile:
 
         assert response.status_code == 200
 
-    async def test_get_profile_with_cookie_only(self, client, user_token, tenant, normal_user):
+    async def test_get_profile_with_cookie_only(
+        self, client, user_token, tenant, normal_user
+    ):
         """GET /api/users/profile をCookieのみで認証できること"""
         async with client as c:
             c.cookies.set("access_token", user_token)

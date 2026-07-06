@@ -5,7 +5,11 @@ from app.core.database import get_session
 from app.core.security import require_admin, require_admin_for_tenant_path
 from app.models.tenant_endpoint import EndpointType
 from app.models.user import User
-from app.schemas.tenant_endpoint import EndpointResponse, TenantEndpointCreateRequest, TenantEndpointUpdateRequest
+from app.schemas.tenant_endpoint import (
+    EndpointResponse,
+    TenantEndpointCreateRequest,
+    TenantEndpointUpdateRequest,
+)
 from app.services.tenant_endpoint_service import TenantEndpointService
 
 router = APIRouter(prefix="/api/admin/tenants", tags=["tenant-endpoints"])
@@ -38,7 +42,9 @@ async def update_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> EndpointResponse:
     """エンドポイント更新"""
-    return await TenantEndpointService.update_endpoint(endpoint_id, tenant_id, req, session)
+    return await TenantEndpointService.update_endpoint(
+        endpoint_id, tenant_id, req, session
+    )
 
 
 @router.delete("/{tenant_id}/endpoints/{endpoint_id}", status_code=204)
@@ -58,4 +64,6 @@ async def get_endpoints_by_type(
     session: AsyncSession = Depends(get_session),
 ) -> list[EndpointResponse]:
     """タイプ別エンドポイント一覧取得"""
-    return await TenantEndpointService.get_endpoints_by_type(current_user.tenant_id, type, session)
+    return await TenantEndpointService.get_endpoints_by_type(
+        current_user.tenant_id, type, session
+    )

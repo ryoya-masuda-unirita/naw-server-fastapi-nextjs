@@ -2,7 +2,6 @@ from app.repositories.tenant_repository import TenantRepository
 
 
 class TestFindById:
-
     async def test_returns_tenant_when_found(self, session, test_tenant):
         """存在するtenantIdでTenantを取得できること"""
         result = await TenantRepository.find_by_id(test_tenant.id, session)

@@ -3,11 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
-from app.schemas.tenant_endpoint import EndpointResponse, TenantEndpointCreateRequest, TenantEndpointUpdateRequest
+from app.schemas.tenant_endpoint import (
+    EndpointResponse,
+    TenantEndpointCreateRequest,
+    TenantEndpointUpdateRequest,
+)
 
 
 class TenantEndpointService:
-
     @staticmethod
     def _assert_local_server_only(endpoint_type: EndpointType) -> None:
         """LOCAL_SERVER以外のタイプに対する作成・更新・削除操作を拒否する。
@@ -38,10 +41,15 @@ class TenantEndpointService:
             HTTPException: http(s)://で始まらない場合 400 を返す。
         """
         if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="有効なURLを入力してください。")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="有効なURLを入力してください。",
+            )
 
     @staticmethod
-    async def get_endpoints(tenant_id: str, session: AsyncSession) -> list[EndpointResponse]:
+    async def get_endpoints(
+        tenant_id: str, session: AsyncSession
+    ) -> list[EndpointResponse]:
         """テナント内の全エンドポイント一覧を取得する。
 
         Args:
@@ -68,7 +76,9 @@ class TenantEndpointService:
         Returns:
             エンドポイント一覧。
         """
-        endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(tenant_id, endpoint_type, session)
+        endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
+            tenant_id, endpoint_type, session
+        )
         return [TenantEndpointService._to_response(e) for e in endpoints]
 
     @staticmethod
@@ -105,7 +115,10 @@ class TenantEndpointService:
 
     @staticmethod
     async def update_endpoint(
-        endpoint_id: str, tenant_id: str, req: TenantEndpointUpdateRequest, session: AsyncSession
+        endpoint_id: str,
+        tenant_id: str,
+        req: TenantEndpointUpdateRequest,
+        session: AsyncSession,
     ) -> EndpointResponse:
         """エンドポイントを更新する（対象・更新後ともLOCAL_SERVERタイプのみ）。
 
@@ -122,9 +135,13 @@ class TenantEndpointService:
             HTTPException: エンドポイントが存在しない場合404、現在または更新後のtypeが
                 LOCAL_SERVER以外の場合400、URL形式が不正な場合400を返す。
         """
-        endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(endpoint_id, tenant_id, session)
+        endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
+            endpoint_id, tenant_id, session
+        )
         if not endpoint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found"
+            )
 
         TenantEndpointService._assert_local_server_only(endpoint.type)
         if req.type is not None:
@@ -144,7 +161,9 @@ class TenantEndpointService:
         return TenantEndpointService._to_response(endpoint)
 
     @staticmethod
-    async def delete_endpoint(endpoint_id: str, tenant_id: str, session: AsyncSession) -> None:
+    async def delete_endpoint(
+        endpoint_id: str, tenant_id: str, session: AsyncSession
+    ) -> None:
         """エンドポイントを削除する（LOCAL_SERVERタイプのみ）。
 
         Args:
@@ -155,9 +174,13 @@ class TenantEndpointService:
         Raises:
             HTTPException: エンドポイントが存在しない場合404、typeがLOCAL_SERVER以外の場合400を返す。
         """
-        endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(endpoint_id, tenant_id, session)
+        endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
+            endpoint_id, tenant_id, session
+        )
         if not endpoint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found"
+            )
 
         TenantEndpointService._assert_local_server_only(endpoint.type)
         await TenantEndpointRepository.delete(endpoint, session)

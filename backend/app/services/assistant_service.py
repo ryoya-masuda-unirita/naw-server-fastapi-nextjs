@@ -9,7 +9,6 @@ from app.schemas.assistant import AssistantGetResponse
 
 
 class AssistantService:
-
     @staticmethod
     async def get_assistants(
         tenant_id: str, current_user: User, session: AsyncSession
@@ -24,18 +23,26 @@ class AssistantService:
         Returns:
             アシスタント一覧（重複排除済み）。
         """
-        group_ids = await GroupUserRepository.find_belonging_group_ids(tenant_id, current_user.id, session)
+        group_ids = await GroupUserRepository.find_belonging_group_ids(
+            tenant_id, current_user.id, session
+        )
         assistant_ids = await GroupAssistantRepository.find_assistant_ids_by_group_ids(
             group_ids, tenant_id, session
         )
-        assistants = await AssistantRepository.find_by_ids_and_tenant_id(assistant_ids, tenant_id, session)
+        assistants = await AssistantRepository.find_by_ids_and_tenant_id(
+            assistant_ids, tenant_id, session
+        )
 
         assistant_id_list = [a.id for a in assistants]
-        groups_by_assistant_id = await GroupAssistantRepository.find_group_ids_grouped_by_assistant_id(
-            assistant_id_list, tenant_id, session
+        groups_by_assistant_id = (
+            await GroupAssistantRepository.find_group_ids_grouped_by_assistant_id(
+                assistant_id_list, tenant_id, session
+            )
         )
-        endpoints_by_assistant_id = await AssistantEndpointRepository.find_endpoints_grouped_by_assistant_id(
-            assistant_id_list, tenant_id, session
+        endpoints_by_assistant_id = (
+            await AssistantEndpointRepository.find_endpoints_grouped_by_assistant_id(
+                assistant_id_list, tenant_id, session
+            )
         )
 
         return [
