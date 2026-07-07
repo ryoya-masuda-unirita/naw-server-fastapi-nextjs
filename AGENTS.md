@@ -19,6 +19,7 @@
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。
 
 `frontend-angular/` は `secuaigent-client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
+`secuaigent-client` / `frontend-angular` が明示された同期依頼、または「frontendを最新にして」など文脈上 `secuaigent-client` → `frontend-angular` 同期と判断できる依頼では、`.codex/skills/frontend-angular-sync/SKILL.md` を先に読むこと。`frontend/`（React）と `frontend-angular/` のどちらを指すか判断に迷う場合のみ、作業前にユーザーへ確認すること。
 
 ### 現在の開発方針
 
@@ -81,6 +82,17 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 - PR 本文更新
 - `code-review.md` 作成
 - テスト結果・動作確認結果の整理
+
+### 3. secuaigent-client → frontend-angular 同期
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/frontend-angular-sync/SKILL.md` を読むこと。
+
+- `secuaigent-client` の最新実装を `frontend-angular/` に反映したいとき
+- `frontend-angular/` を最新にしたいとき
+- `secuaigent-client` から `frontend-angular/` にソースをコピーしたいとき
+- 「frontendを最新にして」「frontend-angularを最新にして」「secuaigent-clientから持ってきて」等、文言が曖昧でも文脈上 `secuaigent-client` → `frontend-angular` 同期の意図だと判断できるとき
+
+`secuaigent-client` または `frontend-angular` が明示されていれば確認不要。`frontend/`（React 移植）と `frontend-angular/` のどちらを指すか判断に迷う場合のみ、ユーザーに確認すること。
 
 ## 実行方針
 
