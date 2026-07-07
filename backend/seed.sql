@@ -182,3 +182,21 @@ VALUES (
     '00000000-0000-4000-8000-000000000001'
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- 動作確認用アシスタントとカテゴリの紐付け
+INSERT INTO assistant_category_mappings (assistant_id, category_id, tenant_id)
+VALUES (
+    '10000000000040008000000000000001',
+    '50000000000040008000000000000001',
+    'test-tenant'
+)
+ON CONFLICT (assistant_id, category_id) DO NOTHING;
+
+-- AIモデル (id自動採番: 動作確認用アシスタント作成・編集画面のモデル選択肢)
+INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
+SELECT 'AZURE_OPENAI_CHAT', 'gpt-4o', 128000, true, 1.0
+WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'gpt-4o');
+
+INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
+SELECT 'CLAUDE_CHAT', 'claude-3-5-sonnet', 200000, true, 1.0
+WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'claude-3-5-sonnet');
