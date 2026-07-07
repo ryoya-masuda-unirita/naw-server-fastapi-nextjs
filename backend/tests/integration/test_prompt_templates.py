@@ -541,6 +541,21 @@ class TestCreatePromptTemplate:
         assert response.status_code == 200
         assert response.json()["groups"] == []
 
+    async def test_non_admin_cannot_create(self, client, member_headers):
+        """テナント管理者以外（グループ管理者含む）はテンプレートを作成できないこと"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json={
+                    "name": "New Template",
+                    "description": None,
+                    "systemPrompt": "prompt",
+                },
+                headers=member_headers,
+            )
+
+        assert response.status_code == 403
+
 
 @pytest.mark.asyncio
 class TestUpdatePromptTemplate:
@@ -600,6 +615,23 @@ class TestUpdatePromptTemplate:
 
         assert response.status_code == 404
 
+    async def test_non_admin_cannot_update(
+        self, client, member_headers, template_in_group
+    ):
+        """テナント管理者以外（グループ管理者含む）はテンプレートを更新できないこと"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/prompt-templates/{template_in_group.id}",
+                json={
+                    "name": "Renamed",
+                    "description": "desc",
+                    "systemPrompt": "prompt",
+                },
+                headers=member_headers,
+            )
+
+        assert response.status_code == 403
+
 
 @pytest.mark.asyncio
 class TestDeletePromptTemplate:
@@ -633,3 +665,15 @@ class TestDeletePromptTemplate:
             )
 
         assert response.status_code == 204
+
+    async def test_non_admin_cannot_delete(
+        self, client, member_headers, template_in_group
+    ):
+        """テナント管理者以外（グループ管理者含む）はテンプレートを削除できないこと"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/prompt-templates/{template_in_group.id}",
+                headers=member_headers,
+            )
+
+        assert response.status_code == 403

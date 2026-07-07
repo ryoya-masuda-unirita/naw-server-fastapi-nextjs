@@ -1,3 +1,4 @@
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.group import Group
@@ -178,6 +179,7 @@ class PromptTemplateService:
         groups = await PromptTemplateService._resolve_groups(
             tenant_id, req.groups, session
         )
+        group_ids = {g.id for g in groups} if groups is not None else set()
 
         template = PromptTemplate(
             tenant_id=tenant_id,
@@ -185,14 +187,13 @@ class PromptTemplateService:
             description=req.description,
             system_prompt=req.systemPrompt,
         )
-        template = await PromptTemplateRepository.save(template, session)
-
-        group_ids = {g.id for g in groups} if groups is not None else set()
+        session.add(template)
         if group_ids:
             await GroupPromptTemplateRepository.replace_groups_for_template(
                 template.id, tenant_id, group_ids, session
             )
-            await session.commit()
+        await session.commit()
+        await session.refresh(template)
 
         return PromptTemplateCreateResponse(
             id=template.id,
@@ -209,7 +210,7 @@ class PromptTemplateService:
         tenant_id: str,
         req: PromptTemplateCreateRequest,
         session: AsyncSession,
-    ) -> PromptTemplateCreateResponse | None:
+    ) -> PromptTemplateCreateResponse:
         """プロンプトテンプレートを更新する。グループ集合が指定されない場合は既存の紐付けを維持する。
 
         Args:
@@ -219,18 +220,24 @@ class PromptTemplateService:
             session: 非同期DBセッション。
 
         Returns:
-            更新後のテンプレート（groupsはグループID集合）。存在しない場合は None。
+            更新後のテンプレート（groupsはグループID集合）。
+
+        Raises:
+            HTTPException: テンプレートが存在しない場合 404 を返す。
         """
         template = await PromptTemplateRepository.find_by_id_and_tenant_id(
             template_id, tenant_id, session
         )
         if not template:
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Prompt template not found",
+            )
 
         template.name = req.name
         template.description = req.description
         template.system_prompt = req.systemPrompt
-        template = await PromptTemplateRepository.save(template, session)
+        session.add(template)
 
         groups = await PromptTemplateService._resolve_groups(
             tenant_id, req.groups, session
@@ -240,7 +247,6 @@ class PromptTemplateService:
             await GroupPromptTemplateRepository.replace_groups_for_template(
                 template.id, tenant_id, group_ids, session
             )
-            await session.commit()
         else:
             existing = (
                 await GroupPromptTemplateRepository.find_groups_grouped_by_template_ids(
@@ -248,6 +254,9 @@ class PromptTemplateService:
                 )
             )
             group_ids = {group_id for group_id, _ in existing.get(template.id, [])}
+
+        await session.commit()
+        await session.refresh(template)
 
         return PromptTemplateCreateResponse(
             id=template.id,

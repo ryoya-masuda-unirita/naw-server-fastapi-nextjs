@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
-from app.core.security import get_current_user, get_verified_tenant_id
+from app.core.security import get_current_user, get_verified_tenant_id, require_admin
 from app.models.user import User
 from app.schemas.prompt_template import (
     PagedPromptTemplateResponse,
@@ -46,7 +46,7 @@ async def get_prompt_templates(
 async def get_admin_prompt_templates(
     search: str | None = Query(None),
     team: str | None = Query(None),
-    excludeGroupId: str | None = Query(None),
+    exclude_group_id: str | None = Query(None, alias="excludeGroupId"),
     page: int = Query(0, ge=0),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=100),
     x_tenant_id: str = Depends(get_verified_tenant_id),
@@ -59,7 +59,7 @@ async def get_admin_prompt_templates(
         current_user,
         search,
         team,
-        excludeGroupId,
+        exclude_group_id,
         page,
         size or DEFAULT_PAGE_SIZE,
         session,
@@ -70,10 +70,10 @@ async def get_admin_prompt_templates(
 async def create_prompt_template(
     req: PromptTemplateCreateRequest,
     x_tenant_id: str = Depends(get_verified_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PromptTemplateCreateResponse:
-    """プロンプトテンプレート作成"""
+    """プロンプトテンプレート作成（テナント管理者専用）"""
     return await PromptTemplateService.create_prompt_template(x_tenant_id, req, session)
 
 
@@ -84,26 +84,21 @@ async def update_prompt_template(
     template_id: str,
     req: PromptTemplateCreateRequest,
     x_tenant_id: str = Depends(get_verified_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PromptTemplateCreateResponse:
-    """プロンプトテンプレート更新"""
-    updated = await PromptTemplateService.update_prompt_template(
+    """プロンプトテンプレート更新（テナント管理者専用）"""
+    return await PromptTemplateService.update_prompt_template(
         template_id, x_tenant_id, req, session
     )
-    if not updated:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Prompt template not found"
-        )
-    return updated
 
 
 @admin_prompt_template_router.delete("/{id}", status_code=204)
 async def delete_prompt_template(
     id: str,
     x_tenant_id: str = Depends(get_verified_tenant_id),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """プロンプトテンプレート削除"""
+    """プロンプトテンプレート削除（テナント管理者専用）"""
     await PromptTemplateService.delete_prompt_template(id, x_tenant_id, session)

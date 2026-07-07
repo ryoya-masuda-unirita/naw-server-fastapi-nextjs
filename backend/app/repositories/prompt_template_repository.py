@@ -2,6 +2,7 @@ from collections.abc import Collection
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.core.search import escape_like_pattern
 from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
@@ -31,7 +32,7 @@ class PromptTemplateRepository:
         return result.scalars().first()
 
     @staticmethod
-    def _apply_search(stmt, search: str | None):
+    def _apply_search(stmt: Select, search: str | None) -> Select:
         if not search:
             return stmt
         pattern = escape_like_pattern(search.lower())
@@ -156,22 +157,6 @@ class PromptTemplateRepository:
         stmt = stmt.offset(page * size).limit(size)
         templates = (await session.execute(stmt)).scalars().all()
         return list(templates), total
-
-    @staticmethod
-    async def save(template: PromptTemplate, session: AsyncSession) -> PromptTemplate:
-        """プロンプトテンプレートを保存する（作成・更新共通）。
-
-        Args:
-            template: 保存対象の PromptTemplate。
-            session: 非同期DBセッション。
-
-        Returns:
-            保存後の PromptTemplate。
-        """
-        session.add(template)
-        await session.commit()
-        await session.refresh(template)
-        return template
 
     @staticmethod
     async def delete_by_id_and_tenant_id(

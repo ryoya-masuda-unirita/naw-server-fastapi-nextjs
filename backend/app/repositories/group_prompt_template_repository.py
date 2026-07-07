@@ -7,33 +7,6 @@ from app.models.prompt_template import GroupPromptTemplate
 
 class GroupPromptTemplateRepository:
     @staticmethod
-    async def find_template_ids_by_group_ids(
-        group_ids: list[str], tenant_id: str, session: AsyncSession
-    ) -> list[str]:
-        """グループID一覧に紐づくプロンプトテンプレートID一覧を重複排除して取得する。
-
-        Args:
-            group_ids: 対象のグループID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-
-        Returns:
-            プロンプトテンプレートID一覧（重複なし）。
-        """
-        if not group_ids:
-            return []
-        stmt = (
-            select(GroupPromptTemplate.prompt_template_id)
-            .where(
-                GroupPromptTemplate.group_id.in_(group_ids),
-                GroupPromptTemplate.tenant_id == tenant_id,
-            )
-            .distinct()
-        )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
-
-    @staticmethod
     async def find_groups_grouped_by_template_ids(
         template_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> dict[str, list[tuple[str, str]]]:
