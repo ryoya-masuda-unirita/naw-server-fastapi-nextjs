@@ -24,6 +24,33 @@ class AssistantCategoryService:
         )
 
     @staticmethod
+    async def _get_category_or_404(
+        category_id: str, tenant_id: str, session: AsyncSession
+    ) -> AssistantCategory:
+        """IDとテナントIDでアシスタントカテゴリを取得し、存在しなければ404を送出する。
+
+        Args:
+            category_id: アシスタントカテゴリID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するアシスタントカテゴリ。
+
+        Raises:
+            HTTPException: 存在しない場合404を返す。
+        """
+        category = await AssistantCategoryRepository.find_by_id_and_tenant_id(
+            category_id, tenant_id, session
+        )
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assistant category not found",
+            )
+        return category
+
+    @staticmethod
     async def create_assistant_category(
         tenant_id: str,
         current_user: User,
@@ -40,7 +67,18 @@ class AssistantCategoryService:
 
         Returns:
             作成したアシスタントカテゴリ。
+
+        Raises:
+            HTTPException: 同一テナント内に同名のカテゴリが既に存在する場合400を返す。
         """
+        if await AssistantCategoryRepository.exists_by_tenant_id_and_name(
+            tenant_id, req.name, session
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Assistant category with name {req.name} already exists",
+            )
+
         category = AssistantCategory(
             tenant_id=tenant_id,
             name=req.name,
@@ -85,14 +123,9 @@ class AssistantCategoryService:
         Raises:
             HTTPException: 存在しない場合404を返す。
         """
-        category = await AssistantCategoryRepository.find_by_id_and_tenant_id(
+        category = await AssistantCategoryService._get_category_or_404(
             category_id, tenant_id, session
         )
-        if not category:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Assistant category not found",
-            )
         return AssistantCategoryService._to_response(category)
 
     @staticmethod
@@ -116,15 +149,18 @@ class AssistantCategoryService:
             更新後のアシスタントカテゴリ。
 
         Raises:
-            HTTPException: 存在しない場合404を返す。
+            HTTPException: 存在しない場合404、同一テナント内に同名の別カテゴリが
+                既に存在する場合400を返す。
         """
-        category = await AssistantCategoryRepository.find_by_id_and_tenant_id(
+        category = await AssistantCategoryService._get_category_or_404(
             category_id, tenant_id, session
         )
-        if not category:
+        if await AssistantCategoryRepository.exists_by_tenant_id_and_name(
+            tenant_id, req.name, session, exclude_id=category_id
+        ):
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Assistant category not found",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Assistant category with name {req.name} already exists",
             )
 
         category.name = req.name
@@ -147,12 +183,7 @@ class AssistantCategoryService:
         Raises:
             HTTPException: 存在しない場合404を返す。
         """
-        category = await AssistantCategoryRepository.find_by_id_and_tenant_id(
+        category = await AssistantCategoryService._get_category_or_404(
             category_id, tenant_id, session
         )
-        if not category:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Assistant category not found",
-            )
         await AssistantCategoryRepository.delete(category, session)

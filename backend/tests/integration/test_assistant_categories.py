@@ -102,6 +102,21 @@ async def category(session, tenant, admin_user):
 
 
 @pytest.fixture
+async def second_category(session, tenant, admin_user):
+    """同一テナント内の別名アシスタントカテゴリ（重複名チェックの確認用）"""
+    c = AssistantCategory(
+        tenant_id=tenant.id,
+        name="second",
+        description="second desc",
+        updated_user_id=admin_user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    return c
+
+
+@pytest.fixture
 async def other_tenant_category(session, other_tenant, admin_user):
     """他テナントのアシスタントカテゴリ"""
     c = AssistantCategory(
@@ -194,6 +209,19 @@ class TestCreateAssistantCategory:
             )
 
         assert response.status_code == 403
+
+    async def test_create_with_duplicate_name_returns_400(
+        self, client, admin_headers, category
+    ):
+        """同一テナント内に同名のカテゴリが既に存在する場合400になり作成されないこと"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistant-categories",
+                json={"name": category.name, "description": "別の説明"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
 
 
 class TestListAssistantCategories:
@@ -295,6 +323,32 @@ class TestUpdateAssistantCategory:
         body = response.json()
         assert body["name"] == "updated"
         assert body["description"] == "updated desc"
+
+    async def test_update_keeping_same_name_succeeds(
+        self, client, admin_headers, category
+    ):
+        """自分自身の既存の名前のまま更新しても重複エラーにならないこと"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistant-categories/{category.id}",
+                json={"name": category.name, "description": "changed"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+
+    async def test_update_with_duplicate_name_returns_400(
+        self, client, admin_headers, category, second_category
+    ):
+        """更新後の名前が同一テナント内の別カテゴリと重複する場合400になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistant-categories/{category.id}",
+                json={"name": second_category.name},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
 
     async def test_update_not_found_returns_404(self, client, admin_headers):
         """存在しないIDだと404になること"""

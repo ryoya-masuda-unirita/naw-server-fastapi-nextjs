@@ -2,12 +2,25 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+# 移植元Java（`@Size(max=16)`）に合わせたAPIバリデーション用の上限。
+# DBカラム（AssistantCategory.name）は移植元Liquibaseに合わせてvarchar(32)だが、
+# API側は将来の拡張余地としてDBより厳しい16文字を維持する（意図的な差分）。
 NAME_MAX_LENGTH = 16
 DESCRIPTION_MAX_LENGTH = 255
 
 
 def _validate_name(value: str) -> str:
-    """カテゴリ名が空白のみでなく16文字以内であることを検証する。"""
+    """カテゴリ名が空白のみでなく指定文字数以内であることを検証する。
+
+    Args:
+        value: 検証対象のカテゴリ名。
+
+    Returns:
+        検証済みのカテゴリ名。
+
+    Raises:
+        ValueError: 空白のみ、または`NAME_MAX_LENGTH`を超える場合。
+    """
     if not value.strip():
         raise ValueError("カテゴリ名は必須です")
     if len(value) > NAME_MAX_LENGTH:
@@ -16,13 +29,25 @@ def _validate_name(value: str) -> str:
 
 
 def _validate_description(value: str | None) -> str | None:
-    """説明が255文字以内であることを検証する。"""
+    """説明が指定文字数以内であることを検証する。
+
+    Args:
+        value: 検証対象の説明。Noneの場合は検証をスキップする。
+
+    Returns:
+        検証済みの説明。
+
+    Raises:
+        ValueError: `DESCRIPTION_MAX_LENGTH`を超える場合。
+    """
     if value is not None and len(value) > DESCRIPTION_MAX_LENGTH:
         raise ValueError(f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください")
     return value
 
 
-class AssistantCategoryCreateRequest(BaseModel):
+class _AssistantCategoryRequestBase(BaseModel):
+    """作成・更新リクエストで共通のフィールド・バリデーション。"""
+
     name: str
     description: str | None = None
 
@@ -30,12 +55,12 @@ class AssistantCategoryCreateRequest(BaseModel):
     _validate_description = field_validator("description")(_validate_description)
 
 
-class AssistantCategoryUpdateRequest(BaseModel):
-    name: str
-    description: str | None = None
+class AssistantCategoryCreateRequest(_AssistantCategoryRequestBase):
+    pass
 
-    _validate_name = field_validator("name")(_validate_name)
-    _validate_description = field_validator("description")(_validate_description)
+
+class AssistantCategoryUpdateRequest(_AssistantCategoryRequestBase):
+    pass
 
 
 class AssistantCategoryResponse(BaseModel):

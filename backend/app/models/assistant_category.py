@@ -23,6 +23,8 @@ class AssistantCategory(SQLModel, table=True):
             nullable=False,
         ),
     )
+    # DBカラム長は移植元Liquibase通り32文字。APIバリデーション（schemas.assistant_category.
+    # NAME_MAX_LENGTH）は移植元Java（`@Size(max=16)`）に合わせて16文字とする意図的な差分。
     name: str = Field(max_length=32)
     description: str | None = Field(
         default=None, sa_column=sa.Column(sa.Text, nullable=True)
