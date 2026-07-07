@@ -17,6 +17,16 @@ Spring Boot 実装: `~/Documents/naw-server`
 - Pydantic v2
 - pytest + pytest-asyncio
 
+## Spring Bootからの移植における書き方の方針
+
+コードの書き方（イディオム）はFastAPI/Pythonのベストプラクティスに従う。Javaのパターンをそのまま直訳しない。
+
+ただし、Spring由来の設計上の規律で優れている部分（下記「レイヤー責務」「重要ルール」にあるControllerServiceRepositoryの責務分離、`service`が別`service`を呼ばない、DB操作を`repositories/`に集約する、等）はPythonでもそのまま維持する。移植元がJavaだからではなく、それ自体が優れた設計だから維持する。
+
+例: バリデーションは`schemas/`のPydanticモデルに書く（ルーターには書かない）。単純な制約は`Field(min_length=..., max_length=...)`のように宣言的に書き、移植元Javaのような日本語カスタムエラーメッセージが必要な場合や単純な制約で表現できないロジック（空白のみ拒否等）のみ、Pydantic v2の`@field_validator` + `@classmethod`のデコレータ構文をモデルクラスの中に直接書く。関数をモジュールレベルに切り出して`field_validator(...)（func)`のように後から手動で登録する書き方はしない。複数のリクエストクラスで同じバリデーションを共有する場合は共通の基底クラスを継承させる。
+
+判断に迷った場合は実装前に一言確認すること。
+
 ## レイヤー責務
 
 ```text
