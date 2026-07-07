@@ -37,6 +37,9 @@ core/         設定、DI、共通処理
 - 型ヒントは全関数・全メソッドの引数と戻り値に付ける
 - `Optional` は使わず `X | None` を使う
 - 移植元（Spring Boot）で `@JoinTable` のみで実体化されていない中間テーブルや、Liquibase changelogにしかなくJPA Entityが存在しないテーブルも、省略せず `models/` に `SQLModel(table=True)` として定義する。カラム構成は対応するLiquibase changelog（`~/Documents/naw-server/src/main/resources/liquibase/changelog/`）で確認する
+- N+1問題を発生させない: 一覧取得後に関連データを行数分の個別クエリで取得しない。`IN`句や`JOIN`で1クエリにまとめること
+- 複数行のUPDATE/DELETEをPythonのループで1件ずつ発行しない。`delete()`文で条件に合う行を一括処理すること（`session.add()`のループはSQLAlchemyの`insertmanyvalues`により1回のINSERTにまとまるため問題ない）
+  - 参考実装: `app/repositories/group_prompt_template_repository.py`
 
 ## 実装パターン
 
