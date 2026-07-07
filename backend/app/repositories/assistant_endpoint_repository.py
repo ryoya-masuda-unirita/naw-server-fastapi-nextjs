@@ -1,9 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import AssistantEndpoint
 from app.models.tenant_endpoint import TenantEndpoint
-from app.schemas.assistant import AssistantEndpointItemResponse
+from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemResponse
 
 
 class AssistantEndpointRepository:
@@ -50,3 +50,58 @@ class AssistantEndpointRepository:
                 )
             )
         return grouped
+
+    @staticmethod
+    async def find_by_assistant_id_and_tenant_id(
+        assistant_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[AssistantEndpoint]:
+        """アシスタントIDとテナントIDに紐づくエンドポイント紐付け一覧を取得する。
+
+        Args:
+            assistant_id: 対象のアシスタントID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            エンドポイント紐付け一覧。
+        """
+        stmt = select(AssistantEndpoint).where(
+            AssistantEndpoint.assistant_id == assistant_id,
+            AssistantEndpoint.tenant_id == tenant_id,
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def replace_endpoints_for_assistant(
+        assistant_id: str,
+        tenant_id: str,
+        endpoints: list[AssistantEndpointInput],
+        session: AsyncSession,
+    ) -> None:
+        """対象アシスタントの既存エンドポイント紐付けを全削除し、指定内容で置き換える。
+
+        コミットは呼び出し側で行う。
+
+        Args:
+            assistant_id: 対象のアシスタントID。
+            tenant_id: テナントID。
+            endpoints: 紐付け先のテナントエンドポイントIDとモデルの一覧（実在確認済みのものを渡すこと）。
+            session: 非同期DBセッション。
+        """
+        await session.execute(
+            delete(AssistantEndpoint).where(
+                AssistantEndpoint.assistant_id == assistant_id,
+                AssistantEndpoint.tenant_id == tenant_id,
+            )
+        )
+
+        for endpoint in endpoints:
+            session.add(
+                AssistantEndpoint(
+                    assistant_id=assistant_id,
+                    endpoint_id=endpoint.id,
+                    tenant_id=tenant_id,
+                    model=endpoint.model,
+                )
+            )
