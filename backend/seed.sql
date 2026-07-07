@@ -171,3 +171,14 @@ VALUES (
     'あなたは簡潔に回答するアシスタントです。'
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- アシスタントカテゴリ (id 固定: 動作確認用)
+INSERT INTO assistant_categories (id, tenant_id, name, description, updated_user_id)
+VALUES (
+    '50000000000040008000000000000001',
+    'test-tenant',
+    '業務効率化',
+    '業務効率化を目的としたアシスタントのカテゴリ',
+    '00000000-0000-4000-8000-000000000001'
+)
+ON CONFLICT (id) DO NOTHING;

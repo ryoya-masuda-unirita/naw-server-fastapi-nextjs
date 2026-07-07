@@ -39,6 +39,46 @@ Spring Boot 実装: `~/Documents/naw-server`
 
 ---
 
+## Spring Bootからの移植における書き方の方針
+
+このリポジトリはSpring Boot実装の移植だが、**コードの書き方（イディオム）はFastAPI/Pythonのベストプラクティスに従う**。JavaのパターンをそのままPythonに直訳しない。
+
+一方で、**Spring由来の設計上の規律で優れている部分はPythonでもそのまま維持する**。具体的には次節「アーキテクチャ規約」にある、Controller(`routers/`)/Service(`services/`)/Repository(`repositories/`)の責務分離、`service`が別の`service`を呼ばない、DB操作を`repositories/`に集約する、といったルール群がこれにあたる。これらは移植元がJavaだからではなく、それ自体が優れた設計だから維持する。
+
+### 良い例・悪い例
+
+**バリデーション**: リクエストのバリデーションは`schemas/`のPydanticモデルに書く（ルーターには書かない）。
+
+- 単純な制約（文字数上限など）で、移植元Java（`@Size(message=...)`等）のような日本語のカスタムエラーメッセージが不要な場合は、`Field(min_length=..., max_length=...)`のように宣言的に書く
+- 移植元同様に日本語のカスタムエラーメッセージが必要な場合（このプロジェクトはUI・メッセージが日本語のため頻出する）や、単純な制約で表現できないロジック（空白のみ拒否、複数フィールドにまたがる相関チェック等）は、Pydantic v2の`@field_validator` + `@classmethod`のデコレータ構文をモデルクラスの中に直接書く
+
+```python
+# Good（Pydantic v2のデコレータ構文をそのまま使う）
+class FooRequest(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("名前は必須です")
+        return value
+
+# Bad（Javaの「バリデーションメソッドを切り出して後から紐付ける」発想を引きずった書き方）
+def _validate_name(value: str) -> str:
+    ...
+
+class FooRequest(BaseModel):
+    name: str
+    _validate_name = field_validator("name")(_validate_name)
+```
+
+- 複数のリクエストクラス（Create/Update等）で同じバリデーションを共有したい場合は、共通の基底クラスを継承させる（関数をモジュールレベルに切り出して個別に登録し直す必要はない）
+
+判断に迷った場合（「Pythonらしい書き方」と「Spring由来の責務分離」のどちらを優先すべきか等）は、実装前に一言確認すること。
+
+---
+
 ## アーキテクチャ規約
 
 ### レイヤー責務
