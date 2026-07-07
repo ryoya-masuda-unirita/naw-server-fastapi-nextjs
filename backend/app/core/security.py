@@ -9,6 +9,7 @@ from passlib.context import CryptContext
 from app.core.config import get_settings
 from app.core.database import get_session
 from app.models.user import User, UserRole
+from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.user_repository import UserRepository
 
 # JWT 設定
@@ -243,3 +244,37 @@ async def require_admin_for_tenant_path(
             status_code=status.HTTP_403_FORBIDDEN, detail="Tenant mismatch"
         )
     return tenant_id
+
+
+async def require_admin_or_group_admin(
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """テナント管理者、またはいずれかのグループの管理者であることを検証する。
+
+    移植元`AdminAuthorizationFilter`（`/api/admin/**`への一律フィルタ。ADMIN/SYSTEMロール
+    またはグループ管理者のいずれかを許可）相当。
+
+    Args:
+        x_tenant_id: 検証済みテナントID。
+        current_user: 認証済みユーザー。
+        session: 非同期DBセッション。
+
+    Returns:
+        認可済みの User オブジェクト。
+
+    Raises:
+        HTTPException: テナント管理者でも、いずれのグループの管理者でもない場合 403 を返す。
+    """
+    if current_user.role in (UserRole.ADMIN, UserRole.SYSTEM):
+        return current_user
+
+    admin_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(
+        x_tenant_id, current_user.id, session
+    )
+    if not admin_group_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
+        )
+    return current_user
