@@ -19,18 +19,26 @@ admin_prompt_template_router = APIRouter(
 )
 
 
+DEFAULT_PAGE_SIZE = 20
+
+
 @prompt_template_router.get("", response_model=PagedPromptTemplateResponse)
 async def get_prompt_templates(
     search: str | None = Query(None),
     page: int = Query(0, ge=0),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=100),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PagedPromptTemplateResponse:
-    """プロンプトテンプレート一覧取得（一般ユーザー向け、所属グループに紐づくもののみ）"""
+    """プロンプトテンプレート一覧取得（一般ユーザー向け、所属グループに紐づくもののみ）
+
+    移植元（Spring Data `Pageable`）は `size` が1未満の場合デフォルトページサイズに
+    フォールバックするため、`size=0`（チャット画面のテンプレート選択が送信する）を
+    エラーにせず同様にフォールバックする。
+    """
     return await PromptTemplateService.get_prompt_templates(
-        x_tenant_id, current_user, search, page, size, session
+        x_tenant_id, current_user, search, page, size or DEFAULT_PAGE_SIZE, session
     )
 
 
@@ -40,14 +48,21 @@ async def get_admin_prompt_templates(
     team: str | None = Query(None),
     excludeGroupId: str | None = Query(None),
     page: int = Query(0, ge=0),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=100),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PagedPromptTemplateResponse:
     """プロンプトテンプレート一覧取得（管理者向け、検索・チームフィルタ・除外グループフィルタ対応）"""
     return await PromptTemplateService.get_admin_prompt_templates(
-        x_tenant_id, current_user, search, team, excludeGroupId, page, size, session
+        x_tenant_id,
+        current_user,
+        search,
+        team,
+        excludeGroupId,
+        page,
+        size or DEFAULT_PAGE_SIZE,
+        session,
     )
 
 

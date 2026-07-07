@@ -348,6 +348,20 @@ class TestGetPromptTemplates:
         ids = [t["id"] for t in response.json()["content"]]
         assert other_tenant_template.id not in ids
 
+    async def test_size_zero_falls_back_to_default_page_size(
+        self, client, member_headers, member_of_group, template_in_group
+    ):
+        """size=0（チャット画面のテンプレート選択が送信する）は422にせずデフォルトページサイズになること"""
+        async with client as c:
+            response = await c.get(
+                "/api/prompt-templates",
+                params={"size": 0},
+                headers=member_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["size"] == 20
+
 
 @pytest.mark.asyncio
 class TestGetAdminPromptTemplates:
