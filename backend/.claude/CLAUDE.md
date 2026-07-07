@@ -116,6 +116,44 @@ FastAPI側では、こうしたテーブルも省略せず、すべて `SQLModel
 - 追加カラムを持つ中間テーブル（例: グループ所属ユーザーの管理者フラグ等）はもちろん、追加カラムのない単純なM2M中間テーブルも、SQLModelには「Entityなしで暗黙的にJoinTableを扱う」というSpring同等の省略記法がないため、明示的なモデルクラスとして定義する
 - 移植対象のテーブルにSpring側のEntityクラスが存在しない場合でも、対応するLiquibaseのchangelog（`~/Documents/naw-server/src/main/resources/liquibase/changelog/`）を確認し、カラム構成を正しく再現したモデルを作成すること
 
+### N+1問題を発生させない
+
+一覧を取得したあと、その各行に関連するデータを取得するために行数分だけ追加クエリを発行する実装（N+1問題）を書かないこと。関連データは常に `IN` 句または `JOIN` で1回のクエリにまとめて取得すること。
+
+```python
+# Bad: テンプレートごとに個別クエリを発行してしまう
+for template in templates:
+    groups = await session.execute(
+        select(Group).join(GroupPromptTemplate).where(
+            GroupPromptTemplate.prompt_template_id == template.id
+        )
+    )
+
+# Good: IN句で対象ID一覧をまとめて渡し、1クエリで取得してからPython側で集約する
+template_ids = [t.id for t in templates]
+stmt = (
+    select(GroupPromptTemplate.prompt_template_id, Group.id, Group.name)
+    .join(Group, Group.id == GroupPromptTemplate.group_id)
+    .where(GroupPromptTemplate.prompt_template_id.in_(template_ids))
+)
+```
+
+同様に、複数行のUPDATE/DELETEをPythonのループで1件ずつ発行しない（バルク処理すべきところを1件ずつ処理する非効率も避けること）。
+
+```python
+# Bad: 取得した行をループでdeleteすると行数分のDELETEになりがち
+existing = (await session.execute(select(Model).where(...))).scalars().all()
+for row in existing:
+    await session.delete(row)
+
+# Good: delete()文で条件に合う行を1回のSQLでまとめて削除する
+await session.execute(delete(Model).where(...))
+```
+
+一方、`session.add()` をループで呼ぶのは問題ない。SQLAlchemyの `insertmanyvalues` により、同じマッパークラスの複数オブジェクトはcommit/flush時に1回のINSERT（またはバッチ化されたexecutemany）にまとめられるため、N回のラウンドトリップにはならない。
+
+参考実装: `app/repositories/group_prompt_template_repository.py` の `find_groups_grouped_by_template_ids`（IN句での一括取得）・`replace_groups_for_template`（一括DELETE）。
+
 ### RLS（テナント分離）のパターン
 
 PostgreSQL の RLS をそのまま使用する。FastAPI の `Depends` でセッション開始時にテナント ID を設定する。

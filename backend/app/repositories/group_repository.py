@@ -25,6 +25,26 @@ class GroupRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_tenant_id_and_ids(
+        tenant_id: str, ids: list[str], session: AsyncSession
+    ) -> list[Group]:
+        """テナントIDとグループID一覧に合致するグループを取得する。存在しないIDは無視される。
+
+        Args:
+            tenant_id: テナントID。
+            ids: 対象のグループID一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するグループ一覧。
+        """
+        if not ids:
+            return []
+        stmt = select(Group).where(Group.tenant_id == tenant_id, Group.id.in_(ids))
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def find_all_by_tenant_ordered_by_name(
         tenant_id: str, session: AsyncSession
     ) -> list[Group]:
