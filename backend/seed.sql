@@ -140,3 +140,34 @@ VALUES (
     'gpt-4o'
 )
 ON CONFLICT (assistant_id, endpoint_id) DO NOTHING;
+
+-- プロンプトテンプレート (id 固定: 動作確認用グループに紐付け済み)
+INSERT INTO prompt_templates (id, tenant_id, name, description, system_prompt)
+VALUES (
+    '40000000000040008000000000000001',
+    'test-tenant',
+    '丁寧な回答テンプレート',
+    '丁寧な口調で回答するテンプレート',
+    'あなたは丁寧な口調で回答するアシスタントです。'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 動作確認用グループにプロンプトテンプレートを紐付け
+INSERT INTO groups_prompt_templates (group_id, prompt_template_id, tenant_id)
+VALUES (
+    '20000000000040008000000000000001',
+    '40000000000040008000000000000001',
+    'test-tenant'
+)
+ON CONFLICT (group_id, prompt_template_id, tenant_id) DO NOTHING;
+
+-- プロンプトテンプレート (id 固定: グループ未紐付け、除外フィルタの動作確認用)
+INSERT INTO prompt_templates (id, tenant_id, name, description, system_prompt)
+VALUES (
+    '40000000000040008000000000000002',
+    'test-tenant',
+    '未紐付けテンプレート',
+    'どのグループにも紐付いていないテンプレート',
+    'あなたは簡潔に回答するアシスタントです。'
+)
+ON CONFLICT (id) DO NOTHING;
