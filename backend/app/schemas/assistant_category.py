@@ -9,50 +9,51 @@ NAME_MAX_LENGTH = 16
 DESCRIPTION_MAX_LENGTH = 255
 
 
-def _validate_name(value: str) -> str:
-    """カテゴリ名が空白のみでなく指定文字数以内であることを検証する。
-
-    Args:
-        value: 検証対象のカテゴリ名。
-
-    Returns:
-        検証済みのカテゴリ名。
-
-    Raises:
-        ValueError: 空白のみ、または`NAME_MAX_LENGTH`を超える場合。
-    """
-    if not value.strip():
-        raise ValueError("カテゴリ名は必須です")
-    if len(value) > NAME_MAX_LENGTH:
-        raise ValueError(f"カテゴリ名は{NAME_MAX_LENGTH}文字以内で入力してください")
-    return value
-
-
-def _validate_description(value: str | None) -> str | None:
-    """説明が指定文字数以内であることを検証する。
-
-    Args:
-        value: 検証対象の説明。Noneの場合は検証をスキップする。
-
-    Returns:
-        検証済みの説明。
-
-    Raises:
-        ValueError: `DESCRIPTION_MAX_LENGTH`を超える場合。
-    """
-    if value is not None and len(value) > DESCRIPTION_MAX_LENGTH:
-        raise ValueError(f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください")
-    return value
-
-
 class _AssistantCategoryRequestBase(BaseModel):
     """作成・更新リクエストで共通のフィールド・バリデーション。"""
 
     name: str
     description: str | None = None
 
-    _validate_name = field_validator("name")(_validate_name)
-    _validate_description = field_validator("description")(_validate_description)
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        """カテゴリ名が空白のみでなく指定文字数以内であることを検証する。
+
+        Args:
+            value: 検証対象のカテゴリ名。
+
+        Returns:
+            検証済みのカテゴリ名。
+
+        Raises:
+            ValueError: 空白のみ、または`NAME_MAX_LENGTH`を超える場合。
+        """
+        if not value.strip():
+            raise ValueError("カテゴリ名は必須です")
+        if len(value) > NAME_MAX_LENGTH:
+            raise ValueError(f"カテゴリ名は{NAME_MAX_LENGTH}文字以内で入力してください")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def _validate_description(cls, value: str | None) -> str | None:
+        """説明が指定文字数以内であることを検証する。
+
+        Args:
+            value: 検証対象の説明。Noneの場合は検証をスキップする。
+
+        Returns:
+            検証済みの説明。
+
+        Raises:
+            ValueError: `DESCRIPTION_MAX_LENGTH`を超える場合。
+        """
+        if value is not None and len(value) > DESCRIPTION_MAX_LENGTH:
+            raise ValueError(
+                f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
+            )
+        return value
 
 
 class AssistantCategoryCreateRequest(_AssistantCategoryRequestBase):
