@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 # 移植元Java（`@Size(max=16)`）に合わせたAPIバリデーション用の上限。
 # DBカラム（AssistantCategory.name）は移植元Liquibaseに合わせてvarchar(32)だが、
@@ -12,47 +12,25 @@ DESCRIPTION_MAX_LENGTH = 255
 class _AssistantCategoryRequestBase(BaseModel):
     """作成・更新リクエストで共通のフィールド・バリデーション。"""
 
-    name: str
-    description: str | None = None
+    name: str = Field(max_length=NAME_MAX_LENGTH)
+    description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
 
     @field_validator("name")
     @classmethod
-    def _validate_name(cls, value: str) -> str:
-        """カテゴリ名が空白のみでなく指定文字数以内であることを検証する。
+    def _validate_name_not_blank(cls, value: str) -> str:
+        """カテゴリ名が空白のみでないことを検証する（文字数は`Field(max_length=...)`で検証済み）。
 
         Args:
-            value: 検証対象のカテゴリ名。
+            value: 検証対象のカテゴリ名。`Field()`の長さ制約を通過済み。
 
         Returns:
             検証済みのカテゴリ名。
 
         Raises:
-            ValueError: 空白のみ、または`NAME_MAX_LENGTH`を超える場合。
+            ValueError: 空白のみの場合。
         """
         if not value.strip():
             raise ValueError("カテゴリ名は必須です")
-        if len(value) > NAME_MAX_LENGTH:
-            raise ValueError(f"カテゴリ名は{NAME_MAX_LENGTH}文字以内で入力してください")
-        return value
-
-    @field_validator("description")
-    @classmethod
-    def _validate_description(cls, value: str | None) -> str | None:
-        """説明が指定文字数以内であることを検証する。
-
-        Args:
-            value: 検証対象の説明。Noneの場合は検証をスキップする。
-
-        Returns:
-            検証済みの説明。
-
-        Raises:
-            ValueError: `DESCRIPTION_MAX_LENGTH`を超える場合。
-        """
-        if value is not None and len(value) > DESCRIPTION_MAX_LENGTH:
-            raise ValueError(
-                f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
-            )
         return value
 
 
