@@ -13,6 +13,12 @@
 
 `frontend-angular/` は `secuaigent-client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
 
+**`secuaigent-client` → `frontend-angular/` の同期を意図した指示（文言が曖昧でも）を受けたときは、[frontend-angular-sync skill](skills/frontend-angular-sync/SKILL.md) を呼び出すこと。**
+
+例:「frontendを最新にして」「frontend-angularを最新にして」「secuaigent-clientから持ってきて」「secuaigent-clientからfrontend-angularにソースをコピーして」「Angular側を追従させて」等。
+
+`frontend/`（React移植）ではなく `frontend-angular/` を指しているかどうかの判断に迷う場合は、どちらを指すかユーザーに確認すること。`secuaigent-client` や `frontend-angular` という語が明示されていれば確認不要でこのskillを呼び出してよい。
+
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
 ポート作業を行う際は、対応する参照リポジトリのコミット履歴（`git log`）を確認し、何がどの粒度で実装されたかを把握した上でチケット・実装方針を決めること。複数のコミットをまとめてポートしてもよい。
