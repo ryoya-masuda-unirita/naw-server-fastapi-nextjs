@@ -52,27 +52,6 @@ class AssistantEndpointRepository:
         return grouped
 
     @staticmethod
-    async def find_by_assistant_id_and_tenant_id(
-        assistant_id: str, tenant_id: str, session: AsyncSession
-    ) -> list[AssistantEndpoint]:
-        """アシスタントIDとテナントIDに紐づくエンドポイント紐付け一覧を取得する。
-
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-
-        Returns:
-            エンドポイント紐付け一覧。
-        """
-        stmt = select(AssistantEndpoint).where(
-            AssistantEndpoint.assistant_id == assistant_id,
-            AssistantEndpoint.tenant_id == tenant_id,
-        )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
-
-    @staticmethod
     async def replace_endpoints_for_assistant(
         assistant_id: str,
         tenant_id: str,

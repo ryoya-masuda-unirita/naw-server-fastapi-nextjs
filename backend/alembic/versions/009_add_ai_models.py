@@ -21,7 +21,19 @@ def upgrade() -> None:
     op.create_table(
         "ai_models",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("endpoint_type", sa.String(32), nullable=False),
+        sa.Column(
+            "endpoint_type",
+            sa.Enum(
+                "AZURE_OPENAI_CHAT",
+                "CLAUDE_CHAT",
+                "GEMINI_CHAT",
+                "OPENAI_CHAT",
+                "OPENAI_WEB_SEARCH_CHAT",
+                "AZURE_OPENAI_EMBEDDING",
+                name="aimodelendpointtype",
+            ),
+            nullable=False,
+        ),
         sa.Column("name", sa.String(32), nullable=False),
         sa.Column("max_tokens", sa.Integer(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
@@ -37,3 +49,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("ai_models")
+    op.execute("DROP TYPE IF EXISTS aimodelendpointtype")

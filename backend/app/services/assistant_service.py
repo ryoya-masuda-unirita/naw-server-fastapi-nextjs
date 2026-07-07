@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant, AssistantType
+from app.models.assistant_category import AssistantCategory
 from app.models.tenant_endpoint import EndpointType
 from app.models.user import User, UserRole
 from app.repositories.ai_model_repository import AIModelRepository
@@ -22,6 +23,7 @@ from app.schemas.assistant import (
     AssistantCategoryItemResponse,
     AssistantCreateRequest,
     AssistantEndpointInput,
+    AssistantEndpointItemResponse,
     AssistantEndpointResponse,
     AssistantGetResponse,
     AssistantUpdateRequest,
@@ -29,8 +31,12 @@ from app.schemas.assistant import (
 )
 
 # 移植元PageableSortUtil.remapSortのフロントエンド向けソートキーエイリアス。
+# secuaigent-client（AssistantSortField）は実際に"assistantType"を送信するため、
+# "type"（DBの実カラム名）に変換する。"serverType"・"server"は移植元Javaのマップに
+# 存在した別名で、念のため同様に扱う。
 # "category"はM2Mの多重度により単純な列ソートに落とし込めないため更新日時にフォールバックする。
 _SORT_ALIASES: dict[str, str] = {
+    "assistantType": "type",
     "serverType": "type",
     "server": "type",
     "category": "updatedAt",
@@ -77,6 +83,13 @@ class AssistantService:
         endpoints: list[AssistantEndpointInput], tenant_id: str, session: AsyncSession
     ) -> list[EndpointType]:
         ids = [e.id for e in endpoints]
+        if len(ids) != len(set(ids)):
+            # 重複IDのまま`assistants_endpoints`（PK: assistant_id, endpoint_id）へ
+            # INSERTするとIntegrityErrorになるため、ここで明示的に400として弾く。
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate tenant endpoint id",
+            )
         tenant_endpoints = await TenantEndpointRepository.find_by_ids_and_tenant_id(
             ids, tenant_id, session
         )
@@ -140,9 +153,9 @@ class AssistantService:
     @staticmethod
     def _to_get_response(
         assistant: Assistant,
-        endpoints_map: dict,
+        endpoints_map: dict[str, list[AssistantEndpointItemResponse]],
         groups_map: dict[str, list[str]],
-        categories_map: dict,
+        categories_map: dict[str, list[AssistantCategory]],
     ) -> AssistantGetResponse:
         categories = [
             AssistantCategoryItemResponse(
@@ -295,15 +308,17 @@ class AssistantService:
             req.type, req.endpoints, tenant_id, session
         )
 
-        if req.name is not None:
+        # 移植元の`StringUtils.isNotBlank`と同様、null・空文字・空白のみの場合は
+        # 変更しない（"未送信"と"空文字を送って解除"を区別しないフィールド）。
+        if req.name:
             assistant.name = req.name
         assistant.type = req.type
         if req.indexId is not None:
             assistant.index_id = req.indexId or None
-        if req.description is not None:
+        if req.description and req.description.strip():
             assistant.description = req.description
         assistant.include_history = req.includeHistory
-        if req.iconColor is not None:
+        if req.iconColor and req.iconColor.strip():
             assistant.icon_color = req.iconColor
         session.add(assistant)
 

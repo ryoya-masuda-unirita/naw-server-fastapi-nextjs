@@ -81,8 +81,12 @@ class AssistantUpdateRequest(AssistantRequestBase):
     @field_validator("name")
     @classmethod
     def _validate_name(cls, value: str | None) -> str | None:
-        """アシスタント表示名が送信された場合のみ、空白のみでないことを検証する。"""
-        if value is not None and not value.strip():
+        """アシスタント表示名が送信された場合のみ、空白のみでないことを検証する。
+
+        Noneまたは空文字は「変更なし」として許可する（移植元の
+        `isNameNotBlankWhenPresent`と同様、空白のみの非空文字列だけを拒否する）。
+        """
+        if value is not None and value != "" and not value.strip():
             raise ValueError("アシスタント表示名は空白にできません")
         return value
 

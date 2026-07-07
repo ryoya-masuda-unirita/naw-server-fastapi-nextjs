@@ -205,6 +205,8 @@ class AssistantRepository:
             sort_col = Assistant.type
         elif sort_col_name == "name":
             sort_col = Assistant.name
+        elif sort_col_name == "includeHistory":
+            sort_col = Assistant.include_history
         else:
             sort_col = Assistant.updated_at
         stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())

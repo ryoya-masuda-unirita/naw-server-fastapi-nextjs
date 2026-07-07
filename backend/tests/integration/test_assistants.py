@@ -756,6 +756,64 @@ class TestUpdateAssistant:
         assert response.status_code == 200
         assert response.json()["name"] == assistant.name
 
+    async def test_update_with_empty_name_keeps_existing_name(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """nameを空文字で送信した場合も、既存の名前が維持されること（移植元isNotBlank相当）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == assistant.name
+
+    async def test_update_with_empty_description_keeps_existing_description(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """descriptionを空文字で送信した場合、既存の説明が維持されること（移植元isNotBlank相当）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "description": "",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["description"] == assistant.description
+
+    async def test_update_with_duplicate_endpoint_ids_returns_400(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """同じテナントエンドポイントIDを重複して指定すると400になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [
+                        {"id": tenant_endpoint.id, "model": "gpt-4o"},
+                        {"id": tenant_endpoint.id, "model": "gpt-4o-mini"},
+                    ],
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
     async def test_update_with_empty_category_ids_clears_categories(
         self,
         client,
@@ -954,6 +1012,46 @@ class TestListAdminAssistants:
         ids = [item["id"] for item in body["content"]]
         assert assistant.id in ids
         assert other.id not in ids
+
+    async def test_sort_by_assistant_type_alias(
+        self, client, session, tenant, admin_headers
+    ):
+        """フロントエンド（secuaigent-client）が送信するsort=assistantTypeで種別ソートできること。
+
+        SECUREを先に作成（updated_atが古い）、SAAS_CHATを後に作成（updated_atが新しい）することで、
+        "assistantType"エイリアスが無視されupdatedAtへフォールバックした場合と、
+        正しくtype昇順でソートされた場合とで結果順序が変わるようにする。
+        """
+        secure_assistant = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SECURE,
+            name="SecureOne",
+            include_history=False,
+        )
+        session.add(secure_assistant)
+        await session.commit()
+
+        chat_assistant = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="ChatOne",
+            include_history=False,
+        )
+        session.add(chat_assistant)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"sort": "assistantType,asc"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        types = [item["type"] for item in body["content"]]
+        # SAAS_CHAT < SECURE（辞書順）なので、正しくtype昇順ならchat_assistantが先に来る
+        assert types.index("SAAS_CHAT") < types.index("SECURE")
 
 
 @pytest.mark.asyncio
