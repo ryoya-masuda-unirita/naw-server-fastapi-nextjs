@@ -70,6 +70,9 @@ class GroupPromptTemplateRepository:
             )
         )
 
+        # session.add()はここではSQLを発行せず、commit/flush時にSQLAlchemyの
+        # insertmanyvaluesにより複数行が1回のINSERTにまとめられるため、
+        # ループしてもN回のラウンドトリップにはならない。
         for group_id in group_ids:
             session.add(
                 GroupPromptTemplate(
