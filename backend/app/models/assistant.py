@@ -54,10 +54,7 @@ class Assistant(SQLModel, table=True):
 
 
 class GroupAssistant(SQLModel, table=True):
-    """グループとアシスタントの中間テーブル（`GroupUser`と同様のパターン）。
-
-    `assistants_endpoints`・`assistant_category_mappings`は本スコープ外のため未移植。
-    """
+    """グループとアシスタントの中間テーブル（`GroupUser`と同様のパターン）。"""
 
     __tablename__ = "groups_assistants"
 
@@ -128,3 +125,36 @@ class AssistantEndpoint(SQLModel, table=True):
         ),
     )
     model: str = Field(max_length=32)
+
+
+class AssistantCategoryMapping(SQLModel, table=True):
+    """アシスタントとアシスタントカテゴリの中間テーブル。
+
+    PKは`(assistant_id, category_id)`で`tenant_id`は含まない（移植元の最終スキーマに準拠）。
+    """
+
+    __tablename__ = "assistant_category_mappings"
+
+    assistant_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32),
+            sa.ForeignKey("assistants.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    category_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32),
+            sa.ForeignKey("assistant_categories.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    tenant_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32),
+            sa.ForeignKey("tenants.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+    )
