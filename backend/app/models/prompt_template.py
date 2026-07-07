@@ -5,8 +5,8 @@ import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 
-class Group(SQLModel, table=True):
-    __tablename__ = "groups"
+class PromptTemplate(SQLModel, table=True):
+    __tablename__ = "prompt_templates"
 
     id: str = Field(
         max_length=32, primary_key=True, default_factory=lambda: uuid.uuid4().hex
@@ -18,12 +18,11 @@ class Group(SQLModel, table=True):
             nullable=False,
         ),
     )
-    name: str = Field(max_length=255)
-    created_at: datetime = Field(
-        sa_column=sa.Column(
-            sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
-        ),
+    name: str = Field(max_length=32)
+    description: str | None = Field(
+        default=None, sa_column=sa.Column(sa.Text, nullable=True)
     )
+    system_prompt: str = Field(sa_column=sa.Column(sa.Text, nullable=False))
     updated_at: datetime = Field(
         sa_column=sa.Column(
             sa.DateTime(timezone=True),
@@ -34,15 +33,10 @@ class Group(SQLModel, table=True):
     )
 
 
-class GroupUser(SQLModel, table=True):
-    """グループとユーザーの中間テーブル。
+class GroupPromptTemplate(SQLModel, table=True):
+    """グループとプロンプトテンプレートの中間テーブル（`GroupAssistant`と同様のパターン）。"""
 
-    移植元（Spring Boot）では `@Entity`（`GroupUser`）として明示的にモデル化されている。
-    `groups_assistants` は `app.models.assistant.GroupAssistant`、`groups_prompt_templates` は
-    `app.models.prompt_template.GroupPromptTemplate` としてそれぞれ実装済み。
-    """
-
-    __tablename__ = "groups_users"
+    __tablename__ = "groups_prompt_templates"
 
     group_id: str = Field(
         sa_column=sa.Column(
@@ -52,10 +46,10 @@ class GroupUser(SQLModel, table=True):
             nullable=False,
         ),
     )
-    user_id: uuid.UUID = Field(
+    prompt_template_id: str = Field(
         sa_column=sa.Column(
-            sa.UUID,
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            sa.String(32),
+            sa.ForeignKey("prompt_templates.id", ondelete="CASCADE"),
             primary_key=True,
             nullable=False,
         ),
@@ -67,10 +61,6 @@ class GroupUser(SQLModel, table=True):
             primary_key=True,
             nullable=False,
         ),
-    )
-    is_admin: bool = Field(
-        default=False,
-        sa_column=sa.Column(sa.Boolean, nullable=False, server_default=sa.false()),
     )
     updated_at: datetime = Field(
         sa_column=sa.Column(
