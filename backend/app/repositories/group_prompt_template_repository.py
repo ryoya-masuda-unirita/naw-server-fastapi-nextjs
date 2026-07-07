@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.group import Group
@@ -63,13 +63,12 @@ class GroupPromptTemplateRepository:
             group_ids: 紐付け先のグループID集合（実在確認済みのものを渡すこと）。
             session: 非同期DBセッション。
         """
-        stmt = select(GroupPromptTemplate).where(
-            GroupPromptTemplate.prompt_template_id == template_id,
-            GroupPromptTemplate.tenant_id == tenant_id,
+        await session.execute(
+            delete(GroupPromptTemplate).where(
+                GroupPromptTemplate.prompt_template_id == template_id,
+                GroupPromptTemplate.tenant_id == tenant_id,
+            )
         )
-        existing = (await session.execute(stmt)).scalars().all()
-        for row in existing:
-            await session.delete(row)
 
         for group_id in group_ids:
             session.add(

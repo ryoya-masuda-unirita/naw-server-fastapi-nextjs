@@ -12,7 +12,7 @@
 | 4 | 🟡 注意 | `backend/app/routers/prompt_templates.py` | `excludeGroupId`クエリパラメータがcamelCaseのまま宣言されており、PEP 8および既存の`alias=`パターン（`groups.py`の`isBelonged`）と不整合 | 対応済み |
 | 5 | 🟡 注意 | `backend/app/repositories/prompt_template_repository.py` | `_apply_search`の引数・戻り値に型ヒントがなく、CLAUDE.mdの型ヒント必須ルールに反する | 対応済み |
 | 6 | 🔵 提案 | `backend/app/repositories/group_prompt_template_repository.py` | `find_template_ids_by_group_ids`がどこからも呼ばれていない未使用コード | 対応済み |
-| 7 | 🔵 提案 | `backend/app/repositories/group_prompt_template_repository.py` | `replace_groups_for_template`が既存行をSELECTしてPythonループで1件ずつDELETEしている（一括DELETEにできる） | 対応しない |
+| 7 | 🔵 提案 | `backend/app/repositories/group_prompt_template_repository.py` | `replace_groups_for_template`が既存行をSELECTしてPythonループで1件ずつDELETEしている（一括DELETEにできる） | 対応済み（ユーザー指摘により追加対応） |
 | 8 | 🔵 提案 | `backend/app/services/prompt_template_service.py` | `PromptTemplateService._is_tenant_admin`が`GroupService._is_tenant_admin`と同一実装で重複している | 対応しない |
 | 9 | 🔵 提案 | `backend/app/repositories/prompt_template_repository.py` | 管理者向け一覧で`team`/`__none__`フィルタ指定時に`admin_group_ids`によるスコープ制限が適用されない（移植元Java `Specification`の挙動に忠実） | 対応しない |
 
@@ -50,9 +50,9 @@ PEP 8（`backend/.claude/CLAUDE.md`「PEP 8 準拠」）に反し、かつ`group
 
 `GroupPromptTemplateRepository.find_template_ids_by_group_ids`はどこからも呼ばれておらず、一般ユーザー向け一覧は`PromptTemplateRepository.find_page_by_group_ids`内の`EXISTS`部分問い合わせで同等の判定を行っていた。プロジェクトの「不要コードの削除」規約に従い削除した。
 
-### 7. `replace_groups_for_template`のループDELETE（🔵 提案）→ 対応しない
+### 7. `replace_groups_for_template`のループDELETE（🔵 提案）→ 対応済み（ユーザー指摘により追加対応）
 
-既存行をSELECTしてPythonループで1件ずつ`session.delete`している点は、1件のSQLで`DELETE ... WHERE`とする方が効率的ではある。ただし対象は1テンプレートあたりのグループ紐付け件数（通常は数件程度）であり、実害は小さい。今回のスコープでは見送り、将来グループ紐付け件数が大きくなる場合に再検討する。
+既存行をSELECTしてPythonループで1件ずつ`session.delete`していた点を、`sqlalchemy.delete(GroupPromptTemplate).where(...)`による一括DELETEに変更した。SELECTも不要になり、1テンプレートあたりのグループ紐付け件数に関わらず1回のDELETE文で完結する。当初のレビューでは実害が小さいとして見送ったが、レビュー結果を確認したユーザーからの指摘を受けて追加対応した。
 
 ### 8. `_is_tenant_admin`の重複（🔵 提案）→ 対応しない
 
