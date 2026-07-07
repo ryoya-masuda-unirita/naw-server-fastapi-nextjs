@@ -63,6 +63,28 @@ class TenantEndpointRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_ids_and_tenant_id(
+        ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[TenantEndpoint]:
+        """エンドポイントID一覧とテナントIDでエンドポイントを取得する。
+
+        Args:
+            ids: 取得対象のエンドポイントID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するエンドポイント一覧。
+        """
+        if not ids:
+            return []
+        stmt = select(TenantEndpoint).where(
+            TenantEndpoint.id.in_(ids), TenantEndpoint.tenant_id == tenant_id
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def delete(endpoint: TenantEndpoint, session: AsyncSession) -> None:
         """エンドポイントを削除する。
 

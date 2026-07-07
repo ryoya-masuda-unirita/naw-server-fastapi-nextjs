@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import GroupAssistant
@@ -63,3 +63,36 @@ class GroupAssistantRepository:
         for assistant_id, group_id in result.all():
             grouped[assistant_id].append(group_id)
         return grouped
+
+    @staticmethod
+    async def replace_groups_for_assistant(
+        assistant_id: str,
+        tenant_id: str,
+        group_ids: set[str],
+        session: AsyncSession,
+    ) -> None:
+        """対象アシスタントの既存グループ紐付けを全削除し、指定グループ集合で置き換える。
+
+        コミットは呼び出し側で行う。
+
+        Args:
+            assistant_id: 対象のアシスタントID。
+            tenant_id: テナントID。
+            group_ids: 紐付け先のグループID集合（実在確認済みのものを渡すこと）。
+            session: 非同期DBセッション。
+        """
+        await session.execute(
+            delete(GroupAssistant).where(
+                GroupAssistant.assistant_id == assistant_id,
+                GroupAssistant.tenant_id == tenant_id,
+            )
+        )
+
+        for group_id in group_ids:
+            session.add(
+                GroupAssistant(
+                    group_id=group_id,
+                    assistant_id=assistant_id,
+                    tenant_id=tenant_id,
+                )
+            )

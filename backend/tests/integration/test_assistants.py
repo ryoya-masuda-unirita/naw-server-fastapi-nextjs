@@ -4,12 +4,15 @@ from uuid import uuid4
 
 from app.core.security import create_access_token
 from app.main import app
+from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.assistant import (
     Assistant,
+    AssistantCategoryMapping,
     AssistantEndpoint,
     AssistantType,
     GroupAssistant,
 )
+from app.models.assistant_category import AssistantCategory
 from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
@@ -73,6 +76,40 @@ async def unaffiliated_user(session, tenant):
 
 
 @pytest.fixture
+async def admin_user(session, tenant):
+    """テスト用テナント管理者"""
+    u = User(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        login_id="admin-test",
+        name="Admin",
+        role=UserRole.ADMIN,
+        is_required_password_reset=False,
+    )
+    session.add(u)
+    await session.commit()
+    await session.refresh(u)
+    return u
+
+
+@pytest.fixture
+async def group_admin_user(session, tenant):
+    """テスト用グループ管理者（テナント管理者ロールではない）"""
+    u = User(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        login_id="group-admin-test",
+        name="GroupAdmin",
+        role=UserRole.USER,
+        is_required_password_reset=False,
+    )
+    session.add(u)
+    await session.commit()
+    await session.refresh(u)
+    return u
+
+
+@pytest.fixture
 async def assistant(session, tenant):
     """テスト用アシスタント"""
     a = Assistant(
@@ -105,6 +142,59 @@ async def group_with_assistant(session, tenant, member_user, assistant):
     )
     await session.commit()
     return g
+
+
+@pytest.fixture
+async def managed_group(session, tenant, group_admin_user, assistant):
+    """group_admin_userがグループ内管理者として所属し、assistantが紐づくグループ"""
+    g = Group(tenant_id=tenant.id, name="ManagedGroup")
+    session.add(g)
+    await session.commit()
+    await session.refresh(g)
+
+    session.add(
+        GroupUser(
+            group_id=g.id,
+            tenant_id=tenant.id,
+            user_id=group_admin_user.id,
+            is_admin=True,
+        )
+    )
+    session.add(
+        GroupAssistant(group_id=g.id, tenant_id=tenant.id, assistant_id=assistant.id)
+    )
+    await session.commit()
+    return g
+
+
+@pytest.fixture
+async def assistant_category(session, tenant, admin_user):
+    """テスト用アシスタントカテゴリ"""
+    c = AssistantCategory(
+        tenant_id=tenant.id,
+        name="カテゴリ1",
+        description="desc",
+        updated_user_id=admin_user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    return c
+
+
+@pytest.fixture
+async def ai_model(session):
+    """テスト用AIモデル"""
+    m = AIModel(
+        endpoint_type=AIModelEndpointType.OPENAI_CHAT,
+        name="gpt-4o",
+        max_tokens=128000,
+        active=True,
+    )
+    session.add(m)
+    await session.commit()
+    await session.refresh(m)
+    return m
 
 
 @pytest.fixture
@@ -150,6 +240,16 @@ def member_headers(member_user, tenant):
 @pytest.fixture
 def unaffiliated_headers(unaffiliated_user, tenant):
     return _headers(unaffiliated_user.login_id, tenant.id)
+
+
+@pytest.fixture
+def admin_headers(admin_user, tenant):
+    return _headers(admin_user.login_id, tenant.id)
+
+
+@pytest.fixture
+def group_admin_headers(group_admin_user, tenant):
+    return _headers(group_admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
@@ -401,3 +501,613 @@ class TestGetAssistantsEndpoints:
             response = await c.get("/api/assistants", headers=member_headers)
 
         assert response.json()[0]["endpoints"] == []
+
+
+@pytest.mark.asyncio
+class TestGetAssistantsCategory:
+    """GET /api/assistants のcategory/categories項目"""
+
+    async def test_returns_linked_category(
+        self,
+        client,
+        session,
+        tenant,
+        member_headers,
+        group_with_assistant,
+        assistant,
+        assistant_category,
+    ):
+        """紐づくカテゴリが実データとして返ること"""
+        session.add(
+            AssistantCategoryMapping(
+                assistant_id=assistant.id,
+                category_id=assistant_category.id,
+                tenant_id=tenant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/assistants", headers=member_headers)
+
+        body = response.json()
+        assert body[0]["category"]["id"] == assistant_category.id
+        assert body[0]["categories"][0]["id"] == assistant_category.id
+
+
+@pytest.mark.asyncio
+class TestCreateAssistant:
+    """POST /api/admin/assistants"""
+
+    async def test_create_assistant_as_tenant_admin_succeeds(
+        self, client, admin_headers, tenant_endpoint
+    ):
+        """テナント管理者がアシスタントを作成できること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "New Assistant",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "New Assistant"
+        assert body["iconColor"] is not None
+        assert body["endpoints"][0]["id"] == tenant_endpoint.id
+
+    async def test_create_assistant_as_group_admin_succeeds(
+        self, client, group_admin_headers, tenant_endpoint, managed_group
+    ):
+        """テナント管理者でないグループ管理者もアシスタントを作成できること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "By Group Admin",
+                    "includeHistory": False,
+                },
+                headers=group_admin_headers,
+            )
+
+        assert response.status_code == 200
+
+    async def test_create_assistant_as_normal_user_returns_403(
+        self, client, member_headers, tenant_endpoint
+    ):
+        """管理者権限もグループ管理者権限もない一般ユーザーは403になること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "Denied",
+                    "includeHistory": False,
+                },
+                headers=member_headers,
+            )
+
+        assert response.status_code == 403
+
+    async def test_create_assistant_without_endpoints_returns_422(
+        self, client, admin_headers
+    ):
+        """エンドポイントが1件もない場合422になること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [],
+                    "name": "NoEndpoints",
+                    "includeHistory": False,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_create_assistant_with_blank_name_returns_422(
+        self, client, admin_headers, tenant_endpoint
+    ):
+        """名前が空白のみの場合422になること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "   ",
+                    "includeHistory": False,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_create_secure_assistant_with_non_local_server_endpoint_returns_400(
+        self, client, admin_headers, tenant_endpoint
+    ):
+        """SECUREアシスタントにLOCAL_SERVER以外のエンドポイントを指定すると400になること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SECURE",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "SecureAssistant",
+                    "includeHistory": False,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    async def test_create_saas_rag_assistant_with_two_endpoints_returns_400(
+        self, client, session, tenant, admin_headers, tenant_endpoint
+    ):
+        """SAAS_RAGアシスタントにチャット用エンドポイントを2件指定すると400になること"""
+        second_endpoint = TenantEndpoint(
+            tenant_id=tenant.id,
+            type=EndpointType.CLAUDE_CHAT,
+            endpoint_name="Claude",
+            endpoint="https://api.anthropic.com",
+            api_key="claude-key",
+        )
+        session.add(second_endpoint)
+        await session.commit()
+        await session.refresh(second_endpoint)
+
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_RAG",
+                    "endpoints": [
+                        {"id": tenant_endpoint.id, "model": "gpt-4o"},
+                        {"id": second_endpoint.id, "model": "claude-3-opus"},
+                    ],
+                    "name": "RagAssistant",
+                    "includeHistory": False,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    async def test_create_assistant_saves_category_and_group(
+        self,
+        client,
+        admin_headers,
+        tenant_endpoint,
+        assistant_category,
+        group_with_assistant,
+    ):
+        """カテゴリ・グループを指定して作成できること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistants",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "WithRelations",
+                    "includeHistory": False,
+                    "categoryIds": [assistant_category.id],
+                    "groups": [group_with_assistant.id],
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["category"]["id"] == assistant_category.id
+        assert body["groups"] == [group_with_assistant.id]
+
+
+@pytest.mark.asyncio
+class TestUpdateAssistant:
+    """PATCH /api/admin/assistants/{id}"""
+
+    async def test_update_name_and_description(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """名前・説明を更新できること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "Renamed",
+                    "description": "new desc",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "Renamed"
+        assert body["description"] == "new desc"
+
+    async def test_update_without_name_keeps_existing_name(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """nameを送信しない場合、既存の名前が維持されること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == assistant.name
+
+    async def test_update_with_empty_name_keeps_existing_name(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """nameを空文字で送信した場合も、既存の名前が維持されること（移植元isNotBlank相当）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "name": "",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == assistant.name
+
+    async def test_update_with_empty_description_keeps_existing_description(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """descriptionを空文字で送信した場合、既存の説明が維持されること（移植元isNotBlank相当）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "description": "",
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["description"] == assistant.description
+
+    async def test_update_with_duplicate_endpoint_ids_returns_400(
+        self, client, admin_headers, assistant, tenant_endpoint
+    ):
+        """同じテナントエンドポイントIDを重複して指定すると400になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [
+                        {"id": tenant_endpoint.id, "model": "gpt-4o"},
+                        {"id": tenant_endpoint.id, "model": "gpt-4o-mini"},
+                    ],
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    async def test_update_with_empty_category_ids_clears_categories(
+        self,
+        client,
+        session,
+        tenant,
+        admin_headers,
+        assistant,
+        tenant_endpoint,
+        assistant_category,
+    ):
+        """categoryIdsを空配列で送信すると既存のカテゴリ紐付けが解除されること"""
+        session.add(
+            AssistantCategoryMapping(
+                assistant_id=assistant.id,
+                category_id=assistant_category.id,
+                tenant_id=tenant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistants/{assistant.id}",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "includeHistory": True,
+                    "categoryIds": [],
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["categories"] == []
+
+    async def test_update_not_found_returns_404(
+        self, client, admin_headers, tenant_endpoint
+    ):
+        """存在しないアシスタントIDの場合404になること"""
+        async with client as c:
+            response = await c.patch(
+                "/api/admin/assistants/does-not-exist",
+                json={
+                    "type": "SAAS_CHAT",
+                    "endpoints": [{"id": tenant_endpoint.id, "model": "gpt-4o"}],
+                    "includeHistory": True,
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestDeleteAssistant:
+    """DELETE /api/admin/assistants/{id}"""
+
+    async def test_delete_assistant_succeeds(self, client, admin_headers, assistant):
+        """アシスタントを削除できること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/assistants/{assistant.id}", headers=admin_headers
+            )
+
+        assert response.status_code == 204
+
+    async def test_delete_not_found_returns_404(self, client, admin_headers):
+        """存在しないアシスタントIDの場合404になること"""
+        async with client as c:
+            response = await c.delete(
+                "/api/admin/assistants/does-not-exist", headers=admin_headers
+            )
+
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestListAdminAssistants:
+    """GET /api/admin/assistants"""
+
+    async def test_tenant_admin_sees_all_assistants(
+        self, client, session, tenant, admin_headers, assistant
+    ):
+        """テナント管理者は全アシスタントを取得できること"""
+        other = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="Other",
+            include_history=False,
+        )
+        session.add(other)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/admin/assistants", headers=admin_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 2
+
+    async def test_group_admin_sees_only_managed_group_assistants(
+        self,
+        client,
+        session,
+        tenant,
+        group_admin_headers,
+        managed_group,
+        assistant,
+    ):
+        """テナント管理者でないグループ管理者は、自分の管理グループのアシスタントのみ取得できること"""
+        unmanaged = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="Unmanaged",
+            include_history=False,
+        )
+        session.add(unmanaged)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/admin/assistants", headers=group_admin_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert body["content"][0]["id"] == assistant.id
+
+    async def test_normal_user_returns_403(self, client, member_headers):
+        """管理者権限もグループ管理者権限もない一般ユーザーは403になること"""
+        async with client as c:
+            response = await c.get("/api/admin/assistants", headers=member_headers)
+
+        assert response.status_code == 403
+
+    async def test_filters_by_category_id_none(
+        self,
+        client,
+        session,
+        tenant,
+        admin_headers,
+        assistant,
+        assistant_category,
+    ):
+        """categoryId=NONEでカテゴリ未設定のアシスタントのみに絞り込めること"""
+        categorized = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="Categorized",
+            include_history=False,
+        )
+        session.add(categorized)
+        await session.commit()
+        await session.refresh(categorized)
+        session.add(
+            AssistantCategoryMapping(
+                assistant_id=categorized.id,
+                category_id=assistant_category.id,
+                tenant_id=tenant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"categoryId": "NONE"},
+                headers=admin_headers,
+            )
+
+        body = response.json()
+        ids = [item["id"] for item in body["content"]]
+        assert assistant.id in ids
+        assert categorized.id not in ids
+
+    async def test_search_by_name(
+        self, client, session, tenant, admin_headers, assistant
+    ):
+        """名前の部分一致検索ができること"""
+        other = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="ZZZ",
+            include_history=False,
+        )
+        session.add(other)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"q": assistant.name},
+                headers=admin_headers,
+            )
+
+        body = response.json()
+        ids = [item["id"] for item in body["content"]]
+        assert assistant.id in ids
+        assert other.id not in ids
+
+    async def test_sort_by_assistant_type_alias(
+        self, client, session, tenant, admin_headers
+    ):
+        """フロントエンド（secuaigent-client）が送信するsort=assistantTypeで種別ソートできること。
+
+        SECUREを先に作成（updated_atが古い）、SAAS_CHATを後に作成（updated_atが新しい）することで、
+        "assistantType"エイリアスが無視されupdatedAtへフォールバックした場合と、
+        正しくtype昇順でソートされた場合とで結果順序が変わるようにする。
+        """
+        secure_assistant = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SECURE,
+            name="SecureOne",
+            include_history=False,
+        )
+        session.add(secure_assistant)
+        await session.commit()
+
+        chat_assistant = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="ChatOne",
+            include_history=False,
+        )
+        session.add(chat_assistant)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"sort": "assistantType,asc"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        types = [item["type"] for item in body["content"]]
+        # SAAS_CHAT < SECURE（辞書順）なので、正しくtype昇順ならchat_assistantが先に来る
+        assert types.index("SAAS_CHAT") < types.index("SECURE")
+
+
+@pytest.mark.asyncio
+class TestGetAssistantEndpoints:
+    """GET /api/admin/assistants/endpoints/{type}"""
+
+    async def test_secure_returns_local_server_only(
+        self, client, session, tenant, admin_headers, tenant_endpoint
+    ):
+        """SECURE種別ではLOCAL_SERVERエンドポイントのみ返ること"""
+        local_server = TenantEndpoint(
+            tenant_id=tenant.id,
+            type=EndpointType.LOCAL_SERVER,
+            endpoint_name="Local",
+            endpoint="http://localhost:8080",
+            api_key="key",
+        )
+        session.add(local_server)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants/endpoints/SECURE", headers=admin_headers
+            )
+
+        assert response.status_code == 200
+        types = {e["type"] for e in response.json()}
+        assert types == {"LOCAL_SERVER"}
+
+    async def test_saas_chat_returns_chat_types_only(
+        self, client, admin_headers, tenant_endpoint
+    ):
+        """SAAS_CHAT種別ではチャット系エンドポイントのみ返ること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants/endpoints/SAAS_CHAT", headers=admin_headers
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert any(e["id"] == tenant_endpoint.id for e in body)
+        assert all(e["type"].endswith("CHAT") for e in body)
+
+
+@pytest.mark.asyncio
+class TestGetAIModels:
+    """GET /api/admin/assistants/AIModels"""
+
+    async def test_returns_all_ai_models(self, client, admin_headers, ai_model):
+        """AIモデル一覧が返ること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants/AIModels", headers=admin_headers
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body[0]["id"] == ai_model.id
+        assert body[0]["name"] == "gpt-4o"
