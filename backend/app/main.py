@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_cors_settings
 from app.routers import (
+    assistant_categories,
     assistants,
     auth,
     groups,
@@ -41,3 +42,4 @@ app.include_router(assistants.router)
 app.include_router(prompt_templates.prompt_template_router)
 app.include_router(prompt_templates.admin_prompt_template_router)
 app.include_router(tenant_endpoints.router)
+app.include_router(assistant_categories.router)
