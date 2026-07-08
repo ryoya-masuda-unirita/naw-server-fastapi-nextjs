@@ -9,6 +9,11 @@ name: バックエンドテスト
 
 # --- どんな時にこのワークフローを動かすか（トリガー） ---
 on:
+  pull_request:
+    # PR作成・更新時にもCIを走らせ、PR画面の required checks に使えるようにする。
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
   push:
     # push イベント＝ブランチに何かコミットがプッシュされた時（PRのマージも「developへのpush」として扱われる）。
     # paths を指定すると、そのパターンに一致する変更を含むpushの時だけ実行される。
