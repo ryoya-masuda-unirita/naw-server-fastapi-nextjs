@@ -198,6 +198,51 @@ class IndexService:
         )
 
     @staticmethod
+    async def _ensure_visible(
+        index: Index, tenant_id: str, current_user: User, session: AsyncSession
+    ) -> None:
+        """インデックスがログインユーザーの可視範囲内かを検証する。
+
+        一覧取得と同じ可視性ロジック（`_resolve_visibility_scope`）を再利用し、
+        取得・更新・削除のいずれについても、グループ管理者が自分の管理範囲外の
+        インデックスを操作できないようにする（見えないインデックスは存在しないものとして404）。
+
+        Args:
+            index: 検証対象のインデックス。
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: 可視範囲外の場合404を返す。
+        """
+        if IndexService._is_tenant_admin(current_user):
+            return
+
+        (
+            allowed_index_ids,
+            allowed_group_ids,
+        ) = await IndexService._resolve_visibility_scope(
+            tenant_id, current_user, session
+        )
+        if allowed_index_ids is None and allowed_group_ids is None:
+            return
+
+        group_ids_by_index_id = (
+            await IndexRepository.find_group_ids_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        visible = index.id in (allowed_index_ids or []) or bool(
+            set(group_ids_by_index_id.get(index.id, [])) & set(allowed_group_ids or [])
+        )
+        if not visible:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="インデックスが存在しません。",
+            )
+
+    @staticmethod
     async def get_index(
         index_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> IndexResponse:
@@ -226,28 +271,7 @@ class IndexService:
                 detail="インデックスが存在しません。",
             )
 
-        if not IndexService._is_tenant_admin(current_user):
-            (
-                allowed_index_ids,
-                allowed_group_ids,
-            ) = await IndexService._resolve_visibility_scope(
-                tenant_id, current_user, session
-            )
-            if allowed_index_ids is not None or allowed_group_ids is not None:
-                group_ids_by_index_id = (
-                    await IndexRepository.find_group_ids_grouped_by_index_ids(
-                        [index.id], tenant_id, session
-                    )
-                )
-                visible = index.id in (allowed_index_ids or []) or bool(
-                    set(group_ids_by_index_id.get(index.id, []))
-                    & set(allowed_group_ids or [])
-                )
-                if not visible:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="インデックスが存在しません。",
-                    )
+        await IndexService._ensure_visible(index, tenant_id, current_user, session)
 
         tenant_endpoints_by_index_id = (
             await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
@@ -365,21 +389,31 @@ class IndexService:
 
     @staticmethod
     async def update_index(
-        index_id: str, tenant_id: str, req: IndexRequest, session: AsyncSession
+        index_id: str,
+        tenant_id: str,
+        req: IndexRequest,
+        current_user: User,
+        session: AsyncSession,
     ) -> IndexResponse:
         """インデックスを更新する（移植元同様、部分更新ではなく全フィールド置換）。
+
+        グループ管理者が自分の管理範囲外のインデックスを更新できないよう、
+        一覧・詳細取得と同じ可視性ロジックで検証する（移植元Javaにはこのチェックは
+        存在しないが、本APIの他エンドポイント・他ドメインAPIとは異なりインデックスは
+        `groupId`によるアクセス制御が特に重要なため、FastAPI版では一貫性を優先して追加する）。
 
         Args:
             index_id: 更新対象のインデックスID。
             tenant_id: テナントID。
             req: 更新リクエスト。
+            current_user: 認証済みユーザー。
             session: 非同期DBセッション。
 
         Returns:
             更新後のインデックス。
 
         Raises:
-            HTTPException: インデックスが存在しない場合404を返す。
+            HTTPException: インデックスが存在しない、または可視範囲外の場合404を返す。
                 指定されたエンドポイント・グループが存在しない場合404を返す
                 （SAAS_GLOBALの15件上限チェックは移植元同様、更新時はスキップする）。
         """
@@ -391,6 +425,8 @@ class IndexService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="インデックスが存在しません。",
             )
+
+        await IndexService._ensure_visible(index, tenant_id, current_user, session)
 
         endpoint_ids = await IndexService._resolve_endpoint_ids(
             tenant_id, req.endpointIds, session
@@ -432,19 +468,30 @@ class IndexService:
 
     @staticmethod
     async def delete_index(
-        index_id: str, tenant_id: str, session: AsyncSession
+        index_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> None:
         """インデックスを削除する。存在しない場合は何もしない（冪等）。
 
         `indexes_endpoints`・`indexes_groups`はDBのON DELETE CASCADEにより連動削除される。
+        グループ管理者が自分の管理範囲外のインデックスを削除できないよう、
+        `update_index`と同様に可視性チェックを行う。
 
         Args:
             index_id: 削除対象のインデックスID。
             tenant_id: テナントID。
+            current_user: 認証済みユーザー。
             session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: グループ管理者が可視範囲外のインデックスを指定した場合404を返す
+                （存在しないインデックスの指定自体は冪等に扱い、何もしない）。
         """
         index = await IndexRepository.find_by_id_and_tenant_id(
             index_id, tenant_id, session
         )
-        if index:
-            await IndexRepository.delete(index, session)
+        if not index:
+            return
+
+        await IndexService._ensure_visible(index, tenant_id, current_user, session)
+
+        await IndexRepository.delete(index, session)

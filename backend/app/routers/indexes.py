@@ -69,7 +69,9 @@ async def update_index(
     session: AsyncSession = Depends(get_session),
 ) -> IndexResponse:
     """インデックス更新（全フィールド置換）"""
-    return await IndexService.update_index(index_id, x_tenant_id, req, session)
+    return await IndexService.update_index(
+        index_id, x_tenant_id, req, current_user, session
+    )
 
 
 @admin_router.delete("/{index_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -80,4 +82,4 @@ async def delete_index(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """インデックス削除"""
-    await IndexService.delete_index(index_id, x_tenant_id, session)
+    await IndexService.delete_index(index_id, x_tenant_id, current_user, session)

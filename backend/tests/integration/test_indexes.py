@@ -714,6 +714,59 @@ class TestIndexRouter:
 
             assert response.status_code == 200
 
+        async def test_update_by_group_admin_within_scope_succeeds(
+            self,
+            client,
+            group_admin_headers,
+            group_linked_index,
+            managed_group,
+            tenant_endpoint_1,
+            tenant_endpoint_2,
+        ):
+            """グループ管理者は自分の管理範囲内のインデックスを更新できること"""
+            payload = {
+                "name": "Updated By Group Admin",
+                "type": "SAAS_GLOBAL",
+                "endpointIds": [tenant_endpoint_1.id, tenant_endpoint_2.id],
+                "groupIds": [managed_group.id],
+            }
+            async with client as c:
+                response = await c.patch(
+                    f"/api/admin/indexes/{group_linked_index.id}",
+                    json=payload,
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 200
+            assert response.json()["name"] == "Updated By Group Admin"
+
+        async def test_update_by_group_admin_out_of_scope_returns_404(
+            self,
+            client,
+            group_admin_headers,
+            unrelated_index,
+            managed_group,
+            tenant_endpoint_1,
+            tenant_endpoint_2,
+        ):
+            """グループ管理者は自分の管理範囲外のインデックスを更新できず404になること
+
+            `managed_group`は`require_admin_or_group_admin`を通過させるために必要。
+            """
+            payload = {
+                "name": "Should Not Update",
+                "type": "SAAS_GLOBAL",
+                "endpointIds": [tenant_endpoint_1.id, tenant_endpoint_2.id],
+            }
+            async with client as c:
+                response = await c.patch(
+                    f"/api/admin/indexes/{unrelated_index.id}",
+                    json=payload,
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 404
+
     class TestDelete:
         """DELETE /api/admin/indexes/{id}"""
 
@@ -751,3 +804,32 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 204
+
+        async def test_delete_by_group_admin_within_scope_succeeds(
+            self, client, group_admin_headers, group_linked_index
+        ):
+            """グループ管理者は自分の管理範囲内のインデックスを削除できること"""
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{group_linked_index.id}",
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 204
+
+        async def test_delete_by_group_admin_out_of_scope_returns_404(
+            self, client, group_admin_headers, unrelated_index, managed_group
+        ):
+            """グループ管理者は自分の管理範囲外のインデックスを削除できず404になること
+
+            `managed_group`は`require_admin_or_group_admin`を通過させるために必要。
+            削除されず残っていること自体は本テストでは検証しないが、404であることから
+            `IndexRepository.delete`が呼ばれていないことが分かる。
+            """
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{unrelated_index.id}",
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 404
