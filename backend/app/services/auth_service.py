@@ -71,6 +71,44 @@ class AuthService:
         )
 
     @staticmethod
+    async def login_with_login_key(
+        login_key: str, tenant_id: str, session: AsyncSession
+    ) -> AuthResponse:
+        """ログインキーで認証しJWTを含む認証レスポンスを返す。
+
+        login_key と tenant_id の両方でユーザーを検索するため、存在しない
+        ログインキーの場合と、別テナントのログインキーの場合は同じ401を返す
+        （ログインキーの存在有無が外部から推測できないようにするため）。
+
+        Args:
+            login_key: ログインキー。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            認証結果を含む AuthResponse。
+
+        Raises:
+            HTTPException: ログインキーが存在しない、または別テナントの場合は401を返す。
+        """
+        user = await UserRepository.find_by_login_key(login_key, tenant_id, session)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login key"
+            )
+
+        token = create_access_token(user.login_id, tenant_id)
+
+        return AuthResponse(
+            id=user.login_id,
+            name=user.name,
+            role=user.role.value,
+            token=token,
+            groups=[],
+            loginStatus="SUCCESS",
+        )
+
+    @staticmethod
     async def reset_password(
         login_id: str,
         old_password: str,
