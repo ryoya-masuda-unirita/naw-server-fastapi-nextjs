@@ -200,3 +200,46 @@ WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'gpt-4o');
 INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
 SELECT 'CLAUDE_CHAT', 'claude-3-5-sonnet', 200000, true, 1.0
 WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'claude-3-5-sonnet');
+
+-- フィードバックユーザー一覧API 動作確認用ルーム
+INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id, rating)
+VALUES
+(
+    '60000000000040008000000000000001',
+    'test-tenant',
+    'フィードバック確認用ルーム1',
+    '10000000000040008000000000000001',
+    '00000000-0000-4000-8000-000000000002',
+    'EXCELLENT'
+),
+(
+    '60000000000040008000000000000002',
+    'test-tenant',
+    'フィードバック確認用ルーム2',
+    '10000000000040008000000000000001',
+    '00000000-0000-4000-8000-000000000002',
+    'GOOD'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックユーザー一覧API 動作確認用メッセージ
+INSERT INTO messages (id, tenant_id, room_id, assistant_id)
+VALUES (
+    '70000000000040008000000000000001',
+    'test-tenant',
+    '60000000000040008000000000000001',
+    '10000000000040008000000000000001'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックユーザー一覧API 動作確認用メッセージフィードバック
+INSERT INTO message_feedbacks (id, tenant_id, user_id, message_id, rating, index_id)
+VALUES (
+    '80000000000040008000000000000001',
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000002',
+    '70000000000040008000000000000001',
+    'GOOD',
+    NULL
+)
+ON CONFLICT (message_id) DO NOTHING;
