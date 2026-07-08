@@ -6,6 +6,8 @@ Spring Boot 実装: `~/Documents/naw-server`
 
 **このリポジトリは日々更新される**。実装前に必ず最新の Spring Boot 実装を確認してからポートすること。
 
+移植元の `git log` 確認や、対象 Controller/Service/Request/Response の読み込みなど、読み取り専用のリサーチがまとまった分量になりそうな場合は、`Agent(subagent_type: naw-explore)`（このリポジトリの移植前提を組み込んだ専用エージェント）への委譲を検討すること。対象がすでに明確ですぐ読める場合など、委譲するまでもないと判断できるときは直接読んでよい。
+
 ---
 
 ## 技術スタック
