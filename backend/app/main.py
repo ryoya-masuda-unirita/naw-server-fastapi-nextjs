@@ -9,6 +9,7 @@ from app.routers import (
     feedback,
     groups,
     health,
+    libraries,
     library_tags,
     messages,
     prompt_templates,
@@ -54,4 +55,8 @@ app.include_router(tenant_endpoints.router)
 app.include_router(assistant_categories.router)
 app.include_router(library_tags.library_tag_router)
 app.include_router(library_tags.admin_library_tag_router)
+# library_tags（/api/libraries/tags）より後ろに登録すること。
+# FastAPIはルート登録順にパスを照合するため、先に/api/libraries/{library_id}が
+# 登録されると/api/libraries/tagsへのリクエストがそちらにマッチしてしまう。
+app.include_router(libraries.library_router)
 app.include_router(feedback.router)
