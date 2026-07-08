@@ -368,6 +368,44 @@ class TestGetTokenUsages:
 
         assert response.status_code == 404
 
+    async def test_size_zero_returns_422(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """size=0だとバリデーションエラーになること（hasNextが常にTrueになる不具合を防ぐ）"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?{_period_query()}&size=0",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_negative_page_returns_422(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """page=-1だとバリデーションエラーになること（負のOFFSETによるDBエラーを防ぐ）"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?{_period_query()}&page=-1",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_naive_and_aware_datetime_mixed_does_not_raise_500(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """fromがtz無し・toがtz付きの混在でも500にならず正常に処理されること"""
+        from_ = (BASE_TIME - timedelta(days=1)).replace(tzinfo=None).isoformat()
+        to = _quote_datetime(BASE_TIME + timedelta(days=1))
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?from={from_}&to={to}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+
     async def test_group_admin_can_get_token_usages(
         self,
         client,

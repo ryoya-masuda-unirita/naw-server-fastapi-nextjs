@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.token_usage import TokenUsage
 
@@ -18,6 +18,25 @@ class TokenUsagePeriodQuery(BaseModel):
     from_: datetime = Field(alias="from")
     to: datetime
     user_id: UUID | None = Field(default=None, alias="userId")
+
+    @field_validator("from_", "to")
+    @classmethod
+    def _ensure_timezone_aware(cls, value: datetime) -> datetime:
+        """タイムゾーン情報がない場合はUTCとして扱う。
+
+        `from`/`to`の一方だけタイムゾーンなしで指定されると、後続の`_validate_period`での
+        比較時にnaive/aware混在で`TypeError`が送出され422ではなく500になってしまうため、
+        ここで両者を必ずaware(UTC)に揃える。
+
+        Args:
+            value: パース済みの日時。
+
+        Returns:
+            タイムゾーン情報を持つ日時（元々naiveだった場合はUTCを付与）。
+        """
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
     @model_validator(mode="after")
     def _validate_period(self) -> "TokenUsagePeriodQuery":
@@ -37,8 +56,8 @@ class TokenUsagePeriodQuery(BaseModel):
 
 
 class TokenUsageListQuery(TokenUsagePeriodQuery):
-    page: int = 0
-    size: int = 10
+    page: int = Field(default=0, ge=0)
+    size: int = Field(default=10, ge=1, le=100)
     order_by: str = Field(default="createdAt", alias="orderBy")
     reverse: bool = True
 
