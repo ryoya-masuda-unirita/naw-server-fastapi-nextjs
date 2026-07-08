@@ -1,27 +1,42 @@
 ---
 name: naw-autopilot
-description: Use ONLY when the user explicitly invokes /naw-autopilot or explicitly asks to fully automate the Issue-to-merge development cycle for naw-server-fastapi-nextjs without per-step approval. Runs Issue triage → docs → implementation → test → PR → review → merge, then re-invokes itself via the loop skill indefinitely until the user stops it. Do not use for a single normal Issue (use naw-issue-workflow / naw-pr-workflow instead).
+description: Use ONLY when the user explicitly invokes /naw-autopilot or explicitly asks to fully automate the Issue-to-PR development cycle for naw-server-fastapi-nextjs without per-step approval. Runs Issue triage → docs → implementation → test → verify → code-review → PR (single, final) → repeats via the loop skill indefinitely until the user stops it. Merge is intentionally left to the human. Do not use for a single normal Issue (use naw-issue-workflow / naw-pr-workflow instead).
 ---
 
 # NAW Autopilot
 
-`naw-issue-workflow` / `naw-pr-workflow` の承認ゲート（第1承認・第2承認・HITLの都度確認）を**すべて省略**し、Issue起票からマージまでを無人・無限にループさせるスキル。
+`naw-issue-workflow` / `naw-pr-workflow` の承認ゲート（第1承認・第2承認・HITLの都度確認）を**すべて省略**し、Issue起票からPR作成までを無人・無限にループさせるスキル。
 
 **ユーザーが明示的に `/naw-autopilot` を叩いたとき、またはこのフローの続行・再開を明示的に指示したときのみ使うこと。** 通常のIssue対応では `naw-issue-workflow` を使う。
+
+<!--
+  なぜマージを自動化しないのか:
+  当初はマージまで無人化する設計だったが、このリポジトリを操作している環境（Claude Code Auto
+  Mode）には「マージのような不可逆・高影響操作は人間の承認なしに実行させない」という、エージェント
+  側からは無効化できない安全装置（auto mode classifier）が組み込まれていることが判明した。
+  gh pr merge の実行自体（2026-07-08、PR #61）は成功したが、直後の後続操作が
+  「エージェントが人間レビューなしにマージした」という理由でブロックされ、以後の操作が連鎖的に
+  拒否される事態になった。auto-merge化・設定ファイル変更・リポジトリのPublic化など複数の回避策を
+  検討したが、いずれも同じ壁に当たる可能性が高いと判断し、ユーザーの指示によりマージは人間の判断に
+  委ねる設計とした。
+
+  なぜPRを「最後に1回だけ」作るのか:
+  先にPRを作ってからcode-reviewで指摘修正すると、そのたびにPRへ追いコミットする必要が生じ、
+  レビューする人間にとって差分を追いにくい。動作確認・code-reviewまで完了させ、指摘対応も
+  終えた「完成品」の状態でPRを1回だけ作成する設計とした。
+-->
 
 ## 前提（合意済みの仕様）
 
 - Issue選定基準: `~/Documents/naw-server`（移植元）の未移植エンドポイント・機能を順番に検出して起票する
 - 対象: バックエンド（FastAPI）優先。着手確認は毎回省略する
 - ドキュメント: `00`〜`08` を承認待ちせず一括生成する
-- Merge条件（**すべて**満たした場合のみ `gh pr merge` を実行）
-  1. `backend/` で `pytest` が全件グリーン
-  2. `ruff check app tests` / `mypy app/` がエラーなし
-  3. `/code-review` の結果に 🔴 致命的指摘が残っていない
-  4. 動作確認（`curl` によるAPI呼び出し）が期待通りのレスポンスであること
-- Merge先は必ず `develop`。`main` には直接マージしない
+- **マージは行わない**（人間が手動で行う）。`/code-review` は本スキルが自動実行する
+- PRは**動作確認・`/code-review`（指摘対応含む）が両方完了した後に1回だけ**作成する。本スキルが自動化するのは Issue起票 → ブランチ作成 → ドキュメント生成 → 実装 → テスト → 動作確認 → コードレビュー → PR作成まで
+- `/code-review` で🔴致命的指摘が出た場合は修正して5（実装・テスト）・6（動作確認）に戻る（試行回数のカウントに含める）。🟡🔵は対応要否をAIが判断し、`code-review.md`に理由とともに記録する
 - 同一Issueでの実装〜テストの再試行は**最大3回**。3回失敗したらループを停止し、ユーザーに報告する
 - 移植候補が0件になったらループを停止し、ユーザーに報告する
+- 候補検出時は `gh pr list --state open` も確認し、既にPRが出ているエンドポイントを重複して起票しない
 - セッションが閉じればループも止まる（`ScheduleWakeup` はセッション内でのみ有効）。これは仕様として許容する
 
 ## 状態ファイル
@@ -38,13 +53,13 @@ description: Use ONLY when the user explicitly invokes /naw-autopilot or explici
 }
 ```
 
-`step` の取り得る値: `candidate_search` / `issue_create` / `branch_start` / `docs` / `implementation` / `test` / `verify` / `pr_create` / `code_review` / `merge` / `idle`
+`step` の取り得る値: `candidate_search` / `issue_create` / `branch_start` / `docs` / `implementation` / `test` / `verify` / `code_review` / `pr_create` / `idle`
 
 - サイクル開始時、まず本ファイルの有無を確認する
   - **存在する場合**: 中断からの再開とみなし、`step` に記録されたステップから再開する。`docs/<issueSlug>/06_タスクリスト.md` の `- [x]` 状況も合わせて確認し、実際にどこまで終わっているかを裏取りしてから再開する
   - **存在しない場合**: 新規サイクルとして `candidate_search` から開始する
 - 各ステップ完了時に **即座に** `step` とタイムスタンプを更新する（まとめて更新しない）
-- サイクル完遂（マージ完了）または停止時に、ファイルを削除する（削除 = 次回は新規サイクルとして開始）
+- サイクル完遂（PR作成完了）または停止時に、ファイルを削除する（削除 = 次回は新規サイクルとして開始）
 
 ## 実行手順
 
@@ -66,7 +81,7 @@ Skill(skill="loop", args="/naw-autopilot")
 
 - `Agent(subagent_type: naw-explore)` を呼び、以下を自己完結のプロンプトで依頼する（会話の前提を知らない前提で、必要な情報をすべてプロンプトに含めること）
   - `~/Documents/naw-server` を最新化した上で、`RoomController` 等の Controller 群のエンドポイント一覧を洗い出すこと
-  - `backend/app/routers/` の既存実装（および `gh issue list --state all` の一覧）と突き合わせ、まだ移植されていないエンドポイントを検出すること
+  - `backend/app/routers/` の既存実装、`gh issue list --state all` の一覧、**および `gh pr list --state open` の一覧**と突き合わせ、まだ移植されておらず・かつ未マージのオープンPRでも対応されていないエンドポイントを検出すること（マージは人間が行うため、未マージPRが並行して複数存在しうる）
   - 複数候補がある場合は、依存関係が少なく粒度が小さいものを優先して1件に絞ること
   - 結果は「候補の有無」「エンドポイント（メソッド・パス）」「対応する移植元ファイルパス」「選定理由」を簡潔に返すよう指示すること
 - `naw-explore` エージェントの調査結果を受け取り、メインループ側で次のいずれかを行う
@@ -96,21 +111,23 @@ Skill(skill="loop", args="/naw-autopilot")
 
 ローカルサーバー（`uvicorn`）を起動し、`curl` で対象APIを実際に呼び出して期待レスポンスを確認する。ブラウザ操作は行わない（無人実行のため）。結果を `08_動作確認.md` に記録する。
 
-### 7. PR作成（`pr_create`）
+### 7. コードレビュー（`code_review`）
 
-`naw-pr-workflow` のフォーマットに従い、`Closes #{番号}` を含む PR を作成する。
+PRを作成する**前に** `/code-review` を実行し、`docs/<issueSlug>/code-review.md` を作成する。
 
-### 8. コードレビュー（`code_review`）
+- 🔴致命的指摘: 修正して5（実装・テスト）・6（動作確認）に戻る。これも試行回数のカウントに含める
+- 🟡注意・🔵提案: 対応要否をAIが判断し、`code-review.md`に理由とともに記録する
 
-`/code-review` を実行し、`code-review.md` を作成する。🔴致命的指摘は修正して再テスト・再動作確認する（5・6に戻る。これも試行回数のカウントに含める）。🟡🔵は自動判断してよい。
+### 8. PR作成（`pr_create`）
 
-### 9. マージ（`merge`）
+`naw-pr-workflow` のフォーマットに従い、`Closes #{番号}` を含む PR を作成する（動作確認・コードレビュー・指摘対応がすべて完了した状態で1回だけ作成し、以後追いコミットのための編集は行わない）。`code-review.md` の要約もPR本文に含める。作成後、状態ファイルを削除する（このサイクルはここで完了。マージは行わない）。
 
-「前提」節の Merge条件（1〜4）を**すべて**満たしていることを確認したうえで `gh pr merge --merge`（またはリポジトリの既定戦略）を実行する。マージ後、状態ファイルを削除する。
+### 9. 次サイクルへ
 
-### 10. 次サイクルへ
+PR作成完了をユーザーに簡潔に報告したうえで、`ScheduleWakeup` で次回起動を予約する。
 
-マージ完了をユーザーに簡潔に報告したうえで、`ScheduleWakeup` で次回起動を予約する（間隔は目安として60〜120秒程度。次サイクルの重さを踏まえ、キャッシュ窓を意識しつつ選ぶ）。`prompt` には `<<autonomous-loop-dynamic>>` を渡す。
+- `delaySeconds` は **600秒（10分）** 固定とする（PR作成直後は人間がレビュー・マージ判断をする時間を確保するための待機であり、次サイクルの処理負荷を理由にした調整は行わない）
+- `prompt` には `<<autonomous-loop-dynamic>>` を渡す
 
 ## 中断からの再開
 

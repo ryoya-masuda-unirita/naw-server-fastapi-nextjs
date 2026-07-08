@@ -35,6 +35,10 @@ jobs:
     # ubuntu-latest は GitHub がホストしてくれる使い捨てのUbuntu仮想マシン。
     # ジョブが始まるたびに新品の状態で用意され、終わったら破棄される（ローカルPCやサーバーには一切影響しない）。
     runs-on: ubuntu-latest
+    # timeout-minutes: ジョブの最大実行時間。指定しないとGitHub既定の360分（6時間）まで
+    # 動き続けてしまい、テストがハングした場合にCI時間を浪費し続ける。単体テストは
+    # DB不要で数十秒程度のはずなので、余裕を持たせつつ短めの10分を上限にする。
+    timeout-minutes: 10
 
     # defaults.run.working-directory: 以降の `run:` ステップを実行する際のカレントディレクトリ。
     # このリポジトリは backend/ 配下にPythonプロジェクトがあるモノレポ構成なので、
@@ -104,6 +108,8 @@ jobs:
     # この条件に一致してこのジョブも動く。
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    # 結合テストはDBセットアップを伴う分、単体テストより時間がかかるため上限を15分にする。
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -139,6 +145,8 @@ jobs:
   lint:
     name: Ruffチェック
     runs-on: ubuntu-latest
+    # フォーマット・リンターの検証のみで数十秒程度のはずなので、上限は短めの5分にする。
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: backend
