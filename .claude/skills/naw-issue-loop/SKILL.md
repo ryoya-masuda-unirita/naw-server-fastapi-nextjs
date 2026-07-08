@@ -54,12 +54,16 @@ bash .claude/skills/naw-issue-loop/scripts/next_todo_issue.sh
 - 対象Issue番号
 - `~/Documents/naw-server-fastapi-nextjs` の `.claude/skills/naw-issue-workflow/SKILL.md` と `.claude/skills/naw-issue-workflow/references/doc-templates.md` を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
 - 以下の**本スキル独自の上書きルール**を明示すること（`naw-issue-workflow` のデフォルトと異なる部分なので、エージェントが読み違えないよう強調する）:
-  1. 第1承認・第2承認は省略し、常に「全自動」で進めてよい。ユーザーに立ち止まって確認を取らない
-  2. `08_動作確認.md` のブラウザ操作による確認は行わず、自動テスト（pytest等）の実行結果のみで代替し、その旨をファイルに明記する
-  3. 実装中に解消できないテスト失敗・仕様不明に遭遇し、これ以上進められないと判断した場合は、無理に実装を完成させようとせず、作業ブランチとドキュメントはそのまま残し、対象Issueに詰まった理由をコメントで残した上で「BLOCKED」として作業を終了する（PRは作らない、Project Statusは変更しない）
-  4. 正常に完了できた場合は、`naw-pr-workflow` の [SKILL.md](../naw-pr-workflow/SKILL.md) に従いPRを作成し、`/code-review` を実行して `code-review.md` を作成し、🔴致命的指摘があれば修正すること。PR本文には必ず `Closes #{Issue番号}` を入れること
-  5. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `.claude/CLAUDE.md` に従うこと
-- 最後に「PR作成に成功したか」「BLOCKEDで終わったか」を明確に報告するよう指示する（成功した場合はPR URL、BLOCKEDの場合は理由を含めて）
+  1. **着手前に必ず `gh issue view {番号} --json title,body` でIssue本文を確認し、`NAW-XXXX` 形式の元チケット参照があるかを判定すること。** その上で `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh` を次のいずれかの引数で実行する（このスクリプトが `develop` の最新化・`feature/issue-*` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）
+     - NAW番号の記載なし: `issue-{番号}`（→ `feature/issue-{番号}` ブランチ、`docs/issue-{番号}/`）
+     - `NAW-XXXX` の記載あり: `issue-{番号}-NAW-XXXX`（→ `feature/issue-{番号}-NAW-XXXX` ブランチ、`docs/issue-{番号}-NAW-XXXX/`）
+     - 本スキル（`naw-issue-batch`）で自動起票したIssue（#64, #66〜#72等）は元チケット参照がないため、通常は `issue-{番号}` のみになる想定
+  2. 第1承認・第2承認は省略し、常に「全自動」で進めてよい。ユーザーに立ち止まって確認を取らない
+  3. `08_動作確認.md` のブラウザ操作による確認は行わず、自動テスト（pytest等）の実行結果のみで代替し、その旨をファイルに明記する
+  4. 実装中に解消できないテスト失敗・仕様不明に遭遇し、これ以上進められないと判断した場合は、無理に実装を完成させようとせず、作業ブランチとドキュメントはそのまま残し、対象Issueに詰まった理由をコメントで残した上で「BLOCKED」として作業を終了する（PRは作らない、Project Statusは変更しない）
+  5. 正常に完了できた場合は、`naw-pr-workflow` の [SKILL.md](../naw-pr-workflow/SKILL.md) に従いPRを作成し、`/code-review` を実行して `code-review.md` を作成し、🔴致命的指摘があれば修正すること。PR本文には必ず `Closes #{Issue番号}` を入れること
+  6. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `.claude/CLAUDE.md` に従うこと
+- 最後に「PR作成に成功したか」「BLOCKEDで終わったか」を明確に報告するよう指示する（成功した場合はPR URLとブランチ名、BLOCKEDの場合は理由を含めて）
 
 `isolation` は指定しない（同一リポジトリを順番に使うため worktree 分離は不要。並列実行しない前提と矛盾するため）。
 
