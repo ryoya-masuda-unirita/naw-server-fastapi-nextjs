@@ -121,6 +121,28 @@ class LibraryTagRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_tenant_id_and_ids(
+        tenant_id: str, ids: list[str], session: AsyncSession
+    ) -> list[LibraryTag]:
+        """テナントIDとID一覧に合致するライブラリタグを取得する。存在しないIDは無視される。
+
+        Args:
+            tenant_id: テナントID。
+            ids: 対象のライブラリタグID一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するライブラリタグ一覧。
+        """
+        if not ids:
+            return []
+        stmt = select(LibraryTag).where(
+            LibraryTag.tenant_id == tenant_id, LibraryTag.id.in_(ids)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def create(tag: LibraryTag, session: AsyncSession) -> LibraryTag:
         """ライブラリタグを新規作成する。
 

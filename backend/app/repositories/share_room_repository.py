@@ -6,6 +6,29 @@ from app.models.share import ShareRoom
 
 class ShareRoomRepository:
     @staticmethod
+    async def find_group_ids_by_room_id(
+        room_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[str]:
+        """ルームIDに紐づく共有先グループID一覧を取得する。
+
+        `share_rooms`は`room_id`列を保持しているため、共有リンク（`shares`）を
+        経由せず直接ルームIDで引ける。
+
+        Args:
+            room_id: 対象のルームID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            共有先グループID一覧。
+        """
+        stmt = select(ShareRoom.group_id).where(
+            ShareRoom.room_id == room_id, ShareRoom.tenant_id == tenant_id
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def find_group_ids_by_share_id(
         share_id: str, tenant_id: str, session: AsyncSession
     ) -> list[str]:
