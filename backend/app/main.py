@@ -11,6 +11,7 @@ from app.routers import (
     messages,
     prompt_templates,
     rooms,
+    shares,
     tenant_endpoints,
 )
 from app.routers.users import admin_router, user_router
@@ -44,6 +45,7 @@ app.include_router(assistants.router)
 app.include_router(assistants.admin_router)
 app.include_router(rooms.router)
 app.include_router(messages.router)
+app.include_router(shares.router)
 app.include_router(prompt_templates.prompt_template_router)
 app.include_router(prompt_templates.admin_prompt_template_router)
 app.include_router(tenant_endpoints.router)
