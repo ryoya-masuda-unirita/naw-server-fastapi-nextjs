@@ -15,6 +15,7 @@ from app.routers import (
     rooms,
     shares,
     tenant_endpoints,
+    token_usage,
 )
 from app.routers.users import admin_router, user_router
 
@@ -55,3 +56,4 @@ app.include_router(assistant_categories.router)
 app.include_router(library_tags.library_tag_router)
 app.include_router(library_tags.admin_library_tag_router)
 app.include_router(feedback.router)
+app.include_router(token_usage.admin_router)
