@@ -124,3 +124,5 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 | 401 が続く  | `backend/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:4201` が含まれているか |
 
 
+
+<!-- push動作確認用のダミー変更 -->
