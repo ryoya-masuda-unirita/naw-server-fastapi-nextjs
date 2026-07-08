@@ -1,6 +1,7 @@
 import random
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant, AssistantType
@@ -389,7 +390,14 @@ class AssistantService:
         assistant = await AssistantService._get_assistant_or_404(
             assistant_id, tenant_id, session
         )
-        await AssistantRepository.delete(assistant, session)
+        try:
+            await AssistantRepository.delete(assistant, session)
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="このアシスタントを使用中のルームが存在するため削除できません。",
+            ) from exc
 
     @staticmethod
     async def list_admin_assistants(
