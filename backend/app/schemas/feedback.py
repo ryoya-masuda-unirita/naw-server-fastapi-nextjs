@@ -1,0 +1,89 @@
+from datetime import datetime
+
+from pydantic import BaseModel, Field, field_validator
+
+_RESPONSE_STATUS_VALUES = {"has_response", "no_response"}
+_SATISFACTION_VALUES = {"star1", "star2", "star3", "star4", "star5"}
+_SORT_FIELD_VALUES = {
+    "updatedAt",
+    "name",
+    "count",
+    "review1",
+    "review2",
+    "review3",
+    "review4",
+    "review5",
+}
+_SORT_ORDER_VALUES = {"asc", "desc"}
+
+
+class FeedbackUserListRequest(BaseModel):
+    page: int = Field(default=0, ge=0)
+    size: int = Field(default=20, ge=1, le=100)
+    responseStatus: str | None = None
+    satisfaction: str | None = None
+    sortField: str = "updatedAt"
+    sortOrder: str = "desc"
+
+    @field_validator("responseStatus")
+    @classmethod
+    def _validate_response_status(cls, value: str | None) -> str | None:
+        """responseStatusがhas_response/no_responseのいずれかであることを検証する。"""
+        if value is not None and value not in _RESPONSE_STATUS_VALUES:
+            raise ValueError("responseStatus は has_response または no_response です")
+        return value
+
+    @field_validator("satisfaction")
+    @classmethod
+    def _validate_satisfaction(cls, value: str | None) -> str | None:
+        """satisfactionがstar1〜star5のいずれかであることを検証する。"""
+        if value is not None and value not in _SATISFACTION_VALUES:
+            raise ValueError("satisfaction は star1〜star5 のいずれかです")
+        return value
+
+    @field_validator("sortField")
+    @classmethod
+    def _validate_sort_field(cls, value: str) -> str:
+        """sortFieldが許容値のいずれかであることを検証する。"""
+        if value not in _SORT_FIELD_VALUES:
+            raise ValueError(
+                "sortField は updatedAt, name, count, review1〜review5 のいずれかです"
+            )
+        return value
+
+    @field_validator("sortOrder")
+    @classmethod
+    def _validate_sort_order(cls, value: str) -> str:
+        """sortOrderがasc/descのいずれかであることを検証する。"""
+        if value not in _SORT_ORDER_VALUES:
+            raise ValueError("sortOrder は asc または desc です")
+        return value
+
+
+class FeedbackUserInfo(BaseModel):
+    id: str
+    userId: str
+    displayName: str
+
+
+class FeedbackRoomCount(BaseModel):
+    excellent: int = 0
+    veryGood: int = 0
+    good: int = 0
+    average: int = 0
+    poor: int = 0
+
+
+class FeedbackUserItemResponse(BaseModel):
+    user: FeedbackUserInfo
+    isResponded: bool
+    feedbackMessageCount: int
+    feedbackRoomCount: FeedbackRoomCount
+    updatedAt: datetime
+
+
+class PagedFeedbackUserResponse(BaseModel):
+    content: list[FeedbackUserItemResponse]
+    totalElements: int
+    number: int
+    size: int
