@@ -1,7 +1,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.share import Share, ShareRoom
+from app.models.share import ShareRoom
 
 
 class ShareRoomRepository:
@@ -58,32 +58,3 @@ class ShareRoomRepository:
                     group_id=group_id,
                 )
             )
-
-    @staticmethod
-    async def exists_shared_access(
-        room_id: str, tenant_id: str, group_ids: list[str], session: AsyncSession
-    ) -> bool:
-        """指定ルームが、指定グループ集合のいずれかに共有されているかを判定する。
-
-        Args:
-            room_id: 対象のルームID。
-            tenant_id: テナントID。
-            group_ids: 判定に使うグループID一覧（アクセスしようとしているユーザーの所属グループ）。
-            session: 非同期DBセッション。
-
-        Returns:
-            共有されていればTrue。
-        """
-        if not group_ids:
-            return False
-        stmt = (
-            select(ShareRoom.id)
-            .join(Share, Share.id == ShareRoom.share_id)
-            .where(
-                Share.room_id == room_id,
-                ShareRoom.tenant_id == tenant_id,
-                ShareRoom.group_id.in_(group_ids),
-            )
-        )
-        result = await session.execute(stmt)
-        return result.scalars().first() is not None

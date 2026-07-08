@@ -45,18 +45,20 @@ class ShareRepository:
 
     @staticmethod
     async def save(share: Share, session: AsyncSession) -> Share:
-        """共有リンクを新規作成または更新する。
+        """共有リンクをセッションに登録し、IDを確定させる。
+
+        コミットは呼び出し側で行う（共有先グループの置き換えとあわせて
+        1トランザクションでコミットするため）。
 
         Args:
             share: 保存対象の共有リンク（新規または既存インスタンス）。
             session: 非同期DBセッション。
 
         Returns:
-            保存後の共有リンク。
+            IDが確定した共有リンク。
         """
         session.add(share)
-        await session.commit()
-        await session.refresh(share)
+        await session.flush()
         return share
 
     @staticmethod
