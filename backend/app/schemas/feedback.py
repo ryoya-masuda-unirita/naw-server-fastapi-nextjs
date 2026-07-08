@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.models.message import MessageRating
+
 _RESPONSE_STATUS_VALUES = {"has_response", "no_response"}
 _SATISFACTION_VALUES = {"star1", "star2", "star3", "star4", "star5"}
 _SORT_FIELD_VALUES = {
@@ -15,6 +17,7 @@ _SORT_FIELD_VALUES = {
     "review5",
 }
 _SORT_ORDER_VALUES = {"asc", "desc"}
+_FEEDBACK_MESSAGE_SORT_FIELD_VALUES = {"updatedAt", "name", "accuracy", "add", "folder"}
 
 
 class FeedbackUserListRequest(BaseModel):
@@ -87,3 +90,71 @@ class PagedFeedbackUserResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+
+
+class FeedbackMessageListRequest(BaseModel):
+    page: int = Field(default=0, ge=0)
+    size: int = Field(default=20, ge=1, le=100)
+    assistantId: str | None = None
+    rating: MessageRating | None = None
+    folderId: str | None = None
+    sortField: str = "updatedAt"
+    sortOrder: str = "desc"
+
+    @field_validator("sortField")
+    @classmethod
+    def _validate_feedback_message_sort_field(cls, value: str) -> str:
+        """feedbackMessage用のsortFieldが許容値のいずれかであることを検証する。"""
+        if value not in _FEEDBACK_MESSAGE_SORT_FIELD_VALUES:
+            raise ValueError(
+                "sortField は updatedAt, name, accuracy, add, folder のいずれかです"
+            )
+        return value
+
+    @field_validator("sortOrder")
+    @classmethod
+    def _validate_feedback_message_sort_order(cls, value: str) -> str:
+        """feedbackMessage用のsortOrderがasc/descのいずれかであることを検証する。"""
+        if value not in _SORT_ORDER_VALUES:
+            raise ValueError("sortOrder は asc または desc です")
+        return value
+
+
+class FeedbackMessageContentResponse(BaseModel):
+    question: str | None
+    answer: str | None
+
+
+class FeedbackMessageInfoResponse(BaseModel):
+    assistantId: str | None
+    assistantName: str | None
+    content: FeedbackMessageContentResponse
+
+
+class FeedbackMessageItemResponse(BaseModel):
+    id: str
+    tenantId: str
+    userId: str
+    messageId: str
+    message: FeedbackMessageInfoResponse
+    rating: MessageRating
+    indexId: str | None
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class PagedFeedbackMessageResponse(BaseModel):
+    content: list[FeedbackMessageItemResponse]
+    totalElements: int
+    number: int
+    size: int
+
+
+class ExternalServerInfoResponse(BaseModel):
+    url: str
+    authKey: str
+
+
+class FeedbackMessageListResponse(BaseModel):
+    feedbacks: PagedFeedbackMessageResponse
+    assistantIdToServerMap: dict[str, ExternalServerInfoResponse]

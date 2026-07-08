@@ -3,11 +3,18 @@ from uuid import uuid4
 import pytest
 
 from app.core.security import create_access_token
-from app.models.assistant import Assistant, AssistantType
+from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
 from app.models.group import Group, GroupUser
-from app.models.message import Message, MessageFeedback, MessageRating
+from app.models.message import (
+    Message,
+    MessageContent,
+    MessageContentStatus,
+    MessageFeedback,
+    MessageRating,
+)
 from app.models.room import Room, RoomRating
 from app.models.tenant import Tenant
+from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
 
 
@@ -209,6 +216,20 @@ async def other_tenant_assistant(session, other_tenant):
 
 
 @pytest.fixture
+async def secondary_feedback_assistant(session, feedback_tenant):
+    assistant = Assistant(
+        tenant_id=feedback_tenant.id,
+        type=AssistantType.SECURE,
+        name="Secondary Feedback Assistant",
+        include_history=False,
+    )
+    session.add(assistant)
+    await session.commit()
+    await session.refresh(assistant)
+    return assistant
+
+
+@pytest.fixture
 async def feedback_dataset(
     session,
     feedback_tenant,
@@ -223,6 +244,7 @@ async def feedback_dataset(
     feedback_group,
     feedback_assistant,
     other_tenant_assistant,
+    secondary_feedback_assistant,
 ):
     responded_room_excellent = Room(
         tenant_id=feedback_tenant.id,
@@ -279,7 +301,7 @@ async def feedback_dataset(
     heavy_message_2 = Message(
         tenant_id=feedback_tenant.id,
         room_id=heavy_room.id,
-        assistant_id=feedback_assistant.id,
+        assistant_id=secondary_feedback_assistant.id,
     )
     other_tenant_message = Message(
         tenant_id=other_tenant.id,
@@ -302,17 +324,60 @@ async def feedback_dataset(
 
     session.add_all(
         [
+            MessageContent(
+                tenant_id=feedback_tenant.id,
+                message_id=responded_message.id,
+                status=MessageContentStatus.OK,
+                question="Responded question",
+                answer="Responded answer",
+            ),
+            MessageContent(
+                tenant_id=feedback_tenant.id,
+                message_id=heavy_message_1.id,
+                status=MessageContentStatus.OK,
+                question="Heavy question",
+                answer="Heavy answer",
+            ),
+        ]
+    )
+    await session.commit()
+
+    local_server_endpoint = TenantEndpoint(
+        tenant_id=feedback_tenant.id,
+        type=EndpointType.LOCAL_SERVER,
+        endpoint_name="Local Server",
+        endpoint="http://local-server.example",
+        api_key="local-server-key",
+    )
+    session.add(local_server_endpoint)
+    await session.commit()
+    await session.refresh(local_server_endpoint)
+
+    session.add(
+        AssistantEndpoint(
+            assistant_id=secondary_feedback_assistant.id,
+            endpoint_id=local_server_endpoint.id,
+            tenant_id=feedback_tenant.id,
+            model="local-server-model",
+        )
+    )
+    await session.commit()
+
+    session.add_all(
+        [
             MessageFeedback(
                 tenant_id=feedback_tenant.id,
                 user_id=responded_user.id,
                 message_id=responded_message.id,
                 rating=MessageRating.GOOD,
+                index_id="folder-responded",
             ),
             MessageFeedback(
                 tenant_id=feedback_tenant.id,
                 user_id=heavy_response_user.id,
                 message_id=heavy_message_1.id,
                 rating=MessageRating.GOOD,
+                index_id="folder-001",
             ),
             MessageFeedback(
                 tenant_id=feedback_tenant.id,
@@ -339,6 +404,9 @@ async def feedback_dataset(
         "unresponded_user": unresponded_user,
         "other_tenant_user": other_tenant_user,
         "feedback_group": feedback_group,
+        "feedback_assistant": feedback_assistant,
+        "secondary_feedback_assistant": secondary_feedback_assistant,
+        "local_server_endpoint": local_server_endpoint,
     }
 
 
@@ -539,3 +607,168 @@ class TestFeedbackRouter:
             assert response.status_code == 200
             login_ids = {item["user"]["userId"] for item in response.json()["content"]}
             assert feedback_dataset["other_tenant_user"].login_id not in login_ids
+
+    class TestGetFeedbackMessages:
+        async def test_returns_feedback_message_with_assistant_name_and_content(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """assistantName と question/answer を含む一覧が返ること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?assistantId="
+                    + feedback_dataset["feedback_assistant"].id,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            item = response.json()["feedbacks"]["content"][0]
+            assert (
+                item["message"]["assistantId"]
+                == feedback_dataset["feedback_assistant"].id
+            )
+            assert item["message"]["assistantName"] == "Feedback Assistant"
+            assert item["message"]["content"]["question"] == "Responded question"
+            assert item["message"]["content"]["answer"] == "Responded answer"
+            assert item["rating"] == "GOOD"
+
+        async def test_returns_assistant_id_to_server_map_for_local_server(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """LOCAL_SERVER endpoint を assistantIdToServerMap として返すこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?assistantId="
+                    + feedback_dataset["secondary_feedback_assistant"].id,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            server_map = response.json()["assistantIdToServerMap"]
+            assert server_map == {
+                feedback_dataset["secondary_feedback_assistant"].id: {
+                    "url": feedback_dataset["local_server_endpoint"].endpoint,
+                    "authKey": feedback_dataset["local_server_endpoint"].api_key,
+                }
+            }
+
+        async def test_returns_null_content_when_message_content_is_missing(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """message_contents が無い場合でも content.question/answer が null で返ること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?assistantId="
+                    + feedback_dataset["secondary_feedback_assistant"].id,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            item = response.json()["feedbacks"]["content"][0]
+            assert item["message"]["content"]["question"] is None
+            assert item["message"]["content"]["answer"] is None
+
+        async def test_filters_by_assistant_id(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """assistantId 絞り込みが効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?assistantId="
+                    + feedback_dataset["secondary_feedback_assistant"].id,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            items = response.json()["feedbacks"]["content"]
+            assert len(items) == 1
+            assert (
+                items[0]["message"]["assistantId"]
+                == feedback_dataset["secondary_feedback_assistant"].id
+            )
+
+        async def test_filters_by_rating(self, client, admin_headers, feedback_dataset):
+            """rating 絞り込みが効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?rating=BAD",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            items = response.json()["feedbacks"]["content"]
+            assert len(items) == 1
+            assert items[0]["rating"] == "BAD"
+
+        async def test_filters_by_folder_id(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """folderId 絞り込みが message_feedbacks.index_id に対して効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?folderId=folder-001",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            items = response.json()["feedbacks"]["content"]
+            assert len(items) == 1
+            assert items[0]["indexId"] == "folder-001"
+            assert items[0]["message"]["content"]["question"] == "Heavy question"
+
+        async def test_sorts_by_accuracy_ascending(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """accuracy 昇順ソートが効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?sortField=accuracy&sortOrder=asc",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            ratings = [
+                item["rating"] for item in response.json()["feedbacks"]["content"]
+            ]
+            assert ratings == sorted(ratings)
+
+        async def test_paginates_feedback_messages(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """page/size でページングされること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage?page=0&size=1",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()["feedbacks"]
+            assert len(body["content"]) == 1
+            assert body["totalElements"] == 3
+            assert body["number"] == 0
+            assert body["size"] == 1
+
+    class TestGetFeedbackMessagesPermission:
+        async def test_general_user_returns_403(
+            self, client, general_user_headers, feedback_dataset
+        ):
+            """一般ユーザーはアクセスできないこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage",
+                    headers=general_user_headers,
+                )
+
+            assert response.status_code == 403
+
+        async def test_group_admin_can_access(
+            self, client, group_admin_headers, feedback_dataset
+        ):
+            """グループ管理者はアクセスできること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackMessage",
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 200

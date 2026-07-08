@@ -2,7 +2,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.message import MessageFeedback
+from app.models.message import Message, MessageContent, MessageFeedback
 from app.models.room import Room, RoomRating
 from app.models.user import User
 
@@ -18,6 +18,20 @@ _SATISFACTION_COLUMN_BY_STAR = {
 
 
 class MessageFeedbackRepository:
+    @staticmethod
+    async def find_by_ids_and_tenant_id(
+        feedback_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[MessageFeedback]:
+        """フィードバックID一覧とテナントIDでフィードバック一覧を取得する。"""
+        if not feedback_ids:
+            return []
+        stmt = select(MessageFeedback).where(
+            MessageFeedback.id.in_(feedback_ids),
+            MessageFeedback.tenant_id == tenant_id,
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     @staticmethod
     async def find_by_tenant_id_and_message_id(
         tenant_id: str, message_id: str, session: AsyncSession
@@ -61,6 +75,76 @@ class MessageFeedbackRepository:
         )
         result = await session.execute(stmt)
         return set(result.scalars().all())
+
+    @staticmethod
+    async def find_feedback_messages(
+        tenant_id: str,
+        assistant_id: str | None,
+        rating: str | None,
+        folder_id: str | None,
+        sort_column: str,
+        sort_desc: bool,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> tuple[list[Row], int]:
+        """フィードバックメッセージ一覧を取得する。"""
+        stmt = (
+            select(
+                MessageFeedback.id.label("feedback_id"),
+                MessageFeedback.tenant_id.label("tenant_id"),
+                MessageFeedback.user_id.label("user_id"),
+                MessageFeedback.message_id.label("message_id"),
+                Message.assistant_id.label("assistant_id"),
+                MessageContent.question.label("question"),
+                MessageContent.answer.label("answer"),
+                MessageFeedback.rating.label("rating"),
+                MessageFeedback.index_id.label("index_id"),
+                MessageFeedback.created_at.label("created_at"),
+                MessageFeedback.updated_at.label("updated_at"),
+            )
+            .select_from(MessageFeedback)
+            .outerjoin(
+                Message,
+                and_(
+                    Message.id == MessageFeedback.message_id,
+                    Message.tenant_id == tenant_id,
+                ),
+            )
+            .outerjoin(
+                MessageContent,
+                and_(
+                    MessageContent.message_id == Message.id,
+                    MessageContent.tenant_id == tenant_id,
+                ),
+            )
+            .where(MessageFeedback.tenant_id == tenant_id)
+        )
+
+        if assistant_id is not None:
+            stmt = stmt.where(Message.assistant_id == assistant_id)
+        if rating is not None:
+            stmt = stmt.where(MessageFeedback.rating == rating)
+        if folder_id is not None:
+            stmt = stmt.where(MessageFeedback.index_id == folder_id)
+
+        total = (
+            await session.execute(select(func.count()).select_from(stmt.subquery()))
+        ).scalar() or 0
+
+        if sort_column == "assistant_id":
+            order_col = Message.assistant_id
+        elif sort_column == "rating":
+            order_col = MessageFeedback.rating
+        elif sort_column == "index_id":
+            order_col = MessageFeedback.index_id
+        else:
+            order_col = MessageFeedback.updated_at
+
+        stmt = stmt.order_by(order_col.desc() if sort_desc else order_col.asc())
+        stmt = stmt.offset(page * size).limit(size)
+        result = await session.execute(stmt)
+        return list(result.all()), total
 
     @staticmethod
     async def find_feedback_users(
