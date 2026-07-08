@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# アプリケーションのエントリーポイント。ルーター登録とCORS設定を行う。
+
 from app.core.config import get_cors_settings
 from app.routers import (
     assistant_categories,
