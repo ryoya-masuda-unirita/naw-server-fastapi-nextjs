@@ -82,3 +82,14 @@ class RoomRepository:
         stmt = select(Room).where(Room.id == room_id, Room.tenant_id == tenant_id)
         result = await session.execute(stmt)
         return result.scalars().first()
+
+    @staticmethod
+    async def find_by_ids_and_tenant_id(
+        room_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[Room]:
+        """ルームID一覧とテナントIDでルーム一覧を1クエリで取得する。"""
+        if not room_ids:
+            return []
+        stmt = select(Room).where(Room.id.in_(room_ids), Room.tenant_id == tenant_id)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
