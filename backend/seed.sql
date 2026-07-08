@@ -243,3 +243,106 @@ VALUES (
     NULL
 )
 ON CONFLICT (message_id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用アシスタント（LOCAL_SERVER連携確認用）
+INSERT INTO assistants (id, tenant_id, type, name, description, include_history)
+VALUES (
+    '10000000000040008000000000000002',
+    'test-tenant',
+    'SECURE',
+    'ローカル連携アシスタント',
+    'message.content欠損時のassistantIdToServerMap確認用',
+    false
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用LOCAL_SERVERエンドポイント
+INSERT INTO tenant_endpoints (id, tenant_id, type, endpoint_name, endpoint, api_key)
+VALUES (
+    '30000000000040008000000000000002',
+    'test-tenant',
+    'LOCAL_SERVER',
+    'Local Server (feedbackMessage確認用)',
+    'http://local-server.example',
+    'local-server-key'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ローカル連携アシスタントとLOCAL_SERVERエンドポイントの紐付け
+INSERT INTO assistants_endpoints (assistant_id, endpoint_id, tenant_id, model)
+VALUES (
+    '10000000000040008000000000000002',
+    '30000000000040008000000000000002',
+    'test-tenant',
+    'local-server-model'
+)
+ON CONFLICT (assistant_id, endpoint_id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用ルーム
+INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id, rating)
+VALUES (
+    '60000000000040008000000000000003',
+    'test-tenant',
+    'フィードバックメッセージ確認用ルーム',
+    '10000000000040008000000000000001',
+    '00000000-0000-4000-8000-000000000002',
+    'VERY_GOOD'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用メッセージ
+INSERT INTO messages (id, tenant_id, room_id, assistant_id)
+VALUES
+(
+    '70000000000040008000000000000002',
+    'test-tenant',
+    '60000000000040008000000000000003',
+    '10000000000040008000000000000001'
+),
+(
+    '70000000000040008000000000000003',
+    'test-tenant',
+    '60000000000040008000000000000003',
+    '10000000000040008000000000000002'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用メッセージ本文
+INSERT INTO message_contents (
+    id,
+    tenant_id,
+    message_id,
+    status,
+    question,
+    answer
+)
+VALUES (
+    '90000000000040008000000000000001',
+    'test-tenant',
+    '70000000000040008000000000000002',
+    'OK',
+    'Responded question',
+    'Responded answer'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フィードバックメッセージ取得API 動作確認用メッセージフィードバック
+INSERT INTO message_feedbacks (id, tenant_id, user_id, message_id, rating, index_id)
+VALUES
+(
+    '80000000000040008000000000000002',
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000002',
+    '70000000000040008000000000000002',
+    'GOOD',
+    'folder-responded'
+),
+(
+    '80000000000040008000000000000003',
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000002',
+    '70000000000040008000000000000003',
+    'BAD',
+    NULL
+)
+ON CONFLICT (message_id) DO NOTHING;
