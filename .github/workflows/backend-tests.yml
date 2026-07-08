@@ -11,6 +11,7 @@ name: バックエンドテスト
 on:
   pull_request:
     # PR作成・更新時にもCIを走らせ、PR画面の required checks に使えるようにする。
+    # このコメント更新は、required checks 表示確認用の検証PRでも利用する。
     paths:
       - "backend/**"
       - ".github/workflows/backend-tests.yml"
