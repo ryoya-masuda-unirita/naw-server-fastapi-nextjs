@@ -142,9 +142,11 @@ Issue 対応は、デフォルトで以下の承認フローに従う。
 2. テスト実行
 3. 動作確認（サーバー起動手順をユーザーに案内し、操作結果を受け取る）
 4. PR 作成
-5. `/code-review` の実行
+5. ベースブランチ差分でのコードレビュー実行
 6. `code-review.md` の作成（[naw-pr-workflow](../naw-pr-workflow/SKILL.md) のフォーマットに従う）
 7. 指摘修正 → 再テスト → 再動作確認 → PR 修正
+
+Codex では Claude の `/code-review` 専用導線は使えない。PR 作成後は `prepare_code_review.sh` でレビュー対象を確定し、Codex 自身が差分レビューを実行して `code-review.md` を更新すること。
 
 code-review 指摘への対応: 🔴 致命的は必ず修正、🟡 注意・🔵 提案は AI が判断する。
 

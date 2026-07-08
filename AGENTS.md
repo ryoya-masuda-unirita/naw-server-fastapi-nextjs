@@ -83,6 +83,8 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 - `code-review.md` 作成
 - テスト結果・動作確認結果の整理
 
+Codex では、**PR 作成依頼は `gh pr create` で終わりではなく、必ず同じ作業フローの中でコードレビュー実行と `code-review.md` 作成まで完了させること**。Claude 側の `/code-review` 専用導線がCodexに自動移植されるわけではないため、Codex は自分で差分レビューを実行し、結果をドキュメントへ反映すること。
+
 ### 3. secuaigent-client → frontend-angular 同期
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/frontend-angular-sync/SKILL.md` を読むこと。
