@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.core.security import create_access_token
 from app.main import app
 from app.models.assistant import Assistant, AssistantType
-from app.models.room import Room, RoomPin
+from app.models.room import Room, RoomPin, RoomRating
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
@@ -677,3 +677,70 @@ class TestUnpinRoom:
             )
 
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestFeedbackRoom:
+    async def test_feedback_room_updates_rating(
+        self, client, session, room_owner_headers, owned_room
+    ):
+        """ルーム所有者が満足度評価を登録できること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/rooms/{owned_room.id}/feedback",
+                json={"rating": "EXCELLENT"},
+                headers=room_owner_headers,
+            )
+
+        assert response.status_code == 204
+        await session.refresh(owned_room)
+        assert owned_room.rating == RoomRating.EXCELLENT
+
+    async def test_feedback_room_returns_401_without_token(self, client, owned_room):
+        """未ログインでは満足度評価を登録できないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/rooms/{owned_room.id}/feedback",
+                json={"rating": "EXCELLENT"},
+            )
+
+        assert response.status_code == 401
+
+    async def test_feedback_room_returns_404_for_unknown_room(
+        self, client, room_owner_headers
+    ):
+        """存在しないルームには満足度評価を登録できないこと"""
+        async with client as c:
+            response = await c.post(
+                "/api/rooms/unknown/feedback",
+                json={"rating": "EXCELLENT"},
+                headers=room_owner_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_feedback_room_returns_404_for_other_users_room(
+        self, client, room_owner_headers, other_users_room
+    ):
+        """他ユーザー所有ルームには満足度評価を登録できないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/rooms/{other_users_room.id}/feedback",
+                json={"rating": "EXCELLENT"},
+                headers=room_owner_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_feedback_room_returns_422_for_invalid_rating(
+        self, client, room_owner_headers, owned_room
+    ):
+        """不正なratingでは満足度評価を登録できないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/rooms/{owned_room.id}/feedback",
+                json={"rating": "INVALID"},
+                headers=room_owner_headers,
+            )
+
+        assert response.status_code == 422

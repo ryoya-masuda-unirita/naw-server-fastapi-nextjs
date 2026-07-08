@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import Assistant
-from app.models.room import Room, RoomPin
+from app.models.room import Room, RoomPin, RoomRating
 from app.models.user import User
 from app.repositories.room_pin_repository import RoomPinRepository
 from app.repositories.room_repository import RoomRepository
@@ -179,4 +179,20 @@ class RoomService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Room pin not found"
             )
         await session.delete(existing_pin)
+        await session.commit()
+
+    @staticmethod
+    async def feedback_room(
+        room_id: str,
+        tenant_id: str,
+        current_user: User,
+        rating: RoomRating,
+        session: AsyncSession,
+    ) -> None:
+        """ルーム所有者が満足度評価を登録する。"""
+        room = await RoomService._get_owned_room_or_404(
+            room_id, tenant_id, current_user, session
+        )
+        room.rating = rating
+        session.add(room)
         await session.commit()

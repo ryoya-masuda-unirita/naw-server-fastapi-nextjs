@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.message import MessageRating
+from app.models.room import RoomRating
 
 _RESPONSE_STATUS_VALUES = {"has_response", "no_response"}
 _SATISFACTION_VALUES = {"star1", "star2", "star3", "star4", "star5"}
@@ -18,6 +19,7 @@ _SORT_FIELD_VALUES = {
 }
 _SORT_ORDER_VALUES = {"asc", "desc"}
 _FEEDBACK_MESSAGE_SORT_FIELD_VALUES = {"updatedAt", "name", "accuracy", "add", "folder"}
+_FEEDBACK_ROOM_SORT_FIELD_VALUES = {"updatedAt", "chat", "name", "level"}
 
 
 class FeedbackUserListRequest(BaseModel):
@@ -158,3 +160,59 @@ class ExternalServerInfoResponse(BaseModel):
 class FeedbackMessageListResponse(BaseModel):
     feedbacks: PagedFeedbackMessageResponse
     assistantIdToServerMap: dict[str, ExternalServerInfoResponse]
+
+
+class FeedbackRoomListRequest(BaseModel):
+    page: int = Field(default=0, ge=0)
+    size: int = Field(default=20, ge=1, le=100)
+    assistantId: str | None = None
+    rating: RoomRating | None = None
+    sortField: str = "updatedAt"
+    sortOrder: str = "desc"
+
+    @field_validator("sortField")
+    @classmethod
+    def _validate_feedback_room_sort_field(cls, value: str) -> str:
+        """feedbackRoom用のsortFieldが許容値のいずれかであることを検証する。"""
+        if value not in _FEEDBACK_ROOM_SORT_FIELD_VALUES:
+            raise ValueError("sortField は updatedAt, chat, name, level のいずれかです")
+        return value
+
+    @field_validator("sortOrder")
+    @classmethod
+    def _validate_feedback_room_sort_order(cls, value: str) -> str:
+        """feedbackRoom用のsortOrderがasc/descのいずれかであることを検証する。"""
+        if value not in _SORT_ORDER_VALUES:
+            raise ValueError("sortOrder は asc または desc です")
+        return value
+
+
+class RoomInfoResponse(BaseModel):
+    id: str
+    name: str | None
+    defaultAssistantId: str | None
+    defaultAssistantName: str | None
+    rating: RoomRating
+
+
+class FeedbackRoomItemResponse(BaseModel):
+    id: str
+    tenantId: str
+    userId: str
+    userName: str | None
+    roomId: str
+    room: RoomInfoResponse
+    rating: RoomRating
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class PagedFeedbackRoomResponse(BaseModel):
+    content: list[FeedbackRoomItemResponse]
+    totalElements: int
+    number: int
+    size: int
+
+
+class FeedbackRoomListResponse(BaseModel):
+    feedbacks: PagedFeedbackRoomResponse
