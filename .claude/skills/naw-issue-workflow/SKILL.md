@@ -44,12 +44,20 @@ description: Use when working on a GitHub Issue in this repository, including is
 Issue 起票は必ず以下の手順を順番に行う。
 
 ```bash
-# Step 1: Issue 作成（返ってきた URL から番号を取得する）
-gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body "..."
+# Step 1: Issue 作成（番号未確定のため、この時点では "#{番号}" を付けずに作成する）
+gh issue create --title "issue-{仮} NAW-XXXX 変更概要" --body "..."
+# → 返ってきた URL から番号を取得する（例: .../issues/65 → 65）
+
+# Step 1.5: 確定した番号でタイトルを付け直す（ここを忘れると "#{番号}" が欠けたまま残る）
+gh issue edit {番号} --title "#{番号} issue-{番号} NAW-XXXX 変更概要"
 
 # Step 2: プロジェクトボードに追加（Todo 状態で登録される）
 gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+
+# Step 2.5: プロジェクトボードに追加できたか確認する（失敗を静かに見過ごさない）
+gh issue view {番号} --json projectItems --jq '.projectItems | length'
+# 0 の場合は Step 2 が失敗しているので、原因を確認してから再実行する
 
 # Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
 bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
@@ -65,6 +73,7 @@ git push -u origin feature/issue-{番号}
 
 - プロジェクト番号: `3`
 - オーナー: `ryoya-masuda-unirita`
+- **Step 1 で作成した時点のタイトルには Issue 番号がまだ入らない。Step 1.5 でのタイトル付け直しと Step 2.5 でのプロジェクト追加確認を省略しないこと**（過去に #65 でこの2点が漏れ、ユーザーが手動修正する事態が発生した）
 
 ### NAW チケットとの対応
 
