@@ -66,6 +66,8 @@ async def session(engine):
             "message_feedbacks",
             "message_contents",
             "messages",
+            "share_rooms",
+            "shares",
             "room_pins",
             "rooms",
             "assistant_category_mappings",
