@@ -63,7 +63,7 @@ async def can_view_room(
     """
     if room.user_id == current_user.id:
         return True
-    if current_user.role == UserRole.ADMIN:
+    if current_user.role in (UserRole.ADMIN, UserRole.SYSTEM):
         return True
     shared_group_ids = await ShareRoomRepository.find_group_ids_by_room_id(
         room.id, tenant_id, session

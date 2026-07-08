@@ -3,7 +3,11 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.room_access import can_view_room, require_owned_room
+from app.core.room_access import (
+    can_view_room,
+    require_owned_room,
+    require_viewable_room,
+)
 from app.models.library import Library
 from app.models.user import User
 from app.repositories.group_repository import GroupRepository
@@ -197,17 +201,7 @@ class LibraryService:
         Raises:
             HTTPException: ルームが存在しない場合404、閲覧権限がない場合403。
         """
-        room = await RoomRepository.find_by_id_and_tenant_id(
-            room_id, tenant_id, session
-        )
-        if room is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
-            )
-        if not await can_view_room(tenant_id, current_user, room, session):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
-            )
+        await require_viewable_room(tenant_id, current_user, room_id, session)
 
         libraries = await LibraryRepository.find_by_room_id_and_tenant_id(
             room_id, tenant_id, session

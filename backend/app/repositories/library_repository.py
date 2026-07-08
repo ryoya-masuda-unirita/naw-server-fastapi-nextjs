@@ -10,6 +10,33 @@ from app.models.message import Message
 from app.models.user import User
 
 
+def _visible_library_ids_subquery(tenant_id: str, current_user_id: uuid.UUID):
+    """指定ユーザーの所属グループに共有されたライブラリID一覧を返すサブクエリを組み立てる。
+
+    「所有 or 共有先グループ所属」の可視性判定で共通して使う（`find_page`・
+    `is_visible_to_user`の両方から呼ばれる）。
+
+    Args:
+        tenant_id: テナントID。
+        current_user_id: 判定対象のユーザーID。
+
+    Returns:
+        可視なライブラリID一覧を返すサブクエリ。
+    """
+    return (
+        select(ShareLibrary.library_id)
+        .join(
+            GroupUser,
+            (GroupUser.group_id == ShareLibrary.group_id)
+            & (GroupUser.tenant_id == ShareLibrary.tenant_id),
+        )
+        .where(
+            ShareLibrary.tenant_id == tenant_id,
+            GroupUser.user_id == current_user_id,
+        )
+    )
+
+
 class LibraryRepository:
     @staticmethod
     async def find_by_id_and_tenant_id(
@@ -63,17 +90,8 @@ class LibraryRepository:
         Returns:
             (該当ページのライブラリ一覧, 全体件数) のタプル。
         """
-        visible_group_ids_subquery = (
-            select(ShareLibrary.library_id)
-            .join(
-                GroupUser,
-                (GroupUser.group_id == ShareLibrary.group_id)
-                & (GroupUser.tenant_id == ShareLibrary.tenant_id),
-            )
-            .where(
-                ShareLibrary.tenant_id == tenant_id,
-                GroupUser.user_id == current_user_id,
-            )
+        visible_group_ids_subquery = _visible_library_ids_subquery(
+            tenant_id, current_user_id
         )
 
         conditions = [
@@ -170,17 +188,8 @@ class LibraryRepository:
         Returns:
             可視であればTrue。
         """
-        visible_group_ids_subquery = (
-            select(ShareLibrary.library_id)
-            .join(
-                GroupUser,
-                (GroupUser.group_id == ShareLibrary.group_id)
-                & (GroupUser.tenant_id == ShareLibrary.tenant_id),
-            )
-            .where(
-                ShareLibrary.tenant_id == tenant_id,
-                GroupUser.user_id == current_user_id,
-            )
+        visible_group_ids_subquery = _visible_library_ids_subquery(
+            tenant_id, current_user_id
         )
         stmt = (
             select(func.count())

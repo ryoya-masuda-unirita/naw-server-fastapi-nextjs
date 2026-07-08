@@ -105,6 +105,16 @@ async def admin_user(session, lib_tenant):
 
 
 @pytest.fixture
+async def system_user(session, lib_tenant):
+    """SYSTEMロールユーザー（ADMIN同様のルーム閲覧バイパス対象）"""
+    user = _user(lib_tenant.id, "lib-system", "System", role=UserRole.SYSTEM)
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@pytest.fixture
 async def assistant(session, lib_tenant):
     a = Assistant(
         tenant_id=lib_tenant.id,
@@ -433,6 +443,31 @@ class TestListLibrariesByRoom:
         async with client as c:
             response = await c.get(
                 f"/api/libraries/{room.id}/list", headers=group_member_headers
+            )
+
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+
+    async def test_list_by_room_as_tenant_admin(
+        self, client, admin_headers, room, library
+    ):
+        """テナント管理者(ADMIN)は所有者でなくても一覧を取得できること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{room.id}/list", headers=admin_headers
+            )
+
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+
+    async def test_list_by_room_as_system_role(
+        self, client, system_user, lib_tenant, room, library
+    ):
+        """SYSTEMロールも所有者でなくても一覧を取得できること（ADMIN同様のバイパス対象）"""
+        system_headers = _headers(system_user.login_id, lib_tenant.id)
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{room.id}/list", headers=system_headers
             )
 
         assert response.status_code == 200
