@@ -1,11 +1,125 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import escape_like_pattern
 from app.models.group import Group
-from app.models.prompt_template import GroupPromptTemplate
+from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
 
 
 class GroupPromptTemplateRepository:
+    @staticmethod
+    async def find_one(
+        group_id: str, tenant_id: str, template_id: str, session: AsyncSession
+    ) -> GroupPromptTemplate | None:
+        """グループ・テンプレートの組み合わせでGroupPromptTemplateを取得する。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            template_id: プロンプトテンプレートID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当する GroupPromptTemplate。存在しない場合は None。
+        """
+        stmt = select(GroupPromptTemplate).where(
+            GroupPromptTemplate.group_id == group_id,
+            GroupPromptTemplate.tenant_id == tenant_id,
+            GroupPromptTemplate.prompt_template_id == template_id,
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
+    async def find_page_by_group(
+        group_id: str,
+        tenant_id: str,
+        search: str | None,
+        sort_col_name: str,
+        sort_dir: str,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> tuple[list[tuple[GroupPromptTemplate, PromptTemplate]], int]:
+        """グループに紐づくプロンプトテンプレートをページネーションで取得する（PromptTemplateを結合）。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            search: テンプレート名・説明の部分一致検索文字列。
+            sort_col_name: ソート対象列名（"name" または "addedAt"）。
+            sort_dir: ソート方向（"asc" または "desc"）。
+            page: ページ番号（0始まり）。
+            size: 1ページあたりの件数。
+            session: 非同期DBセッション。
+
+        Returns:
+            ((GroupPromptTemplate, PromptTemplate) のリスト, 総件数) のタプル。
+        """
+        stmt = (
+            select(GroupPromptTemplate, PromptTemplate)
+            .join(
+                PromptTemplate,
+                PromptTemplate.id == GroupPromptTemplate.prompt_template_id,
+            )
+            .where(
+                GroupPromptTemplate.group_id == group_id,
+                GroupPromptTemplate.tenant_id == tenant_id,
+            )
+        )
+
+        if search:
+            pattern = escape_like_pattern(search.lower())
+            stmt = stmt.where(
+                func.lower(PromptTemplate.name).like(pattern, escape="\\")
+                | func.lower(PromptTemplate.description).like(pattern, escape="\\")
+            )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        sort_col = (
+            PromptTemplate.name
+            if sort_col_name == "name"
+            else GroupPromptTemplate.updated_at
+        )
+        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        stmt = stmt.offset(page * size).limit(size)
+
+        rows = (await session.execute(stmt)).all()
+        return [(row[0], row[1]) for row in rows], total
+
+    @staticmethod
+    def add(
+        group_id: str, tenant_id: str, template_id: str, session: AsyncSession
+    ) -> None:
+        """グループにプロンプトテンプレートを追加する（セッションに登録するのみ。コミットは呼び出し側で行う）。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            template_id: 追加するプロンプトテンプレートID。
+            session: 非同期DBセッション。
+        """
+        session.add(
+            GroupPromptTemplate(
+                group_id=group_id, tenant_id=tenant_id, prompt_template_id=template_id
+            )
+        )
+
+    @staticmethod
+    async def remove(
+        group_prompt_template: GroupPromptTemplate, session: AsyncSession
+    ) -> None:
+        """グループからプロンプトテンプレートを除外する。
+
+        Args:
+            group_prompt_template: 削除対象の GroupPromptTemplate。
+            session: 非同期DBセッション。
+        """
+        await session.delete(group_prompt_template)
+        await session.commit()
+
     @staticmethod
     async def find_groups_grouped_by_template_ids(
         template_ids: list[str], tenant_id: str, session: AsyncSession

@@ -9,11 +9,13 @@ from app.schemas.group import (
     GroupDetailResponse,
     GroupListItemResponse,
     GroupListPageResponse,
+    GroupPromptTemplatesAddRequest,
     GroupUpdateRequest,
     GroupUserRoleUpdateRequest,
     GroupUsersAddRequest,
     PagedGroupMemberResponse,
 )
+from app.schemas.prompt_template import PagedPromptTemplateResponse
 from app.services.group_service import GroupService
 
 group_router = APIRouter(prefix="/api/groups", tags=["groups"])
@@ -201,4 +203,54 @@ async def update_group_user_role(
     """グループ内ユーザーロール更新"""
     await GroupService.update_group_user_role(
         group_id, x_tenant_id, user_id, req.groupAdmin, current_user, session
+    )
+
+
+@admin_group_router.get(
+    "/{group_id}/prompt-templates",
+    response_model=PagedPromptTemplateResponse,
+)
+async def get_group_prompt_templates(
+    group_id: str,
+    search: str | None = Query(None),
+    page: int = Query(0, ge=0),
+    size: int = Query(20, ge=1, le=100),
+    sort: str = Query("addedAt,desc"),
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PagedPromptTemplateResponse:
+    """グループ所属プロンプトテンプレート一覧"""
+    return await GroupService.list_group_prompt_templates(
+        group_id, x_tenant_id, current_user, search, sort, page, size, session
+    )
+
+
+@admin_group_router.post("/{group_id}/prompt-templates", status_code=204)
+async def add_group_prompt_templates(
+    group_id: str,
+    req: GroupPromptTemplatesAddRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """グループにプロンプトテンプレートを追加"""
+    await GroupService.add_group_prompt_templates(
+        group_id, x_tenant_id, req.templateIds, current_user, session
+    )
+
+
+@admin_group_router.delete(
+    "/{group_id}/prompt-templates/{template_id}", status_code=204
+)
+async def remove_group_prompt_template(
+    group_id: str,
+    template_id: str,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """グループからプロンプトテンプレートを削除"""
+    await GroupService.remove_group_prompt_template(
+        group_id, x_tenant_id, template_id, current_user, session
     )
