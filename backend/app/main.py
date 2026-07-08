@@ -9,6 +9,7 @@ from app.routers import (
     feedback,
     groups,
     health,
+    library_tags,
     messages,
     prompt_templates,
     rooms,
@@ -51,4 +52,6 @@ app.include_router(prompt_templates.prompt_template_router)
 app.include_router(prompt_templates.admin_prompt_template_router)
 app.include_router(tenant_endpoints.router)
 app.include_router(assistant_categories.router)
+app.include_router(library_tags.library_tag_router)
+app.include_router(library_tags.admin_library_tag_router)
 app.include_router(feedback.router)
