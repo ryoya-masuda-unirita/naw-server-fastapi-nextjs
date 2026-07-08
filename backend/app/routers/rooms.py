@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.room import (
     PagedRoomResponse,
     RoomCreateRequest,
+    RoomFeedbackCreateRequest,
     RoomResponse,
     RoomUpdateRequest,
 )
@@ -97,3 +98,17 @@ async def unpin_room(
 ) -> None:
     """ルーム固定解除"""
     await RoomService.unpin_room(room_id, x_tenant_id, current_user, session)
+
+
+@router.post("/{room_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def feedback_room(
+    room_id: str,
+    req: RoomFeedbackCreateRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """ルーム満足度評価登録"""
+    await RoomService.feedback_room(
+        room_id, x_tenant_id, current_user, req.rating, session
+    )

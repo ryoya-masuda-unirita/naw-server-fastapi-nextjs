@@ -4,6 +4,7 @@ from app.models.tenant_endpoint import EndpointType
 from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
+from app.repositories.room_repository import RoomRepository
 from app.schemas.feedback import (
     ExternalServerInfoResponse,
     FeedbackMessageContentResponse,
@@ -12,11 +13,16 @@ from app.schemas.feedback import (
     FeedbackMessageListRequest,
     FeedbackMessageListResponse,
     FeedbackRoomCount,
+    FeedbackRoomItemResponse,
+    FeedbackRoomListRequest,
+    FeedbackRoomListResponse,
     FeedbackUserInfo,
     FeedbackUserItemResponse,
     FeedbackUserListRequest,
     PagedFeedbackMessageResponse,
+    PagedFeedbackRoomResponse,
     PagedFeedbackUserResponse,
+    RoomInfoResponse,
 )
 
 _SORT_FIELD_TO_COLUMN = {
@@ -35,6 +41,12 @@ _FEEDBACK_MESSAGE_SORT_FIELD_TO_COLUMN = {
     "accuracy": "rating",
     "add": "index_id",
     "folder": "index_id",
+}
+_FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN = {
+    "updatedAt": "updated_at",
+    "chat": "room_name",
+    "name": "assistant_id",
+    "level": "rating",
 }
 
 
@@ -177,4 +189,51 @@ class FeedbackService:
             totalElements=total,
             number=query.page,
             size=query.size,
+        )
+
+    @staticmethod
+    async def get_feedback_rooms(
+        tenant_id: str, query: FeedbackRoomListRequest, session: AsyncSession
+    ) -> FeedbackRoomListResponse:
+        """テナント内の評価済みルーム一覧を取得する。"""
+        sort_column = _FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN[query.sortField]
+        rows, total = await RoomRepository.find_feedback_rooms(
+            tenant_id,
+            query.assistantId,
+            query.rating,
+            sort_column,
+            query.sortOrder == "desc",
+            query.page,
+            query.size,
+            session,
+        )
+
+        content = [
+            FeedbackRoomItemResponse(
+                id=row.room_id,
+                tenantId=row.tenant_id,
+                userId=str(row.user_id),
+                userName=row.user_name,
+                roomId=row.room_id,
+                room=RoomInfoResponse(
+                    id=row.room_id,
+                    name=row.room_name,
+                    defaultAssistantId=row.assistant_id,
+                    defaultAssistantName=row.assistant_name,
+                    rating=row.rating,
+                ),
+                rating=row.rating,
+                createdAt=row.created_at,
+                updatedAt=row.updated_at,
+            )
+            for row in rows
+        ]
+
+        return FeedbackRoomListResponse(
+            feedbacks=PagedFeedbackRoomResponse(
+                content=content,
+                totalElements=total,
+                number=query.page,
+                size=query.size,
+            )
         )

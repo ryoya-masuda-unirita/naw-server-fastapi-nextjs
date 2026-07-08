@@ -1,8 +1,10 @@
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
+from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
-from app.models.room import Room, RoomPin
+from app.models.assistant import Assistant
+from app.models.room import Room, RoomPin, RoomRating
 from app.models.user import User
 
 
@@ -102,3 +104,63 @@ class RoomRepository:
         stmt = select(Room).where(Room.id.in_(room_ids), Room.tenant_id == tenant_id)
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def find_feedback_rooms(
+        tenant_id: str,
+        assistant_id: str | None,
+        rating: RoomRating | None,
+        sort_column: str,
+        sort_desc: bool,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> tuple[list[Row], int]:
+        """評価済みルームのフィードバック一覧を取得する。"""
+        stmt = (
+            select(
+                Room.id.label("room_id"),
+                Room.tenant_id.label("tenant_id"),
+                Room.user_id.label("user_id"),
+                Room.name.label("room_name"),
+                Room.default_assistant_id.label("assistant_id"),
+                Room.rating.label("rating"),
+                Room.created_at.label("created_at"),
+                Room.updated_at.label("updated_at"),
+                User.name.label("user_name"),
+                Assistant.name.label("assistant_name"),
+            )
+            .select_from(Room)
+            .outerjoin(User, and_(User.id == Room.user_id, User.tenant_id == tenant_id))
+            .outerjoin(
+                Assistant,
+                and_(
+                    Assistant.id == Room.default_assistant_id,
+                    Assistant.tenant_id == tenant_id,
+                ),
+            )
+            .where(Room.tenant_id == tenant_id, Room.rating.is_not(None))
+        )
+
+        if assistant_id is not None:
+            stmt = stmt.where(Room.default_assistant_id == assistant_id)
+        if rating is not None:
+            stmt = stmt.where(Room.rating == rating)
+
+        total = (
+            await session.execute(select(func.count()).select_from(stmt.subquery()))
+        ).scalar() or 0
+
+        if sort_column == "room_name":
+            order_col = Room.name
+        elif sort_column == "assistant_id":
+            order_col = Room.default_assistant_id
+        elif sort_column == "rating":
+            order_col = Room.rating
+        else:
+            order_col = Room.updated_at
+
+        stmt = stmt.order_by(order_col.desc() if sort_desc else order_col.asc())
+        stmt = stmt.offset(page * size).limit(size)
+        result = await session.execute(stmt)
+        return list(result.all()), total

@@ -9,6 +9,8 @@ from app.models.user import User
 from app.schemas.feedback import (
     FeedbackMessageListRequest,
     FeedbackMessageListResponse,
+    FeedbackRoomListRequest,
+    FeedbackRoomListResponse,
     FeedbackUserListRequest,
     PagedFeedbackUserResponse,
 )
@@ -37,3 +39,14 @@ async def get_feedback_messages(
 ) -> FeedbackMessageListResponse:
     """フィードバックメッセージ一覧取得（テナント管理者またはグループ管理者）"""
     return await FeedbackService.get_feedback_messages(x_tenant_id, query, session)
+
+
+@router.get("/feedbackRoom", response_model=FeedbackRoomListResponse)
+async def get_feedback_rooms(
+    query: Annotated[FeedbackRoomListRequest, Query()],
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(require_admin_or_group_admin),
+    session: AsyncSession = Depends(get_session),
+) -> FeedbackRoomListResponse:
+    """フィードバックルーム一覧取得（テナント管理者またはグループ管理者）"""
+    return await FeedbackService.get_feedback_rooms(x_tenant_id, query, session)

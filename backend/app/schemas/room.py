@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.models.room import RoomRating
+
 
 class RoomCreateRequest(BaseModel):
     name: str
@@ -11,6 +13,10 @@ class RoomCreateRequest(BaseModel):
 
 class RoomUpdateRequest(BaseModel):
     name: str
+
+
+class RoomFeedbackCreateRequest(BaseModel):
+    rating: RoomRating
 
 
 class RoomResponse(BaseModel):
