@@ -62,6 +62,10 @@ async def session(engine):
         await sess.rollback()
         tables = [
             "ai_models",
+            "room_pins",
+            "rooms",
+            "assistant_category_mappings",
+            "assistant_categories",
             "assistants_endpoints",
             "tenant_endpoints",
             "groups_assistants",

@@ -12,6 +12,7 @@ from app.models.assistant import (
     AssistantType,
     GroupAssistant,
 )
+from app.models.room import Room
 from app.models.assistant_category import AssistantCategory
 from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
@@ -869,6 +870,50 @@ class TestUpdateAssistant:
 
 @pytest.mark.asyncio
 class TestDeleteAssistant:
+    """DELETE /api/admin/assistants/{assistant_id}"""
+
+    async def test_delete_assistant_returns_400_when_used_as_default_assistant_of_room(
+        self,
+        client,
+        session,
+        admin_headers,
+        tenant,
+        member_user,
+        assistant,
+    ):
+        """デフォルトアシスタントとして参照中のルームがある場合400になること"""
+        session.add(
+            Room(
+                tenant_id=tenant.id,
+                name="Referenced Room",
+                default_assistant_id=assistant.id,
+                user_id=member_user.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/assistants/{assistant.id}", headers=admin_headers
+            )
+
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "このアシスタントを使用中のルームが存在するため削除できません。"
+        )
+
+    async def test_delete_assistant_succeeds_when_no_room_references_it(
+        self, client, admin_headers, assistant
+    ):
+        """参照されていないアシスタントは削除できること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/assistants/{assistant.id}", headers=admin_headers
+            )
+
+        assert response.status_code == 204
+
     """DELETE /api/admin/assistants/{id}"""
 
     async def test_delete_assistant_succeeds(self, client, admin_headers, assistant):
