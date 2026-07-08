@@ -52,6 +52,35 @@ class AssistantEndpointRepository:
         return grouped
 
     @staticmethod
+    async def find_tenant_endpoints_grouped_by_assistant_id(
+        assistant_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> dict[str, list[TenantEndpoint]]:
+        """アシスタントID一覧に対して、それぞれの紐づくテナントエンドポイント実体を1クエリでまとめて取得する。
+
+        `find_endpoints_grouped_by_assistant_id`と異なり`api_key`を含む`TenantEndpoint`を
+        そのまま返す。呼び出し側でアシスタント種別に応じてAPIキーの露出可否を判断する用途向け。
+        """
+        if not assistant_ids:
+            return {}
+        stmt = (
+            select(AssistantEndpoint.assistant_id, TenantEndpoint)
+            .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
+            .where(
+                AssistantEndpoint.assistant_id.in_(assistant_ids),
+                AssistantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.tenant_id == tenant_id,
+            )
+        )
+        result = await session.execute(stmt)
+
+        grouped: dict[str, list[TenantEndpoint]] = {
+            assistant_id: [] for assistant_id in assistant_ids
+        }
+        for assistant_id, tenant_endpoint in result.all():
+            grouped[assistant_id].append(tenant_endpoint)
+        return grouped
+
+    @staticmethod
     async def replace_endpoints_for_assistant(
         assistant_id: str,
         tenant_id: str,

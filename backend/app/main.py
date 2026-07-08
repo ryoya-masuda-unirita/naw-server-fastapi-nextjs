@@ -8,6 +8,7 @@ from app.routers import (
     auth,
     groups,
     health,
+    messages,
     prompt_templates,
     rooms,
     tenant_endpoints,
@@ -42,6 +43,7 @@ app.include_router(groups.admin_all_groups_router)
 app.include_router(assistants.router)
 app.include_router(assistants.admin_router)
 app.include_router(rooms.router)
+app.include_router(messages.router)
 app.include_router(prompt_templates.prompt_template_router)
 app.include_router(prompt_templates.admin_prompt_template_router)
 app.include_router(tenant_endpoints.router)
