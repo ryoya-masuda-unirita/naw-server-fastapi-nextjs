@@ -1,0 +1,450 @@
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.index import Index, IndexType
+from app.models.user import User, UserRole
+from app.repositories.assistant_repository import AssistantRepository
+from app.repositories.group_assistant_repository import GroupAssistantRepository
+from app.repositories.group_repository import GroupRepository
+from app.repositories.group_user_repository import GroupUserRepository
+from app.repositories.index_repository import IndexRepository
+from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
+from app.schemas.index import (
+    IndexRequest,
+    IndexResponse,
+    PagedIndexResponse,
+    TenantEndpointItemResponse,
+)
+
+SAAS_INDEX_LIMIT = 15
+
+
+class IndexService:
+    @staticmethod
+    def _is_tenant_admin(current_user: User) -> bool:
+        return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
+
+    @staticmethod
+    async def _resolve_visibility_scope(
+        tenant_id: str, current_user: User, session: AsyncSession
+    ) -> tuple[list[str] | None, list[str] | None]:
+        """一覧・詳細取得の可視性スコープを解決する。
+
+        移植元（Spring Boot）の`IndexService.getIndexes`相当。テナント管理者、または
+        いずれの管理グループも持たない一般ユーザーの場合は絞り込みなし（`None, None`）を返す
+        （移植元の「グループ管理者でなければ全件」という挙動をそのまま踏襲する）。
+        グループ管理者（テナント管理者でない）の場合は、自分の管理グループのアシスタントが
+        使用しているインデックスID一覧と、管理グループID一覧を返す。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            session: 非同期DBセッション。
+
+        Returns:
+            (許可インデックスID一覧, 許可グループID一覧) のタプル。絞り込み不要な場合は両方None。
+        """
+        if IndexService._is_tenant_admin(current_user):
+            return None, None
+
+        admin_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(
+            tenant_id, current_user.id, session
+        )
+        if not admin_group_ids:
+            return None, None
+
+        assistant_ids = await GroupAssistantRepository.find_assistant_ids_by_group_ids(
+            admin_group_ids, tenant_id, session
+        )
+        allowed_index_ids = await AssistantRepository.find_distinct_index_ids_by_ids(
+            assistant_ids, tenant_id, session
+        )
+        return allowed_index_ids, admin_group_ids
+
+    @staticmethod
+    async def _to_response(
+        index: Index,
+        tenant_endpoints_by_index_id: dict[str, list],
+        group_ids_by_index_id: dict[str, list[str]],
+    ) -> IndexResponse:
+        endpoints = tenant_endpoints_by_index_id.get(index.id, [])
+        return IndexResponse(
+            id=index.id,
+            tenantId=index.tenant_id,
+            type=index.type,
+            name=index.name,
+            description=index.description,
+            tenantEndpoints=[
+                TenantEndpointItemResponse(
+                    id=endpoint.id,
+                    tenantId=endpoint.tenant_id,
+                    type=endpoint.type.value,
+                    endpointName=endpoint.endpoint_name,
+                    endpoint=endpoint.endpoint,
+                )
+                for endpoint in endpoints
+            ],
+            groupIds=group_ids_by_index_id.get(index.id, []),
+            add=index.add,
+            delete=index.delete,
+            get=index.get,
+            createdAt=index.created_at,
+            updatedAt=index.updated_at,
+        )
+
+    @staticmethod
+    async def _to_paged_response(
+        indexes: list[Index],
+        total: int,
+        tenant_id: str,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> PagedIndexResponse:
+        index_ids = [i.id for i in indexes]
+        tenant_endpoints_by_index_id = (
+            await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
+                index_ids, tenant_id, session
+            )
+        )
+        group_ids_by_index_id = (
+            await IndexRepository.find_group_ids_grouped_by_index_ids(
+                index_ids, tenant_id, session
+            )
+        )
+        content = [
+            await IndexService._to_response(
+                index, tenant_endpoints_by_index_id, group_ids_by_index_id
+            )
+            for index in indexes
+        ]
+        return PagedIndexResponse(
+            content=content, totalElements=total, number=page, size=size
+        )
+
+    @staticmethod
+    async def list_indexes(
+        tenant_id: str,
+        current_user: User,
+        group_id: str | None,
+        search: str | None,
+        sort_col_name: str,
+        sort_dir: str,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> PagedIndexResponse:
+        """インデックス一覧をページネーションで取得する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            group_id: グループでの絞り込み。
+            search: 名前・説明の部分一致検索文字列。
+            sort_col_name: ソート対象列名。
+            sort_dir: ソート方向。
+            page: ページ番号（0始まり）。
+            size: 1ページあたりの件数。
+            session: 非同期DBセッション。
+
+        Returns:
+            ページネーション済みインデックス一覧。
+        """
+        if group_id:
+            if not IndexService._is_tenant_admin(current_user):
+                admin_group_ids = (
+                    await GroupUserRepository.find_admin_group_ids_for_user(
+                        tenant_id, current_user.id, session
+                    )
+                )
+                if group_id not in admin_group_ids:
+                    return PagedIndexResponse(
+                        content=[], totalElements=0, number=page, size=size
+                    )
+            indexes, total = await IndexRepository.find_page(
+                tenant_id,
+                search,
+                group_id,
+                None,
+                None,
+                sort_col_name,
+                sort_dir,
+                page,
+                size,
+                session,
+            )
+        else:
+            (
+                allowed_index_ids,
+                allowed_group_ids,
+            ) = await IndexService._resolve_visibility_scope(
+                tenant_id, current_user, session
+            )
+            indexes, total = await IndexRepository.find_page(
+                tenant_id,
+                search,
+                None,
+                allowed_index_ids,
+                allowed_group_ids,
+                sort_col_name,
+                sort_dir,
+                page,
+                size,
+                session,
+            )
+
+        return await IndexService._to_paged_response(
+            indexes, total, tenant_id, page, size, session
+        )
+
+    @staticmethod
+    async def get_index(
+        index_id: str, tenant_id: str, current_user: User, session: AsyncSession
+    ) -> IndexResponse:
+        """インデックス詳細を取得する。
+
+        移植元同様、一覧と同じ可視性ロジックで再チェックし、見えない場合は404を返す。
+
+        Args:
+            index_id: インデックスID。
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            session: 非同期DBセッション。
+
+        Returns:
+            インデックス詳細。
+
+        Raises:
+            HTTPException: インデックスが存在しない、または可視範囲外の場合404を返す。
+        """
+        index = await IndexRepository.find_by_id_and_tenant_id(
+            index_id, tenant_id, session
+        )
+        if not index:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="インデックスが存在しません。",
+            )
+
+        if not IndexService._is_tenant_admin(current_user):
+            (
+                allowed_index_ids,
+                allowed_group_ids,
+            ) = await IndexService._resolve_visibility_scope(
+                tenant_id, current_user, session
+            )
+            if allowed_index_ids is not None or allowed_group_ids is not None:
+                group_ids_by_index_id = (
+                    await IndexRepository.find_group_ids_grouped_by_index_ids(
+                        [index.id], tenant_id, session
+                    )
+                )
+                visible = index.id in (allowed_index_ids or []) or bool(
+                    set(group_ids_by_index_id.get(index.id, []))
+                    & set(allowed_group_ids or [])
+                )
+                if not visible:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="インデックスが存在しません。",
+                    )
+
+        tenant_endpoints_by_index_id = (
+            await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        group_ids_by_index_id = (
+            await IndexRepository.find_group_ids_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        return await IndexService._to_response(
+            index, tenant_endpoints_by_index_id, group_ids_by_index_id
+        )
+
+    @staticmethod
+    async def _resolve_endpoint_ids(
+        tenant_id: str, endpoint_ids: list[str], session: AsyncSession
+    ) -> list[str]:
+        endpoints = await TenantEndpointRepository.find_by_ids_and_tenant_id(
+            endpoint_ids, tenant_id, session
+        )
+        if len(endpoints) != len(set(endpoint_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="指定されたテナントエンドポイントが見つかりません。",
+            )
+        return [e.id for e in endpoints]
+
+    @staticmethod
+    async def _resolve_group_ids(
+        tenant_id: str, group_ids: list[str] | None, session: AsyncSession
+    ) -> list[str]:
+        if not group_ids:
+            return []
+        groups = await GroupRepository.find_by_tenant_id_and_ids(
+            tenant_id, group_ids, session
+        )
+        if len(groups) != len(set(group_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="指定されたグループの一部が見つかりません。",
+            )
+        return [g.id for g in groups]
+
+    @staticmethod
+    async def create_index(
+        tenant_id: str, req: IndexRequest, session: AsyncSession
+    ) -> IndexResponse:
+        """インデックスを新規作成する。
+
+        Args:
+            tenant_id: テナントID。
+            req: 作成リクエスト。
+            session: 非同期DBセッション。
+
+        Returns:
+            作成したインデックス。
+
+        Raises:
+            HTTPException: SAAS_GLOBALインデックスが既に15件ある場合400を返す。
+                指定されたエンドポイント・グループが存在しない場合404を返す。
+        """
+        if req.type == IndexType.SAAS_GLOBAL:
+            existing_count = await IndexRepository.count_saas_indexes(
+                tenant_id, session
+            )
+            if existing_count >= SAAS_INDEX_LIMIT:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SaaS側のインデックスは15個までしか作成できません。",
+                )
+
+        endpoint_ids = await IndexService._resolve_endpoint_ids(
+            tenant_id, req.endpointIds, session
+        )
+        group_ids = await IndexService._resolve_group_ids(
+            tenant_id, req.groupIds, session
+        )
+
+        index = Index(
+            tenant_id=tenant_id,
+            name=req.name,
+            description=req.description,
+            type=req.type,
+            add=req.add,
+            delete=req.delete,
+            get=req.get,
+        )
+        session.add(index)
+        await session.flush()
+
+        await IndexRepository.replace_endpoints_for_index(
+            index.id, tenant_id, endpoint_ids, session
+        )
+        await IndexRepository.replace_groups_for_index(
+            index.id, tenant_id, group_ids, session
+        )
+        await session.commit()
+        await session.refresh(index)
+
+        tenant_endpoints_by_index_id = (
+            await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        group_ids_by_index_id = (
+            await IndexRepository.find_group_ids_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        return await IndexService._to_response(
+            index, tenant_endpoints_by_index_id, group_ids_by_index_id
+        )
+
+    @staticmethod
+    async def update_index(
+        index_id: str, tenant_id: str, req: IndexRequest, session: AsyncSession
+    ) -> IndexResponse:
+        """インデックスを更新する（移植元同様、部分更新ではなく全フィールド置換）。
+
+        Args:
+            index_id: 更新対象のインデックスID。
+            tenant_id: テナントID。
+            req: 更新リクエスト。
+            session: 非同期DBセッション。
+
+        Returns:
+            更新後のインデックス。
+
+        Raises:
+            HTTPException: インデックスが存在しない場合404を返す。
+                指定されたエンドポイント・グループが存在しない場合404を返す
+                （SAAS_GLOBALの15件上限チェックは移植元同様、更新時はスキップする）。
+        """
+        index = await IndexRepository.find_by_id_and_tenant_id(
+            index_id, tenant_id, session
+        )
+        if not index:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="インデックスが存在しません。",
+            )
+
+        endpoint_ids = await IndexService._resolve_endpoint_ids(
+            tenant_id, req.endpointIds, session
+        )
+        group_ids = await IndexService._resolve_group_ids(
+            tenant_id, req.groupIds, session
+        )
+
+        index.name = req.name
+        index.description = req.description
+        index.type = req.type
+        index.add = req.add
+        index.delete = req.delete
+        index.get = req.get
+        session.add(index)
+
+        await IndexRepository.replace_endpoints_for_index(
+            index.id, tenant_id, endpoint_ids, session
+        )
+        await IndexRepository.replace_groups_for_index(
+            index.id, tenant_id, group_ids, session
+        )
+        await session.commit()
+        await session.refresh(index)
+
+        tenant_endpoints_by_index_id = (
+            await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        group_ids_by_index_id = (
+            await IndexRepository.find_group_ids_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        return await IndexService._to_response(
+            index, tenant_endpoints_by_index_id, group_ids_by_index_id
+        )
+
+    @staticmethod
+    async def delete_index(
+        index_id: str, tenant_id: str, session: AsyncSession
+    ) -> None:
+        """インデックスを削除する。存在しない場合は何もしない（冪等）。
+
+        `indexes_endpoints`・`indexes_groups`はDBのON DELETE CASCADEにより連動削除される。
+
+        Args:
+            index_id: 削除対象のインデックスID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+        """
+        index = await IndexRepository.find_by_id_and_tenant_id(
+            index_id, tenant_id, session
+        )
+        if index:
+            await IndexRepository.delete(index, session)
