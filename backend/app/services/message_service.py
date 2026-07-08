@@ -31,21 +31,44 @@ from app.schemas.message import (
 
 
 def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
-    """toolsをJSON文字列に変換する。authorization/headersは含めない（ToolConfig側でexclude済み）。"""
+    """toolsをJSON文字列に変換する。
+
+    authorization/headersは秘密情報のため含めない（ToolConfig側でexclude指定済み）。
+
+    Args:
+        tools: チャット送信時に指定されたツール設定一覧。
+
+    Returns:
+        JSON文字列。toolsが空またはNoneの場合はNone。
+    """
     if not tools:
         return None
     return json.dumps([tool.model_dump(exclude_none=True) for tool in tools])
 
 
 def _deserialize_tools(tools_json: str | None) -> list[ToolConfig] | None:
-    """toolsのJSON文字列をToolConfigのリストへ変換する。"""
+    """toolsのJSON文字列をToolConfigのリストへ変換する。
+
+    Args:
+        tools_json: `_serialize_tools`で保存したJSON文字列。
+
+    Returns:
+        ToolConfigのリスト。tools_jsonが空またはNoneの場合はNone。
+    """
     if not tools_json:
         return None
     return [ToolConfig(**item) for item in json.loads(tools_json)]
 
 
 def _split_reference_paths(file_paths: str | None) -> list[str]:
-    """参照ファイルパスのカンマ区切り文字列をリストへ変換する。"""
+    """参照ファイルパスのカンマ区切り文字列をリストへ変換する。
+
+    Args:
+        file_paths: カンマ区切りの参照ファイルパス文字列。
+
+    Returns:
+        参照ファイルパスのリスト。file_pathsが空またはNoneの場合は空リスト。
+    """
     if not file_paths:
         return []
     return [path.strip() for path in file_paths.split(",")]
@@ -59,7 +82,20 @@ class MessageService:
         req: MessageCreateRequest,
         session: AsyncSession,
     ) -> Room:
-        """roomId未指定なら新規ルームを作成し、指定時は所有ルームを解決する。"""
+        """roomId未指定なら新規ルームを作成し、指定時は所有ルームを解決する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            req: メッセージ作成リクエスト。
+            session: 非同期DBセッション。
+
+        Returns:
+            紐づくルーム。
+
+        Raises:
+            HTTPException: roomId指定時、ルームが存在しない場合は404、所有者でない場合は403。
+        """
         if req.roomId is None:
             room = Room(
                 tenant_id=tenant_id,
@@ -72,27 +108,44 @@ class MessageService:
             await session.flush()
             return room
 
-        found_room = await RoomRepository.find_by_id_and_login_id(
-            req.roomId, tenant_id, current_user.login_id, session
+        return await MessageService._require_owned_room(
+            tenant_id, current_user, req.roomId, session
         )
-        if found_room is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
-            )
-        return found_room
 
     @staticmethod
-    async def _require_can_write_room(
+    async def _require_owned_room(
         tenant_id: str, current_user: User, room_id: str, session: AsyncSession
-    ) -> None:
-        """指定ルームの所有者本人であることを検証する。"""
+    ) -> Room:
+        """ルームの所有者本人であることを検証し、ルームを返す。
+
+        存在しないルームIDは404、存在するが所有者でない場合は403を返す
+        （移植元`RoomAccessService`の"存在しなければ404、権限がなければ403"という
+        エラーコードの使い分けに合わせる）。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            room_id: 検証対象のルームID。
+            session: 非同期DBセッション。
+
+        Returns:
+            所有権が確認できたルーム。
+
+        Raises:
+            HTTPException: ルームが存在しない場合は404、所有者でない場合は403。
+        """
         room = await RoomRepository.find_by_id_and_tenant_id(
             room_id, tenant_id, session
         )
-        if room is None or room.user_id != current_user.id:
+        if room is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+            )
+        if room.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
             )
+        return room
 
     @staticmethod
     async def create_message(
@@ -101,7 +154,21 @@ class MessageService:
         req: MessageCreateRequest,
         session: AsyncSession,
     ) -> MessageCreateResponse:
-        """メッセージ（質問スレッド）を作成する。roomId未指定なら新規ルームも作成する。"""
+        """メッセージ（質問スレッド）を作成する。roomId未指定なら新規ルームも作成する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            req: メッセージ作成リクエスト。
+            session: 非同期DBセッション。
+
+        Returns:
+            作成したメッセージのID。
+
+        Raises:
+            HTTPException: アシスタントIDが不正な場合は400、roomId指定時にルームが
+                存在しない場合は404、所有者でない場合は403。
+        """
         assistant = await AssistantRepository.find_by_id_and_tenant_id(
             req.assistantId, tenant_id, session
         )
@@ -141,18 +208,23 @@ class MessageService:
     async def get_messages_and_assistants(
         tenant_id: str, current_user: User, room_id: str, session: AsyncSession
     ) -> GetMessagesResponse:
-        """指定ルームのメッセージ一覧と、参照アシスタント一覧を取得する。"""
-        room = await RoomRepository.find_by_id_and_tenant_id(
-            room_id, tenant_id, session
+        """指定ルームのメッセージ一覧と、参照アシスタント一覧を取得する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            room_id: 対象ルームID。
+            session: 非同期DBセッション。
+
+        Returns:
+            メッセージ一覧と参照アシスタント一覧。
+
+        Raises:
+            HTTPException: ルームが存在しない場合は404、所有者でない場合は403。
+        """
+        await MessageService._require_owned_room(
+            tenant_id, current_user, room_id, session
         )
-        if room is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
-            )
-        if room.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
-            )
 
         rows = await MessageRepository.find_by_tenant_id_and_room_id_with_feedback(
             tenant_id, room_id, session
@@ -213,7 +285,21 @@ class MessageService:
         message_ids: list[str],
         session: AsyncSession,
     ) -> list[MessageContentResponse]:
-        """メッセージID群に対応するメッセージ内容一覧を取得する。"""
+        """メッセージID群に対応するメッセージ内容一覧を取得する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            message_ids: 取得対象のメッセージID一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            メッセージ内容一覧。該当するメッセージ内容が存在しない場合は空リスト。
+
+        Raises:
+            HTTPException: 対象メッセージが属するルームが存在しない場合は404、
+                所有者でない場合は403。
+        """
         contents = await MessageContentRepository.find_by_message_id_in(
             message_ids, tenant_id, session
         )
@@ -273,19 +359,53 @@ class MessageService:
         ]
 
     @staticmethod
-    async def delete_message(
-        tenant_id: str, current_user: User, message_id: str, session: AsyncSession
+    async def _delete_message_if_found(
+        tenant_id: str,
+        current_user: User,
+        message: Message | None,
+        session: AsyncSession,
     ) -> None:
-        """メッセージを削除する。存在しない場合は何もせず成功する（移植元と同様の冪等な仕様）。"""
-        message = await MessageRepository.find_by_tenant_id_and_id(
-            tenant_id, message_id, session
-        )
+        """解決済みのメッセージを、所有権チェックのうえ削除する。
+
+        メッセージが見つからない場合は移植元と同様に何もせず成功する（冪等な仕様）。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            message: 削除対象のメッセージ（未解決ならNone）。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        """
         if message is None:
             return
-        await MessageService._require_can_write_room(
+        await MessageService._require_owned_room(
             tenant_id, current_user, message.room_id, session
         )
         await MessageRepository.delete(message, session)
+
+    @staticmethod
+    async def delete_message(
+        tenant_id: str, current_user: User, message_id: str, session: AsyncSession
+    ) -> None:
+        """メッセージを削除する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            message_id: 削除対象のメッセージID。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        """
+        message = await MessageRepository.find_by_tenant_id_and_id(
+            tenant_id, message_id, session
+        )
+        await MessageService._delete_message_if_found(
+            tenant_id, current_user, message, session
+        )
 
     @staticmethod
     async def delete_message_by_content_id(
@@ -294,16 +414,23 @@ class MessageService:
         message_content_id: str,
         session: AsyncSession,
     ) -> None:
-        """メッセージ内容IDを指定してメッセージを削除する。"""
+        """メッセージ内容IDを指定してメッセージを削除する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            message_content_id: 削除対象のメッセージ内容ID。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        """
         message = await MessageRepository.find_by_tenant_id_and_content_id(
             tenant_id, message_content_id, session
         )
-        if message is None:
-            return
-        await MessageService._require_can_write_room(
-            tenant_id, current_user, message.room_id, session
+        await MessageService._delete_message_if_found(
+            tenant_id, current_user, message, session
         )
-        await MessageRepository.delete(message, session)
 
     @staticmethod
     async def feedback_message(
@@ -313,7 +440,21 @@ class MessageService:
         req: MessageFeedbackCreateRequest,
         session: AsyncSession,
     ) -> MessageFeedbackResponse:
-        """メッセージへの評価を登録・更新する。既存があれば上書きする。"""
+        """メッセージへの評価を登録・更新する。既存があれば上書きする。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            message_id: 評価対象のメッセージID。
+            req: 評価内容（rating）。
+            session: 非同期DBセッション。
+
+        Returns:
+            登録・更新したフィードバック。
+
+        Raises:
+            HTTPException: メッセージが存在しない場合は404、ルームの所有者でない場合は403。
+        """
         message = await MessageRepository.find_by_tenant_id_and_id(
             tenant_id, message_id, session
         )
@@ -321,7 +462,7 @@ class MessageService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
             )
-        await MessageService._require_can_write_room(
+        await MessageService._require_owned_room(
             tenant_id, current_user, message.room_id, session
         )
 

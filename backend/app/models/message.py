@@ -92,7 +92,12 @@ class MessageContent(SQLModel, table=True):
         ),
     )
     status: MessageContentStatus = Field(
-        sa_column=sa.Column(sa.String(32), nullable=False),
+        sa_column=sa.Column(
+            sa.Enum(
+                MessageContentStatus, name="messagecontentstatus", create_type=True
+            ),
+            nullable=False,
+        ),
     )
     question: str = Field(sa_column=sa.Column(sa.Text, nullable=False))
     answer: str = Field(sa_column=sa.Column(sa.Text, nullable=False))
@@ -193,7 +198,12 @@ class MessageFeedback(SQLModel, table=True):
             nullable=False,
         ),
     )
-    rating: MessageRating = Field(sa_column=sa.Column(sa.String(16), nullable=False))
+    rating: MessageRating = Field(
+        sa_column=sa.Column(
+            sa.Enum(MessageRating, name="messagerating", create_type=True),
+            nullable=False,
+        ),
+    )
     # RAGインデックスへの参照。インデックス機能自体が未移植のため外部キー制約は付けない。
     index_id: str | None = Field(default=None, max_length=64)
     created_at: datetime = Field(

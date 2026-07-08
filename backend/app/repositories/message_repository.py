@@ -9,7 +9,16 @@ class MessageRepository:
     async def find_by_tenant_id_and_id(
         tenant_id: str, message_id: str, session: AsyncSession
     ) -> Message | None:
-        """メッセージIDとテナントIDでメッセージを取得する。"""
+        """メッセージIDとテナントIDでメッセージを取得する。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 対象のメッセージID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するメッセージ。存在しない場合はNone。
+        """
         stmt = select(Message).where(
             Message.id == message_id, Message.tenant_id == tenant_id
         )
@@ -20,7 +29,16 @@ class MessageRepository:
     async def find_by_tenant_id_and_content_id(
         tenant_id: str, message_content_id: str, session: AsyncSession
     ) -> Message | None:
-        """メッセージ内容IDから、それが属するメッセージを取得する。"""
+        """メッセージ内容IDから、それが属するメッセージを取得する。
+
+        Args:
+            tenant_id: テナントID。
+            message_content_id: 対象のメッセージ内容ID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するメッセージ。存在しない場合はNone。
+        """
         stmt = (
             select(Message)
             .join(MessageContent, MessageContent.message_id == Message.id)
@@ -36,7 +54,16 @@ class MessageRepository:
     async def find_by_tenant_id_and_ids(
         tenant_id: str, message_ids: list[str], session: AsyncSession
     ) -> list[Message]:
-        """メッセージID一覧とテナントIDでメッセージ一覧を1クエリで取得する。"""
+        """メッセージID一覧とテナントIDでメッセージ一覧を1クエリで取得する。
+
+        Args:
+            tenant_id: テナントID。
+            message_ids: 取得対象のメッセージID一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            メッセージ一覧。
+        """
         if not message_ids:
             return []
         stmt = select(Message).where(
@@ -49,7 +76,16 @@ class MessageRepository:
     async def exists_by_tenant_id_and_id(
         tenant_id: str, message_id: str, session: AsyncSession
     ) -> bool:
-        """メッセージIDとテナントIDでメッセージが存在するかを判定する。"""
+        """メッセージIDとテナントIDでメッセージが存在するかを判定する。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 対象のメッセージID。
+            session: 非同期DBセッション。
+
+        Returns:
+            存在すればTrue。
+        """
         stmt = select(Message.id).where(
             Message.id == message_id, Message.tenant_id == tenant_id
         )
@@ -60,7 +96,16 @@ class MessageRepository:
     async def find_by_tenant_id_and_room_id_with_feedback(
         tenant_id: str, room_id: str, session: AsyncSession
     ) -> list[tuple[Message, MessageFeedback | None]]:
-        """指定ルームのメッセージ一覧を、フィードバックとあわせて1クエリで取得する。"""
+        """指定ルームのメッセージ一覧を、フィードバックとあわせて1クエリで取得する。
+
+        Args:
+            tenant_id: テナントID。
+            room_id: 対象のルームID。
+            session: 非同期DBセッション。
+
+        Returns:
+            (メッセージ, フィードバック) のタプル一覧。フィードバック未登録時はNone。
+        """
         stmt = (
             select(Message, MessageFeedback)
             .outerjoin(
@@ -74,19 +119,15 @@ class MessageRepository:
         return [(row[0], row[1]) for row in result.all()]
 
     @staticmethod
-    async def create(message: Message, session: AsyncSession) -> Message:
-        """メッセージを新規作成する。"""
-        session.add(message)
-        await session.commit()
-        await session.refresh(message)
-        return message
-
-    @staticmethod
     async def delete(message: Message, session: AsyncSession) -> None:
         """メッセージを削除する。
 
         子孫メッセージ・メッセージ内容はDBの`ON DELETE CASCADE`に任せるため、
         対象メッセージ本体を1回`DELETE`するだけでよい。
+
+        Args:
+            message: 削除対象のメッセージ。
+            session: 非同期DBセッション。
         """
         await session.execute(delete(Message).where(Message.id == message.id))
         await session.commit()

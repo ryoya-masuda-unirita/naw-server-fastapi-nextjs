@@ -249,7 +249,7 @@ class TestMessageRouter:
 
             assert response.status_code == 400
 
-        async def test_create_message_with_other_users_room_returns_404(
+        async def test_create_message_with_other_users_room_returns_403(
             self, client, owner_headers, other_users_room, message_assistant
         ):
             """他人が所有するルームIDを指定するとエラーになること"""
@@ -263,7 +263,7 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 404
+            assert response.status_code == 403
 
         async def test_create_message_with_nonexistent_parent_id_sets_null(
             self, client, owner_headers, owned_room, message_assistant

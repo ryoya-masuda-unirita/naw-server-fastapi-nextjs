@@ -87,7 +87,16 @@ class RoomRepository:
     async def find_by_ids_and_tenant_id(
         room_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[Room]:
-        """ルームID一覧とテナントIDでルーム一覧を1クエリで取得する。"""
+        """ルームID一覧とテナントIDでルーム一覧を1クエリで取得する。
+
+        Args:
+            room_ids: 取得対象のルームID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            ルーム一覧。
+        """
         if not room_ids:
             return []
         stmt = select(Room).where(Room.id.in_(room_ids), Room.tenant_id == tenant_id)

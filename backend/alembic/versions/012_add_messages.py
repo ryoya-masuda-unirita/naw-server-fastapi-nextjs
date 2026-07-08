@@ -63,7 +63,11 @@ def upgrade() -> None:
         sa.Column("id", sa.String(32), nullable=False),
         sa.Column("tenant_id", sa.String(32), nullable=False),
         sa.Column("message_id", sa.String(32), nullable=False),
-        sa.Column("status", sa.String(32), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum("OK", "ERROR", name="messagecontentstatus"),
+            nullable=False,
+        ),
         sa.Column("question", sa.Text(), nullable=False),
         sa.Column("answer", sa.Text(), nullable=False),
         sa.Column("context", sa.Text(), nullable=True),
@@ -142,7 +146,9 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(32), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("message_id", sa.String(32), nullable=False),
-        sa.Column("rating", sa.String(16), nullable=False),
+        sa.Column(
+            "rating", sa.Enum("GOOD", "BAD", name="messagerating"), nullable=False
+        ),
         sa.Column("index_id", sa.String(64), nullable=True),
         sa.Column(
             "created_at",
@@ -181,7 +187,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("message_feedbacks")
+    op.execute("DROP TYPE IF EXISTS messagerating")
     op.drop_table("message_files")
     op.drop_index("message_contents_created_at_idx", table_name="message_contents")
     op.drop_table("message_contents")
+    op.execute("DROP TYPE IF EXISTS messagecontentstatus")
     op.drop_table("messages")
