@@ -167,6 +167,44 @@ async def test_user_with_password(session, test_tenant, test_user):
 
 
 @pytest.fixture
+async def test_user_with_login_key(session, test_tenant):
+    """テスト用ユーザー（ログインキー設定済み）"""
+    user = User(
+        id=uuid4(),
+        tenant_id=test_tenant.id,
+        login_id="loginkeyuser",
+        name="Login Key User",
+        role="USER",
+        login_key="test-login-key-1234",
+        is_required_password_reset=False,
+    )
+    session.add(user)
+    await session.flush()
+    await session.refresh(user)
+    return user
+
+
+@pytest.fixture
+async def test_other_tenant(session):
+    """別テナント検証用のテスト用テナント"""
+    tenant = Tenant(
+        id="test-other-tenant",
+        name="Other Tenant",
+        owner="admin",
+        pw_policy_min_length=8,
+        pw_policy_use_uppercase=True,
+        pw_policy_use_lowercase=True,
+        pw_policy_use_digits=True,
+        pw_policy_use_symbols=True,
+        pw_histories_limit=3,
+    )
+    session.add(tenant)
+    await session.flush()
+    await session.refresh(tenant)
+    return tenant
+
+
+@pytest.fixture
 def valid_jwt_token(test_user, test_tenant):
     """有効な JWT トークン"""
     return create_access_token(test_user.login_id, test_tenant.id)

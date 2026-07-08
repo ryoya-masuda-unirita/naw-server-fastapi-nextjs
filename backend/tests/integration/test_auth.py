@@ -38,6 +38,71 @@ class TestAuthAPI:
 
         assert response.status_code == 422
 
+    async def test_post_auth_login_key_success(
+        self, client, test_tenant, test_user_with_login_key
+    ):
+        """POST /auth/login-key 成功ケース"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": test_user_with_login_key.login_key},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["loginStatus"] == "SUCCESS"
+        assert response.json()["id"] == test_user_with_login_key.login_id
+        assert response.json()["token"] is not None
+
+    async def test_post_auth_login_key_with_nonexistent_key(self, client, test_tenant):
+        """POST /auth/login-key 存在しないログインキー"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": "nonexistent-key"},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 401
+
+    async def test_post_auth_login_key_with_different_tenant(
+        self, client, test_other_tenant, test_user_with_login_key
+    ):
+        """POST /auth/login-key 別テナントのログインキーは存在しない場合と同じ401になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": test_user_with_login_key.login_key},
+                headers={"X-Tenant-ID": test_other_tenant.id},
+            )
+
+        assert response.status_code == 401
+
+    async def test_post_auth_login_key_missing_header(
+        self, client, test_user_with_login_key
+    ):
+        """POST /auth/login-key X-Tenant-ID ヘッダーなし"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": test_user_with_login_key.login_key},
+            )
+
+        assert response.status_code == 422
+
+    async def test_post_auth_login_key_sets_access_token_cookie(
+        self, client, test_tenant, test_user_with_login_key
+    ):
+        """POST /auth/login-key 成功時にaccess_token Cookieが発行されること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": test_user_with_login_key.login_key},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert "access_token" in response.cookies
+
     async def test_post_auth_logout(self, client):
         """POST /auth/logout"""
         async with client as c:

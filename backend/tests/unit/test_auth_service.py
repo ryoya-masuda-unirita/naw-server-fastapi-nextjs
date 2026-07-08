@@ -129,6 +129,53 @@ class TestAuthServiceLogin:
         assert response.token is None
 
 
+class TestAuthServiceLoginWithLoginKey:
+    """ログインキー認証処理テスト（モック使用）"""
+
+    REPO_USER_PATH = "app.services.auth_service.UserRepository"
+
+    async def test_login_with_valid_login_key(self, test_tenant, test_user):
+        """有効なログインキーで認証に成功しトークンが発行されること"""
+        with patch(
+            f"{self.REPO_USER_PATH}.find_by_login_key",
+            new=AsyncMock(return_value=test_user),
+        ):
+            response = await AuthService.login_with_login_key(
+                "any-login-key", test_tenant.id, AsyncMock()
+            )
+
+        assert response.id == test_user.login_id
+        assert response.loginStatus == "SUCCESS"
+        assert response.token is not None
+
+    async def test_login_with_nonexistent_login_key(self, test_tenant):
+        """存在しないログインキーの場合、HTTPException 401 を返すこと"""
+        with patch(
+            f"{self.REPO_USER_PATH}.find_by_login_key",
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await AuthService.login_with_login_key(
+                    "nonexistent-key", test_tenant.id, AsyncMock()
+                )
+
+        assert exc_info.value.status_code == 401
+
+    async def test_login_with_login_key_of_different_tenant(self, test_tenant):
+        """別テナントのログインキーの場合、存在しない場合と同じ401を返すこと"""
+        # find_by_login_key はテナントIDも条件に含むため、別テナントのキーはNoneを返す
+        with patch(
+            f"{self.REPO_USER_PATH}.find_by_login_key",
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await AuthService.login_with_login_key(
+                    "other-tenant-key", test_tenant.id, AsyncMock()
+                )
+
+        assert exc_info.value.status_code == 401
+
+
 class TestAuthServicePasswordReset:
     """パスワードリセット処理テスト（モック使用）"""
 
