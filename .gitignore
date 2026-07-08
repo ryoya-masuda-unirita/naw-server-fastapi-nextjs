@@ -1,3 +1,6 @@
+# naw-autopilot runtime state (not committed)
+.claude/skills/naw-autopilot/state.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

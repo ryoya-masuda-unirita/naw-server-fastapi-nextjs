@@ -31,6 +31,14 @@ description: Use when working on a GitHub Issue in this repository, including is
 - バックエンド: `~/Documents/naw-server`
 - フロントエンド: `~/Documents/secuaigent-client`
 
+### 参照リポジトリ調査はサブエージェントに委譲する
+
+「1. 参照リポジトリを確認する」（移植元の `git log` 確認、対象 Controller/Service/Request/Response の読み込み、既存 Issue との突き合わせ等）は読み取り専用のリサーチであり、メインの会話コンテキストを圧迫しやすい。原則として `Agent(subagent_type: naw-explore)` に委譲すること（汎用の `Explore` ではなく、このリポジトリの移植前提を組み込んだ `naw-explore` を使う）。
+
+- プロンプトには、対象の移植元ファイルパス（分かっていれば）、確認したい範囲（例: `RoomController` の未移植エンドポイント）、返してほしい情報（対象エンドポイントの仕様、参照元ファイルパス、既存実装との差分）を自己完結で書く
+- `naw-explore` は読み取り専用のため、`gh issue create` 等の書き込み操作は必ずメインの会話側で実行する
+- 対象がすでに明確（ユーザーが Issue 本文で移植元ファイルを指定済み等）で調査の必要が薄い場合は、委譲せず直接読んでよい
+
 ## Issue 起票手順
 
 Issue 起票は必ず以下の手順を順番に行う。
