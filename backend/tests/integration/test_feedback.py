@@ -772,3 +772,150 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
+
+    class TestGetFeedbackRooms:
+        async def test_excludes_unrated_rooms(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """rating未登録のルームは一覧から除外されること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            room_names = {
+                item["room"]["name"] for item in response.json()["feedbacks"]["content"]
+            }
+            assert "Heavy Room" not in room_names
+            assert room_names == {"Responded Excellent", "Responded Good"}
+
+        async def test_returns_user_name_and_assistant_name(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """userNameとdefaultAssistantNameが解決されて返ること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            item = next(
+                item
+                for item in response.json()["feedbacks"]["content"]
+                if item["room"]["name"] == "Responded Excellent"
+            )
+            assert item["userName"] == feedback_dataset["responded_user"].name
+            assert item["room"]["defaultAssistantName"] == "Feedback Assistant"
+            assert item["rating"] == "EXCELLENT"
+            assert item["room"]["rating"] == "EXCELLENT"
+
+        async def test_filters_by_assistant_id(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """assistantId絞り込みが効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?assistantId="
+                    + feedback_dataset["secondary_feedback_assistant"].id,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            assert response.json()["feedbacks"]["content"] == []
+
+        async def test_filters_by_rating(self, client, admin_headers, feedback_dataset):
+            """rating絞り込みが効くこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?rating=GOOD",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            items = response.json()["feedbacks"]["content"]
+            assert len(items) == 1
+            assert items[0]["room"]["name"] == "Responded Good"
+
+        async def test_sorts_by_level_ascending(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """sortField=level&sortOrder=ascで評価の昇順に並ぶこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?sortField=level&sortOrder=asc",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            ratings = [
+                item["rating"] for item in response.json()["feedbacks"]["content"]
+            ]
+            assert ratings == sorted(ratings)
+
+        async def test_paginates_feedback_rooms(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """page/sizeでページングされ、totalElementsが全体件数を示すこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?page=0&size=1",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()["feedbacks"]
+            assert len(body["content"]) == 1
+            assert body["totalElements"] == 2
+            assert body["number"] == 0
+            assert body["size"] == 1
+
+        async def test_excludes_other_tenant_rooms(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """別テナントの評価済みルームが結果に含まれないこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            room_names = {
+                item["room"]["name"] for item in response.json()["feedbacks"]["content"]
+            }
+            assert "Other Tenant Room" not in room_names
+
+    class TestGetFeedbackRoomsPermission:
+        async def test_general_user_returns_403(
+            self, client, general_user_headers, feedback_dataset
+        ):
+            """一般ユーザーはアクセスできないこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom",
+                    headers=general_user_headers,
+                )
+
+            assert response.status_code == 403
+
+        async def test_group_admin_can_access(
+            self, client, group_admin_headers, feedback_dataset
+        ):
+            """グループ管理者はアクセスできること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom",
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 200
+
+        async def test_returns_401_without_token(self, client, feedback_dataset):
+            """未ログインではアクセスできないこと"""
+            async with client as c:
+                response = await c.get("/api/admin/feedbackRoom")
+
+            assert response.status_code == 401
