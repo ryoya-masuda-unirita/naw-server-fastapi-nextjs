@@ -125,6 +125,15 @@ class FileService:
 
     @staticmethod
     async def _to_response(file: File, updated_by: str | None) -> FileResponse:
+        """`File`エンティティをレスポンススキーマに変換する。
+
+        Args:
+            file: 変換対象のFile。
+            updated_by: 解決済みの更新者名（呼び出し側で一括解決したものを渡す）。
+
+        Returns:
+            変換後のFileResponse。
+        """
         return FileResponse(
             id=file.id,
             tenantId=file.tenant_id,
@@ -434,6 +443,15 @@ class FileService:
             file = await FileRepository.save(file, session)
             return await FileService._to_single_response(file, tenant_id, session)
 
+        if not form.name:
+            # `name`が未指定のまま置換すると、旧ファイル削除後に空文字の`name`で
+            # 新規レコードが作成されてしまい復旧できなくなる。旧ファイルを削除する前に
+            # 検証する。
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ファイルを添付して更新する場合、nameは必須です。",
+            )
+
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
         FileService._ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
@@ -443,7 +461,7 @@ class FileService:
         )
         file = await FileService._save_to_storage_and_create(
             index,
-            form.name or "",
+            form.name,
             form.display_name,
             form.reference,
             current_user,

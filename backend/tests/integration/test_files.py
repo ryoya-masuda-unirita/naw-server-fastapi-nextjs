@@ -320,6 +320,37 @@ class TestFilesRouter:
             assert body["displayName"] == "更新後の表示名"
             assert body["fileName"] == "sample.txt"
 
+        async def test_update_with_file_without_name_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """file添付時にnameを省略すると400になり、旧ファイルが削除されないこと"""
+            files, data = _upload_payload()
+            async with client as ac:
+                upload_response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    headers=files_admin_headers,
+                )
+                file_id = upload_response.json()["id"]
+
+                new_files = {"file": ("new.txt", b"new content", "text/plain")}
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    files=new_files,
+                    data={},
+                    headers=files_admin_headers,
+                )
+                assert response.status_code == 400
+
+                # nameが未指定で拒否された場合、旧ファイルが削除されず残っていること
+                download_response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    headers=files_admin_headers,
+                )
+            assert download_response.status_code == 200
+            assert download_response.content == b"hello world"
+
         async def test_update_status_deleted_returns_400(
             self, client, files_index, files_admin_headers, override_file_storage
         ):

@@ -88,12 +88,22 @@ async def download_file(
     # 日本語等の非ASCII文字を含むファイル名はlatin-1で符号化できずヘッダー生成が
     # 失敗するため、RFC 5987（filename*=UTF-8''...）形式でパーセントエンコードする。
     encoded_filename = quote(filename)
+    # ASCIIフォールバック側の`filename=".."`はダブルクォートで囲むため、表示名に
+    # ダブルクォートが含まれているとヘッダーの区切りが壊れる（ヘッダーインジェクション
+    # の懸念があるため）、クォート・制御文字を除去してから埋め込む。
+    ascii_fallback = (
+        filename.encode("ascii", "replace")
+        .decode("ascii")
+        .replace('"', "'")
+        .replace("\r", "")
+        .replace("\n", "")
+    )
     return Response(
         content=content,
         media_type="application/octet-stream",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="{filename.encode("ascii", "replace").decode("ascii")}"; '
+                f'attachment; filename="{ascii_fallback}"; '
                 f"filename*=UTF-8''{encoded_filename}"
             )
         },

@@ -48,11 +48,19 @@ class FileUploadForm:
         splitLength: Annotated[str | None, Form()] = None,
         status: Annotated[str | None, Form()] = None,
     ) -> None:
+        """アップロードフォームの各フィールドを保持する。
+
+        Args:
+            name: ファイルの内部名。
+            displayName: 表示名。
+            reference: 参照情報。
+            splitLength: コンテンツ分割・埋め込み登録（Issue #88スコープ）で使用する値。
+                本Issueでは受理のみ行い未使用とする。
+            status: ステータス文字列（`ENABLE`・`DISABLE`・`DELETED`）。
+        """
         self.name = name
         self.display_name = displayName
         self.reference = reference
-        # splitLength はコンテンツ分割・埋め込み登録（Issue #88 スコープ）で使用する値
-        # であり、本Issueでは受理のみ行い未使用とする。
         self.split_length = splitLength
         self.status = status
 
@@ -72,6 +80,19 @@ class FileUpdateForm:
         splitLength: Annotated[str | None, Form()] = None,
         status: Annotated[str | None, Form()] = None,
     ) -> None:
+        """更新フォームの各フィールドを保持する。
+
+        `file`が未添付ならメタデータ更新のみに使われ、添付時は置換更新の新規メタデータ
+        として使われる（置換更新時は`name`が必須。`FileService.update_file`で検証する）。
+
+        Args:
+            name: ファイルの内部名。
+            displayName: 表示名。
+            reference: 参照情報。
+            splitLength: コンテンツ分割・埋め込み登録（Issue #88スコープ）で使用する値。
+                本Issueでは受理のみ行い未使用とする。
+            status: ステータス文字列（`ENABLE`・`DISABLE`・`DELETED`）。
+        """
         self.name = name
         self.display_name = displayName
         self.reference = reference

@@ -55,7 +55,12 @@ class LocalFileStorage:
         """
         tenant_dir = self._root / tenant_id
         tenant_dir.mkdir(parents=True, exist_ok=True)
-        target_path = tenant_dir / f"{file_id}_{filename}"
+        # アップロードされたファイル名はクライアント（攻撃者）が任意に指定できるため、
+        # `../`等のパス区切り文字を含んでいるとディレクトリトラバーサルによって
+        # tenant_dir外への書き込みが可能になってしまう。`Path(...).name`でパス構造を
+        # 除去し、ベース名のみを保存ファイル名に使用する。
+        safe_filename = Path(filename).name
+        target_path = tenant_dir / f"{file_id}_{safe_filename}"
         target_path.write_bytes(content)
         return f"file://{target_path.resolve()}"
 
