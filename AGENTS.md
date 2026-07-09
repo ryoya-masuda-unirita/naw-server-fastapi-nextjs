@@ -2,10 +2,10 @@
 
 ## 目的
 
-このリポジトリでは、既存の `.claude/CLAUDE.md` 運用を `Codex` でも同じ品質で再現する。
+このリポジトリでは、既存運用を `Codex` でも同じ品質で再現する。
 詳細な反復手順は `.codex/skills/` へ切り出し、`AGENTS.md` には全体方針と呼び出し条件だけを残す。
 
-既存の `.claude/CLAUDE.md` は互換運用のため残してよいが、Codex はこの `AGENTS.md` を優先して従うこと。
+Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正とすること。旧設定ファイルは互換運用のため残っていても、Codex の実行時ルールとして参照しない。
 
 ## プロジェクト概要
 
@@ -74,7 +74,27 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW-XXXX
 ```
 
-### 2. PR / レビュー / 動作確認まとめ
+### 2. Issue 一括起票
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-issue-batch/SKILL.md` を読むこと。
+
+- `/naw-issue-batch`
+- 未移植のバックエンド機能をまとめて Issue 起票する
+- `~/Documents/naw-server` から未移植候補を検出し、Issue 作成だけを繰り返す
+
+この skill は Issue 起票のみを行う。ブランチ作成、`docs/issue-*` 作成、実装、PR 作成には進まない。
+
+### 3. Todo Issue 自動処理ループ
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-issue-loop/SKILL.md` を読むこと。
+
+- `/naw-issue-loop`
+- GitHub Projects の `Todo` Issue を1件ずつ、着手からPR作成まで進める
+- 「open backend porting Issues を順番に最後まで進めて」等、起票済みIssueの自動処理ループを明示されたとき
+
+この skill は `naw-issue-workflow` と `naw-pr-workflow` を組み合わせ、承認フローを省略して全自動モードで進める専用フローである。単一Issueを対話的に進める場合は使わず、`naw-issue-workflow` を使う。
+
+### 4. PR / レビュー / 動作確認まとめ
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-pr-workflow/SKILL.md` を読むこと。
 
@@ -83,9 +103,9 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 - `code-review.md` 作成
 - テスト結果・動作確認結果の整理
 
-Codex では、**PR 作成依頼は `gh pr create` で終わりではなく、必ず同じ作業フローの中でコードレビュー実行と `code-review.md` 作成まで完了させること**。Claude 側の `/code-review` 専用導線がCodexに自動移植されるわけではないため、Codex は自分で差分レビューを実行し、結果をドキュメントへ反映すること。
+Codex では、**PR 作成依頼は `gh pr create` で終わりではなく、必ず同じ作業フローの中でコードレビュー実行と `code-review.md` 作成まで完了させること**。Codex は自分で差分レビューを実行し、結果をドキュメントへ反映すること。
 
-### 3. secuaigent-client → frontend-angular 同期
+### 5. secuaigent-client → frontend-angular 同期
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/frontend-angular-sync/SKILL.md` を読むこと。
 
@@ -102,7 +122,7 @@ skill を読まずに進めてよいのは、単純な質問応答や軽微な�
 Issue 対応や PR 対応では、該当 skill を読んだ前提で進めること。
 
 判断が分かれる点だけ確認し、それ以外は止まらず進める。
-ただし Issue 対応では、`.claude/CLAUDE.md` と同等の承認フローを優先し、指定された承認ポイントでは必ず停止すること。
+ただし Issue 対応では、この `AGENTS.md` と `.codex/skills/naw-issue-workflow/SKILL.md` に定義された承認フローを優先し、指定された承認ポイントでは必ず停止すること。
 
 ### Issue 対応時の承認フロー
 
@@ -126,19 +146,40 @@ Issue 対応や PR 対応では、該当 skill を読んだ前提で進めるこ
 
 ## コミットメッセージ規約
 
-Conventional Commits は使わず、Issue 番号ベースの日本語メッセージに統一する。具体例と分割方針は `naw-issue-workflow` 側の指示に従うこと。
+Conventional Commits は使わず、Issue 番号ベースの日本語メッセージに統一する。
+
+```text
+#{番号} issue-{番号} 変更概要を1文で
+    - 変更詳細
+    - 変更詳細
+```
+
+NAW チケットに対応する作業の場合は NAW 番号も加える。
+
+```text
+#{番号} issue-{番号} NAW-XXXX 変更概要を1文で
+    - 変更詳細
+    - 変更詳細
+```
+
+- 1行目: `#{番号}` + 半角スペース + `issue-{番号}` + 半角スペース +（NAW あれば `NAW-XXXX` + 半角スペース）+ 変更概要（日本語1文）
+- 2行目以降: 4スペース + `-` + 半角スペース + 変更詳細
+- `feat:` / `fix:` などの Conventional Commits プレフィックスは使わない
+- `Co-Authored-By:` などのトレーラーは不要
 
 ## クラウド / 環境メモ
 
+- 環境: dev/staging のみ（本番環境なし）
 - フロントエンド: CloudFront + S3
-- バックエンド: AWS ECS（EC2 起動タイプ）
-- DB: Amazon RDS PostgreSQL
+- バックエンド: AWS ECS（EC2 起動タイプ、t4g.nano。メモリ不足時は t4g.micro に変更）
+- DB: Amazon RDS PostgreSQL（db.t4g.micro）
 - コンテナレジストリ: Amazon ECR
 - IaC: Terraform
 - CI/CD: GitHub Actions + OIDC
 - リージョン: ap-northeast-1
 
 RDS はコスト削減のためデフォルト停止運用。必要時のみ起動し、作業後は停止すること。
+手動停止した RDS は AWS の制約で7日後に自動再起動されるため、EventBridge Scheduler で毎日 09:00 JST に起動、09:10 JST に停止する10分間スケジュールを設定し、7日連続停止を避ける。
 
 ## 実務上の注意
 

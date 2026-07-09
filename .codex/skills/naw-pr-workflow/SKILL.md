@@ -9,7 +9,7 @@ description: Use when preparing a pull request for naw-server-fastapi-nextjs, in
 
 ## Codex での重要事項
 
-Claude 側の `/code-review` 専用導線は Codex には存在しない。したがって Codex は、**PR 作成タスクを受けたら `gh pr create` で終了してはいけない**。必ず同じ作業の中で以下まで完了させること。
+Codex は、**PR 作成タスクを受けたら `gh pr create` で終了してはいけない**。必ず同じ作業の中で以下まで完了させること。
 
 1. PR 作成
 2. ベースブランチ差分でのコードレビュー実行

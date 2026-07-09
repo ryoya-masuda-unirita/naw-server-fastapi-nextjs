@@ -31,17 +31,32 @@ description: Use when working on a GitHub Issue in this repository, including is
 - バックエンド: `~/Documents/naw-server`
 - フロントエンド: `~/Documents/secuaigent-client`
 
+### 参照リポジトリ調査
+
+「1. 参照リポジトリを確認する」（移植元の `git log` 確認、対象 Controller/Service/Request/Response の読み込み、既存 Issue との突き合わせ等）は、Codex が実装前に必要な範囲を直接確認する。調査量が大きい場合でも、Issue 起票やブランチ操作などの書き込み作業へ進む前に、確認した内容を要件・設計へ反映する。
+
+- 対象の移植元ファイルパス（分かっていれば）、確認したい範囲（例: `RoomController` の未移植エンドポイント）、対象エンドポイントの仕様、参照元ファイルパス、既存実装との差分を整理する
+- 対象が広すぎて判断が分かれる場合だけ、作業前にユーザーへ確認する
+
 ## Issue 起票手順
 
 Issue 起票は必ず以下の手順を順番に行う。
 
 ```bash
-# Step 1: Issue 作成（返ってきた URL から番号を取得する）
-gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body "..."
+# Step 1: Issue 作成（番号未確定のため、この時点では "#{番号}" を付けずに作成する）
+gh issue create --title "issue-{仮} NAW-XXXX 変更概要" --body "..."
+# → 返ってきた URL から番号を取得する（例: .../issues/65 → 65）
+
+# Step 1.5: 確定した番号でタイトルを付け直す（ここを忘れると "#{番号}" が欠けたまま残る）
+gh issue edit {番号} --title "#{番号} issue-{番号} NAW-XXXX 変更概要"
 
 # Step 2: プロジェクトボードに追加（Todo 状態で登録される）
 gh project item-add 3 --owner ryoya-masuda-unirita \
   --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+
+# Step 2.5: プロジェクトボードに追加できたか確認する（失敗を静かに見過ごさない）
+gh issue view {番号} --json projectItems --jq '.projectItems | length'
+# 0 の場合は Step 2 が失敗しているので、原因を確認してから再実行する
 
 # Step 3: Issue 開始スクリプトで最新化・ブランチ作成・linked branch 反映・In Progress 移動まで自動化
 bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}           # NAW なし
@@ -57,6 +72,7 @@ git push -u origin feature/issue-{番号}
 
 - プロジェクト番号: `3`
 - オーナー: `ryoya-masuda-unirita`
+- **Step 1 で作成した時点のタイトルには Issue 番号がまだ入らない。Step 1.5 でのタイトル付け直しと Step 2.5 でのプロジェクト追加確認を省略しないこと**（過去に #65 でこの2点が漏れ、ユーザーが手動修正する事態が発生した）
 
 ### NAW チケットとの対応
 
@@ -146,7 +162,7 @@ Issue 対応は、デフォルトで以下の承認フローに従う。
 6. `code-review.md` の作成（[naw-pr-workflow](../naw-pr-workflow/SKILL.md) のフォーマットに従う）
 7. 指摘修正 → 再テスト → 再動作確認 → PR 修正
 
-Codex では Claude の `/code-review` 専用導線は使えない。PR 作成後は `prepare_code_review.sh` でレビュー対象を確定し、Codex 自身が差分レビューを実行して `code-review.md` を更新すること。
+PR 作成後は `prepare_code_review.sh` でレビュー対象を確定し、Codex 自身が差分レビューを実行して `code-review.md` を更新すること。
 
 code-review 指摘への対応: 🔴 致命的は必ず修正、🟡 注意・🔵 提案は AI が判断する。
 
