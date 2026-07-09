@@ -353,6 +353,32 @@ class TestTenantsRouter:
 
             assert response.status_code == 422
 
+        async def test_patch_returns_422_for_null_tenant_name(
+            self, client, tenant, admin_user
+        ):
+            """tenantNameキーの値がnullの場合422になること（DB列がNOT NULLのため）"""
+            async with client as ac:
+                response = await ac.patch(
+                    f"/api/admin/tenants/{tenant.id}",
+                    json={"tenantName": None},
+                    headers=_headers(admin_user.login_id, tenant.id),
+                )
+
+            assert response.status_code == 422
+
+        async def test_patch_returns_422_for_too_long_tenant_name(
+            self, client, tenant, admin_user
+        ):
+            """tenantNameがDB列の上限(32文字)を超える場合422になること"""
+            async with client as ac:
+                response = await ac.patch(
+                    f"/api/admin/tenants/{tenant.id}",
+                    json={"tenantName": "a" * 33},
+                    headers=_headers(admin_user.login_id, tenant.id),
+                )
+
+            assert response.status_code == 422
+
         async def test_patch_forbidden_when_tenant_path_mismatch(
             self, client, tenant, admin_user, other_tenant
         ):

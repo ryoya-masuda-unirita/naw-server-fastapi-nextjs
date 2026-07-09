@@ -19,6 +19,8 @@ from app.schemas.tenant import (
     TenantResourceResponse,
 )
 
+ActiveSubscriptionAndPlan = tuple[Subscription, Plan] | None
+
 
 class TenantService:
     @staticmethod
@@ -72,11 +74,10 @@ class TenantService:
             )
 
         fields_set = request.model_fields_set
-        updated = False
-
-        if "tenantName" in fields_set and request.tenantName is not None:
-            tenant.name = request.tenantName
-            updated = True
+        # 有効なサブスクリプション+プランは、クレジット上限チェックとレスポンス組み立ての
+        # 両方で必要になりうる。日をまたぐレースやDB往復を避けるため、このリクエスト内で
+        # 一度だけ解決して使い回す（未解決時はNoneのまま _build_response 側で解決する）。
+        active: ActiveSubscriptionAndPlan = None
 
         if "maxUsageBasedCreditsPerMonth" in fields_set:
             effective = (
@@ -84,20 +85,32 @@ class TenantService:
                 if request.maxUsageBasedCreditsPerMonth is not None
                 else 0
             )
+            today_utc = datetime.now(timezone.utc).date()
+            active = await SubscriptionRepository.find_active_by_tenant_id_with_plan(
+                tenant_id, today_utc, session
+            )
             await TenantService._assert_new_max_usage_based_credits_not_below_current_usage(
-                tenant_id, effective, session
+                tenant_id, active, effective, session
             )
             tenant.max_usage_based_credits_per_month = effective
-            updated = True
 
-        if updated:
+        if "tenantName" in fields_set:
+            # model_validator（TenantAdminPatchRequest）が、キー送信時に値がnullなら
+            # 事前に422で弾いているため、ここに到達する時点でtenantNameはstr確定。
+            assert request.tenantName is not None
+            tenant.name = request.tenantName
+
+        if fields_set:
             tenant = await TenantRepository.update(tenant, session)
 
-        return await TenantService._build_response(tenant, session)
+        return await TenantService._build_response(tenant, session, active=active)
 
     @staticmethod
     async def _assert_new_max_usage_based_credits_not_below_current_usage(
-        tenant_id: str, new_max: int, session: AsyncSession
+        tenant_id: str,
+        active: ActiveSubscriptionAndPlan,
+        new_max: int,
+        session: AsyncSession,
     ) -> None:
         """新しい利用ベースクレジット上限が、請求期間内の現在の利用量を下回らないことを検証する。
 
@@ -107,6 +120,8 @@ class TenantService:
 
         Args:
             tenant_id: テナントID。
+            active: 呼び出し元で解決済みの有効なサブスクリプションとプランのタプル。
+                有効なサブスクリプションが存在しない場合はNone。
             new_max: 新しく設定しようとする利用ベースクレジット上限。
             session: 非同期DBセッション。
 
@@ -114,18 +129,15 @@ class TenantService:
             HTTPException: 請求期間内の利用クレジット合計が
                 「プランのクレジット枠 + new_max」以上の場合400を返す。
         """
-        now = datetime.now(timezone.utc)
-        result = await SubscriptionRepository.find_active_by_tenant_id_with_plan(
-            tenant_id, now.date(), session
-        )
-        if result is None:
+        if active is None:
             return
 
-        _subscription, plan = result
+        subscription, plan = active
         if plan.max_credits_per_month is None:
             return
 
-        period_from = current_billing_reset_instant_utc(_subscription.start_date, now)
+        now = datetime.now(timezone.utc)
+        period_from = current_billing_reset_instant_utc(subscription.start_date, now)
         if period_from is None:
             return
 
@@ -146,22 +158,33 @@ class TenantService:
 
     @staticmethod
     async def _build_response(
-        tenant: Tenant, session: AsyncSession
+        tenant: Tenant,
+        session: AsyncSession,
+        active: ActiveSubscriptionAndPlan = None,
     ) -> TenantDetailResponse:
         """テナントエンティティからリソース・サブスクリプションを解決してレスポンスを組み立てる。
 
         Args:
             tenant: テナント。
             session: 非同期DBセッション。
+            active: 呼び出し元で既に解決済みの有効なサブスクリプション・プラン。
+                未指定（省略時のデフォルト値であるNone）の場合はここで新たに解決する。
+                呼び出し元が「有効なサブスクリプションなし」を確定済みの場合と、
+                「未解決」の場合を区別できないため、更新系（PATCH）から渡す場合は
+                クレジット上限チェックの中で既に解決した結果を必ず渡すこと。
 
         Returns:
             テナント詳細レスポンス。
         """
+        # SQLAlchemyのAsyncSessionは単一コルーチンからの逐次利用が前提のため、
+        # 同一sessionに対する複数クエリをasyncio.gather等で並行実行しない。
         resources = await TenantResourceRepository.find_by_tenant_id(tenant.id, session)
-        today_utc = datetime.now(timezone.utc).date()
-        active = await SubscriptionRepository.find_active_by_tenant_id_with_plan(
-            tenant.id, today_utc, session
-        )
+        if active is None:
+            today_utc = datetime.now(timezone.utc).date()
+            active = await SubscriptionRepository.find_active_by_tenant_id_with_plan(
+                tenant.id, today_utc, session
+            )
+
         subscription_response = None
         if active is not None:
             subscription, plan = active
