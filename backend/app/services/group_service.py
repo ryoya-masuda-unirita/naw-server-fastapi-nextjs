@@ -4,14 +4,18 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.group import Group
+from app.models.assistant import AssistantType
 from app.models.user import User, UserRole
+from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.group_prompt_template_repository import (
     GroupPromptTemplateRepository,
 )
+from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_repository import GroupRepository
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.prompt_template_repository import PromptTemplateRepository
 from app.repositories.user_repository import UserRepository
+from app.schemas.assistant import PagedAssistantResponse
 from app.schemas.group import (
     GroupCreateRequest,
     GroupDetailResponse,
@@ -25,6 +29,7 @@ from app.schemas.prompt_template import (
     PagedPromptTemplateResponse,
     PromptTemplateResponse,
 )
+from app.services.assistant_service import AssistantService
 
 
 class GroupService:
@@ -550,6 +555,163 @@ class GroupService:
         group_user.is_admin = group_admin
         session.add(group_user)
         await session.commit()
+
+    @staticmethod
+    async def add_group_assistants(
+        group_id: str,
+        tenant_id: str,
+        assistant_ids: list[str],
+        current_user: User,
+        session: AsyncSession,
+    ) -> None:
+        """グループにアシスタントを一括追加する。既存紐付けはスキップする。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            assistant_ids: 追加対象のアシスタントID一覧。
+            current_user: 認証済みユーザー。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: assistant_idsが空の場合400、グループが存在しない場合404、
+                権限がない場合403、対象アシスタントが存在しない場合404を返す。
+        """
+        if not assistant_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="assistantIds is required",
+            )
+
+        await GroupService._get_group_or_404(group_id, tenant_id, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
+
+        target_ids = list(dict.fromkeys(assistant_ids))
+        assistants = await AssistantRepository.find_by_ids_and_tenant_id(
+            target_ids, tenant_id, session
+        )
+        if len(assistants) != len(target_ids):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Assistant not found"
+            )
+
+        for assistant_id in target_ids:
+            existing = await GroupAssistantRepository.find_one(
+                group_id, tenant_id, assistant_id, session
+            )
+            if existing:
+                continue
+            GroupAssistantRepository.add(group_id, tenant_id, assistant_id, session)
+
+        await session.commit()
+
+    @staticmethod
+    async def remove_group_assistant(
+        group_id: str,
+        tenant_id: str,
+        assistant_id: str,
+        current_user: User,
+        session: AsyncSession,
+    ) -> None:
+        """グループからアシスタントを除外する。既に非紐付けなら何もしない。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            assistant_id: 除外対象のアシスタントID。
+            current_user: 認証済みユーザー。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: グループが存在しない場合404、権限がない場合403、
+                対象アシスタントが存在しない場合404を返す。
+        """
+        await GroupService._get_group_or_404(group_id, tenant_id, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
+
+        assistant = await AssistantRepository.find_by_id_and_tenant_id(
+            assistant_id, tenant_id, session
+        )
+        if not assistant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Assistant not found"
+            )
+
+        group_assistant = await GroupAssistantRepository.find_one(
+            group_id, tenant_id, assistant_id, session
+        )
+        if group_assistant:
+            await GroupAssistantRepository.remove(group_assistant, session)
+
+    @staticmethod
+    async def list_group_assistants(
+        group_id: str,
+        tenant_id: str,
+        current_user: User,
+        assistant_type: AssistantType | None,
+        category_id: str | None,
+        search: str | None,
+        sort: str,
+        page: int,
+        size: int,
+        session: AsyncSession,
+    ) -> PagedAssistantResponse:
+        """グループに紐づくアシスタント一覧をページネーションで取得する。
+
+        Args:
+            group_id: グループID。
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            assistant_type: アシスタント種別での絞り込み。
+            category_id: カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
+            search: アシスタント名・説明の部分一致検索文字列。
+            sort: ソート指定（例: "addedAt,desc"）。
+            page: ページ番号（0始まり）。
+            size: 1ページあたりの件数。
+            session: 非同期DBセッション。
+
+        Returns:
+            ページネーション済みアシスタント一覧（各要素にaddedAtを含む）。
+
+        Raises:
+            HTTPException: グループが存在しない場合404、権限がない場合403を返す。
+        """
+        await GroupService._get_group_or_404(group_id, tenant_id, session)
+        await GroupService._assert_can_manage_group(
+            group_id, tenant_id, current_user, session
+        )
+
+        sort_parts = sort.split(",")
+        sort_col_name = sort_parts[0]
+        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
+
+        rows, total = await GroupAssistantRepository.find_page_by_group(
+            group_id,
+            tenant_id,
+            assistant_type,
+            category_id,
+            search,
+            sort_col_name,
+            sort_dir,
+            page,
+            size,
+            session,
+        )
+
+        assistants = [assistant for _, assistant in rows]
+        content = await AssistantService._build_responses(
+            assistants, tenant_id, session
+        )
+        for response, (group_assistant, _) in zip(content, rows, strict=True):
+            response.addedAt = group_assistant.updated_at
+
+        return PagedAssistantResponse(
+            content=content, totalElements=total, number=page, size=size
+        )
 
     @staticmethod
     async def add_group_prompt_templates(

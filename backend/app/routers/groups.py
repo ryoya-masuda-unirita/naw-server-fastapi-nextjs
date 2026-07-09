@@ -3,8 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.security import get_current_user, get_verified_tenant_id, require_admin
+from app.models.assistant import AssistantType
 from app.models.user import User
+from app.schemas.assistant import PagedAssistantResponse
 from app.schemas.group import (
+    GroupAssistantsAddRequest,
     GroupCreateRequest,
     GroupDetailResponse,
     GroupListItemResponse,
@@ -203,6 +206,65 @@ async def update_group_user_role(
     """グループ内ユーザーロール更新"""
     await GroupService.update_group_user_role(
         group_id, x_tenant_id, user_id, req.groupAdmin, current_user, session
+    )
+
+
+@admin_group_router.get(
+    "/{group_id}/assistants",
+    response_model=PagedAssistantResponse,
+)
+async def get_group_assistants(
+    group_id: str,
+    type: AssistantType | None = Query(None),
+    category_id: str | None = Query(None, alias="categoryId"),
+    search: str | None = Query(None),
+    page: int = Query(0, ge=0),
+    size: int = Query(20, ge=1, le=100),
+    sort: str = Query("addedAt,desc"),
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PagedAssistantResponse:
+    """グループ所属アシスタント一覧"""
+    return await GroupService.list_group_assistants(
+        group_id,
+        x_tenant_id,
+        current_user,
+        type,
+        category_id,
+        search,
+        sort,
+        page,
+        size,
+        session,
+    )
+
+
+@admin_group_router.post("/{group_id}/assistants", status_code=204)
+async def add_group_assistants(
+    group_id: str,
+    req: GroupAssistantsAddRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """グループにアシスタントを追加"""
+    await GroupService.add_group_assistants(
+        group_id, x_tenant_id, req.assistantIds, current_user, session
+    )
+
+
+@admin_group_router.delete("/{group_id}/assistants/{assistant_id}", status_code=204)
+async def remove_group_assistant(
+    group_id: str,
+    assistant_id: str,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """グループからアシスタントを削除"""
+    await GroupService.remove_group_assistant(
+        group_id, x_tenant_id, assistant_id, current_user, session
     )
 
 
