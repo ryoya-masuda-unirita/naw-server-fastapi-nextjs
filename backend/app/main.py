@@ -6,6 +6,7 @@ from app.routers import (
     assistant_categories,
     assistants,
     auth,
+    credit_usage,
     feedback,
     groups,
     health,
@@ -68,3 +69,4 @@ app.include_router(library_tags.admin_library_tag_router)
 app.include_router(libraries.library_router)
 app.include_router(feedback.router)
 app.include_router(token_usage.admin_router)
+app.include_router(credit_usage.router)
