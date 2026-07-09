@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str
     cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    file_storage_root: str = Field(default="./data/files", alias="FILE_STORAGE_ROOT")
 
 
 class CorsSettings(BaseSettings):

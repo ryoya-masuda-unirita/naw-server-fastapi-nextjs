@@ -61,6 +61,7 @@ async def session(engine):
 
         await sess.rollback()
         tables = [
+            "files",
             "library_tag_mappings",
             "share_libraries",
             "libraries",
