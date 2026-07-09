@@ -8,6 +8,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class LoginKeyRequest(BaseModel):
+    """ログインキー認証リクエスト"""
+
+    loginKey: str
+
+
 class PasswordResetRequest(BaseModel):
     """パスワードリセットリクエスト"""
 

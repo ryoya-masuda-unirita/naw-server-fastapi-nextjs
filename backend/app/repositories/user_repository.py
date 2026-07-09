@@ -28,6 +28,29 @@ class UserRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_login_key(
+        login_key: str, tenant_id: str, session: AsyncSession
+    ) -> User | None:
+        """ログインキーとtenantIdでユーザーを取得する。
+
+        tenant_id もクエリ条件に含めることで、別テナントの同じログインキーを
+        持つユーザーを取得できないようにし、テナント分離をクエリレベルで担保する。
+
+        Args:
+            login_key: ログインキー。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当する User。存在しない場合は None。
+        """
+        stmt = select(User).where(
+            User.login_key == login_key, User.tenant_id == tenant_id
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
     async def find_by_id_and_tenant_id(
         user_id: uuid.UUID, tenant_id: str, session: AsyncSession
     ) -> User | None:
