@@ -1,8 +1,10 @@
 from datetime import date, datetime, timezone
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
+from app.core.azure_cost_client import AzureCostQueryResult
 from app.core.security import create_access_token
 from app.models.plan import Plan
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -398,6 +400,124 @@ class TestTenantsRouter:
                 response = await ac.patch(
                     f"/api/admin/tenants/{tenant.id}",
                     json={"tenantName": "New Name"},
+                    headers=_headers(normal_user.login_id, tenant.id),
+                )
+
+            assert response.status_code == 403
+
+    class TestGetTenantResourceCost:
+        """GET /api/admin/tenants/resources/{resourceId}/cost のテスト
+
+        Azure Cost Management APIへの実際の接続は行わず、
+        `AzureCostClient.get_cost_by_resource_id` をモックして検証する。
+        """
+
+        async def test_returns_cost_list_for_owned_resource(
+            self, client, tenant, admin_user, tenant_resource
+        ):
+            """自テナントに紐づくリソースのコスト一覧を取得できること"""
+            with patch(
+                "app.services.tenant_service.AzureCostClient.get_cost_by_resource_id",
+                return_value=[
+                    AzureCostQueryResult(
+                        resource_type="AZURE_OPENAI",
+                        usage_date=date(2024, 1, 1),
+                        pre_tax_cost=12.5,
+                        currency="JPY",
+                    )
+                ],
+            ) as mock_get_cost:
+                async with client as ac:
+                    response = await ac.get(
+                        f"/api/admin/tenants/resources/{tenant_resource.id}/cost",
+                        headers=_headers(admin_user.login_id, tenant.id),
+                    )
+
+            assert response.status_code == 200
+            assert response.json() == [
+                {
+                    "resourceType": "AZURE_OPENAI",
+                    "usageDate": "2024-01-01",
+                    "preTaxCost": 12.5,
+                    "currency": "JPY",
+                }
+            ]
+            mock_get_cost.assert_called_once_with(tenant_resource.id, None, None)
+
+        async def test_forwards_from_and_to_query_params(
+            self, client, tenant, admin_user, tenant_resource
+        ):
+            """from/toクエリパラメータがISO8601日時としてパースされ渡されること"""
+            with patch(
+                "app.services.tenant_service.AzureCostClient.get_cost_by_resource_id",
+                return_value=[],
+            ) as mock_get_cost:
+                async with client as ac:
+                    response = await ac.get(
+                        f"/api/admin/tenants/resources/{tenant_resource.id}/cost",
+                        params={
+                            "from": "2024-01-01T00:00:00Z",
+                            "to": "2024-02-01T00:00:00Z",
+                        },
+                        headers=_headers(admin_user.login_id, tenant.id),
+                    )
+
+            assert response.status_code == 200
+            mock_get_cost.assert_called_once_with(
+                tenant_resource.id,
+                datetime(2024, 1, 1, tzinfo=timezone.utc),
+                datetime(2024, 2, 1, tzinfo=timezone.utc),
+            )
+
+        async def test_returns_400_when_resource_belongs_to_other_tenant(
+            self,
+            client,
+            tenant,
+            other_tenant,
+            other_tenant_admin_user,
+            tenant_resource,
+        ):
+            """他テナントのリソースIDを指定した場合400になること"""
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/tenants/resources/{tenant_resource.id}/cost",
+                    headers=_headers(other_tenant_admin_user.login_id, other_tenant.id),
+                )
+
+            assert response.status_code == 400
+
+        async def test_returns_400_when_resource_id_does_not_exist(
+            self, client, tenant, admin_user
+        ):
+            """存在しないリソースIDを指定した場合400になること"""
+            async with client as ac:
+                response = await ac.get(
+                    "/api/admin/tenants/resources/not-exist/cost",
+                    headers=_headers(admin_user.login_id, tenant.id),
+                )
+
+            assert response.status_code == 400
+
+        async def test_returns_400_for_invalid_date_format(
+            self, client, tenant, admin_user, tenant_resource
+        ):
+            """from/toがISO8601形式でない場合400になること"""
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/tenants/resources/{tenant_resource.id}/cost",
+                    params={"from": "not-a-date"},
+                    headers=_headers(admin_user.login_id, tenant.id),
+                )
+
+            assert response.status_code == 400
+
+        async def test_forbidden_for_non_admin(
+            self, client, tenant, normal_user, tenant_resource
+        ):
+            """一般ユーザーで403になること"""
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/tenants/resources/{tenant_resource.id}/cost",
                     headers=_headers(normal_user.login_id, tenant.id),
                 )
 

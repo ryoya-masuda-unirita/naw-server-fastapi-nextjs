@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -8,7 +8,11 @@ from app.core.security import (
     require_admin_for_tenant_path,
 )
 from app.models.user import User
-from app.schemas.tenant import TenantAdminPatchRequest, TenantDetailResponse
+from app.schemas.tenant import (
+    TenantAdminPatchRequest,
+    TenantDetailResponse,
+    TenantResourceCostResponse,
+)
 from app.services.tenant_service import TenantService
 
 router = APIRouter(prefix="/api/admin/tenants", tags=["tenants"])
@@ -32,3 +36,19 @@ async def patch_admin_tenant(
 ) -> TenantDetailResponse:
     """テナント情報の部分更新（管理）"""
     return await TenantService.patch_admin_tenant(tenant_id, request, session)
+
+
+@router.get(
+    "/resources/{resource_id}/cost", response_model=list[TenantResourceCostResponse]
+)
+async def get_tenant_resource_cost(
+    resource_id: str,
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[TenantResourceCostResponse]:
+    """テナントリソースコスト取得"""
+    return await TenantService.query_cost(
+        current_user.tenant_id, resource_id, from_, to, session
+    )

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.azure_cost_client import AzureCostClient
 from app.core.billing_cycle import current_billing_reset_instant_utc
 from app.models.plan import Plan
 from app.models.subscription import Subscription
@@ -16,6 +17,7 @@ from app.schemas.tenant import (
     SubscriptionResponse,
     TenantAdminPatchRequest,
     TenantDetailResponse,
+    TenantResourceCostResponse,
     TenantResourceResponse,
 )
 
@@ -237,3 +239,80 @@ class TenantService:
                 maxCreditsPerMonth=plan.max_credits_per_month,
             ),
         )
+
+    @staticmethod
+    async def query_cost(
+        tenant_id: str,
+        resource_id: str,
+        from_: str | None,
+        to: str | None,
+        session: AsyncSession,
+    ) -> list[TenantResourceCostResponse]:
+        """テナントに紐づくリソースのコストをAzure Cost Management API経由で取得する。
+
+        移植元Java版`TenantService.queryCost`に対応する。
+
+        Args:
+            tenant_id: 認証済みテナント管理者の所属テナントID。
+            resource_id: コストを取得する対象のリソースID。
+            from_: 集計期間の開始日時（ISO8601形式の文字列）。未指定の場合はNone。
+            to: 集計期間の終了日時（ISO8601形式の文字列）。未指定の場合はNone。
+            session: 非同期DBセッション。
+
+        Returns:
+            リソースタイプ・日付ごとのコスト一覧。
+
+        Raises:
+            HTTPException: `resource_id`が`tenant_id`に紐づくリソースでない場合、
+                または`from_`・`to`がISO8601形式として解釈できない場合400を返す。
+        """
+        resource = await TenantResourceRepository.find_by_id_and_tenant_id(
+            resource_id, tenant_id, session
+        )
+        if resource is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid resourceId: {resource_id}",
+            )
+
+        start_date = TenantService._parse_iso_datetime(from_)
+        end_date = TenantService._parse_iso_datetime(to)
+
+        results = AzureCostClient.get_cost_by_resource_id(
+            resource_id, start_date, end_date
+        )
+        return [
+            TenantResourceCostResponse(
+                resourceType=result.resource_type,
+                usageDate=result.usage_date,
+                preTaxCost=result.pre_tax_cost,
+                currency=result.currency,
+            )
+            for result in results
+        ]
+
+    @staticmethod
+    def _parse_iso_datetime(value: str | None) -> datetime | None:
+        """ISO8601形式の日時文字列をパースする。
+
+        移植元Java版`OffsetDateTime.parse`に相当する。`Z`サフィックス（UTC）も
+        受け付ける。
+
+        Args:
+            value: ISO8601形式の日時文字列。Noneの場合は変換せずNoneを返す。
+
+        Returns:
+            パース済みのdatetime。`value`がNoneの場合はNone。
+
+        Raises:
+            HTTPException: `value`がISO8601形式として解釈できない場合400を返す。
+        """
+        if value is None:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid date format: {value}",
+            ) from e

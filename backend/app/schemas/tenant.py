@@ -62,3 +62,15 @@ class TenantDetailResponse(BaseModel):
     subscription: SubscriptionResponse | None = None
     createdAt: datetime
     updatedAt: datetime
+
+
+class TenantResourceCostResponse(BaseModel):
+    """テナントリソースのコスト取得APIのレスポンス。
+
+    移植元Java版`TenantResourceCostResponse`（record）に対応する。
+    """
+
+    resourceType: str
+    usageDate: date
+    preTaxCost: float
+    currency: str

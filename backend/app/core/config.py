@@ -69,6 +69,25 @@ class CorsSettings(BaseSettings):
         return v or None
 
 
+class AzureCostSettings(BaseSettings):
+    """Azure Cost Management API連携用の設定。
+
+    `Settings` とは別クラスにする。理由は`CorsSettings`と同様（このAPIを使わない
+    環境・単体テストで`app.main`をインポートするだけで必須値エラーになるのを防ぐため）。
+    移植元Java版の`azure.app.*`（`@Value`注入）に対応する。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    azure_subscription_id: str = Field(alias="AZURE_APP_SUBSCRIPTION_ID")
+    azure_resource_group_name: str = Field(alias="AZURE_APP_RESOURCE_GROUP_NAME")
+    azure_tenant_id: str = Field(alias="AZURE_APP_TENANT_ID")
+    azure_client_id: str = Field(alias="AZURE_APP_CLIENT_ID")
+    azure_client_secret_value: str = Field(alias="AZURE_APP_CLIENT_SECRET_VALUE")
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
@@ -77,3 +96,8 @@ def get_settings() -> Settings:
 @lru_cache
 def get_cors_settings() -> CorsSettings:
     return CorsSettings()
+
+
+@lru_cache
+def get_azure_cost_settings() -> AzureCostSettings:
+    return AzureCostSettings()
