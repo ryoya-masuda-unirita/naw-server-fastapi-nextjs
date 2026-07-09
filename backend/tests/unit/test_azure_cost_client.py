@@ -1,5 +1,8 @@
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.core.azure_cost_client import AzureCostClient, AzureCostQueryResult
 from app.core.config import AzureCostSettings
@@ -17,6 +20,12 @@ def _settings() -> AzureCostSettings:
     )  # type: ignore[arg-type]
 
 
+def _columns(names: list[str] | None = None) -> list[SimpleNamespace]:
+    """Azure APIレスポンスの列メタデータ（`QueryColumn`相当）を組み立てる。"""
+    names = names or ["totalCost", "UsageDate", "ResourceType", "Currency"]
+    return [SimpleNamespace(name=name) for name in names]
+
+
 class TestGetCostByResourceId:
     """AzureCostClient.get_cost_by_resource_id のテスト"""
 
@@ -28,13 +37,15 @@ class TestGetCostByResourceId:
     ):
         """Azure APIのレスポンス行をAzureCostQueryResultへ正しくマッピングできること
 
-        行の並びは [PreTaxCost, UsageDate(yyyyMMdd), ResourceType, Currency]。
+        列の並びは columns メタデータの [totalCost, UsageDate(yyyyMMdd),
+        ResourceType, Currency] に対応する。
         """
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
         mock_client.query.usage.return_value = MagicMock(
-            rows=[[1.5, 20240101, "AZURE_OPENAI", "JPY"]]
+            columns=_columns(),
+            rows=[[1.5, 20240101, "AZURE_OPENAI", "JPY"]],
         )
 
         results = AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
@@ -51,6 +62,51 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.get_azure_cost_settings")
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
+    def test_maps_rows_regardless_of_column_order(
+        self, mock_credential, mock_client_cls, mock_get_settings
+    ):
+        """列の並び順がクエリ定義により変わっても、列名で正しくマッピングできること"""
+        mock_get_settings.return_value = _settings()
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        # totalCostとUsageDateの並びを入れ替えたレスポンスを返す
+        mock_client.query.usage.return_value = MagicMock(
+            columns=_columns(["UsageDate", "totalCost", "ResourceType", "Currency"]),
+            rows=[[20240101, 1.5, "AZURE_OPENAI", "JPY"]],
+        )
+
+        results = AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
+
+        assert results == [
+            AzureCostQueryResult(
+                resource_type="AZURE_OPENAI",
+                usage_date=date(2024, 1, 1),
+                pre_tax_cost=1.5,
+                currency="JPY",
+            )
+        ]
+
+    @patch("app.core.azure_cost_client.get_azure_cost_settings")
+    @patch("app.core.azure_cost_client.CostManagementClient")
+    @patch("app.core.azure_cost_client.ClientSecretCredential")
+    def test_raises_when_expected_column_is_missing(
+        self, mock_credential, mock_client_cls, mock_get_settings
+    ):
+        """想定する列（totalCost等）がレスポンスに含まれない場合ValueErrorになること"""
+        mock_get_settings.return_value = _settings()
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.query.usage.return_value = MagicMock(
+            columns=_columns(["UsageDate", "ResourceType", "Currency"]),
+            rows=[[20240101, "AZURE_OPENAI", "JPY"]],
+        )
+
+        with pytest.raises(ValueError):
+            AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
+
+    @patch("app.core.azure_cost_client.get_azure_cost_settings")
+    @patch("app.core.azure_cost_client.CostManagementClient")
+    @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_returns_empty_list_when_no_rows(
         self, mock_credential, mock_client_cls, mock_get_settings
     ):
@@ -58,7 +114,7 @@ class TestGetCostByResourceId:
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
-        mock_client.query.usage.return_value = MagicMock(rows=[])
+        mock_client.query.usage.return_value = MagicMock(columns=_columns(), rows=[])
 
         results = AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
 
@@ -70,12 +126,13 @@ class TestGetCostByResourceId:
     def test_skips_rows_with_unexpected_column_count(
         self, mock_credential, mock_client_cls, mock_get_settings
     ):
-        """列数が4以外の行は無視すること"""
+        """列メタデータと列数が一致しない行は無視すること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
         mock_client.query.usage.return_value = MagicMock(
-            rows=[[1.5, 20240101, "AZURE_OPENAI"]]
+            columns=_columns(),
+            rows=[[1.5, 20240101, "AZURE_OPENAI"]],
         )
 
         results = AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
@@ -92,7 +149,7 @@ class TestGetCostByResourceId:
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
-        mock_client.query.usage.return_value = MagicMock(rows=[])
+        mock_client.query.usage.return_value = MagicMock(columns=_columns(), rows=[])
 
         AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
 
@@ -111,7 +168,7 @@ class TestGetCostByResourceId:
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
-        mock_client.query.usage.return_value = MagicMock(rows=[])
+        mock_client.query.usage.return_value = MagicMock(columns=_columns(), rows=[])
         start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end = datetime(2024, 2, 1, tzinfo=timezone.utc)
 
@@ -133,7 +190,7 @@ class TestGetCostByResourceId:
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
-        mock_client.query.usage.return_value = MagicMock(rows=[])
+        mock_client.query.usage.return_value = MagicMock(columns=_columns(), rows=[])
 
         AzureCostClient.get_cost_by_resource_id("resource-xyz", None, None)
 
@@ -143,3 +200,20 @@ class TestGetCostByResourceId:
         assert dimensions.name == "ResourceId"
         assert dimensions.operator == "In"
         assert dimensions.values_property == ["resource-xyz"]
+
+    @patch("app.core.azure_cost_client.get_azure_cost_settings")
+    @patch("app.core.azure_cost_client.CostManagementClient")
+    @patch("app.core.azure_cost_client.ClientSecretCredential")
+    def test_builds_scope_from_settings(
+        self, mock_credential, mock_client_cls, mock_get_settings
+    ):
+        """設定値（サブスクリプションID・リソースグループ名）からscopeを組み立てること"""
+        mock_get_settings.return_value = _settings()
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.query.usage.return_value = MagicMock(columns=_columns(), rows=[])
+
+        AzureCostClient.get_cost_by_resource_id("resource-1", None, None)
+
+        _, kwargs = mock_client.query.usage.call_args
+        assert kwargs["scope"] == "/subscriptions/sub-1/resourceGroups/rg-1"

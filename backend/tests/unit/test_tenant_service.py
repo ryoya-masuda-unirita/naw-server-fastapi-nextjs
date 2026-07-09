@@ -138,7 +138,49 @@ class TestQueryCost:
 
         with pytest.raises(HTTPException) as exc_info:
             await TenantService.query_cost(
-                "tenant-1", "resource-1", "not-a-date", None, session=None
+                "tenant-1", "resource-1", "not-a-date", "also-not-a-date", session=None
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @patch(
+        "app.services.tenant_service.TenantResourceRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_only_from_is_specified(self, mock_find_resource):
+        """fromのみ指定しtoを省略した場合400になること
+
+        Azure Cost Management APIはCustom期間指定時にfrom/to両方を要求するため、
+        片方のみの指定はAzure呼び出し前に弾く。
+        """
+        mock_find_resource.return_value = object()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await TenantService.query_cost(
+                "tenant-1",
+                "resource-1",
+                "2024-01-01T00:00:00Z",
+                None,
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @patch(
+        "app.services.tenant_service.TenantResourceRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_only_to_is_specified(self, mock_find_resource):
+        """toのみ指定しfromを省略した場合400になること"""
+        mock_find_resource.return_value = object()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await TenantService.query_cost(
+                "tenant-1",
+                "resource-1",
+                None,
+                "2024-02-01T00:00:00Z",
+                session=None,
             )
 
         assert exc_info.value.status_code == 400

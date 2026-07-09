@@ -264,7 +264,8 @@ class TenantService:
 
         Raises:
             HTTPException: `resource_id`が`tenant_id`に紐づくリソースでない場合、
-                または`from_`・`to`がISO8601形式として解釈できない場合400を返す。
+                `from_`・`to`がISO8601形式として解釈できない場合、または
+                `from_`・`to`の一方のみが指定された場合400を返す。
         """
         resource = await TenantResourceRepository.find_by_id_and_tenant_id(
             resource_id, tenant_id, session
@@ -273,6 +274,15 @@ class TenantService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid resourceId: {resource_id}",
+            )
+
+        # Azure Cost Management APIは集計期間（Custom）指定時にfrom/to両方を要求するため、
+        # 片方のみ指定された状態でAzure API呼び出しに進むと、Azure側エラーが未捕捉のまま
+        # 500として伝播してしまう。呼び出し前に400として弾く。
+        if (from_ is None) != (to is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="from・toは両方指定するか、両方省略してください。",
             )
 
         start_date = TenantService._parse_iso_datetime(from_)

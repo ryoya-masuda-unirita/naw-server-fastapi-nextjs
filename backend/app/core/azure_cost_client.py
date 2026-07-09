@@ -1,10 +1,13 @@
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 from azure.identity import ClientSecretCredential
 from azure.mgmt.costmanagement import CostManagementClient
 from azure.mgmt.costmanagement.models import (
     QueryAggregation,
+    QueryColumn,
     QueryComparisonExpression,
     QueryDataset,
     QueryDefinition,
@@ -14,6 +17,8 @@ from azure.mgmt.costmanagement.models import (
 )
 
 from app.core.config import get_azure_cost_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -115,13 +120,63 @@ class AzureCostClient:
         if result is None or not result.rows:
             return []
 
-        return [
-            AzureCostQueryResult(
-                resource_type=row[2],
-                usage_date=datetime.strptime(str(row[1]), "%Y%m%d").date(),
-                pre_tax_cost=float(row[0]),
-                currency=row[3],
+        return AzureCostClient._map_rows(result.columns or [], result.rows)
+
+    @staticmethod
+    def _map_rows(
+        columns: list[QueryColumn], rows: list[list[Any]]
+    ) -> list[AzureCostQueryResult]:
+        """Azure APIレスポンスの行を`AzureCostQueryResult`へマッピングする。
+
+        Azure Cost Management APIの列順は、クエリ定義（aggregation・groupingの
+        構成）によって変わりうる。固定インデックスで解釈すると、将来クエリ定義を
+        変更した際やAPI仕様変更時に、列の意味を取り違えたまま誤った値を返す危険が
+        あるため、レスポンスに含まれる`columns`（列メタデータ）から列名で位置を
+        特定する。
+
+        Args:
+            columns: レスポンスの列メタデータ一覧（`QueryColumn`相当）。
+            rows: レスポンスの行データ一覧。
+
+        Returns:
+            リソースタイプ・日付ごとのコスト集計結果一覧。列構成が想定と異なる
+            行はログを出力して除外する。
+
+        Raises:
+            ValueError: 想定する列（`totalCost`, `UsageDate`, `ResourceType`,
+                `Currency`）のいずれかがレスポンスに含まれない場合。
+        """
+        column_names = [column.name for column in columns]
+        try:
+            cost_index = column_names.index("totalCost")
+            usage_date_index = column_names.index("UsageDate")
+            resource_type_index = column_names.index("ResourceType")
+            currency_index = column_names.index("Currency")
+        except ValueError as e:
+            raise ValueError(
+                "Azure Cost Management APIのレスポンス列構成が想定と異なります: "
+                f"{column_names}"
+            ) from e
+
+        results = []
+        for row in rows:
+            if len(row) != len(column_names):
+                logger.warning(
+                    "Azure Cost Management APIのレスポンス行の列数(%d)が"
+                    "列メタデータの列数(%d)と一致しないため無視します: %r",
+                    len(row),
+                    len(column_names),
+                    row,
+                )
+                continue
+            results.append(
+                AzureCostQueryResult(
+                    resource_type=row[resource_type_index],
+                    usage_date=datetime.strptime(
+                        str(row[usage_date_index]), "%Y%m%d"
+                    ).date(),
+                    pre_tax_cost=float(row[cost_index]),
+                    currency=row[currency_index],
+                )
             )
-            for row in result.rows
-            if len(row) == 4
-        ]
+        return results
