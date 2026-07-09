@@ -22,7 +22,11 @@ class PromptTemplateCreateResponse(BaseModel):
 
 
 class PromptTemplateResponse(BaseModel):
-    """一覧取得のレスポンス。移植元同様、groupsにはグループ名を返す。"""
+    """一覧取得のレスポンス。移植元同様、groupsにはグループ名を返す。
+
+    addedAtは、グループ所属テンプレート一覧（中間テーブル起点）取得時のみ設定される
+    紐付け日時。それ以外の一覧取得では常にNone。
+    """
 
     id: str
     tenantId: str
@@ -31,6 +35,7 @@ class PromptTemplateResponse(BaseModel):
     systemPrompt: str
     groups: set[str]
     updatedAt: datetime
+    addedAt: datetime | None = None
 
 
 class PagedPromptTemplateResponse(BaseModel):

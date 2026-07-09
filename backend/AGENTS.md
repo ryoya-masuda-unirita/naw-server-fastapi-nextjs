@@ -7,6 +7,7 @@
 Spring Boot 実装: `~/Documents/naw-server`
 
 実装前に必ず最新状態を確認すること。
+移植元の `git log` 確認や、対象 Controller/Service/Request/Response の読み込みなど、読み取り専用のリサーチがまとまった分量になりそうな場合も、Codex が必要な範囲を直接確認して実装方針へ反映する。対象が広すぎて判断が分かれる場合だけ、作業前に確認する。
 
 ## 技術スタック
 
@@ -58,6 +59,62 @@ core/         設定、DI、共通処理
 - `@Repository` 相当は `repositories/*_repository.py`
 - `Page<T>` 相当は `PagedResponse[T]`
 - テナント分離は PostgreSQL の RLS を前提にする
+
+### Spring Boot → FastAPI 対応表
+
+| Spring Boot | FastAPI |
+|---|---|
+| `@RestController` | `APIRouter`（`routers/xxx.py`） |
+| `@Service` | `services/xxx_service.py` |
+| `@Repository` / JPA Repository | `repositories/xxx_repository.py` |
+| `@Entity` | SQLModel（`models/xxx.py`） |
+| `@RequestBody` / `@RequestParam` | Pydantic モデル / Query params |
+| `@Transactional` | SQLAlchemy `AsyncSession`（`async with session.begin()`） |
+| `Page<T>` | `PagedResponse[T]`（共通スキーマ） |
+| Spring Security / JWT | FastAPI Security / `Depends` |
+| `TenantContext`（RLS） | FastAPI `Depends` でセッション開始時に注入 |
+| `Specification` パターン | SQLAlchemy `where()` の動的組み立て |
+| `application.yml` | `.env` + `pydantic-settings` |
+
+### RLS（テナント分離）
+
+PostgreSQL の RLS をそのまま使用する。FastAPI の `Depends` でセッション開始時にテナント ID を設定する。
+
+```python
+async def get_session_with_tenant(
+    tenant_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> AsyncSession:
+    await session.execute(text("SET app.tenant_id = :tid"), {"tid": tenant_id})
+    return session
+```
+
+### ページネーションレスポンス
+
+Spring Boot の `Page<T>` と同形式で返すこと（フロントエンド互換性のため）。
+
+```python
+class PagedResponse(BaseModel, Generic[T]):
+    content: list[T]
+    totalElements: int
+    number: int
+    size: int
+```
+
+## 新規 Issue 対応開始時
+
+新しいチケット・Issue に着手する前に、必ずルート `AGENTS.md` と `.codex/skills/naw-issue-workflow/SKILL.md` に従う。スクリプト未使用で手動開始する場合も、`develop` を最新化してからブランチを切ること。
+
+```bash
+git fetch
+git checkout develop
+git pull
+git checkout -b feature/issue-X
+git log origin/develop ^HEAD --oneline
+```
+
+- `develop` を最新化せずにブランチを切らない
+- ブランチを切った後、`git log origin/develop ^HEAD --oneline` で develop との差分がないことを確認する
 
 ## 開発コマンド
 
@@ -119,3 +176,54 @@ docker exec -i naw-fastapi-postgres psql -U root -d postgres < backend/seed.sql
 
 - HITL モードでは、バックエンド実装やテストを1まとまり終えるごとに `docs/issue-*/06_タスクリスト.md` を即時更新する
 - 検証結果は `08_動作確認.md` に事実ベースで残す
+
+## コーディング規約
+
+- PEP 8 準拠
+- 型ヒントをすべての関数・メソッドの引数と戻り値に必ず付ける（Python 3.12+ 構文: `list[str]`、`dict[str, int]` 等）
+- `async/await` を使う（sync な DB アクセスは禁止）
+- `Optional` は使わず `X | None` で書く
+- コメントは「なぜそうしているか」を書く。コードをそのまま言葉にするコメントは書かない
+
+### docstring
+
+Google スタイルで書く。引数・戻り値・例外がある関数には必ず記載すること。
+
+```python
+def example(name: str, count: int) -> list[str]:
+    """概要を1行で書く。
+
+    Args:
+        name: 名前の説明。
+        count: 件数の説明。
+
+    Returns:
+        文字列のリスト。
+
+    Raises:
+        ValueError: count が負の場合。
+    """
+```
+
+- 概要行は動詞で始める（「〜を取得する」「〜を検証する」など）
+- 引数・戻り値がない場合は該当セクションを省略してよい
+- テストメソッドには引数・戻り値セクション不要（日本語 docstring 1行のみ）
+
+## テスト
+
+```python
+import pytest
+from httpx import AsyncClient
+```
+
+```text
+tests/
+├── unit/          # DB 不要。1つの関数・メソッドを単独で検証するテスト
+└── integration/   # DB 接続が必要なテスト
+```
+
+- unit: 外部依存なし。Router テスト（`ASGITransport` 経由）、Service テスト（Repository をモック）など
+- integration: 実際の DB に接続して制約・CASCADE・データ整合性を確認する
+- クラス名は英語（`TestAssistantRouter`, `TestCreate` など）
+- テストメソッド名は英語（`test_insert_tenant`, `test_default_values` など）
+- テストの意図は日本語 docstring に書く

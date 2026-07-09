@@ -15,6 +15,10 @@ class GroupUsersAddRequest(BaseModel):
     userIds: list[str]
 
 
+class GroupPromptTemplatesAddRequest(BaseModel):
+    templateIds: list[str]
+
+
 class GroupUserRoleUpdateRequest(BaseModel):
     groupAdmin: bool
 

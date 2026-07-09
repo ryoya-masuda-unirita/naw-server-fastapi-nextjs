@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.core.security import create_access_token
 from app.main import app
 from app.models.group import Group, GroupUser
+from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
@@ -488,3 +489,216 @@ class TestGroupUsers:
             )
 
         assert response.status_code == 204
+
+
+@pytest.fixture
+async def prompt_template(session, tenant):
+    """テスト用プロンプトテンプレート"""
+    t = PromptTemplate(
+        tenant_id=tenant.id,
+        name="Test Template",
+        description="A test template",
+        system_prompt="You are a helpful assistant.",
+    )
+    session.add(t)
+    await session.commit()
+    await session.refresh(t)
+    return t
+
+
+@pytest.fixture
+async def other_prompt_template(session, tenant):
+    """テスト用プロンプトテンプレート（未紐付け想定）"""
+    t = PromptTemplate(
+        tenant_id=tenant.id,
+        name="Other Template",
+        description="Another template",
+        system_prompt="You are another assistant.",
+    )
+    session.add(t)
+    await session.commit()
+    await session.refresh(t)
+    return t
+
+
+@pytest.fixture
+async def group_with_prompt_template(session, tenant, group, prompt_template):
+    """prompt_templateを紐付けたグループ"""
+    gpt = GroupPromptTemplate(
+        group_id=group.id, tenant_id=tenant.id, prompt_template_id=prompt_template.id
+    )
+    session.add(gpt)
+    await session.commit()
+    return group
+
+
+@pytest.mark.asyncio
+class TestGroupPromptTemplates:
+    """GET/POST/DELETE /api/admin/groups/{groupId}/prompt-templates"""
+
+    async def test_get_group_prompt_templates_returns_spring_page_shape(
+        self, client, admin_headers, group_with_prompt_template, prompt_template
+    ):
+        """所属テンプレート一覧がcontent/totalElements/number/size形式で返り、addedAtを含むこと"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_prompt_template.id}/prompt-templates",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {"content", "totalElements", "number", "size"}.issubset(body.keys())
+        assert len(body["content"]) == 1
+        assert body["content"][0]["id"] == prompt_template.id
+        assert body["content"][0]["addedAt"] is not None
+
+    async def test_search_filters_by_name(
+        self,
+        client,
+        admin_headers,
+        group_with_prompt_template,
+        tenant,
+        session,
+        group,
+        other_prompt_template,
+    ):
+        """search指定時、名前・説明でフィルタされること"""
+        gpt = GroupPromptTemplate(
+            group_id=group.id,
+            tenant_id=tenant.id,
+            prompt_template_id=other_prompt_template.id,
+        )
+        session.add(gpt)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                params={"search": "Other"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert body["content"][0]["id"] == other_prompt_template.id
+
+    async def test_add_template_to_group(
+        self, client, admin_headers, group, prompt_template
+    ):
+        """テンプレートをグループに追加できること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                json={"templateIds": [prompt_template.id]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_add_already_linked_is_idempotent(
+        self,
+        client,
+        admin_headers,
+        group_with_prompt_template,
+        prompt_template,
+    ):
+        """既に紐付け済みのテンプレートを追加してもエラーにならないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group_with_prompt_template.id}/prompt-templates",
+                json={"templateIds": [prompt_template.id]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_add_empty_template_ids_returns_400(
+        self, client, admin_headers, group
+    ):
+        """templateIdsが空の場合400になること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                json={"templateIds": []},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    async def test_add_nonexistent_template_returns_404(
+        self, client, admin_headers, group
+    ):
+        """存在しないテンプレートIDの追加は404になること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                json={"templateIds": ["nonexistent"]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_remove_template_from_group(
+        self, client, admin_headers, group_with_prompt_template, prompt_template
+    ):
+        """テンプレートをグループから削除できること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group_with_prompt_template.id}"
+                f"/prompt-templates/{prompt_template.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_remove_non_linked_is_idempotent(
+        self, client, admin_headers, group, prompt_template
+    ):
+        """既に非紐付けのテンプレートを削除してもエラーにならないこと"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}/prompt-templates/{prompt_template.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_remove_nonexistent_template_returns_404(
+        self, client, admin_headers, group
+    ):
+        """存在しないテンプレートIDの削除は404になること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}/prompt-templates/nonexistent",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_group_admin_can_manage_own_group_templates(
+        self, client, member_headers, group_with_admin_member, prompt_template
+    ):
+        """グループ管理者は自分の管理グループのテンプレートを追加できること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group_with_admin_member.id}/prompt-templates",
+                json={"templateIds": [prompt_template.id]},
+                headers=member_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_unrelated_user_cannot_manage_templates(
+        self, client, other_headers, group, prompt_template
+    ):
+        """無関係な一般ユーザーはテンプレートを追加できないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                json={"templateIds": [prompt_template.id]},
+                headers=other_headers,
+            )
+
+        assert response.status_code == 403

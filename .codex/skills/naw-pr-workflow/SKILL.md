@@ -9,7 +9,7 @@ description: Use when preparing a pull request for naw-server-fastapi-nextjs, in
 
 ## Codex での重要事項
 
-Claude 側の `/code-review` 専用導線は Codex には存在しない。したがって Codex は、**PR 作成タスクを受けたら `gh pr create` で終了してはいけない**。必ず同じ作業の中で以下まで完了させること。
+Codex は、**PR 作成タスクを受けたら `gh pr create` で終了してはいけない**。必ず同じ作業の中で以下まで完了させること。
 
 1. PR 作成
 2. ベースブランチ差分でのコードレビュー実行
@@ -28,6 +28,19 @@ Claude 側の `/code-review` 専用導線は Codex には存在しない。し�
 - `Closes #XX` を入れる
 - PR 作成後は `.github/workflows/project-status-sync.yml` により対応 Issue が `Review` へ自動反映される前提で確認する
 - `Closes #XX` により、PR マージ時に Issue がクローズされ GitHub Projects の `Done` へ自動反映される前提で確認する
+
+## Projects 同期ワークフローの復旧
+
+PR 作成後に `.github/workflows/project-status-sync.yml` が `PROJECT_PAT` 未設定で失敗した場合は、Codex はこの手順で対応する。
+
+```bash
+gh secret set PROJECT_PAT --body "$(gh auth token)"
+gh run rerun <run-id>
+```
+
+- `secrets.PROJECT_PAT` が未設定だと GitHub Projects v2 の操作権限が不足し、自動ステータス移動が失敗する
+- `gh auth token` で現在の認証トークンを secret として登録すれば解決できる
+- secret は一度登録すれば以降は不要。ただしトークン失効時は再設定する
 
 ## ベースブランチ
 

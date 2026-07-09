@@ -159,6 +159,30 @@ class PromptTemplateRepository:
         return list(templates), total
 
     @staticmethod
+    async def find_by_ids_and_tenant_id(
+        ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[PromptTemplate]:
+        """テンプレートID一覧とテナントIDに合致するプロンプトテンプレートを取得する。
+
+        存在しないIDは無視される（呼び出し側で件数を比較して存在確認を行うこと）。
+
+        Args:
+            ids: 対象のプロンプトテンプレートID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するプロンプトテンプレート一覧。
+        """
+        if not ids:
+            return []
+        stmt = select(PromptTemplate).where(
+            PromptTemplate.tenant_id == tenant_id, PromptTemplate.id.in_(ids)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def delete_by_id_and_tenant_id(
         template_id: str, tenant_id: str, session: AsyncSession
     ) -> None:
