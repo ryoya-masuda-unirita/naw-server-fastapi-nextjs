@@ -15,7 +15,7 @@ class SubscriptionStatus(str, Enum):
 
 
 class Subscription(SQLModel, table=True):
-    """テナットごとの契約（サブスクリプション）。
+    """テナントごとの契約（サブスクリプション）。
 
     移植元(Spring Boot)の`SUBSCRIPTIONS`テーブルに対応する。有効なサブスクリプションの
     判定は`status == ACTIVE`かつ`end_date`が未設定または本日以降であることで行う
