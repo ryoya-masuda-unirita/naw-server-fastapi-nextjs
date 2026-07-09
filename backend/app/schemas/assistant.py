@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
@@ -35,6 +36,7 @@ class AssistantGetResponse(BaseModel):
     description: str | None
     includeHistory: bool
     iconColor: str | None
+    addedAt: datetime | None = None
 
 
 class PagedAssistantResponse(BaseModel):

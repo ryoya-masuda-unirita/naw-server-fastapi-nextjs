@@ -1,9 +1,17 @@
+from uuid import uuid4
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from uuid import uuid4
 
 from app.core.security import create_access_token
 from app.main import app
+from app.models.assistant import (
+    Assistant,
+    AssistantCategoryMapping,
+    AssistantType,
+    GroupAssistant,
+)
+from app.models.assistant_category import AssistantCategory
 from app.models.group import Group, GroupUser
 from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
 from app.models.tenant import Tenant
@@ -698,6 +706,353 @@ class TestGroupPromptTemplates:
             response = await c.post(
                 f"/api/admin/groups/{group.id}/prompt-templates",
                 json={"templateIds": [prompt_template.id]},
+                headers=other_headers,
+            )
+
+        assert response.status_code == 403
+
+
+@pytest.fixture
+async def assistant(session, tenant):
+    """テスト用アシスタント"""
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SAAS_CHAT,
+        name="Test Assistant",
+        description="A test assistant",
+        include_history=False,
+        icon_color="#112233",
+    )
+    session.add(a)
+    await session.commit()
+    await session.refresh(a)
+    return a
+
+
+@pytest.fixture
+async def other_assistant(session, tenant):
+    """テスト用アシスタント（未紐付け想定）"""
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SAAS_CHAT,
+        name="Other Assistant",
+        description="Another assistant",
+        include_history=True,
+        icon_color="#445566",
+    )
+    session.add(a)
+    await session.commit()
+    await session.refresh(a)
+    return a
+
+
+@pytest.fixture
+async def secure_assistant(session, tenant):
+    """種別フィルタ用SECUREアシスタント"""
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SECURE,
+        name="Secure Assistant",
+        description="Secure assistant",
+        include_history=False,
+        icon_color="#778899",
+    )
+    session.add(a)
+    await session.commit()
+    await session.refresh(a)
+    return a
+
+
+@pytest.fixture
+async def assistant_category(session, tenant, admin_user):
+    """テスト用アシスタントカテゴリ"""
+    c = AssistantCategory(
+        tenant_id=tenant.id,
+        name="Category A",
+        description="Category for assistants",
+        updated_user_id=admin_user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    return c
+
+
+@pytest.fixture
+async def categorized_assistant(session, tenant, assistant_category):
+    """カテゴリを持つアシスタント"""
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SAAS_RAG,
+        name="Categorized Assistant",
+        description="Assistant with category",
+        include_history=True,
+        icon_color="#AABBCC",
+    )
+    session.add(a)
+    await session.flush()
+    session.add(
+        AssistantCategoryMapping(
+            assistant_id=a.id,
+            category_id=assistant_category.id,
+            tenant_id=tenant.id,
+        )
+    )
+    await session.commit()
+    await session.refresh(a)
+    return a
+
+
+@pytest.fixture
+async def group_with_assistant(session, tenant, group, assistant):
+    """assistantを紐付けたグループ"""
+    ga = GroupAssistant(
+        group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+    )
+    session.add(ga)
+    await session.commit()
+    return group
+
+
+@pytest.mark.asyncio
+class TestGroupAssistants:
+    """GET/POST/DELETE /api/admin/groups/{groupId}/assistants"""
+
+    async def test_get_group_assistants_returns_spring_page_shape(
+        self, client, admin_headers, group_with_assistant, assistant
+    ):
+        """所属アシスタント一覧がcontent/totalElements/number/size形式で返り、addedAtを含むこと"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_assistant.id}/assistants",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {"content", "totalElements", "number", "size"}.issubset(body.keys())
+        assert len(body["content"]) == 1
+        assert body["content"][0]["id"] == assistant.id
+        assert body["content"][0]["addedAt"] is not None
+
+    async def test_search_filters_by_name_or_description(
+        self,
+        client,
+        admin_headers,
+        group,
+        tenant,
+        session,
+        assistant,
+        other_assistant,
+    ):
+        """search指定時、名前・説明でフィルタされること"""
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=other_assistant.id
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                params={"search": "Other"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert body["content"][0]["id"] == other_assistant.id
+
+    async def test_type_filter_returns_matching_assistants(
+        self,
+        client,
+        admin_headers,
+        group,
+        tenant,
+        session,
+        assistant,
+        secure_assistant,
+    ):
+        """type指定時、指定種別のアシスタントのみ返ること"""
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
+        session.add(
+            GroupAssistant(
+                group_id=group.id,
+                tenant_id=tenant.id,
+                assistant_id=secure_assistant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                params={"type": "SECURE"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert body["content"][0]["id"] == secure_assistant.id
+
+    async def test_category_none_filter_returns_uncategorized_assistants(
+        self,
+        client,
+        admin_headers,
+        group,
+        tenant,
+        session,
+        assistant,
+        categorized_assistant,
+    ):
+        """categoryId=NONE指定時、カテゴリ未設定のアシスタントのみ返ること"""
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
+        session.add(
+            GroupAssistant(
+                group_id=group.id,
+                tenant_id=tenant.id,
+                assistant_id=categorized_assistant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                params={"categoryId": "NONE"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert body["content"][0]["id"] == assistant.id
+
+    async def test_add_assistant_to_group(
+        self, client, admin_headers, group, assistant
+    ):
+        """アシスタントをグループに追加できること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/assistants",
+                json={"assistantIds": [assistant.id]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_add_already_linked_is_idempotent(
+        self, client, admin_headers, group_with_assistant, assistant
+    ):
+        """既に紐付け済みのアシスタントを追加してもエラーにならないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group_with_assistant.id}/assistants",
+                json={"assistantIds": [assistant.id]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_add_empty_assistant_ids_returns_400(
+        self, client, admin_headers, group
+    ):
+        """assistantIdsが空の場合400になること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/assistants",
+                json={"assistantIds": []},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    async def test_add_nonexistent_assistant_returns_404(
+        self, client, admin_headers, group
+    ):
+        """存在しないアシスタントIDの追加は404になること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/assistants",
+                json={"assistantIds": ["nonexistent"]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_remove_assistant_from_group(
+        self, client, admin_headers, group_with_assistant, assistant
+    ):
+        """アシスタントをグループから削除できること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group_with_assistant.id}/assistants/{assistant.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_remove_non_linked_is_idempotent(
+        self, client, admin_headers, group, assistant
+    ):
+        """既に非紐付けのアシスタントを削除してもエラーにならないこと"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}/assistants/{assistant.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_remove_nonexistent_assistant_returns_404(
+        self, client, admin_headers, group
+    ):
+        """存在しないアシスタントIDの削除は404になること"""
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/groups/{group.id}/assistants/nonexistent",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_group_admin_can_manage_own_group_assistants(
+        self, client, member_headers, group_with_admin_member, assistant
+    ):
+        """グループ管理者は自分の管理グループのアシスタントを追加できること"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group_with_admin_member.id}/assistants",
+                json={"assistantIds": [assistant.id]},
+                headers=member_headers,
+            )
+
+        assert response.status_code == 204
+
+    async def test_unrelated_user_cannot_manage_assistants(
+        self, client, other_headers, group, assistant
+    ):
+        """無関係な一般ユーザーはアシスタントを追加できないこと"""
+        async with client as c:
+            response = await c.post(
+                f"/api/admin/groups/{group.id}/assistants",
+                json={"assistantIds": [assistant.id]},
                 headers=other_headers,
             )
 
