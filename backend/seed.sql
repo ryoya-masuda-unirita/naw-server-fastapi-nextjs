@@ -346,3 +346,20 @@ VALUES
     NULL
 )
 ON CONFLICT (message_id) DO NOTHING;
+
+-- クレジット利用状況ダッシュボードAPI 動作確認用プラン
+INSERT INTO plans (id, name, max_users, max_credits_per_month)
+VALUES ('plan-standard', 'Standard', 50, 100000)
+ON CONFLICT (id) DO NOTHING;
+
+-- クレジット利用状況ダッシュボードAPI 動作確認用サブスクリプション
+-- 契約開始日は当月1日固定（動作確認時点で常に有効な請求期間になるようにするため）
+INSERT INTO subscriptions (id, tenant_id, plan_id, status, start_date)
+VALUES (
+    'subscription-test-tenant',
+    'test-tenant',
+    'plan-standard',
+    'ACTIVE',
+    date_trunc('month', CURRENT_DATE)
+)
+ON CONFLICT (id) DO NOTHING;

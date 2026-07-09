@@ -87,6 +87,8 @@ async def session(engine):
             "groups_users",
             "groups",
             "user_import_jobs",
+            "subscriptions",
+            "plans",
             "password_histories",
             "users",
             "tenants",
