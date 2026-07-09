@@ -7,7 +7,8 @@ from sqlalchemy import select
 
 from app.core.security import create_access_token
 from app.main import app
-from app.models.assistant import Assistant, AssistantType
+from app.models.assistant import Assistant, AssistantType, GroupAssistant
+from app.models.group import Group, GroupUser
 from app.models.room import Room, RoomPin, RoomRating
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
@@ -67,11 +68,57 @@ async def another_user_same_tenant(session, rooms_tenant):
 
 
 @pytest.fixture
+async def admin_user(session, rooms_tenant):
+    user = User(
+        id=uuid4(),
+        tenant_id=rooms_tenant.id,
+        login_id="room-admin",
+        name="Room Admin",
+        role=UserRole.ADMIN,
+        is_required_password_reset=False,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@pytest.fixture
+async def group_admin_user(session, rooms_tenant):
+    user = User(
+        id=uuid4(),
+        tenant_id=rooms_tenant.id,
+        login_id="room-group-admin",
+        name="Room Group Admin",
+        role=UserRole.USER,
+        is_required_password_reset=False,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@pytest.fixture
 async def room_assistant(session, rooms_tenant):
     assistant = Assistant(
         tenant_id=rooms_tenant.id,
         type=AssistantType.SAAS_CHAT,
         name="Room Assistant",
+        include_history=False,
+    )
+    session.add(assistant)
+    await session.commit()
+    await session.refresh(assistant)
+    return assistant
+
+
+@pytest.fixture
+async def secondary_room_assistant(session, rooms_tenant):
+    assistant = Assistant(
+        tenant_id=rooms_tenant.id,
+        type=AssistantType.SECURE,
+        name="Secondary Room Assistant",
         include_history=False,
     )
     session.add(assistant)
@@ -156,6 +203,16 @@ def other_user_headers(another_user_same_tenant, rooms_tenant):
 
 
 @pytest.fixture
+def admin_headers(admin_user, rooms_tenant):
+    return _headers(admin_user.login_id, rooms_tenant.id)
+
+
+@pytest.fixture
+def group_admin_headers(group_admin_user, rooms_tenant):
+    return _headers(group_admin_user.login_id, rooms_tenant.id)
+
+
+@pytest.fixture
 def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -237,6 +294,180 @@ class TestGetRooms:
             "Newer Unpinned",
         ]
         assert [room["pinned"] for room in body["content"]] == [True, True, False]
+
+
+@pytest.mark.asyncio
+class TestAdminRoomHistories:
+    """GET /api/admin/histories"""
+
+    async def test_admin_histories_returns_page_shape(
+        self, client, admin_headers, owned_room, room_owner_user
+    ):
+        """テナント管理者はルーム履歴一覧をPage形式で取得できること"""
+        async with client as c:
+            response = await c.get("/api/admin/histories", headers=admin_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {"content", "totalElements", "number", "size"}.issubset(body.keys())
+        assert body["totalElements"] >= 1
+        room = next(item for item in body["content"] if item["id"] == owned_room.id)
+        assert room["userId"] == str(room_owner_user.id)
+        assert room["userName"] == room_owner_user.name
+        assert room["indexIds"] == []
+
+    async def test_admin_history_detail_returns_room(
+        self, client, admin_headers, owned_room
+    ):
+        """テナント管理者はルーム履歴1件を取得できること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/histories/{owned_room.id}", headers=admin_headers
+            )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == owned_room.id
+
+    async def test_admin_histories_filters_by_user_id(
+        self, client, admin_headers, owned_room, other_users_room, room_owner_user
+    ):
+        """userId指定時、指定ユーザーのルームのみ返ること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"userId": str(room_owner_user.id)},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        ids = [room["id"] for room in response.json()["content"]]
+        assert owned_room.id in ids
+        assert other_users_room.id not in ids
+
+    async def test_admin_histories_filters_unrated_rooms(
+        self, client, admin_headers, owned_room, other_users_room, session
+    ):
+        """roomRate=unRated指定時、未評価ルームのみ返ること"""
+        owned_room.rating = RoomRating.GOOD
+        session.add(owned_room)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"roomRate": "unRated"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        ids = [room["id"] for room in response.json()["content"]]
+        assert owned_room.id not in ids
+        assert other_users_room.id in ids
+
+    async def test_admin_histories_filters_by_name(
+        self, client, admin_headers, owned_room, other_users_room
+    ):
+        """name指定時、ルーム名の部分一致で絞り込まれること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"name": "Owner"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        ids = [room["id"] for room in response.json()["content"]]
+        assert owned_room.id in ids
+        assert other_users_room.id not in ids
+
+    async def test_admin_histories_orders_by_name_desc(
+        self, client, admin_headers, owned_room, other_users_room
+    ):
+        """orderBy=name&reverse=true指定時、名前降順で返ること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"orderBy": "name", "reverse": "true"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        names = [room["name"] for room in response.json()["content"]]
+        assert names == sorted(names, reverse=True)
+
+    async def test_group_admin_sees_managed_assistant_rooms_only(
+        self,
+        client,
+        group_admin_headers,
+        session,
+        rooms_tenant,
+        group_admin_user,
+        room_owner_user,
+        room_assistant,
+        secondary_room_assistant,
+    ):
+        """グループ管理者は管理グループに紐づくアシスタントのルームのみ取得できること"""
+        group = Group(tenant_id=rooms_tenant.id, name="Managed Group")
+        session.add(group)
+        await session.commit()
+        await session.refresh(group)
+        session.add(
+            GroupUser(
+                group_id=group.id,
+                tenant_id=rooms_tenant.id,
+                user_id=group_admin_user.id,
+                is_admin=True,
+            )
+        )
+        session.add(
+            GroupAssistant(
+                group_id=group.id,
+                tenant_id=rooms_tenant.id,
+                assistant_id=room_assistant.id,
+            )
+        )
+        visible_room = Room(
+            tenant_id=rooms_tenant.id,
+            name="Visible Room",
+            default_assistant_id=room_assistant.id,
+            user_id=room_owner_user.id,
+        )
+        hidden_room = Room(
+            tenant_id=rooms_tenant.id,
+            name="Hidden Room",
+            default_assistant_id=secondary_room_assistant.id,
+            user_id=room_owner_user.id,
+        )
+        session.add_all([visible_room, hidden_room])
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/admin/histories", headers=group_admin_headers)
+
+        assert response.status_code == 200
+        ids = [room["id"] for room in response.json()["content"]]
+        assert visible_room.id in ids
+        assert hidden_room.id not in ids
+
+    async def test_general_user_cannot_access_admin_histories(
+        self, client, other_user_headers
+    ):
+        """管理者でもグループ管理者でもないユーザーは403になること"""
+        async with client as c:
+            response = await c.get("/api/admin/histories", headers=other_user_headers)
+
+        assert response.status_code == 403
+
+    async def test_invalid_created_at_returns_400(self, client, admin_headers):
+        """createdAtFromがyyyy-MM-dd形式でない場合400になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"createdAtFrom": "invalid-date"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
 
     async def test_get_rooms_filters_by_name_case_insensitive(
         self,

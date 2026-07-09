@@ -38,3 +38,27 @@ class PagedRoomResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+
+
+class AdminRoomHistoryItemResponse(BaseModel):
+    id: str
+    name: str | None
+    defaultAssistantId: str
+    userId: UUID
+    userName: str | None
+    indexIds: list[str]
+    createdAt: datetime
+    updatedAt: datetime
+    shareUrl: str | None = None
+    rating: RoomRating | None = None
+
+
+class AdminRoomHistoryDetailResponse(RoomResponse):
+    rating: RoomRating | None = None
+
+
+class PagedAdminRoomHistoryResponse(BaseModel):
+    content: list[AdminRoomHistoryItemResponse]
+    totalElements: int
+    number: int
+    size: int
