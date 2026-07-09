@@ -54,6 +54,38 @@ class AssistantRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_distinct_index_ids_by_ids(
+        assistant_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[str]:
+        """アシスタントID一覧から、紐づくインデックスID一覧を重複排除して取得する。
+
+        移植元（Spring Boot）の`AssistantSpecification.inGroups`経由で取得した
+        アシスタント一覧から`indexId`を抽出する処理に相当。`index_id`カラムのみを
+        `IN`句でまとめて取得し、アシスタント本体は取得しないことでN+1を避ける。
+
+        Args:
+            assistant_ids: 対象のアシスタントID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            重複なしのインデックスID一覧（`index_id`がNoneのものは除外）。
+        """
+        if not assistant_ids:
+            return []
+        stmt = (
+            select(Assistant.index_id)
+            .where(
+                Assistant.id.in_(assistant_ids),
+                Assistant.tenant_id == tenant_id,
+                Assistant.index_id.is_not(None),
+            )
+            .distinct()
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def create(assistant: Assistant, session: AsyncSession) -> Assistant:
         """アシスタントを新規作成する。
 
