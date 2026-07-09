@@ -19,3 +19,19 @@ class TenantRepository:
         stmt = select(Tenant).where(Tenant.id == tenant_id)
         result = await session.execute(stmt)
         return result.scalars().first()
+
+    @staticmethod
+    async def update(tenant: Tenant, session: AsyncSession) -> Tenant:
+        """テナントの変更を永続化する。
+
+        Args:
+            tenant: 更新対象の Tenant（属性は呼び出し側で変更済み）。
+            session: 非同期DBセッション。
+
+        Returns:
+            更新後の Tenant。
+        """
+        session.add(tenant)
+        await session.commit()
+        await session.refresh(tenant)
+        return tenant

@@ -81,6 +81,7 @@ async def session(engine):
             "indexes_endpoints",
             "indexes_groups",
             "indexes",
+            "tenant_resources",
             "tenant_endpoints",
             "groups_assistants",
             "assistants",

@@ -18,6 +18,7 @@ from app.routers import (
     rooms,
     shares,
     tenant_endpoints,
+    tenants,
     token_usage,
     user_imports,
 )
@@ -59,6 +60,7 @@ app.include_router(prompt_templates.prompt_template_router)
 app.include_router(prompt_templates.admin_prompt_template_router)
 app.include_router(tenant_endpoints.router)
 app.include_router(tenant_endpoints.local_endpoint_router)
+app.include_router(tenants.router)
 app.include_router(indexes.admin_router)
 app.include_router(assistant_categories.router)
 app.include_router(library_tags.library_tag_router)
