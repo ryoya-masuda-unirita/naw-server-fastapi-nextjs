@@ -33,9 +33,12 @@ description: Use when working on a GitHub Issue in this repository, including is
 
 ### 参照リポジトリ調査
 
-「1. 参照リポジトリを確認する」（移植元の `git log` 確認、対象 Controller/Service/Request/Response の読み込み、既存 Issue との突き合わせ等）は、Codex が実装前に必要な範囲を直接確認する。調査量が大きい場合でも、Issue 起票やブランチ操作などの書き込み作業へ進む前に、確認した内容を要件・設計へ反映する。
+「1. 参照リポジトリを確認する」（移植元の `git log` 確認、対象 Controller/Service/Request/Response の読み込み、既存 Issue との突き合わせ等）は、Codex が実装前に必要な範囲を直接確認する。外部AI固有の agent や memory を参照せず、この skill とローカルの参照リポジトリだけで完結させる。
 
+- 調査は読み取り専用で行い、`gh issue create` 等の書き込み操作は候補・仕様を整理した後にメイン手順として実行する
 - 対象の移植元ファイルパス（分かっていれば）、確認したい範囲（例: `RoomController` の未移植エンドポイント）、対象エンドポイントの仕様、参照元ファイルパス、既存実装との差分を整理する
+- バックエンド調査では `~/Documents/naw-server` と `backend/app/routers/`・`backend/app/services/`・`backend/app/schemas/` を突き合わせる
+- フロントエンド調査を依頼された場合のみ `~/Documents/secuaigent-client` と `frontend/` を突き合わせる。通常はバックエンド優先とする
 - 対象が広すぎて判断が分かれる場合だけ、作業前にユーザーへ確認する
 
 ## Issue 起票手順

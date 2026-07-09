@@ -41,6 +41,12 @@ api-client.ts         fetch ラッパー
 
 ## Angular からの移植指針
 
+- Angular のデザインを忠実に React へ移行する。独自の簡易実装で代替しない
+- 実装前に対象ページの Angular HTML テンプレート（`*.component.html`）を必ず読む
+- `~/Documents/secuaigent-client/src/styles.css` のカスタムカラー・カスタムクラスを確認し、React 側の `src/index.css` に必要な定義を反映する
+- `~/Documents/secuaigent-client/public/i18n/ja.json` / `en.json` を確認し、文言を i18n 経由で移植する
+- `bg-blue-600` などの汎用 Tailwind クラスで Angular のカスタムカラーを代用しない
+- Angular HTML を読まずに独自レイアウトを実装しない
 - Standalone Component は React Component へ移植
 - signalStore の API 呼び出しは TanStack Query へ移植
 - signalStore の UI 状態は Zustand へ移植
