@@ -16,6 +16,7 @@ dependencies = [
     "PyJWT>=2.8.0",
     "azure-identity>=1.19.0",
     "azure-mgmt-costmanagement>=4.0.0",
+    "openai>=1.54.0",
 ]
 
 [dependency-groups]

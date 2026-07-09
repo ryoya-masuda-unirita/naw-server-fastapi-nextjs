@@ -88,6 +88,23 @@ class AzureCostSettings(BaseSettings):
     azure_client_secret_value: str = Field(alias="AZURE_APP_CLIENT_SECRET_VALUE")
 
 
+class LlmCreditSettings(BaseSettings):
+    """LLMトークン消費量をクレジットへ換算するための設定。
+
+    `Settings` とは別クラスにする。理由は`CorsSettings`と同様（このAPIを使わない
+    環境・単体テストで`app.main`をインポートするだけで必須値エラーになるのを防ぐため）。
+    移植元Java版の`naw.token-usage.credit.*`（`@Value`注入）に対応する。デフォルト値は
+    移植元の`application-*.yaml`に記載の値をそのまま踏襲する。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    tokens_per_credit: int = Field(default=1000, alias="TOKENS_PER_CREDIT")
+    input_credit_weight: float = Field(default=1 / 3, alias="INPUT_CREDIT_WEIGHT")
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
@@ -101,3 +118,8 @@ def get_cors_settings() -> CorsSettings:
 @lru_cache
 def get_azure_cost_settings() -> AzureCostSettings:
     return AzureCostSettings()
+
+
+@lru_cache
+def get_llm_credit_settings() -> LlmCreditSettings:
+    return LlmCreditSettings()
