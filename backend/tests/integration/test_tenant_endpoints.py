@@ -88,6 +88,23 @@ async def normal_user(session, tenant):
 
 
 @pytest.fixture
+async def other_admin_user(session, other_tenant):
+    """テスト用の別テナントの管理者"""
+    u = User(
+        id=uuid4(),
+        tenant_id=other_tenant.id,
+        login_id="other-admin-test",
+        name="Other Admin",
+        role=UserRole.ADMIN,
+        is_required_password_reset=False,
+    )
+    session.add(u)
+    await session.commit()
+    await session.refresh(u)
+    return u
+
+
+@pytest.fixture
 async def local_server_endpoint(session, tenant):
     """テスト用LOCAL_SERVERエンドポイント"""
     e = TenantEndpoint(
@@ -132,6 +149,11 @@ def admin_headers(admin_user, tenant):
 @pytest.fixture
 def user_headers(normal_user, tenant):
     return _headers(normal_user.login_id, tenant.id)
+
+
+@pytest.fixture
+def other_admin_headers(other_admin_user, other_tenant):
+    return _headers(other_admin_user.login_id, other_tenant.id)
 
 
 @pytest.fixture
@@ -363,3 +385,70 @@ class TestDeleteEndpoint:
             )
 
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestGetLocalServerEndpoint:
+    """GET /api/tenants/endpoints/local/{endpointId}"""
+
+    async def test_admin_gets_local_server_endpoint_with_api_key(
+        self, client, admin_headers, local_server_endpoint
+    ):
+        """管理者は自テナントのLOCAL_SERVERエンドポイントをapiKey付きで取得できること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/tenants/endpoints/local/{local_server_endpoint.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == local_server_endpoint.id
+        assert body["apiKey"] == "secret-key"
+        assert body["type"] == "LOCAL_SERVER"
+
+    async def test_returns_404_for_non_local_server_type(
+        self, client, admin_headers, azure_endpoint
+    ):
+        """LOCAL_SERVER以外のタイプの場合は404になること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/tenants/endpoints/local/{azure_endpoint.id}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_returns_404_for_nonexistent_endpoint(self, client, admin_headers):
+        """存在しないendpointIdの場合は404になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/tenants/endpoints/local/nonexistent-id",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_returns_404_for_other_tenant_endpoint(
+        self, client, other_admin_headers, local_server_endpoint
+    ):
+        """他テナントの管理者は自テナントに属さないエンドポイントを取得できず404になること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/tenants/endpoints/local/{local_server_endpoint.id}",
+                headers=other_admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_normal_user_gets_403(
+        self, client, user_headers, local_server_endpoint
+    ):
+        """一般ユーザーは403になること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/tenants/endpoints/local/{local_server_endpoint.id}",
+                headers=user_headers,
+            )
+
+        assert response.status_code == 403

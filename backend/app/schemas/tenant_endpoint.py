@@ -25,3 +25,13 @@ class EndpointResponse(BaseModel):
     type: EndpointType
     endpointName: str
     endpoint: str
+
+
+class LocalServerEndpointResponse(BaseModel):
+    """ローカルサーバーエンドポイント取得専用のレスポンス。apiKeyを含む。"""
+
+    id: str
+    tenantId: str
+    type: EndpointType
+    endpoint: str
+    apiKey: str

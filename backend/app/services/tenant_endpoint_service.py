@@ -5,6 +5,7 @@ from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.tenant_endpoint import (
     EndpointResponse,
+    LocalServerEndpointResponse,
     TenantEndpointCreateRequest,
     TenantEndpointUpdateRequest,
 )
@@ -184,6 +185,40 @@ class TenantEndpointService:
 
         TenantEndpointService._assert_local_server_only(endpoint.type)
         await TenantEndpointRepository.delete(endpoint, session)
+
+    @staticmethod
+    async def get_local_server_endpoint(
+        tenant_id: str, endpoint_id: str, session: AsyncSession
+    ) -> LocalServerEndpointResponse:
+        """ローカルサーバーエンドポイントを取得する（apiKeyを含む）。
+
+        Args:
+            tenant_id: テナントID。
+            endpoint_id: エンドポイントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            apiKeyを含むエンドポイント情報。
+
+        Raises:
+            HTTPException: エンドポイントが存在しない、自テナントに属さない、
+                またはLOCAL_SERVERタイプでない場合404を返す。
+        """
+        endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
+            endpoint_id, tenant_id, session
+        )
+        if not endpoint or endpoint.type != EndpointType.LOCAL_SERVER:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No endpoint found for endpointId: {endpoint_id}",
+            )
+        return LocalServerEndpointResponse(
+            id=endpoint.id,
+            tenantId=endpoint.tenant_id,
+            type=endpoint.type,
+            endpoint=endpoint.endpoint,
+            apiKey=endpoint.api_key,
+        )
 
     @staticmethod
     def _to_response(endpoint: TenantEndpoint) -> EndpointResponse:
