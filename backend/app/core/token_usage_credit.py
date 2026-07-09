@@ -8,6 +8,24 @@
 import math
 
 
+def positive_token_weight(token_weight: float) -> float:
+    """モデルのtoken_weightを、クレジット計算に使える正の値へ正規化する。
+
+    移植元(Spring Boot)の`AIModelService.toPositiveTokenWeight`に対応する。
+    `ai_models.token_weight`は本来正の値のみを想定するが、不正なデータ（0以下・NaN・無限大）が
+    混入した場合に誤ったクレジット数（0や無限大）を算出しないよう、その場合は1.0にフォールバックする。
+
+    Args:
+        token_weight: DBから取得したモデルの重み係数。
+
+    Returns:
+        正規化された重み係数。不正な値の場合は1.0。
+    """
+    if token_weight <= 0 or math.isnan(token_weight) or math.isinf(token_weight):
+        return 1.0
+    return token_weight
+
+
 def input_credits(
     input_tokens: int,
     tokens_per_credit: int,

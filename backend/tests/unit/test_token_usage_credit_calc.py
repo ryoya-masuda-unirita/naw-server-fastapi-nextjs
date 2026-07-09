@@ -1,6 +1,29 @@
 import math
 
-from app.core.token_usage_credit import embedding_credits, input_credits, output_credits
+from app.core.token_usage_credit import (
+    embedding_credits,
+    input_credits,
+    output_credits,
+    positive_token_weight,
+)
+
+
+class TestPositiveTokenWeight:
+    """positive_token_weight のテスト"""
+
+    def test_returns_as_is_when_positive(self):
+        """正の値はそのまま返すこと"""
+        assert positive_token_weight(2.5) == 2.5
+
+    def test_falls_back_to_one_when_not_positive(self):
+        """0以下の場合1.0にフォールバックすること"""
+        assert positive_token_weight(0.0) == 1.0
+        assert positive_token_weight(-1.0) == 1.0
+
+    def test_falls_back_to_one_when_nan_or_infinite(self):
+        """NaN・無限大の場合1.0にフォールバックすること"""
+        assert positive_token_weight(float("nan")) == 1.0
+        assert positive_token_weight(float("inf")) == 1.0
 
 
 class TestInputCredits:

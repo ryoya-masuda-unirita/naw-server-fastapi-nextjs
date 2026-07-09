@@ -77,11 +77,6 @@ class AzureLlmChatClient:
         Yields:
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
         """
-        client = AsyncAzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
-        )
         create_kwargs: dict = {
             "model": deploy_name,
             "messages": [
@@ -95,19 +90,27 @@ class AzureLlmChatClient:
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
 
-        stream = await client.chat.completions.create(**create_kwargs)
-        async for chunk in stream:
-            if chunk.usage is not None:
-                yield ChatStreamChunk(
-                    input_tokens=chunk.usage.prompt_tokens,
-                    output_tokens=chunk.usage.completion_tokens,
-                )
-                continue
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta is not None and delta.content:
-                yield ChatStreamChunk(text_delta=delta.content)
+        # クライアントは`async with`でリクエスト単位に生成・破棄する。ストリーム消費が
+        # 終わるまで(このジェネレータが最後までイテレートされるまで)コンテキストマネージャ
+        # を閉じないよう、ストリームの読み取りも`async with`ブロック内で行う。
+        async with AsyncAzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version=AZURE_OPENAI_API_VERSION,
+        ) as client:
+            stream = await client.chat.completions.create(**create_kwargs)
+            async for chunk in stream:
+                if chunk.usage is not None:
+                    yield ChatStreamChunk(
+                        input_tokens=chunk.usage.prompt_tokens,
+                        output_tokens=chunk.usage.completion_tokens,
+                    )
+                    continue
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta is not None and delta.content:
+                    yield ChatStreamChunk(text_delta=delta.content)
 
 
 class AzureLlmEmbeddingClient:
@@ -133,17 +136,17 @@ class AzureLlmEmbeddingClient:
         Returns:
             埋め込みベクトルと消費した入力トークン数。
         """
-        client = AsyncAzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
-        )
         create_kwargs: dict = {"model": deploy_name, "input": input_text}
         if dimensions is not None:
             create_kwargs["dimensions"] = dimensions
 
-        response = await client.embeddings.create(**create_kwargs)
-        return EmbeddingResult(
-            embedding=list(response.data[0].embedding),
-            tokens=response.usage.prompt_tokens,
-        )
+        async with AsyncAzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version=AZURE_OPENAI_API_VERSION,
+        ) as client:
+            response = await client.embeddings.create(**create_kwargs)
+            return EmbeddingResult(
+                embedding=list(response.data[0].embedding),
+                tokens=response.usage.prompt_tokens,
+            )

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.llm_client import AzureLlmEmbeddingClient
-from app.core.token_usage_credit import embedding_credits
+from app.core.token_usage_credit import embedding_credits, positive_token_weight
 from app.models.ai_model import AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType
 from app.models.token_usage import TokenUsage
@@ -83,7 +83,7 @@ class LlmEmbeddingService:
             embedding_credits=embedding_credits(
                 result.tokens,
                 credit_settings.tokens_per_credit,
-                float(ai_model.token_weight),
+                positive_token_weight(float(ai_model.token_weight)),
             ),
         )
         session.add(token_usage)

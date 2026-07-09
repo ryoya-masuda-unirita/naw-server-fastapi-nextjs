@@ -37,6 +37,20 @@ class _AsyncChunkIterator:
             yield chunk
 
 
+def _as_async_context_manager(mock_client: MagicMock) -> None:
+    """MagicMockが`async with`で使えるよう`__aenter__`/`__aexit__`を設定する。
+
+    `AzureLlmChatClient`/`AzureLlmEmbeddingClient`が`AsyncAzureOpenAI`を
+    `async with`で使うようになったため、テスト側のモックも非同期コンテキスト
+    マネージャとして振る舞う必要がある。
+
+    Args:
+        mock_client: `async with`エントリ時に返すクライアントのモック。
+    """
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+
 class TestAzureLlmChatClient:
     """AzureLlmChatClient.stream_chat のテスト"""
 
@@ -45,6 +59,7 @@ class TestAzureLlmChatClient:
         """テキスト差分を順にyieldし、最後にトークン使用量を持つチャンクをyieldすること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
         mock_client.chat.completions.create = AsyncMock(
             return_value=_AsyncChunkIterator(
                 [
@@ -80,6 +95,7 @@ class TestAzureLlmChatClient:
         """maxTokens未指定時はcreate呼び出しにmax_tokensを含めないこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
         mock_client.chat.completions.create = AsyncMock(
             return_value=_AsyncChunkIterator([])
         )
@@ -108,6 +124,7 @@ class TestAzureLlmEmbeddingClient:
         """埋め込みベクトルと消費トークン数を返すこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
         response = MagicMock()
         response.data = [MagicMock(embedding=[0.1, 0.2, 0.3])]
         response.usage.prompt_tokens = 7
@@ -131,6 +148,7 @@ class TestAzureLlmEmbeddingClient:
         """dimensions指定時はcreate呼び出しに含めること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
         response = MagicMock()
         response.data = [MagicMock(embedding=[0.1])]
         response.usage.prompt_tokens = 3

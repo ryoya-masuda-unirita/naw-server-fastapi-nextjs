@@ -18,7 +18,12 @@ from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
 from app.core.llm_client import AzureLlmChatClient, ChatMessage
-from app.core.token_usage_credit import input_credits, output_credits
+from app.core.room_access import require_owned_room
+from app.core.token_usage_credit import (
+    input_credits,
+    output_credits,
+    positive_token_weight,
+)
 from app.models.ai_model import AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType
 from app.models.token_usage import TokenUsage
@@ -72,7 +77,8 @@ class LlmChatService:
         Raises:
             HTTPException: クレジット上限超過時は429、指定deployNameのAIモデルが
                 存在しない・テナントにAzure OpenAI Chatエンドポイントが存在しない
-                場合は400、指定messageIdがテナント内に存在しない場合は404を返す。
+                場合は400、指定messageIdがテナント内に存在しない場合は404、
+                所属ルームの所有者でない場合は403を返す。
         """
         await enforce_within_quota(tenant_id, session)
 
@@ -107,6 +113,11 @@ class LlmChatService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="指定された messageId のメッセージが見つかりません。",
                 )
+            # 移植元Java版はここでルーム所有権を検証していないが、他の
+            # メッセージ関連エンドポイント（message_service.py等）と同様に
+            # 所有権のないメッセージIDが指定された場合のなりすまし・情報漏えいを
+            # 防ぐため、本ポートでは所有権チェックを追加する（`01_要件定義.md`参照）。
+            await require_owned_room(tenant_id, current_user, message.room_id, session)
             room_id = message.room_id
             message_id_for_usage = message.id
 
@@ -126,7 +137,7 @@ class LlmChatService:
         max_tokens = req.maxTokens
         user_id = current_user.id
         model_name = ai_model.name
-        token_weight = float(ai_model.token_weight)
+        token_weight = positive_token_weight(float(ai_model.token_weight))
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信する。"""
@@ -176,22 +187,30 @@ class LlmChatService:
     def _apply_additional_prompt(
         messages: list[ChatMessage], additional_prompt: str | None
     ) -> list[ChatMessage]:
-        """最後の発話の前に追加プロンプトを前置する。
+        """末尾から見て最後の"user"ロール発話の前に追加プロンプトを前置する。
+
+        移植元Java版`applyAdditionalPromptToLastUserTurn`に対応する。単純に配列末尾の
+        発話を書き換えるのではなく、末尾から遡って最初に見つかった"user"ロールの発話
+        （大文字小文字を区別しない）に適用する。該当する発話がない場合は何もしない。
 
         Args:
             messages: 会話履歴。
-            additional_prompt: 前置きするプロンプト。未指定ならそのまま返す。
+            additional_prompt: 前置きするプロンプト。未指定・空白のみなら何もしない。
 
         Returns:
             追加プロンプト適用後の会話履歴。
         """
-        if not additional_prompt or not messages:
+        if not additional_prompt or not additional_prompt.strip():
             return messages
-        last = messages[-1]
-        updated_last = ChatMessage(
-            role=last.role, content=f"{additional_prompt}\n{last.content}"
-        )
-        return [*messages[:-1], updated_last]
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role.lower() == "user":
+                updated = list(messages)
+                updated[index] = ChatMessage(
+                    role=messages[index].role,
+                    content=f"{additional_prompt}\n\n{messages[index].content}",
+                )
+                return updated
+        return messages
 
     @staticmethod
     async def _persist_token_usage(
