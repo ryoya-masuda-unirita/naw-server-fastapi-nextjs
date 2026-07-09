@@ -51,6 +51,28 @@ class UserRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_login_ids(
+        login_ids: set[str], tenant_id: str, session: AsyncSession
+    ) -> dict[str, User]:
+        """loginId一覧とtenantIdでユーザーをまとめて取得する。
+
+        Args:
+            login_ids: ログインIDの集合。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            loginId をキーとした User の辞書。
+        """
+        if not login_ids:
+            return {}
+        stmt = select(User).where(
+            User.login_id.in_(login_ids), User.tenant_id == tenant_id
+        )
+        result = await session.execute(stmt)
+        return {user.login_id: user for user in result.scalars().all()}
+
+    @staticmethod
     async def find_by_id_and_tenant_id(
         user_id: uuid.UUID, tenant_id: str, session: AsyncSession
     ) -> User | None:
