@@ -14,6 +14,7 @@ from app.routers import (
     indexes,
     libraries,
     library_tags,
+    llm,
     messages,
     prompt_templates,
     rooms,
@@ -74,3 +75,4 @@ app.include_router(libraries.library_router)
 app.include_router(feedback.router)
 app.include_router(token_usage.admin_router)
 app.include_router(credit_usage.router)
+app.include_router(llm.router)

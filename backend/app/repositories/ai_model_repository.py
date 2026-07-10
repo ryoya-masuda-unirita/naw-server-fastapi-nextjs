@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.ai_model import AIModel
+from app.models.ai_model import AIModel, AIModelEndpointType
 
 
 class AIModelRepository:
@@ -18,3 +18,23 @@ class AIModelRepository:
         stmt = select(AIModel)
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def find_by_endpoint_type_and_name(
+        endpoint_type: AIModelEndpointType, name: str, session: AsyncSession
+    ) -> AIModel | None:
+        """エンドポイントタイプとモデル名(デプロイ名)でAIモデルを取得する。
+
+        Args:
+            endpoint_type: エンドポイントタイプ。
+            name: モデル名(デプロイ名)。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するAIモデル。存在しない場合はNone。
+        """
+        stmt = select(AIModel).where(
+            AIModel.endpoint_type == endpoint_type, AIModel.name == name
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
