@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
+from app.core.file_storage import FileStorage, get_file_storage
 from app.core.security import get_verified_tenant_id, require_admin_or_group_admin
 from app.models.user import User
-from app.schemas.index import IndexRequest, IndexResponse, PagedIndexResponse
+from app.schemas.index import (
+    IndexAdditionalLearningForm,
+    IndexRequest,
+    IndexResponse,
+    PagedIndexResponse,
+)
 from app.services.index_service import IndexService
 
 admin_router = APIRouter(prefix="/api/admin/indexes", tags=["admin-indexes"])
@@ -83,3 +89,38 @@ async def delete_index(
 ) -> None:
     """インデックス削除"""
     await IndexService.delete_index(index_id, x_tenant_id, current_user, session)
+
+
+@admin_router.post("/{index_id}/sync", status_code=status.HTTP_204_NO_CONTENT)
+async def sync_index(
+    index_id: str,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(require_admin_or_group_admin),
+) -> None:
+    """インデックス同期（SAAS環境では未対応のためスタブ）"""
+    IndexService.sync_index()
+
+
+@admin_router.post(
+    "/{index_id}/additionalLearning", status_code=status.HTTP_204_NO_CONTENT
+)
+async def add_additional_learning(
+    index_id: str,
+    content: UploadFile = File(...),
+    form: IndexAdditionalLearningForm = Depends(),
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(require_admin_or_group_admin),
+    storage: FileStorage = Depends(get_file_storage),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """インデックスへ追加学習用のファイルを登録する"""
+    await IndexService.additional_learning(
+        index_id,
+        x_tenant_id,
+        current_user,
+        form.feedback_id,
+        form.room_id,
+        content,
+        storage,
+        session,
+    )

@@ -48,23 +48,12 @@ def _summary_row(input_credits=0, output_credits=0, embedding_credits=0) -> Magi
 class TestEnforceWithinQuota:
     """enforce_within_quota のテスト"""
 
-    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
-    async def test_skips_when_tenant_not_found(self, mock_find_tenant):
-        """テナントが存在しない場合チェックをスキップすること"""
-        mock_find_tenant.return_value = None
-
-        await enforce_within_quota("tenant-1", session=None)
-
     @patch(
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
-    async def test_skips_when_no_active_subscription(
-        self, mock_find_tenant, mock_find_active
-    ):
+    async def test_skips_when_no_active_subscription(self, mock_find_active):
         """有効なサブスクリプションが存在しない場合チェックをスキップすること"""
-        mock_find_tenant.return_value = _tenant()
         mock_find_active.return_value = None
 
         await enforce_within_quota("tenant-1", session=None)
@@ -73,12 +62,8 @@ class TestEnforceWithinQuota:
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
-    async def test_skips_when_plan_has_no_credit_limit(
-        self, mock_find_tenant, mock_find_active
-    ):
+    async def test_skips_when_plan_has_no_credit_limit(self, mock_find_active):
         """プランのクレジット枠が未設定の場合チェックをスキップすること"""
-        mock_find_tenant.return_value = _tenant()
         mock_find_active.return_value = (
             _subscription(),
             _plan(max_credits_per_month=None),
@@ -89,20 +74,20 @@ class TestEnforceWithinQuota:
     @patch(
         "app.core.credit_quota.TokenUsageRepository.summarize", new_callable=AsyncMock
     )
+    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
     @patch(
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
     async def test_passes_when_usage_below_limit(
-        self, mock_find_tenant, mock_find_active, mock_summarize
+        self, mock_find_active, mock_find_tenant, mock_summarize
     ):
         """当月利用量が上限未満の場合チェックを通過すること"""
-        mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_find_active.return_value = (
             _subscription(),
             _plan(max_credits_per_month=1000),
         )
+        mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_summarize.return_value = _summary_row(input_credits=500)
 
         await enforce_within_quota("tenant-1", session=None)
@@ -110,20 +95,20 @@ class TestEnforceWithinQuota:
     @patch(
         "app.core.credit_quota.TokenUsageRepository.summarize", new_callable=AsyncMock
     )
+    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
     @patch(
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
     async def test_raises_429_when_usage_reaches_limit(
-        self, mock_find_tenant, mock_find_active, mock_summarize
+        self, mock_find_active, mock_find_tenant, mock_summarize
     ):
         """当月利用量が上限以上の場合429エラーになること"""
-        mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_find_active.return_value = (
             _subscription(),
             _plan(max_credits_per_month=1000),
         )
+        mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_summarize.return_value = _summary_row(input_credits=1000)
 
         from fastapi import HTTPException
@@ -133,3 +118,29 @@ class TestEnforceWithinQuota:
 
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail == CREDIT_QUOTA_EXCEEDED_MESSAGE
+
+    @patch(
+        "app.core.credit_quota.TokenUsageRepository.summarize", new_callable=AsyncMock
+    )
+    @patch("app.core.credit_quota.TenantRepository.find_by_id", new_callable=AsyncMock)
+    @patch(
+        "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
+        new_callable=AsyncMock,
+    )
+    async def test_treats_missing_tenant_as_no_usage_based_limit(
+        self, mock_find_active, mock_find_tenant, mock_summarize
+    ):
+        """テナントが見つからない場合は利用ベース上限0として計算すること"""
+        mock_find_active.return_value = (
+            _subscription(),
+            _plan(max_credits_per_month=1000),
+        )
+        mock_find_tenant.return_value = None
+        mock_summarize.return_value = _summary_row(input_credits=1000)
+
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await enforce_within_quota("tenant-1", session=None)
+
+        assert exc_info.value.status_code == 429

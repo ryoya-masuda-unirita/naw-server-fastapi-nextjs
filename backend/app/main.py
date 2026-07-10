@@ -8,6 +8,7 @@ from app.routers import (
     auth,
     credit_usage,
     feedback,
+    files,
     groups,
     health,
     indexes,
@@ -63,6 +64,7 @@ app.include_router(tenant_endpoints.router)
 app.include_router(tenant_endpoints.local_endpoint_router)
 app.include_router(tenants.router)
 app.include_router(indexes.admin_router)
+app.include_router(files.admin_router)
 app.include_router(assistant_categories.router)
 app.include_router(library_tags.library_tag_router)
 app.include_router(library_tags.admin_library_tag_router)

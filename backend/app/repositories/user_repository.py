@@ -73,6 +73,29 @@ class UserRepository:
         return {user.login_id: user for user in result.scalars().all()}
 
     @staticmethod
+    async def find_by_ids(
+        user_ids: set[uuid.UUID], tenant_id: str, session: AsyncSession
+    ) -> dict[uuid.UUID, User]:
+        """ユーザーID一覧とtenantIdでユーザーをまとめて取得する。
+
+        一覧取得結果の各行に紐づくユーザー名（`updatedBy`等）を解決する際、行数分の
+        個別クエリを発行するN+1を避けるために使う。
+
+        Args:
+            user_ids: ユーザーIDの集合。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            ユーザーIDをキーとした User の辞書。
+        """
+        if not user_ids:
+            return {}
+        stmt = select(User).where(User.id.in_(user_ids), User.tenant_id == tenant_id)
+        result = await session.execute(stmt)
+        return {user.id: user for user in result.scalars().all()}
+
+    @staticmethod
     async def find_by_id_and_tenant_id(
         user_id: uuid.UUID, tenant_id: str, session: AsyncSession
     ) -> User | None:

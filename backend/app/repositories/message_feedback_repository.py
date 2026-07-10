@@ -19,6 +19,30 @@ _SATISFACTION_COLUMN_BY_STAR = {
 
 class MessageFeedbackRepository:
     @staticmethod
+    async def find_by_id_and_tenant_id(
+        feedback_id: str, tenant_id: str, session: AsyncSession
+    ) -> MessageFeedback | None:
+        """フィードバックIDとテナントIDでフィードバックを1件取得する。
+
+        移植元`MessageFeedbackRepository.findById`（JPA標準メソッド）相当。テナント分離の
+        規約に沿い、`tenant_id`も条件に加える。
+
+        Args:
+            feedback_id: フィードバックID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するフィードバック。存在しない場合はNone。
+        """
+        stmt = select(MessageFeedback).where(
+            MessageFeedback.id == feedback_id,
+            MessageFeedback.tenant_id == tenant_id,
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
     async def find_by_ids_and_tenant_id(
         feedback_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[MessageFeedback]:
