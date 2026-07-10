@@ -1094,6 +1094,143 @@ class TestIndexRouter:
             # 移植元同様、roomId指定時もreferenceの接頭辞は「フィードバック_」のまま
             assert created.reference == f"フィードバック_{room_id}"
 
+        async def test_nonexistent_feedback_id_raises_404(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """存在しないfeedbackIdを指定すると404になること（ファイルは作成されない）"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "nonexistent-feedback-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_nonexistent_room_id_raises_404(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """存在しないroomIdを指定すると404になること（ファイルは作成されない）"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"roomId": "nonexistent-room-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_other_tenant_feedback_id_raises_404(
+            self,
+            client,
+            session,
+            admin_headers,
+            saas_index,
+            unrelated_index,
+        ):
+            """他テナントのfeedbackIdを指定すると404になり、テナントをまたいで紐付かないこと
+
+            `files.feedback_id`は`message_feedbacks.id`への単一列FK（テナント条件を含まない）
+            のため、テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
+            黙って紐付いてしまう懸念がある（回帰確認）。
+            """
+            other_tenant = Tenant(
+                id="tenant-indexes-test-other",
+                name="Other Tenant",
+                owner="admin",
+                pw_policy_min_length=8,
+                pw_policy_use_uppercase=True,
+                pw_policy_use_lowercase=True,
+                pw_policy_use_digits=True,
+                pw_policy_use_symbols=True,
+                pw_policy_valid_symbols="!@#$",
+                pw_validity_period_days=90,
+                pw_histories_limit=3,
+            )
+            session.add(other_tenant)
+            await session.commit()
+            await session.refresh(other_tenant)
+
+            other_user = User(
+                id=uuid4(),
+                tenant_id=other_tenant.id,
+                login_id="other-tenant-admin",
+                name="OtherAdmin",
+                role=UserRole.ADMIN,
+                is_required_password_reset=False,
+            )
+            other_assistant = Assistant(
+                tenant_id=other_tenant.id,
+                type=AssistantType.SAAS_RAG,
+                name="Other Assistant",
+                include_history=False,
+            )
+            session.add_all([other_user, other_assistant])
+            await session.commit()
+            await session.refresh(other_user)
+            await session.refresh(other_assistant)
+
+            other_room = Room(
+                tenant_id=other_tenant.id,
+                name="Other Room",
+                default_assistant_id=other_assistant.id,
+                user_id=other_user.id,
+            )
+            session.add(other_room)
+            await session.commit()
+            await session.refresh(other_room)
+
+            other_message = Message(
+                tenant_id=other_tenant.id,
+                room_id=other_room.id,
+                assistant_id=other_assistant.id,
+            )
+            session.add(other_message)
+            await session.commit()
+            await session.refresh(other_message)
+
+            other_feedback = MessageFeedback(
+                tenant_id=other_tenant.id,
+                user_id=other_user.id,
+                message_id=other_message.id,
+                rating=MessageRating.GOOD,
+            )
+            session.add(other_feedback)
+            await session.commit()
+            await session.refresh(other_feedback)
+
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": other_feedback.id}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+            created = (
+                (
+                    await session.execute(
+                        select(File).where(File.feedback_id == other_feedback.id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            assert created is None
+
+            await session.refresh(other_feedback)
+            assert other_feedback.index_id is None
+
         async def test_index_not_found_raises_404(
             self, client, admin_headers, override_index_file_storage
         ):

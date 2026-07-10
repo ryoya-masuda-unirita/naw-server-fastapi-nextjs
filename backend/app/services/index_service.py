@@ -11,6 +11,7 @@ from app.repositories.group_repository import GroupRepository
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.index_repository import IndexRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
+from app.repositories.room_repository import RoomRepository
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.index import (
     IndexRequest,
@@ -547,7 +548,10 @@ class IndexService:
         Raises:
             HTTPException: `feedback_id`・`room_id`のどちらも未指定、または両方指定の場合400。
                 インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
-                当月クレジット上限超過の場合429を返す。
+                当月クレジット上限超過の場合429を返す。指定された`feedback_id`・`room_id`が
+                テナント内に存在しない場合404を返す（`files.feedback_id`は単一列FKのため、
+                テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
+                黙って紐付いてしまう）。
         """
         learning_source_not_specified = feedback_id is None and room_id is None
         confused_learning_source = feedback_id is not None and room_id is not None
@@ -568,10 +572,32 @@ class IndexService:
         file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
 
+        # `files.feedback_id`・`files.room_id`にはそれぞれ`message_feedbacks`・`rooms`への
+        # FK制約がある。`feedback_id`は単一列FK（テナント条件を含まない）のため、存在確認を
+        # テナントIDで行わずファイル作成に進むと、他テナントの`feedback_id`を指定された場合に
+        # そのFK自体は満たしてしまい、テナントをまたいだ紐付けが黙って成立してしまう。
+        # そのため、ファイル作成前に必ずテナントIDを条件に含めて存在確認を行う。
+        feedback = None
         if feedback_id is not None:
+            feedback = await MessageFeedbackRepository.find_by_id_and_tenant_id(
+                feedback_id, tenant_id, session
+            )
+            if feedback is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="指定されたフィードバックが見つかりません。",
+                )
             name = f"追加学習_{feedback_id}.md"
             reference = f"フィードバック_{feedback_id}"
         else:
+            room = await RoomRepository.find_by_id_and_tenant_id(
+                room_id, tenant_id, session
+            )
+            if room is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="指定されたルームが見つかりません。",
+                )
             # 移植元同様、roomId指定時もreferenceの接頭辞は「フィードバック_」のまま
             # （意図的なバグ修正は本Issueのスコープ外とし、移植元の挙動をそのまま踏襲する）。
             name = f"追加学習_ルーム_{room_id}.md"
@@ -591,10 +617,6 @@ class IndexService:
             room_id,
         )
 
-        if feedback_id is not None:
-            feedback = await MessageFeedbackRepository.find_by_id_and_tenant_id(
-                feedback_id, tenant_id, session
-            )
-            if feedback is not None:
-                feedback.index_id = index_id
-                await MessageFeedbackRepository.save(feedback, session)
+        if feedback is not None:
+            feedback.index_id = index_id
+            await MessageFeedbackRepository.save(feedback, session)
