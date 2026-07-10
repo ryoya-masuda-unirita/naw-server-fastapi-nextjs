@@ -1,6 +1,8 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import credit_quota, file_creation
+from app.core.file_storage import FileStorage
 from app.models.index import Index, IndexType
 from app.models.user import User, UserRole
 from app.repositories.assistant_repository import AssistantRepository
@@ -8,6 +10,8 @@ from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_repository import GroupRepository
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.index_repository import IndexRepository
+from app.repositories.message_feedback_repository import MessageFeedbackRepository
+from app.repositories.room_repository import RoomRepository
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.index import (
     IndexRequest,
@@ -495,3 +499,124 @@ class IndexService:
         await IndexService._ensure_visible(index, tenant_id, current_user, session)
 
         await IndexRepository.delete(index, session)
+
+    @staticmethod
+    def sync_index() -> None:
+        """インデックスを同期する。
+
+        移植元`FileService.syncFiles`相当。SAAS環境ではファイル一括同期機能自体が
+        未実装であり、移植元は常にエラーを返すスタブ実装のため、その挙動をそのまま踏襲する。
+
+        Raises:
+            HTTPException: 常に400を返す。
+        """
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ファイル一括同期機能はローカルAPIサーバしか対応していません。",
+        )
+
+    @staticmethod
+    async def additional_learning(
+        index_id: str,
+        tenant_id: str,
+        current_user: User,
+        feedback_id: str | None,
+        room_id: str | None,
+        upload: UploadFile,
+        storage: FileStorage,
+        session: AsyncSession,
+    ) -> None:
+        """インデックスへ追加学習用のファイルを登録する。
+
+        移植元`FileService.additionalLearning`相当。`feedbackId`指定時は特定の質問回答
+        ペアを、`roomId`指定時はルーム内の全メッセージを学習データソースとして扱う。
+
+        ファイルのストレージ保存・DB作成処理は、`FileService.create_file`と共通する
+        ロジックのため`core.file_creation`に切り出したものを再利用する（`xxx_service.py`
+        が別の`yyy_service.py`を呼ぶ構造を避けるため）。
+
+        Args:
+            index_id: インデックスID。
+            tenant_id: テナントID。
+            current_user: 追加学習を実行するユーザー。
+            feedback_id: 学習データソースとするフィードバックID。`room_id`と排他。
+            room_id: 学習データソースとするルームID。`feedback_id`と排他。
+            upload: 追加学習用のアップロードファイル。
+            storage: ファイルストレージ。
+            session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: `feedback_id`・`room_id`のどちらも未指定、または両方指定の場合400。
+                インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
+                当月クレジット上限超過の場合429を返す。指定された`feedback_id`・`room_id`が
+                テナント内に存在しない場合404を返す（`files.feedback_id`は単一列FKのため、
+                テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
+                黙って紐付いてしまう）。
+        """
+        learning_source_not_specified = feedback_id is None and room_id is None
+        confused_learning_source = feedback_id is not None and room_id is not None
+        if learning_source_not_specified or confused_learning_source:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="追加学習のデータソースが正しく指定されていません。",
+            )
+
+        index = await IndexRepository.find_by_id_and_tenant_id(
+            index_id, tenant_id, session
+        )
+        if index is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="インデックスが存在しません。",
+            )
+        file_creation.ensure_not_local(index)
+        await credit_quota.enforce_within_quota(tenant_id, session)
+
+        # `files.feedback_id`・`files.room_id`にはそれぞれ`message_feedbacks`・`rooms`への
+        # FK制約がある。`feedback_id`は単一列FK（テナント条件を含まない）のため、存在確認を
+        # テナントIDで行わずファイル作成に進むと、他テナントの`feedback_id`を指定された場合に
+        # そのFK自体は満たしてしまい、テナントをまたいだ紐付けが黙って成立してしまう。
+        # そのため、ファイル作成前に必ずテナントIDを条件に含めて存在確認を行う。
+        feedback = None
+        if feedback_id is not None:
+            feedback = await MessageFeedbackRepository.find_by_id_and_tenant_id(
+                feedback_id, tenant_id, session
+            )
+            if feedback is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="指定されたフィードバックが見つかりません。",
+                )
+            name = f"追加学習_{feedback_id}.md"
+            reference = f"フィードバック_{feedback_id}"
+        else:
+            room = await RoomRepository.find_by_id_and_tenant_id(
+                room_id, tenant_id, session
+            )
+            if room is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="指定されたルームが見つかりません。",
+                )
+            # 移植元同様、roomId指定時もreferenceの接頭辞は「フィードバック_」のまま
+            # （意図的なバグ修正は本Issueのスコープ外とし、移植元の挙動をそのまま踏襲する）。
+            name = f"追加学習_ルーム_{room_id}.md"
+            reference = f"フィードバック_{room_id}"
+
+        await file_creation.create_file_record(
+            index,
+            name,
+            "フィードバック学習",
+            reference,
+            current_user,
+            upload,
+            tenant_id,
+            storage,
+            session,
+            feedback_id,
+            room_id,
+        )
+
+        if feedback is not None:
+            feedback.index_id = index_id
+            await MessageFeedbackRepository.save(feedback, session)
