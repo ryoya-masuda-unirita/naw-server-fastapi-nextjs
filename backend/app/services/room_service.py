@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.room_access import require_viewable_room
 from app.models.assistant import Assistant
 from app.models.room import Room, RoomPin, RoomRating
 from app.models.user import User, UserRole
@@ -104,8 +105,11 @@ class RoomService:
         name: str | None,
         session: AsyncSession,
     ) -> PagedRoomResponse:
-        rooms, total = await RoomRepository.find_page_by_login_id(
-            tenant_id, current_user.login_id, page, size, name, session
+        group_ids = await GroupUserRepository.find_belonging_group_ids(
+            tenant_id, current_user.id, session
+        )
+        rooms, total = await RoomRepository.find_page_viewable_by_user(
+            tenant_id, current_user.id, group_ids, page, size, name, session
         )
         pinned_room_ids = await RoomPinRepository.find_pinned_room_ids_by_login_id(
             tenant_id, current_user.login_id, session
@@ -131,9 +135,7 @@ class RoomService:
     async def get_room(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> RoomResponse:
-        room = await RoomService._get_owned_room_or_404(
-            room_id, tenant_id, current_user, session
-        )
+        room = await require_viewable_room(tenant_id, current_user, room_id, session)
         return RoomService._to_room_response(room)
 
     @staticmethod

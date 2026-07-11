@@ -12,6 +12,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
+from app.models.group import Group, GroupUser
 from app.models.message import (
     Message,
     MessageContent,
@@ -21,6 +22,7 @@ from app.models.message import (
     MessageRating,
 )
 from app.models.room import Room
+from app.models.share import Share, ShareRoom
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
@@ -199,6 +201,44 @@ async def other_users_message(
 
 
 @pytest.fixture
+async def share_target_group(session, messages_tenant, other_user_same_tenant):
+    """other_user_same_tenantが所属する共有先グループ"""
+    group = Group(tenant_id=messages_tenant.id, name="Share Target Group")
+    session.add(group)
+    await session.commit()
+    await session.refresh(group)
+    session.add(
+        GroupUser(
+            group_id=group.id,
+            tenant_id=messages_tenant.id,
+            user_id=other_user_same_tenant.id,
+            is_admin=False,
+        )
+    )
+    await session.commit()
+    return group
+
+
+@pytest.fixture
+async def shared_room_share(session, messages_tenant, owned_room, share_target_group):
+    """owned_roomをshare_target_groupに共有する共有リンク"""
+    share = Share(tenant_id=messages_tenant.id, room_id=owned_room.id)
+    session.add(share)
+    await session.commit()
+    await session.refresh(share)
+    session.add(
+        ShareRoom(
+            tenant_id=messages_tenant.id,
+            share_id=share.id,
+            room_id=owned_room.id,
+            group_id=share_target_group.id,
+        )
+    )
+    await session.commit()
+    return share
+
+
+@pytest.fixture
 async def owned_message_content(session, messages_tenant, owned_message):
     content = MessageContent(
         tenant_id=messages_tenant.id,
@@ -321,6 +361,28 @@ class TestMessageRouter:
 
             assert response.status_code == 403
 
+        async def test_create_message_with_shared_group_member_returns_403(
+            self,
+            client,
+            other_user_headers,
+            owned_room,
+            shared_room_share,
+            message_assistant,
+        ):
+            """共有先グループのメンバーは書き込み系（メッセージ送信）を行えず
+            403になること（書き込み系は引き続き所有者限定のため）"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages",
+                    json={
+                        "roomId": owned_room.id,
+                        "assistantId": message_assistant.id,
+                    },
+                    headers=other_user_headers,
+                )
+
+            assert response.status_code == 403
+
         async def test_create_message_with_nonexistent_parent_id_sets_null(
             self, client, owner_headers, owned_room, message_assistant
         ):
@@ -395,6 +457,27 @@ class TestMessageRouter:
             assert [m["id"] for m in body["messages"]] == [owned_message.id]
             assert [a["id"] for a in body["assistants"]] == [message_assistant.id]
 
+        async def test_get_messages_with_shared_group_member_returns_200(
+            self,
+            client,
+            other_user_headers,
+            owned_room,
+            owned_message,
+            shared_room_share,
+        ):
+            """共有リンクを持つ共有先グループのメンバーはメッセージ一覧を
+            取得できること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=other_user_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert [m["id"] for m in body["messages"]] == [owned_message.id]
+
         async def test_get_messages_with_other_users_room_returns_403(
             self, client, owner_headers, other_users_room
         ):
@@ -438,6 +521,27 @@ class TestMessageRouter:
             assert len(body) == 1
             assert body[0]["referencePaths"] == ["path/a.txt", "path/b.txt"]
             assert [f["name"] for f in body[0]["attachmentFiles"]] == ["file.txt"]
+
+        async def test_get_message_contents_with_shared_group_member_returns_200(
+            self,
+            client,
+            other_user_headers,
+            owned_message,
+            owned_message_content,
+            shared_room_share,
+        ):
+            """共有リンクを持つ共有先グループのメンバーはメッセージ内容一覧を
+            取得できること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/contents",
+                    json={"messageIds": [owned_message.id]},
+                    headers=other_user_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert len(body) == 1
 
         async def test_get_message_contents_with_other_users_message_returns_403(
             self, client, session, messages_tenant, owner_headers, other_users_message

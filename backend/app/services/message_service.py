@@ -19,7 +19,11 @@ from app.core.library_stream_router import (
 )
 from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
 from app.core.llm_client import ToolConfig as CoreToolConfig
-from app.core.room_access import require_owned_room
+from app.core.room_access import (
+    can_view_room,
+    require_owned_room,
+    require_viewable_room,
+)
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
     input_credits,
@@ -448,9 +452,9 @@ class MessageService:
             メッセージ一覧と参照アシスタント一覧。
 
         Raises:
-            HTTPException: ルームが存在しない場合は404、所有者でない場合は403。
+            HTTPException: ルームが存在しない場合は404、閲覧権限がない場合は403。
         """
-        await require_owned_room(tenant_id, current_user, room_id, session)
+        await require_viewable_room(tenant_id, current_user, room_id, session)
 
         rows = await MessageRepository.find_by_tenant_id_and_room_id_with_feedback(
             tenant_id, room_id, session
@@ -524,7 +528,7 @@ class MessageService:
 
         Raises:
             HTTPException: 対象メッセージが属するルームが存在しない場合は404、
-                所有者でない場合は403。
+                閲覧権限がない場合は403。
         """
         contents = await MessageContentRepository.find_by_message_id_in(
             message_ids, tenant_id, session
@@ -547,7 +551,7 @@ class MessageService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
                 )
-            if room.user_id != current_user.id:
+            if not await can_view_room(tenant_id, current_user, room, session):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
                 )

@@ -1,36 +1,53 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
 from app.models.assistant import Assistant
 from app.models.room import Room, RoomPin, RoomRating
+from app.models.share import ShareRoom
 from app.models.user import User
 
 
 class RoomRepository:
     @staticmethod
-    async def find_page_by_login_id(
+    async def find_page_viewable_by_user(
         tenant_id: str,
-        login_id: str,
+        user_id: UUID,
+        group_ids: list[str],
         page: int,
         size: int,
         name: str | None,
         session: AsyncSession,
     ) -> tuple[list[Room], int]:
-        """ログインユーザーが所有するルーム一覧を、固定優先・更新日時降順で取得する。"""
-        user_id_subquery = (
-            select(User.id)
-            .where(User.login_id == login_id, User.tenant_id == tenant_id)
-            .scalar_subquery()
-        )
+        """ログインユーザーが閲覧可能なルーム一覧を、固定優先・更新日時降順で取得する。
 
-        base_stmt = select(Room).where(
-            Room.tenant_id == tenant_id, Room.user_id == user_id_subquery
-        )
+        「閲覧可能」は、自ユーザーが所有するルーム、または共有リンクで自ユーザーの
+        所属グループに共有されているルームのいずれか（issue-114で追加）。
+
+        Args:
+            tenant_id: テナントID。
+            user_id: ログインユーザーのID。
+            group_ids: ログインユーザーが所属するグループID一覧。
+            page: ページ番号（0始まり）。
+            size: 1ページあたりの件数。
+            name: ルーム名の部分一致検索文字列。
+            session: 非同期DBセッション。
+
+        Returns:
+            (ルーム一覧, 総件数) のタプル。
+        """
+        conditions = [Room.user_id == user_id]
+        if group_ids:
+            shared_room_ids = select(ShareRoom.room_id).where(
+                ShareRoom.tenant_id == tenant_id, ShareRoom.group_id.in_(group_ids)
+            )
+            conditions.append(Room.id.in_(shared_room_ids))
+
+        base_stmt = select(Room).where(Room.tenant_id == tenant_id, or_(*conditions))
         if name:
             pattern = escape_like_pattern(name.lower())
             base_stmt = base_stmt.where(
@@ -50,7 +67,7 @@ class RoomRepository:
                 (
                     (RoomPin.room_id == Room.id)
                     & (RoomPin.tenant_id == tenant_id)
-                    & (RoomPin.user_id == user_id_subquery)
+                    & (RoomPin.user_id == user_id)
                 ),
             )
             .order_by(pinned_order.asc(), Room.updated_at.desc())
