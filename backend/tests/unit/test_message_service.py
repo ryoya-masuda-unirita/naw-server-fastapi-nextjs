@@ -4,10 +4,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.core.llm_client import ChatMessage
+from app.core.llm_client import ChatMessage, EmbeddingResult
+from app.core.vector_store import VectorSearchResult
 from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
+from app.models.file import File, FileStatus
+from app.models.index import Index, IndexType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
+from app.models.token_usage import TokenUsage
 from app.schemas.message import MessageContentCreateRequest, MessageContentHistoryTurn
 from app.services.message_service import MessageService, _apply_additional_prompt
 
@@ -54,6 +58,55 @@ def _assistant(assistant_type: AssistantType = AssistantType.SAAS_CHAT) -> Assis
 
 def _message(assistant_id: str | None = "assistant-1") -> MagicMock:
     return MagicMock(id="msg-1", room_id="room-1", assistant_id=assistant_id)
+
+
+def _rag_assistant(index_id: str | None = "index-1") -> Assistant:
+    return Assistant(
+        id="assistant-1",
+        tenant_id="tenant-1",
+        type=AssistantType.SAAS_RAG,
+        name="RAG Assistant",
+        include_history=False,
+        index_id=index_id,
+    )
+
+
+def _index(index_id: str = "index-1") -> Index:
+    return Index(id=index_id, tenant_id="tenant-1", type=IndexType.LOCAL, name="Index")
+
+
+def _embedding_endpoint(endpoint_id: str = "embed-endpoint-1") -> TenantEndpoint:
+    return TenantEndpoint(
+        id=endpoint_id,
+        tenant_id="tenant-1",
+        type=EndpointType.AZURE_OPENAI_EMBEDDING,
+        endpoint_name="azure-embedding",
+        endpoint="https://example-embedding.openai.azure.com",
+        api_key="embedding-api-key",
+    )
+
+
+def _vdb_endpoint(tenant_id: str = "tenant-1") -> TenantEndpoint:
+    return TenantEndpoint(
+        id="vdb-endpoint-1",
+        tenant_id=tenant_id,
+        type=EndpointType.VDB,
+        endpoint_name="azure-search",
+        endpoint="https://example-search.search.windows.net",
+        api_key="vdb-api-key",
+    )
+
+
+def _file(file_id: str, reference: str | None) -> File:
+    return File(
+        id=file_id,
+        tenant_id="tenant-1",
+        name=f"{file_id}.txt",
+        reference=reference,
+        status=FileStatus.ENABLE,
+        user_id="11111111-1111-1111-1111-111111111111",
+        index_id="index-1",
+    )
 
 
 def _request(**overrides) -> MessageContentCreateRequest:
@@ -184,16 +237,16 @@ class TestStreamMessageContent:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_raises_400_when_assistant_type_is_not_saas_chat(
+    async def test_raises_400_when_secure_assistant_type(
         self,
         mock_find_message,
         mock_require_owned_room,
         mock_find_assistant,
         test_user,
     ):
-        """アシスタント種別がSAAS_CHAT以外の場合400になること"""
+        """アシスタント種別がSECUREの場合400になること"""
         mock_find_message.return_value = _message()
-        mock_find_assistant.return_value = _assistant(AssistantType.SAAS_RAG)
+        mock_find_assistant.return_value = _assistant(AssistantType.SECURE)
 
         with pytest.raises(HTTPException) as exc_info:
             await MessageService.stream_message_content(
@@ -636,6 +689,604 @@ class TestStreamMessageContent:
         mock_save_content.assert_awaited_once()
         saved_content = mock_save_content.await_args.args[0]
         assert saved_content.answer == "途中まで"
+
+
+class TestStreamMessageContentRag:
+    """MessageService.stream_message_content のSAAS_RAG分岐のテスト"""
+
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_rag_assistant_has_no_index_id(
+        self, mock_find_message, mock_require_owned_room, test_user
+    ):
+        """SAAS_RAGアシスタントにindex_idが紐付いていない場合400になること"""
+        mock_find_message.return_value = _message()
+
+        with (
+            patch(
+                "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_assistant,
+            patch(
+                "app.services.message_service.enforce_within_quota",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+            ) as mock_find_endpoint,
+            patch(
+                "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+            ) as mock_find_model,
+        ):
+            mock_find_assistant.return_value = _rag_assistant(index_id=None)
+            mock_find_endpoint.return_value = (
+                _assistant_endpoint(),
+                _tenant_endpoint(),
+            )
+            mock_find_model.return_value = _ai_model()
+
+            with pytest.raises(HTTPException) as exc_info:
+                await MessageService.stream_message_content(
+                    "tenant-1", test_user, _request(), session=None
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_rag_index_not_found(
+        self, mock_find_message, mock_require_owned_room, test_user
+    ):
+        """index_idはあるがインデックスが存在しない場合400になること"""
+        mock_find_message.return_value = _message()
+
+        with (
+            patch(
+                "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_assistant,
+            patch(
+                "app.services.message_service.enforce_within_quota",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+            ) as mock_find_endpoint,
+            patch(
+                "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+            ) as mock_find_model,
+            patch(
+                "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_index,
+        ):
+            mock_find_assistant.return_value = _rag_assistant()
+            mock_find_endpoint.return_value = (
+                _assistant_endpoint(),
+                _tenant_endpoint(),
+            )
+            mock_find_model.return_value = _ai_model()
+            mock_find_index.return_value = None
+
+            with pytest.raises(HTTPException) as exc_info:
+                await MessageService.stream_message_content(
+                    "tenant-1", test_user, _request(), session=None
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_rag_embedding_endpoint_not_found(
+        self, mock_find_message, mock_require_owned_room, test_user
+    ):
+        """インデックスに埋め込みタイプのエンドポイントが紐付いていない場合400になること"""
+        mock_find_message.return_value = _message()
+
+        with (
+            patch(
+                "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_assistant,
+            patch(
+                "app.services.message_service.enforce_within_quota",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+            ) as mock_find_endpoint,
+            patch(
+                "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+            ) as mock_find_model,
+            patch(
+                "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_index,
+            patch(
+                "app.services.message_service.IndexRepository"
+                ".find_tenant_endpoints_grouped_by_index_ids",
+                new_callable=AsyncMock,
+            ) as mock_find_index_endpoints,
+        ):
+            mock_find_assistant.return_value = _rag_assistant()
+            mock_find_endpoint.return_value = (
+                _assistant_endpoint(),
+                _tenant_endpoint(),
+            )
+            mock_find_model.return_value = _ai_model()
+            mock_find_index.return_value = _index()
+            mock_find_index_endpoints.return_value = {"index-1": []}
+
+            with pytest.raises(HTTPException) as exc_info:
+                await MessageService.stream_message_content(
+                    "tenant-1", test_user, _request(), session=None
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_rag_vector_db_endpoint_not_found(
+        self, mock_find_message, mock_require_owned_room, test_user
+    ):
+        """テナントにVDBタイプのエンドポイントが存在しない場合400になること"""
+        mock_find_message.return_value = _message()
+
+        with (
+            patch(
+                "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_assistant,
+            patch(
+                "app.services.message_service.enforce_within_quota",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+            ) as mock_find_endpoint,
+            patch(
+                "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+            ) as mock_find_model,
+            patch(
+                "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_index,
+            patch(
+                "app.services.message_service.IndexRepository"
+                ".find_tenant_endpoints_grouped_by_index_ids",
+                new_callable=AsyncMock,
+            ) as mock_find_index_endpoints,
+            patch(
+                "app.services.message_service.TenantEndpointRepository"
+                ".find_by_tenant_id_and_type",
+                new_callable=AsyncMock,
+            ) as mock_find_vdb_endpoints,
+        ):
+            mock_find_assistant.return_value = _rag_assistant()
+            mock_find_endpoint.return_value = (
+                _assistant_endpoint(),
+                _tenant_endpoint(),
+            )
+            mock_find_model.return_value = _ai_model()
+            mock_find_index.return_value = _index()
+            mock_find_index_endpoints.return_value = {
+                "index-1": [_embedding_endpoint()]
+            }
+            mock_find_vdb_endpoints.return_value = []
+
+            with pytest.raises(HTTPException) as exc_info:
+                await MessageService.stream_message_content(
+                    "tenant-1", test_user, _request(), session=None
+                )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureAiSearchVectorStoreClient.similarity_search",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.TenantEndpointRepository"
+        ".find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository"
+        ".find_tenant_endpoints_grouped_by_index_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_rag_streams_with_context_from_vector_search(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_find_index,
+        mock_find_index_endpoints,
+        mock_find_vdb_endpoints,
+        mock_create_embedding,
+        mock_similarity_search,
+        mock_find_files,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """ベクトル検索結果からRAGコンテキストを構築し、システムメッセージ追加・永続化すること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _rag_assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+
+        def _find_model_side_effect(endpoint_type, name, session):
+            if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
+                return _ai_model()
+            return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
+
+        mock_find_model.side_effect = _find_model_side_effect
+        mock_find_index.return_value = _index()
+        mock_find_index_endpoints.return_value = {"index-1": [_embedding_endpoint()]}
+        mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+        mock_create_embedding.return_value = EmbeddingResult(
+            embedding=[0.1, 0.2], tokens=7
+        )
+        mock_similarity_search.return_value = [
+            VectorSearchResult(content="資料1", file_unique_id="f001"),
+            VectorSearchResult(content="資料2", file_unique_id="f002"),
+        ]
+        mock_find_files.return_value = [
+            _file("f001", reference="ref1.pdf"),
+            _file("f002", reference="ref2.pdf"),
+        ]
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="回答"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="回答",
+            context="資料1資料2",
+            file_paths="ref1.pdf,ref2.pdf",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        # ベクトル検索(Azure AI Search)にはVDB接続情報が属するテナントID
+        # (`vdb.tenant_id`)がインデックス名として渡されること。
+        mock_similarity_search.assert_awaited_once()
+        assert mock_similarity_search.await_args.args[2] == "tenant-1"
+
+        # チャットへの会話履歴の先頭に、区切り文字なしで連結したRAGコンテキストを
+        # 含むシステムメッセージが追加されていること。
+        chat_messages_arg = mock_stream_chat.call_args.args[3]
+        assert chat_messages_arg[0].role == "system"
+        assert "資料1資料2" in chat_messages_arg[0].content
+
+        saved_content = mock_save_content.await_args.args[0]
+        assert saved_content.context == "資料1資料2"
+        assert saved_content.file_paths == "ref1.pdf,ref2.pdf"
+
+        # 埋め込みトークン数・埋め込みcredit(token_weight=2.0のため ceil(7*2.0/1000)=1)
+        # が TokenUsage として永続化されること。
+        added_objects = [call.args[0] for call in mock_new_session.add.call_args_list]
+        token_usages = [obj for obj in added_objects if isinstance(obj, TokenUsage)]
+        assert len(token_usages) == 1
+        assert token_usages[0].embedding_tokens == 7
+        assert token_usages[0].embedding_credits == 1
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureAiSearchVectorStoreClient.similarity_search",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.TenantEndpointRepository"
+        ".find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository"
+        ".find_tenant_endpoints_grouped_by_index_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_rag_skips_files_not_found_in_tenant(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_find_index,
+        mock_find_index_endpoints,
+        mock_find_vdb_endpoints,
+        mock_create_embedding,
+        mock_similarity_search,
+        mock_find_files,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """検索結果の一部がテナント内に存在しないファイルの場合、コンテキストに反映されないこと"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _rag_assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_find_index.return_value = _index()
+        mock_find_index_endpoints.return_value = {"index-1": [_embedding_endpoint()]}
+        mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+        mock_create_embedding.return_value = EmbeddingResult(
+            embedding=[0.1, 0.2], tokens=3
+        )
+        mock_similarity_search.return_value = [
+            VectorSearchResult(content="資料1", file_unique_id="f001"),
+            VectorSearchResult(content="資料2(未解決)", file_unique_id="f999"),
+        ]
+        # f999はテナント内に存在しないため、find_by_ids_and_tenant_idの戻り値に含めない。
+        mock_find_files.return_value = [_file("f001", reference="ref1.pdf")]
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(input_tokens=1, output_tokens=1)]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+            context="資料1",
+            file_paths="ref1.pdf",
+        )
+        mock_find_room.return_value = None
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        saved_content = mock_save_content.await_args.args[0]
+        assert saved_content.context == "資料1"
+        assert saved_content.file_paths == "ref1.pdf"
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureAiSearchVectorStoreClient.similarity_search",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.TenantEndpointRepository"
+        ".find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository"
+        ".find_tenant_endpoints_grouped_by_index_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_rag_no_system_message_when_search_returns_empty(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_find_index,
+        mock_find_index_endpoints,
+        mock_find_vdb_endpoints,
+        mock_create_embedding,
+        mock_similarity_search,
+        mock_find_files,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """ベクトル検索結果が空の場合、RAGシステムメッセージを追加しないこと"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _rag_assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_find_index.return_value = _index()
+        mock_find_index_endpoints.return_value = {"index-1": [_embedding_endpoint()]}
+        mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+        mock_create_embedding.return_value = EmbeddingResult(
+            embedding=[0.1, 0.2], tokens=2
+        )
+        mock_similarity_search.return_value = []
+        mock_find_files.return_value = []
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="回答"),
+                ChatStreamChunk(input_tokens=1, output_tokens=1),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="回答",
+        )
+        mock_find_room.return_value = None
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        chat_messages_arg = mock_stream_chat.call_args.args[3]
+        assert chat_messages_arg[0].role == "user"
+
+        saved_content = mock_save_content.await_args.args[0]
+        assert saved_content.context is None
+        assert saved_content.file_paths is None
 
 
 class TestApplyAdditionalPrompt:

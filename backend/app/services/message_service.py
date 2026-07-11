@@ -11,15 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
-from app.core.llm_client import AzureLlmChatClient, ChatMessage
+from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
+    embedding_credits as calc_embedding_credits,
     input_credits,
     output_credits,
     positive_token_weight,
 )
+from app.core.vector_store import AzureAiSearchVectorStoreClient, DEFAULT_TOP_K
 from app.models.ai_model import AIModelEndpointType
-from app.models.assistant import AssistantType
+from app.models.assistant import Assistant, AssistantType
 from app.models.message import (
     Message,
     MessageContent,
@@ -33,10 +35,13 @@ from app.models.user import User
 from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
+from app.repositories.file_repository import FileRepository
+from app.repositories.index_repository import IndexRepository
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.room_repository import RoomRepository
+from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.message import (
     AssistantResponse,
     EndpointResponse,
@@ -53,6 +58,15 @@ from app.schemas.message import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 移植元Java版`MessageService.EMBEDDING_MODEL_NAME`に対応する。RAG検索用の埋め込みは
+# テナントエンドポイントのモデル設定を参照せず、この固定デプロイ名を使う。
+EMBEDDING_MODEL_NAME = "text-embedding-ada-002"
+
+# SAAS_RAGのチャット応答クレジット計算に使うtoken_weight。移植元`buildRagContext`が
+# 返す`StreamMessageContentContext.tokenWeight`は、SAAS_CHATと異なりAIモデルの
+# token_weightを使わず固定値1.0のため、その挙動をそのまま踏襲する。
+RAG_CHAT_TOKEN_WEIGHT = 1.0
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -531,13 +545,13 @@ class MessageService:
     ) -> StreamingResponse:
         """メッセージ送信によるアシスタント応答生成をSSEでストリーミング返却する。
 
-        本Issueのスコープは`SAAS_CHAT`アシスタントによる基本チャットのみで、
-        `SAAS_RAG`・`SECURE`は非対応（400）。クレジット上限チェック・アシスタント/
-        エンドポイント/AIモデル解決は、ここで注入された`session`を使いストリーミング
-        開始前に行う。ストリーミング完了後の`MessageContent`永続化・ルーム更新日時の
-        更新・トークン使用量永続化は、`session`のライフサイクル（StreamingResponse
-        返却後にリクエストのDIスコープが終了しうる）とは独立させる必要があるため、
-        新規セッションで行う。
+        `SAAS_CHAT`（基本チャット）・`SAAS_RAG`（ベクトル検索付きアシスタント）に
+        対応する。`SECURE`は非対応（400）。クレジット上限チェック・アシスタント/
+        エンドポイント/AIモデル解決・（SAAS_RAGの場合の）RAGコンテキスト構築は、
+        ここで注入された`session`を使いストリーミング開始前に行う。ストリーミング
+        完了後の`MessageContent`永続化・ルーム更新日時の更新・トークン使用量永続化は、
+        `session`のライフサイクル（StreamingResponse返却後にリクエストのDIスコープが
+        終了しうる）とは独立させる必要があるため、新規セッションで行う。
 
         Args:
             tenant_id: テナントID。
@@ -550,9 +564,10 @@ class MessageService:
 
         Raises:
             HTTPException: 指定messageIdのメッセージが存在しない場合は404、所属
-                ルームの所有者でない場合は403、アシスタントが未解決・`SAAS_CHAT`
-                以外・チャットエンドポイント/AIモデルが解決できない場合は400、
-                クレジット上限超過時は429。
+                ルームの所有者でない場合は403、アシスタントが未解決・`SECURE`・
+                チャットエンドポイント/AIモデルが解決できない場合は400、SAAS_RAGで
+                インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
+                ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
         """
         message = await MessageRepository.find_by_tenant_id_and_id(
             tenant_id, req.messageId, session
@@ -574,12 +589,10 @@ class MessageService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid assistant"
             )
-        if assistant.type != AssistantType.SAAS_CHAT:
+        if assistant.type == AssistantType.SECURE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "Unsupported assistant type (SAAS_RAG/SECURE are not supported yet)"
-                ),
+                detail="Unsupported assistant type (SECURE is not supported yet)",
             )
 
         await enforce_within_quota(tenant_id, session)
@@ -612,12 +625,43 @@ class MessageService:
             req.additionalPrompt,
         )
 
+        rag_context = ""
+        reference_paths: list[str] = []
+        embedding_tokens = 0
+        embedding_token_weight = 1.0
+        if assistant.type == AssistantType.SAAS_RAG:
+            (
+                rag_context,
+                reference_paths,
+                embedding_tokens,
+                embedding_token_weight,
+            ) = await MessageService._build_rag_context(
+                tenant_id, assistant, req.userInput, session
+            )
+            if rag_context.strip():
+                chat_messages = [
+                    ChatMessage(
+                        role="system",
+                        content=(
+                            "以下のコンテキスト情報を参考にして回答してください:\n\n"
+                            f"{rag_context}"
+                        ),
+                    ),
+                    *chat_messages,
+                ]
+
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
         api_key = tenant_endpoint.api_key
         deploy_name = assistant_endpoint.model
         model_name = ai_model.name
-        token_weight = positive_token_weight(float(ai_model.token_weight))
+        # SAAS_RAGの場合、移植元`buildRagContext`の挙動に合わせてAIモデルのtoken_weight
+        # ではなく固定値を使う（`RAG_CHAT_TOKEN_WEIGHT`のコメント参照）。
+        token_weight = (
+            RAG_CHAT_TOKEN_WEIGHT
+            if assistant.type == AssistantType.SAAS_RAG
+            else positive_token_weight(float(ai_model.token_weight))
+        )
         message_id = message.id
         room_id = message.room_id
         user_id = current_user.id
@@ -681,6 +725,8 @@ class MessageService:
                     question=question_text,
                     answer=answer_text,
                     content_status=content_status,
+                    context=rag_context or None,
+                    reference_paths=reference_paths,
                 )
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
@@ -692,11 +738,147 @@ class MessageService:
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     credit_settings=credit_settings,
+                    embedding_tokens=embedding_tokens,
+                    embedding_token_weight=embedding_token_weight,
                 )
                 if stream_finished:
                     yield _sse("complete", content_response.model_dump())
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @staticmethod
+    async def _build_rag_context(
+        tenant_id: str,
+        assistant: Assistant,
+        user_input: str,
+        session: AsyncSession,
+    ) -> tuple[str, list[str], int, float]:
+        """SAAS_RAGアシスタントのRAGコンテキストを構築する（移植元`buildRagContext`相当）。
+
+        インデックス・埋め込みエンドポイント・ベクトルDB接続情報を解決したうえで、
+        ユーザー入力を埋め込みベクトル化しAzure AI Searchへ類似検索を行い、検索結果の
+        `fileUniqueId`メタデータから解決できたファイルのみをコンテキストへ採用する。
+
+        Args:
+            tenant_id: テナントID。
+            assistant: SAAS_RAGアシスタント。
+            user_input: ユーザーの発話（検索クエリとして使う）。
+            session: 非同期DBセッション。
+
+        Returns:
+            (RAGコンテキスト文字列, 参照ファイルパス一覧, 消費した埋め込みトークン数,
+            埋め込みクレジット換算用のtoken_weight) のタプル。
+
+        Raises:
+            HTTPException: インデックスが未紐付け・未検出、埋め込みエンドポイントが
+                見つからない、ベクトルDB接続情報が見つからない、ベクトルDBへの
+                接続・検索に失敗した場合は400。
+        """
+        if assistant.index_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No index found for this assistant",
+            )
+        index = await IndexRepository.find_by_id_and_tenant_id(
+            assistant.index_id, tenant_id, session
+        )
+        if index is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No index found for this assistant",
+            )
+
+        index_endpoints_map = (
+            await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
+                [index.id], tenant_id, session
+            )
+        )
+        embedding_endpoint = next(
+            (
+                endpoint
+                for endpoint in sorted(
+                    index_endpoints_map.get(index.id, []), key=lambda e: e.id
+                )
+                if endpoint.type == EndpointType.AZURE_OPENAI_EMBEDDING
+            ),
+            None,
+        )
+        if embedding_endpoint is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No embedding endpoint found for this index",
+            )
+
+        vdb_endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
+            tenant_id, EndpointType.VDB, session
+        )
+        if not vdb_endpoints:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No vector database connection found for this tenant",
+            )
+        vdb = vdb_endpoints[0]
+
+        embedding_result = await AzureLlmEmbeddingClient.create_embedding(
+            embedding_endpoint.endpoint,
+            embedding_endpoint.api_key,
+            EMBEDDING_MODEL_NAME,
+            user_input,
+            None,
+        )
+
+        # 移植元同様、Azure Searchのインデックス名にはベクトルDB接続情報が属する
+        # テナントIDを使う（`assistant.index_id`ではない）。
+        search_results = await AzureAiSearchVectorStoreClient.similarity_search(
+            vdb.endpoint,
+            vdb.api_key,
+            vdb.tenant_id,
+            embedding_result.embedding,
+            DEFAULT_TOP_K,
+        )
+
+        seen_file_ids: set[str] = set()
+        file_ids: list[str] = []
+        for result in search_results:
+            if result.file_unique_id and result.file_unique_id not in seen_file_ids:
+                seen_file_ids.add(result.file_unique_id)
+                file_ids.append(result.file_unique_id)
+        files = await FileRepository.find_by_ids_and_tenant_id(
+            file_ids, tenant_id, session
+        )
+        files_by_id = {file.id: file for file in files}
+
+        context_parts: list[str] = []
+        reference_paths: list[str] = []
+        for result in search_results:
+            file = (
+                files_by_id.get(result.file_unique_id)
+                if result.file_unique_id
+                else None
+            )
+            if file is None:
+                continue
+            context_parts.append(result.content)
+            if file.reference:
+                reference_paths.append(file.reference)
+        # 移植元`contentBuilder.append(doc.getText())`同様、区切り文字なしで連結する。
+        rag_context = "".join(context_parts)
+
+        embedding_model = await AIModelRepository.find_by_endpoint_type_and_name(
+            AIModelEndpointType.AZURE_OPENAI_EMBEDDING, EMBEDDING_MODEL_NAME, session
+        )
+        embedding_token_weight = (
+            positive_token_weight(float(embedding_model.token_weight))
+            if embedding_model is not None
+            else 1.0
+        )
+
+        return (
+            rag_context,
+            reference_paths,
+            embedding_result.tokens,
+            embedding_token_weight,
+        )
 
     @staticmethod
     async def _persist_message_content(
@@ -707,6 +889,8 @@ class MessageService:
         question: str,
         answer: str,
         content_status: MessageContentStatus,
+        context: str | None = None,
+        reference_paths: list[str] | None = None,
     ) -> MessageContentResponse:
         """ストリーミング完了後、回答内容を新規セッションで永続化し、ルームの更新日時を進める。
 
@@ -717,10 +901,13 @@ class MessageService:
             question: 質問本文。
             answer: 回答本文(エラー時は例外メッセージ)。
             content_status: 永続化するステータス(`OK`/`ERROR`)。
+            context: RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
+            reference_paths: 参照ファイルパス一覧(SAAS_CHATの場合は空)。
 
         Returns:
             永続化した内容を表す`complete`イベント用のレスポンス。
         """
+        reference_paths = reference_paths or []
         session_maker = get_session_maker()
         async with session_maker() as new_session:
             content = await MessageContentRepository.save(
@@ -730,6 +917,8 @@ class MessageService:
                     status=content_status,
                     question=question,
                     answer=answer,
+                    context=context,
+                    file_paths=",".join(reference_paths) or None,
                 ),
                 new_session,
             )
@@ -750,7 +939,7 @@ class MessageService:
                 answer=content.answer,
                 context=content.context,
                 attachmentFiles=[],
-                referencePaths=[],
+                referencePaths=reference_paths,
                 isRated=False,
             )
 
@@ -766,6 +955,8 @@ class MessageService:
         input_tokens: int,
         output_tokens: int,
         credit_settings: LlmCreditSettings,
+        embedding_tokens: int = 0,
+        embedding_token_weight: float = 1.0,
     ) -> None:
         """メッセージ送信のトークン使用量を新規セッションで永続化する。
 
@@ -782,8 +973,10 @@ class MessageService:
             input_tokens: 入力トークン数。
             output_tokens: 出力トークン数。
             credit_settings: クレジット換算設定。
+            embedding_tokens: RAG検索用に消費した埋め込みトークン数(SAAS_CHATの場合は0)。
+            embedding_token_weight: 埋め込みモデルの重み係数。
         """
-        if input_tokens <= 0 and output_tokens <= 0:
+        if input_tokens <= 0 and output_tokens <= 0 and embedding_tokens <= 0:
             return
 
         token_usage = TokenUsage(
@@ -803,6 +996,12 @@ class MessageService:
             ),
             output_credits=output_credits(
                 output_tokens, credit_settings.tokens_per_credit, token_weight
+            ),
+            embedding_tokens=embedding_tokens,
+            embedding_credits=calc_embedding_credits(
+                embedding_tokens,
+                credit_settings.tokens_per_credit,
+                embedding_token_weight,
             ),
         )
         session_maker = get_session_maker()
