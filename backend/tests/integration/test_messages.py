@@ -1,11 +1,17 @@
+from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 
+from app.core.llm_client import ChatStreamChunk
 from app.core.security import create_access_token
 from app.main import app
-from app.models.assistant import Assistant, AssistantType
+from app.models.ai_model import AIModel, AIModelEndpointType
+from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
 from app.models.message import (
     Message,
     MessageContent,
@@ -16,6 +22,7 @@ from app.models.message import (
 )
 from app.models.room import Room
 from app.models.tenant import Tenant
+from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
 
 
@@ -97,6 +104,40 @@ async def message_assistant(session, messages_tenant):
     await session.commit()
     await session.refresh(assistant)
     return assistant
+
+
+@pytest.fixture
+async def message_chat_endpoint(session, messages_tenant, message_assistant):
+    """メッセージ送信(SSE)テスト用のAzure OpenAI Chatエンドポイント・AIモデル一式"""
+    tenant_endpoint = TenantEndpoint(
+        tenant_id=messages_tenant.id,
+        type=EndpointType.AZURE_OPENAI_CHAT,
+        endpoint_name="azure",
+        endpoint="https://example.openai.azure.com",
+        api_key="api-key",
+    )
+    session.add(tenant_endpoint)
+    await session.commit()
+    await session.refresh(tenant_endpoint)
+
+    session.add(
+        AssistantEndpoint(
+            assistant_id=message_assistant.id,
+            endpoint_id=tenant_endpoint.id,
+            tenant_id=messages_tenant.id,
+            model="gpt-4o",
+        )
+    )
+    session.add(
+        AIModel(
+            endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT,
+            name="gpt-4o",
+            max_tokens=4096,
+            token_weight=Decimal("1.0"),
+        )
+    )
+    await session.commit()
+    return tenant_endpoint
 
 
 @pytest.fixture
@@ -402,6 +443,80 @@ class TestMessageRouter:
                 response = await c.post(
                     "/api/messages/contents",
                     json={"messageIds": [other_users_message.id]},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 403
+
+    class TestCreateMessageContent:
+        async def test_streams_sse_and_persists_message_content(
+            self,
+            client,
+            owner_headers,
+            owned_message,
+            message_chat_endpoint,
+            engine,
+        ):
+            """正常系: SSEでtext_delta・message_stop・completeイベントを配信すること"""
+
+            async def _stream_chunks(*args, **kwargs):
+                yield ChatStreamChunk(text_delta="こんにちは")
+                yield ChatStreamChunk(input_tokens=10, output_tokens=5)
+
+            # ストリーミング完了後の永続化はリクエストのDIスコープ(テスト用の`session`
+            # フィクスチャ)とは独立した新規セッションで行われるため、`get_session_maker`
+            # もテスト用エンジンにつなぎ替える。
+            test_session_maker = sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+            with (
+                patch(
+                    "app.services.message_service.AzureLlmChatClient.stream_chat",
+                    side_effect=_stream_chunks,
+                ),
+                patch(
+                    "app.services.message_service.get_session_maker",
+                    return_value=test_session_maker,
+                ),
+            ):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        json={
+                            "messageId": owned_message.id,
+                            "userInput": "こんにちは",
+                        },
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            body = response.text
+            assert "event: text_delta" in body
+            assert "event: message_stop" in body
+            assert "event: complete" in body
+
+        async def test_returns_404_when_message_not_found(self, client, owner_headers):
+            """存在しないmessageIdを指定すると404になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    json={"messageId": "nonexistent", "userInput": "こんにちは"},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_returns_403_when_room_not_owned(
+            self, client, owner_headers, other_users_message
+        ):
+            """他人のルームに属するメッセージIDを指定するとエラーになること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    json={
+                        "messageId": other_users_message.id,
+                        "userInput": "こんにちは",
+                    },
                     headers=owner_headers,
                 )
 
