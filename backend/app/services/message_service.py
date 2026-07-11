@@ -569,9 +569,26 @@ class MessageService:
                 インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
                 ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
         """
-        message = await MessageRepository.find_by_tenant_id_and_id(
-            tenant_id, req.messageId, session
-        )
+        existing_content: MessageContent | None = None
+        if req.messageContentId is not None:
+            existing_content = await MessageContentRepository.find_by_id_and_tenant_id(
+                req.messageContentId, tenant_id, session
+            )
+            if existing_content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Message content not found",
+                )
+            message = await MessageRepository.find_by_tenant_id_and_id(
+                tenant_id, existing_content.message_id, session
+            )
+        else:
+            # スキーマの相関バリデーション(`_validate_target_specified`)により、
+            # messageContentIdがNoneの場合はmessageIdが必ず指定されている。
+            assert req.messageId is not None
+            message = await MessageRepository.find_by_tenant_id_and_id(
+                tenant_id, req.messageId, session
+            )
         if message is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
@@ -665,7 +682,15 @@ class MessageService:
         message_id = message.id
         room_id = message.room_id
         user_id = current_user.id
-        question_text = req.userInput
+        # 再生成(messageContentId指定)時は元の質問文を保持し、新規生成時のみ
+        # リクエストのuserInputを質問文として永続化する（移植元`persistMessageContent`
+        # の挙動に合わせる）。LLMへの入力自体は再生成時もリクエストのuserInputを使う。
+        question_text = (
+            existing_content.question if existing_content is not None else req.userInput
+        )
+        existing_content_id = (
+            existing_content.id if existing_content is not None else None
+        )
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
@@ -727,6 +752,7 @@ class MessageService:
                     content_status=content_status,
                     context=rag_context or None,
                     reference_paths=reference_paths,
+                    existing_content_id=existing_content_id,
                 )
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
@@ -902,37 +928,69 @@ class MessageService:
         content_status: MessageContentStatus,
         context: str | None = None,
         reference_paths: list[str] | None = None,
+        existing_content_id: str | None = None,
     ) -> MessageContentResponse:
         """ストリーミング完了後、回答内容を新規セッションで永続化し、ルームの更新日時を進める。
+
+        `existing_content_id`が指定されている場合は、新規作成ではなく既存の
+        `MessageContent`を再生成結果で上書きする（`question`は変更しない）。
 
         Args:
             tenant_id: テナントID。
             message_id: 紐づくメッセージID。
             room_id: 紐づくルームID(更新日時を進める対象)。
-            question: 質問本文。
+            question: 質問本文(再生成時は元の質問文をそのまま渡すこと)。
             answer: 回答本文(エラー時は例外メッセージ)。
             content_status: 永続化するステータス(`OK`/`ERROR`)。
             context: RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
             reference_paths: 参照ファイルパス一覧(SAAS_CHATの場合は空)。
+            existing_content_id: 再生成対象の既存メッセージ内容ID。新規作成の
+                場合はNone。
 
         Returns:
             永続化した内容を表す`complete`イベント用のレスポンス。
+
+        Raises:
+            ValueError: `existing_content_id`指定時、対象がストリーミング中に
+                削除される等の稀な競合で見つからない場合。
         """
         reference_paths = reference_paths or []
+        file_paths = ",".join(reference_paths) or None
         session_maker = get_session_maker()
         async with session_maker() as new_session:
-            content = await MessageContentRepository.save(
-                MessageContent(
-                    tenant_id=tenant_id,
-                    message_id=message_id,
+            if existing_content_id is not None:
+                existing = await MessageContentRepository.find_by_id_and_tenant_id(
+                    existing_content_id, tenant_id, new_session
+                )
+                if existing is None:
+                    # ストリーミング開始時点では存在確認済みのため、通常は到達しない
+                    # （ストリーミング中に対象が削除された等の競合時のみ）。移植元
+                    # (`persistMessageContent`)も同様にここでは救済せず例外を送出する。
+                    raise ValueError(
+                        "Message content not found for regeneration: "
+                        f"{existing_content_id}"
+                    )
+                content = await MessageContentRepository.update_answer(
+                    existing,
                     status=content_status,
-                    question=question,
                     answer=answer,
                     context=context,
-                    file_paths=",".join(reference_paths) or None,
-                ),
-                new_session,
-            )
+                    file_paths=file_paths,
+                    session=new_session,
+                )
+            else:
+                content = await MessageContentRepository.save(
+                    MessageContent(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        status=content_status,
+                        question=question,
+                        answer=answer,
+                        context=context,
+                        file_paths=file_paths,
+                    ),
+                    new_session,
+                )
 
             room = await RoomRepository.find_by_id_and_tenant_id(
                 room_id, tenant_id, new_session
