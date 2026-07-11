@@ -12,6 +12,7 @@ from app.models.assistant import (
     AssistantType,
     GroupAssistant,
 )
+from app.models.message import Message
 from app.models.room import Room
 from app.models.assistant_category import AssistantCategory
 from app.models.group import Group, GroupUser
@@ -913,6 +914,57 @@ class TestDeleteAssistant:
             )
 
         assert response.status_code == 204
+
+    async def test_delete_assistant_keeps_messages_and_sets_assistant_id_null(
+        self,
+        client,
+        session,
+        admin_headers,
+        tenant,
+        member_user,
+        assistant,
+    ):
+        """アシスタント削除時、そのアシスタントを使用したメッセージは削除されず、assistant_idがNULLになること（NAW-1192）"""
+        # メッセージのルームは削除対象と別のアシスタントをデフォルトにし、
+        # rooms.default_assistant_id の RESTRICT 制約で削除自体がブロックされないようにする。
+        other_assistant = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="OtherAssistant",
+            include_history=True,
+        )
+        session.add(other_assistant)
+        await session.commit()
+        await session.refresh(other_assistant)
+
+        room = Room(
+            tenant_id=tenant.id,
+            name="Room used by deleted assistant",
+            default_assistant_id=other_assistant.id,
+            user_id=member_user.id,
+        )
+        session.add(room)
+        await session.commit()
+        await session.refresh(room)
+
+        message = Message(
+            tenant_id=tenant.id,
+            room_id=room.id,
+            assistant_id=assistant.id,
+        )
+        session.add(message)
+        await session.commit()
+        await session.refresh(message)
+
+        async with client as c:
+            response = await c.delete(
+                f"/api/admin/assistants/{assistant.id}", headers=admin_headers
+            )
+
+        assert response.status_code == 204
+
+        await session.refresh(message)
+        assert message.assistant_id is None
 
     """DELETE /api/admin/assistants/{id}"""
 
