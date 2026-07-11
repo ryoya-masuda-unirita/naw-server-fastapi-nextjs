@@ -952,3 +952,91 @@ class TestStreamMessageContentWithAttachmentFiles:
 
         mock_save_attachment_files.assert_not_awaited()
         assert '"attachmentFiles": []' in body
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch(
+        "app.services.message_service.MessageContentRepository.save_attachment_files"
+    )
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_persists_token_usage_and_emits_complete_even_when_attachment_save_fails(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_save_attachment_files,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """添付ファイルの永続化が失敗しても、トークン使用量の永続化とcompleteイベント送出は行われること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="回答"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="回答",
+        )
+        mock_save_attachment_files.side_effect = RuntimeError("db error")
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        req = _request(
+            attachmentFiles=[
+                AttachmentFile(name="a.png", type="image/png", data=b"data")
+            ]
+        )
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, req, session=None
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        mock_save_attachment_files.assert_awaited_once()
+        mock_new_session.rollback.assert_awaited_once()
+        # 添付ファイル保存失敗後もRoom更新・completeイベント送出まで到達すること
+        assert "event: complete" in body
+        assert '"attachmentFiles": []' in body

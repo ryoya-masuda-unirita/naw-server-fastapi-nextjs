@@ -782,19 +782,28 @@ class MessageService:
 
             saved_files: list[MessageFile] = []
             if attachment_files:
-                saved_files = await MessageContentRepository.save_attachment_files(
-                    [
-                        MessageFile(
-                            tenant_id=tenant_id,
-                            name=file.name,
-                            type=file.type,
-                            data=file.data,
-                            message_id=content.id,
-                        )
-                        for file in attachment_files
-                    ],
-                    new_session,
-                )
+                # ここで例外を握り潰さず伝播させると、呼び出し元(event_streamの
+                # finally節)でトークン使用量の永続化・completeイベント送出まで
+                # 巻き込んで失敗してしまう(既にAzureへの課金が発生済みのトークンの
+                # 記録が失われる)。添付ファイルの保存失敗は本体の回答永続化とは
+                # 独立した問題として扱い、ログに残したうえで後続処理を継続する。
+                try:
+                    saved_files = await MessageContentRepository.save_attachment_files(
+                        [
+                            MessageFile(
+                                tenant_id=tenant_id,
+                                name=file.name,
+                                type=file.type,
+                                data=file.data,
+                                message_id=content.id,
+                            )
+                            for file in attachment_files
+                        ],
+                        new_session,
+                    )
+                except Exception:
+                    logger.exception("添付ファイルの永続化に失敗しました")
+                    await new_session.rollback()
 
             room = await RoomRepository.find_by_id_and_tenant_id(
                 room_id, tenant_id, new_session

@@ -83,18 +83,19 @@ class MessageContentRepository:
 
         `session.add`をループで呼んでも、SQLAlchemyの`insertmanyvalues`により
         commit時に1回のINSERT(またはバッチ化されたexecutemany)にまとめられるため、
-        N回のラウンドトリップにはならない。
+        N回のラウンドトリップにはならない。`id`は`default_factory`でPython側が
+        払い出し、`name`/`type`/`data`も挿入前に確定済みで、呼び出し元は
+        `created_at`/`updated_at`(サーバー側生成値)を参照しないため、`refresh`は
+        あえて行わない（行うとファイル数分のSELECTが発生しN+1になる）。
 
         Args:
             files: 保存対象の添付ファイル一覧。
             session: 非同期DBセッション。
 
         Returns:
-            保存後の添付ファイル一覧（DBが払い出した値を反映済み）。
+            保存後の添付ファイル一覧。
         """
         for file in files:
             session.add(file)
         await session.commit()
-        for file in files:
-            await session.refresh(file)
         return files
