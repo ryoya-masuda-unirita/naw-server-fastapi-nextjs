@@ -104,6 +104,7 @@ naw-server-fastapi-nextjs/
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、対応 Issue を GitHub Projects の `Review` に自動反映する前提で運用する
 - PR が `develop` にマージされたら、`Closes #XX` と `.github/workflows/project-status-sync.yml` により GitHub Projects の `Done` まで自動反映される前提で運用する
 - Issue 起票の具体的な `gh` コマンド手順・NAW チケット対応の書き方は [.claude/skills/naw-issue-workflow/SKILL.md](skills/naw-issue-workflow/SKILL.md) を参照すること
+- **フロントエンド移植（Angular `secuaigent-client` → React `frontend/`）用のIssue対応harness** は [.claude/skills/naw-frontend-issue-workflow/SKILL.md](skills/naw-frontend-issue-workflow/SKILL.md)（個別対応）・[naw-frontend-issue-batch](skills/naw-frontend-issue-batch/SKILL.md)（一括起票）・[naw-frontend-issue-loop](skills/naw-frontend-issue-loop/SKILL.md)（起票済みIssueの一括処理）として整備済み。バックエンド版（`naw-issue-workflow`/`naw-issue-batch`/`naw-issue-loop`）と対になる構成。フロントエンド移植Issueには必ず `frontend-port` ラベルを付与し、同じプロジェクトボード上でバックエンドIssueと区別する。現在の開発方針（バックエンド優先）に従い、着手前には必ずユーザーに優先順位を確認すること
 
 ---
 
