@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.core.llm_client import ChatMessage
 from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
+from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.services.llm_chat_service import LlmChatService
 
@@ -274,6 +275,104 @@ class TestStreamChat:
         assert "event: error" in body
         assert "azure error" in body
 
+    async def test_raises_400_when_create_library_without_message_id(self, test_user):
+        """createLibrary=trueかつmessageId未指定の場合400になること"""
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1",
+                test_user,
+                _request(createLibrary=True),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_tools_to_llm_client(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """toolsを指定した場合、AzureLlmChatClient.stream_chatへ変換済みtoolsが渡ること"""
+        from app.schemas.message import ToolConfig
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(tools=[ToolConfig(name="web_search")]),
+            session=None,
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        passed_tools = args[6]
+        assert passed_tools is not None
+        assert len(passed_tools) == 1
+        assert passed_tools[0].name == "web_search"
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_tools_none_by_default(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """tools未指定時はAzureLlmChatClient.stream_chatへtools=Noneが渡ること"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        assert args[6] is None
+
     @patch("app.services.llm_chat_service.get_session_maker")
     @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
     @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
@@ -315,7 +414,7 @@ class TestStreamChat:
 
         call_args = mock_stream_chat.call_args.args
         messages = call_args[3]
-        response_format_arg = call_args[6]
+        response_format_arg = call_args[7]
         assert messages[0] == ChatMessage(
             role="system", content="回答は JSON 形式で出力してください。"
         )
@@ -359,9 +458,97 @@ class TestStreamChat:
 
         call_args = mock_stream_chat.call_args.args
         messages = call_args[3]
-        response_format_arg = call_args[6]
+        response_format_arg = call_args[7]
         assert messages[0] == ChatMessage(role="user", content="こんにちは")
         assert response_format_arg is None
+
+
+class TestStreamChatCreateLibrary:
+    """LlmChatService.stream_chat のライブラリ生成(createLibrary)モードのテスト"""
+
+    def _library_prompt(self) -> MagicMock:
+        return MagicMock(content="ライブラリ生成用システムプロンプト")
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch(
+        "app.services.llm_chat_service.LibraryRepository.save", new_callable=AsyncMock
+    )
+    @patch(
+        "app.services.llm_chat_service.SystemPromptTemplateRepository.find_by_type",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_streams_library_title_and_content_delta_then_persists_library(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_stream_chat,
+        mock_find_prompt,
+        mock_save_library,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """createLibrary=trueの場合、library_title_delta/library_content_deltaを配信しライブラリを永続化すること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_find_message.return_value = MagicMock(id="msg-1", room_id="room-1")
+        mock_find_prompt.return_value = self._library_prompt()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\nタイトルA\n"),
+                ChatStreamChunk(text_delta="<<<CONTENT>>>\n本文B\n"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(messageId="msg-1", createLibrary=True),
+            session=None,
+        )
+        chunks = await _consume(response)
+        body = b"".join(chunks).decode()
+
+        assert "event: library_title_delta" in body
+        assert '"text": "タイトルA' in body
+        assert "event: library_content_delta" in body
+        assert '"text": "本文B' in body
+        # コメント区間が省略された場合、デフォルトの案内文がtext_deltaで配信されること
+        assert "event: text_delta" in body
+        assert "「タイトルA" in body
+        assert "を作成しました" in body
+
+        mock_save_library.assert_awaited_once()
+        saved_library = mock_save_library.await_args.args[0]
+        assert saved_library.title == "タイトルA"
+        assert saved_library.content == "本文B"
+        assert saved_library.message_id == "msg-1"
 
 
 class TestApplyAdditionalPrompt:
@@ -398,3 +585,88 @@ class TestApplyAdditionalPrompt:
         """user発話が存在しない場合は何もしないこと"""
         messages = [ChatMessage(role="assistant", content="回答のみ")]
         assert LlmChatService._apply_additional_prompt(messages, "追加指示") == messages
+
+
+class TestApplyAttachmentFiles:
+    """LlmChatService._apply_attachment_files のテスト"""
+
+    def _file(self, name: str = "photo.png") -> AttachmentFile:
+        return AttachmentFile(name=name, type="image/png", data=b"data")
+
+    def test_returns_as_is_when_no_files(self):
+        """添付ファイルがない場合そのまま返すこと"""
+        messages = [ChatMessage(role="user", content="こんにちは")]
+        assert LlmChatService._apply_attachment_files(messages, []) == messages
+
+    def test_converts_last_user_turn_content_to_multimodal_list(self):
+        """末尾のuser発話のcontentがマルチモーダル形式に変換されること"""
+        messages = [
+            ChatMessage(role="system", content="system prompt"),
+            ChatMessage(role="user", content="質問1"),
+        ]
+        result = LlmChatService._apply_attachment_files(messages, [self._file()])
+
+        assert result[0] == messages[0]
+        assert isinstance(result[1].content, list)
+        assert result[1].content[0] == {"type": "text", "text": "質問1"}
+        assert result[1].content[1]["type"] == "image_url"
+
+    def test_returns_as_is_when_no_user_turn_exists(self):
+        """user発話が存在しない場合は何もしないこと"""
+        messages = [ChatMessage(role="assistant", content="回答のみ")]
+        assert (
+            LlmChatService._apply_attachment_files(messages, [self._file()]) == messages
+        )
+
+
+class TestStreamChatWithAttachmentFiles:
+    """LlmChatService.stream_chat の添付ファイル関連テスト"""
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_multimodal_content_to_azure_when_attachment_files_present(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """attachmentFilesを含むリクエストの場合、最後のuser発話がマルチモーダル形式で渡されること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(text_delta="回答")]
+        )
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        req = _request(
+            attachmentFiles=[
+                AttachmentFile(name="photo.png", type="image/png", data=b"data")
+            ]
+        )
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, req, session=None
+        )
+        await _consume(response)
+
+        sent_messages = mock_stream_chat.call_args.args[3]
+        assert isinstance(sent_messages[-1].content, list)
+        assert sent_messages[-1].content[1]["type"] == "image_url"

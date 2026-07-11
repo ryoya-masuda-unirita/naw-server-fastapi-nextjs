@@ -8,10 +8,17 @@ from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
+from app.core.library_stream_router import (
+    DEFAULT_LIBRARY_TITLE,
+    LIBRARY_USER_INSTRUCTION_PREFIX,
+    LibraryStreamRouter,
+)
 from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
+from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
@@ -22,11 +29,13 @@ from app.core.token_usage_credit import (
 from app.core.vector_store import AzureAiSearchVectorStoreClient, DEFAULT_TOP_K
 from app.models.ai_model import AIModelEndpointType
 from app.models.assistant import Assistant, AssistantType
+from app.models.library import Library
 from app.models.message import (
     Message,
     MessageContent,
     MessageContentStatus,
     MessageFeedback,
+    MessageFile,
 )
 from app.models.room import Room
 from app.models.tenant_endpoint import EndpointType
@@ -37,11 +46,16 @@ from app.repositories.assistant_endpoint_repository import AssistantEndpointRepo
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.file_repository import FileRepository
 from app.repositories.index_repository import IndexRepository
+from app.repositories.library_repository import LibraryRepository
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.room_repository import RoomRepository
+from app.repositories.system_prompt_template_repository import (
+    SystemPromptTemplateRepository,
+)
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
+from app.schemas.attachment import AttachmentFile
 from app.schemas.message import (
     AssistantResponse,
     EndpointResponse,
@@ -72,6 +86,12 @@ RAG_CHAT_TOKEN_WEIGHT = 1.0
 # responseFormat指定時にメッセージ列の先頭へ前置する固定指示文。`llm_chat_service.py`の
 # 同名定数と同一値だが、「serviceが別serviceを呼ばない」規約により複製している。
 _JSON_RESPONSE_INSTRUCTION = "回答は JSON 形式で出力してください。"
+
+# ライブラリ生成用固定システムプロンプトの種別キー(system_prompt_templates.type)。
+_LIBRARY_PROMPT_TYPE = "LIBRARY"
+
+# タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
+_LIBRARY_TITLE_MAX_LENGTH = 255
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -161,6 +181,89 @@ def _prepend_json_response_instruction(
     return [ChatMessage(role="system", content=_JSON_RESPONSE_INSTRUCTION), *messages]
 
 
+def _apply_library_instruction_to_last_user_turn(
+    messages: list[ChatMessage],
+) -> list[ChatMessage]:
+    """ライブラリ生成時のみ、末尾から見て最後の"user"ロール発話の先頭に固定の指示を前置する。
+
+    移植元Java版`applyLibraryInstructionToLastUserTurn`に対応する。`llm_chat_service.py`の
+    `LlmChatService._apply_library_instruction_to_last_user_turn`と同一ロジックだが、
+    「serviceが別serviceを呼ばない」規約により複製している。`_apply_additional_prompt`で
+    結合済みの発話にさらに被せる想定のため、必ずその後に呼ぶこと。
+
+    Args:
+        messages: 会話履歴。
+
+    Returns:
+        指示前置後の会話履歴。該当する"user"ロール発話がない場合はそのまま返す。
+    """
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].role.lower() == "user":
+            updated = list(messages)
+            updated[index] = ChatMessage(
+                role=messages[index].role,
+                content=f"{LIBRARY_USER_INSTRUCTION_PREFIX}{messages[index].content}",
+            )
+            return updated
+    return messages
+
+
+def _apply_attachment_files(
+    messages: list[ChatMessage], files: list[AttachmentFile]
+) -> list[ChatMessage]:
+    """末尾から見て最後の"user"ロール発話に添付ファイルを付与する。
+
+    `llm_chat_service.LlmChatService._apply_attachment_files`と同等のロジックだが、
+    「serviceが別serviceを呼ばない」規約により複製している。移植元Java版はターンごとに
+    ファイル名で紐付けるが、本ポートでは複雑さ低減のため`attachmentFiles`は常に最後の
+    ユーザー発話（今回のユーザー入力）に一括で適用する（`docs/issue-97/01_要件定義.md`参照）。
+
+    Args:
+        messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
+        files: 添付ファイル一覧。
+
+    Returns:
+        添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない場合は
+        そのまま返す。
+    """
+    if not files:
+        return messages
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].role.lower() == "user":
+            updated = list(messages)
+            content = messages[index].content
+            # additionalPrompt適用直後はcontentが常にstrであることを前提とする
+            # (このメソッドは_apply_additional_promptの直後にのみ呼ばれる)。
+            assert isinstance(content, str)
+            updated[index] = ChatMessage(
+                role=messages[index].role,
+                content=build_user_content(content, files),
+            )
+            return updated
+    return messages
+
+
+def _downgrade_system_turns_to_user(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """ライブラリ生成時、クライアント由来の"system"ロール発話を"user"へ降格する。
+
+    移植元Java版`CreateMessageContentViewModel.getChatHistoryMessages`のcreateLibrary分岐に
+    対応する。`llm_chat_service.py`の`LlmChatService._downgrade_system_turns_to_user`と
+    同一ロジックだが、「serviceが別serviceを呼ばない」規約により複製している。
+
+    Args:
+        messages: 会話履歴。
+
+    Returns:
+        system発話をuserへ降格した会話履歴。
+    """
+    return [
+        ChatMessage(role="user", content=message.content)
+        if message.role.lower() == "system"
+        else message
+        for message in messages
+    ]
+
+
 def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
     """toolsをJSON文字列に変換する。
 
@@ -189,6 +292,37 @@ def _deserialize_tools(tools_json: str | None) -> list[ToolConfig] | None:
     if not tools_json:
         return None
     return [ToolConfig(**item) for item in json.loads(tools_json)]
+
+
+def _to_core_tool_configs(
+    tools: list[ToolConfig] | None,
+) -> list[CoreToolConfig] | None:
+    """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
+
+    `llm_chat_service.py`の同名関数と実装が重複するが、「serviceが別serviceを呼ばない」
+    規約により`LlmChatService`側の実装をインポートできないため、小さな純粋関数として
+    このファイル内に複製する。
+
+    Args:
+        tools: リクエストで指定されたツール設定一覧。
+
+    Returns:
+        LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
+    """
+    if not tools:
+        return None
+    return [
+        CoreToolConfig(
+            name=tool.name,
+            server_label=tool.server_label,
+            server_url=tool.server_url,
+            require_approval=tool.require_approval,
+            authorization=tool.authorization,
+            headers=tool.headers,
+            allowed_tools=tool.allowed_tools,
+        )
+        for tool in tools
+    ]
 
 
 def _split_reference_paths(file_paths: str | None) -> list[str]:
@@ -662,14 +796,25 @@ class MessageService:
                 detail=f"AI model not found: {assistant_endpoint.model}",
             )
 
+        history_messages = [
+            ChatMessage(role=turn.role, content=turn.content)
+            for turn in req.historyMessages
+        ]
+        if req.isCreateLibrary:
+            # ライブラリ用システムプロンプトより後ろに別のsystem発話が並ぶと出力形式が
+            # 不安定になるため、クライアント由来のsystem発話はuserへ降格する
+            # （移植元`CreateMessageContentViewModel.getChatHistoryMessages`相当）。
+            history_messages = _downgrade_system_turns_to_user(history_messages)
+
         chat_messages = _apply_additional_prompt(
-            [
-                ChatMessage(role=turn.role, content=turn.content)
-                for turn in req.historyMessages
-            ]
-            + [ChatMessage(role="user", content=req.userInput)],
+            history_messages + [ChatMessage(role="user", content=req.userInput)],
             req.additionalPrompt,
         )
+        if req.isCreateLibrary:
+            # attachmentFiles適用より前に行う。build_user_content適用後はcontentが
+            # マルチモーダルのリストになりうり、その後にf-string結合すると壊れるため。
+            chat_messages = _apply_library_instruction_to_last_user_turn(chat_messages)
+        chat_messages = _apply_attachment_files(chat_messages, req.attachmentFiles)
 
         rag_context = ""
         reference_paths: list[str] = []
@@ -696,10 +841,23 @@ class MessageService:
                     *chat_messages,
                 ]
 
-        # JSON出力指示は最も外側の振る舞い指定として、RAGコンテキストのsystemメッセージ
-        # より先頭に置く（`docs/issue-100/03_詳細設計.md`参照）。RAGコンテキスト挿入の
-        # 後に適用することで、SAAS_RAGでrag_contextが存在する場合でもJSON出力指示が
-        # 常に先頭に来るようにする。
+        if req.isCreateLibrary:
+            library_prompt = await SystemPromptTemplateRepository.find_by_type(
+                _LIBRARY_PROMPT_TYPE, session
+            )
+            if library_prompt is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="ライブラリ生成用のシステムプロンプトが見つかりません。",
+                )
+            chat_messages = [
+                ChatMessage(role="system", content=library_prompt.content),
+                *chat_messages,
+            ]
+
+        # JSON出力指示は最も外側の振る舞い指定として、RAGコンテキスト・ライブラリ用
+        # システムプロンプトのsystemメッセージより先頭に置く
+        # （`docs/issue-100/03_詳細設計.md`参照）。
         chat_messages = _prepend_json_response_instruction(
             chat_messages, req.responseFormat
         )
@@ -721,6 +879,9 @@ class MessageService:
         room_id = message.room_id
         user_id = current_user.id
         question_text = req.userInput
+        create_library = req.isCreateLibrary
+        attachment_files = req.attachmentFiles
+        tools = _to_core_tool_configs(req.tools)
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
@@ -731,12 +892,21 @@ class MessageService:
             捕捉できない）場合でも、Azureで既に消費したトークンの記録・応答の永続化が
             必ず行われるようにする。ただし`GeneratorExit`処理中は`yield`できないため、
             `complete`イベントの送出はストリームが正常に完了/エラー終了した場合のみ行う。
+
+            `create_library=true`の場合は、`text_delta`の代わりに`LibraryStreamRouter`
+            経由でタイトル/本文/補足コメントの3区分に振り分けて配信する。補足コメント
+            区間のテキストのみ`answer_text`へ積算し、`MessageContent.answer`として
+            永続化する（コメントが空ならデフォルトの案内文を使う）。ライブラリ自体の
+            永続化は、移植元同様ストリーミングが正常に完了した場合のみ行う。
             """
             input_tokens = 0
             output_tokens = 0
             answer_text = ""
             content_status = MessageContentStatus.OK
             stream_finished = False
+            router = LibraryStreamRouter() if create_library else None
+            library_title: str | None = None
+            library_content: str | None = None
             try:
                 # temperature・max_tokensは`MessageContentCreateRequest`に含めていない
                 # （`01_要件定義.md`のスコープ外）ため、Issue #88の`LlmChatRequest`の
@@ -749,15 +919,40 @@ class MessageService:
                     chat_messages,
                     0.0,
                     None,
+                    tools,
                     response_format_param,
                 ):
                     if chunk.text_delta is not None:
-                        answer_text += chunk.text_delta
-                        yield _sse("text_delta", {"text": chunk.text_delta})
+                        if router is not None:
+                            for kind, text in router.feed(chunk.text_delta):
+                                if kind == "comment":
+                                    answer_text += text
+                                    yield _sse("text_delta", {"text": text})
+                                else:
+                                    yield _sse(f"library_{kind}_delta", {"text": text})
+                        else:
+                            answer_text += chunk.text_delta
+                            yield _sse("text_delta", {"text": chunk.text_delta})
                     if chunk.input_tokens is not None:
                         input_tokens = chunk.input_tokens
                     if chunk.output_tokens is not None:
                         output_tokens = chunk.output_tokens
+
+                if router is not None:
+                    for kind, text in router.flush():
+                        if kind == "comment":
+                            answer_text += text
+                            yield _sse("text_delta", {"text": text})
+                        else:
+                            yield _sse(f"library_{kind}_delta", {"text": text})
+                    library_title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
+                        :_LIBRARY_TITLE_MAX_LENGTH
+                    ]
+                    library_content = router.final_content()
+                    if not answer_text.strip():
+                        answer_text = f"「{library_title}」を作成しました"
+                        yield _sse("text_delta", {"text": answer_text})
+
                 yield _sse(
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
@@ -781,9 +976,22 @@ class MessageService:
                     question=question_text,
                     answer=answer_text,
                     content_status=content_status,
+                    attachment_files=attachment_files,
                     context=rag_context or None,
                     reference_paths=reference_paths,
                 )
+                if (
+                    library_title is not None
+                    and library_content is not None
+                    and content_status == MessageContentStatus.OK
+                ):
+                    await MessageService._persist_library(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        user_id=user_id,
+                        title=library_title,
+                        content=library_content,
+                    )
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -798,7 +1006,10 @@ class MessageService:
                     embedding_token_weight=embedding_token_weight,
                 )
                 if stream_finished:
-                    yield _sse("complete", content_response.model_dump())
+                    # attachmentFilesの`data`がbytesの場合、素の.model_dump()では
+                    # json.dumpsがシリアライズできないため、mode="json"でBase64
+                    # 文字列へ変換してから渡す。
+                    yield _sse("complete", content_response.model_dump(mode="json"))
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -956,6 +1167,7 @@ class MessageService:
         question: str,
         answer: str,
         content_status: MessageContentStatus,
+        attachment_files: list[AttachmentFile],
         context: str | None = None,
         reference_paths: list[str] | None = None,
     ) -> MessageContentResponse:
@@ -968,6 +1180,7 @@ class MessageService:
             question: 質問本文。
             answer: 回答本文(エラー時は例外メッセージ)。
             content_status: 永続化するステータス(`OK`/`ERROR`)。
+            attachment_files: 今回のユーザー発話に添付されたファイル一覧。
             context: RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
             reference_paths: 参照ファイルパス一覧(SAAS_CHATの場合は空)。
 
@@ -990,6 +1203,31 @@ class MessageService:
                 new_session,
             )
 
+            saved_files: list[MessageFile] = []
+            if attachment_files:
+                # ここで例外を握り潰さず伝播させると、呼び出し元(event_streamの
+                # finally節)でトークン使用量の永続化・completeイベント送出まで
+                # 巻き込んで失敗してしまう(既にAzureへの課金が発生済みのトークンの
+                # 記録が失われる)。添付ファイルの保存失敗は本体の回答永続化とは
+                # 独立した問題として扱い、ログに残したうえで後続処理を継続する。
+                try:
+                    saved_files = await MessageContentRepository.save_attachment_files(
+                        [
+                            MessageFile(
+                                tenant_id=tenant_id,
+                                name=file.name,
+                                type=file.type,
+                                data=file.data,
+                                message_id=content.id,
+                            )
+                            for file in attachment_files
+                        ],
+                        new_session,
+                    )
+                except Exception:
+                    logger.exception("添付ファイルの永続化に失敗しました")
+                    await new_session.rollback()
+
             room = await RoomRepository.find_by_id_and_tenant_id(
                 room_id, tenant_id, new_session
             )
@@ -1005,9 +1243,48 @@ class MessageService:
                 question=content.question,
                 answer=content.answer,
                 context=content.context,
-                attachmentFiles=[],
+                attachmentFiles=[
+                    MessageContentAttachmentFileResponse(
+                        name=file.name, type=file.type, data=file.data
+                    )
+                    for file in saved_files
+                ],
                 referencePaths=reference_paths,
                 isRated=False,
+            )
+
+    @staticmethod
+    async def _persist_library(
+        *,
+        tenant_id: str,
+        message_id: str,
+        user_id: UUID,
+        title: str,
+        content: str,
+    ) -> None:
+        """生成したライブラリを新規セッションで永続化する（移植元`persistLibrary`相当）。
+
+        `llm_chat_service.LlmChatService._persist_library`と同等のロジックだが、
+        「serviceが別serviceを呼ばない」規約により複製している。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 紐づくメッセージID。
+            user_id: 生成したユーザーのID。
+            title: 確定したタイトル(255文字以内に切り詰め済み)。
+            content: 確定した本文(md)。
+        """
+        session_maker = get_session_maker()
+        async with session_maker() as new_session:
+            await LibraryRepository.save(
+                Library(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    user_id=user_id,
+                    title=title,
+                    content=content,
+                ),
+                new_session,
             )
 
     @staticmethod
