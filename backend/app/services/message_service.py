@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
@@ -25,6 +26,7 @@ from app.models.message import (
     MessageContent,
     MessageContentStatus,
     MessageFeedback,
+    MessageFile,
 )
 from app.models.room import Room
 from app.models.tenant_endpoint import EndpointType
@@ -37,6 +39,7 @@ from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.room_repository import RoomRepository
+from app.schemas.attachment import AttachmentFile
 from app.schemas.message import (
     AssistantResponse,
     EndpointResponse,
@@ -96,6 +99,41 @@ def _apply_additional_prompt(
             updated[index] = ChatMessage(
                 role=messages[index].role,
                 content=f"{additional_prompt}\n\n{messages[index].content}",
+            )
+            return updated
+    return messages
+
+
+def _apply_attachment_files(
+    messages: list[ChatMessage], files: list[AttachmentFile]
+) -> list[ChatMessage]:
+    """末尾から見て最後の"user"ロール発話に添付ファイルを付与する。
+
+    `llm_chat_service.LlmChatService._apply_attachment_files`と同等のロジックだが、
+    「serviceが別serviceを呼ばない」規約により複製している。移植元Java版はターンごとに
+    ファイル名で紐付けるが、本ポートでは複雑さ低減のため`attachmentFiles`は常に最後の
+    ユーザー発話（今回のユーザー入力）に一括で適用する（`docs/issue-97/01_要件定義.md`参照）。
+
+    Args:
+        messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
+        files: 添付ファイル一覧。
+
+    Returns:
+        添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない場合は
+        そのまま返す。
+    """
+    if not files:
+        return messages
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].role.lower() == "user":
+            updated = list(messages)
+            content = messages[index].content
+            # additionalPrompt適用直後はcontentが常にstrであることを前提とする
+            # (このメソッドは_apply_additional_promptの直後にのみ呼ばれる)。
+            assert isinstance(content, str)
+            updated[index] = ChatMessage(
+                role=messages[index].role,
+                content=build_user_content(content, files),
             )
             return updated
     return messages
@@ -611,6 +649,7 @@ class MessageService:
             + [ChatMessage(role="user", content=req.userInput)],
             req.additionalPrompt,
         )
+        chat_messages = _apply_attachment_files(chat_messages, req.attachmentFiles)
 
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
@@ -622,6 +661,7 @@ class MessageService:
         room_id = message.room_id
         user_id = current_user.id
         question_text = req.userInput
+        attachment_files = req.attachmentFiles
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
@@ -681,6 +721,7 @@ class MessageService:
                     question=question_text,
                     answer=answer_text,
                     content_status=content_status,
+                    attachment_files=attachment_files,
                 )
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
@@ -694,7 +735,10 @@ class MessageService:
                     credit_settings=credit_settings,
                 )
                 if stream_finished:
-                    yield _sse("complete", content_response.model_dump())
+                    # attachmentFilesの`data`がbytesの場合、素の.model_dump()では
+                    # json.dumpsがシリアライズできないため、mode="json"でBase64
+                    # 文字列へ変換してから渡す。
+                    yield _sse("complete", content_response.model_dump(mode="json"))
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -707,6 +751,7 @@ class MessageService:
         question: str,
         answer: str,
         content_status: MessageContentStatus,
+        attachment_files: list[AttachmentFile],
     ) -> MessageContentResponse:
         """ストリーミング完了後、回答内容を新規セッションで永続化し、ルームの更新日時を進める。
 
@@ -717,6 +762,7 @@ class MessageService:
             question: 質問本文。
             answer: 回答本文(エラー時は例外メッセージ)。
             content_status: 永続化するステータス(`OK`/`ERROR`)。
+            attachment_files: 今回のユーザー発話に添付されたファイル一覧。
 
         Returns:
             永続化した内容を表す`complete`イベント用のレスポンス。
@@ -734,6 +780,22 @@ class MessageService:
                 new_session,
             )
 
+            saved_files: list[MessageFile] = []
+            if attachment_files:
+                saved_files = await MessageContentRepository.save_attachment_files(
+                    [
+                        MessageFile(
+                            tenant_id=tenant_id,
+                            name=file.name,
+                            type=file.type,
+                            data=file.data,
+                            message_id=content.id,
+                        )
+                        for file in attachment_files
+                    ],
+                    new_session,
+                )
+
             room = await RoomRepository.find_by_id_and_tenant_id(
                 room_id, tenant_id, new_session
             )
@@ -749,7 +811,12 @@ class MessageService:
                 question=content.question,
                 answer=content.answer,
                 context=content.context,
-                attachmentFiles=[],
+                attachmentFiles=[
+                    MessageContentAttachmentFileResponse(
+                        name=file.name, type=file.type, data=file.data
+                    )
+                    for file in saved_files
+                ],
                 referencePaths=[],
                 isRated=False,
             )

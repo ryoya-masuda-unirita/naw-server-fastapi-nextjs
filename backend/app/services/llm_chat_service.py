@@ -1,8 +1,9 @@
 """LLMチャットAPI(SSEストリーミング応答)のビジネスロジック。
 
 移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、tools
-（Function Calling）・添付ファイル・ライブラリ生成（createLibrary）・response_format
-は対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+（Function Calling）・ライブラリ生成（createLibrary）・response_formatは対象外のため
+扱わない（`docs/issue-88/01_要件定義.md`参照）。添付ファイル(`attachmentFiles`)は
+issue-97で対応済み（`docs/issue-97/01_要件定義.md`参照）。
 """
 
 import json
@@ -14,6 +15,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
@@ -31,6 +33,7 @@ from app.models.user import User
 from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
+from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest
 
 logger = logging.getLogger(__name__)
@@ -128,6 +131,9 @@ class LlmChatService:
             ],
             req.additionalPrompt,
         )
+        chat_messages = LlmChatService._apply_attachment_files(
+            chat_messages, req.attachmentFiles
+        )
 
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
@@ -208,6 +214,40 @@ class LlmChatService:
                 updated[index] = ChatMessage(
                     role=messages[index].role,
                     content=f"{additional_prompt}\n\n{messages[index].content}",
+                )
+                return updated
+        return messages
+
+    @staticmethod
+    def _apply_attachment_files(
+        messages: list[ChatMessage], files: list[AttachmentFile]
+    ) -> list[ChatMessage]:
+        """末尾から見て最後の"user"ロール発話に添付ファイルを付与する。
+
+        移植元Java版はターンごとにファイル名で紐付けるが、本ポートでは複雑さ低減のため
+        `attachmentFiles`は常に最後のユーザー発話に一括で適用する
+        （`docs/issue-97/01_要件定義.md`参照）。
+
+        Args:
+            messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
+            files: 添付ファイル一覧。
+
+        Returns:
+            添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない
+            場合はそのまま返す。
+        """
+        if not files:
+            return messages
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role.lower() == "user":
+                updated = list(messages)
+                content = messages[index].content
+                # additionalPrompt適用直後はcontentが常にstrであることを前提とする
+                # (このメソッドは_apply_additional_promptの直後にのみ呼ばれる)。
+                assert isinstance(content, str)
+                updated[index] = ChatMessage(
+                    role=messages[index].role,
+                    content=build_user_content(content, files),
                 )
                 return updated
         return messages

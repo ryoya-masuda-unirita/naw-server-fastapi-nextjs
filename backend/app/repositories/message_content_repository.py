@@ -74,3 +74,27 @@ class MessageContentRepository:
         for file in result.scalars().all():
             grouped[file.message_id].append(file)
         return grouped
+
+    @staticmethod
+    async def save_attachment_files(
+        files: list[MessageFile], session: AsyncSession
+    ) -> list[MessageFile]:
+        """メッセージ内容に紐づく添付ファイルをまとめて新規追加してコミットする。
+
+        `session.add`をループで呼んでも、SQLAlchemyの`insertmanyvalues`により
+        commit時に1回のINSERT(またはバッチ化されたexecutemany)にまとめられるため、
+        N回のラウンドトリップにはならない。
+
+        Args:
+            files: 保存対象の添付ファイル一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            保存後の添付ファイル一覧（DBが払い出した値を反映済み）。
+        """
+        for file in files:
+            session.add(file)
+        await session.commit()
+        for file in files:
+            await session.refresh(file)
+        return files
