@@ -146,6 +146,67 @@ class TestAzureLlmChatClient:
     """AzureLlmChatClient.stream_chat のテスト"""
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
+    @patch("app.core.llm_client.get_azure_openai_settings")
+    async def test_uses_configured_api_version_for_chat_completions(
+        self, mock_get_settings, mock_client_cls
+    ):
+        """Chat Completions APIは設定されたAPIバージョンでclientを生成すること"""
+        mock_get_settings.return_value = MagicMock(api_version="2026-01-01")
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=_AsyncChunkIterator([])
+        )
+
+        async for _ in AzureLlmChatClient.stream_chat(
+            "https://example.openai.azure.com",
+            "api-key",
+            "gpt-4o",
+            [ChatMessage(role="user", content="hi")],
+            0.0,
+            None,
+        ):
+            pass
+
+        mock_client_cls.assert_called_once_with(
+            azure_endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+            api_version="2026-01-01",
+        )
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    @patch("app.core.llm_client.get_azure_openai_settings")
+    async def test_uses_configured_api_version_for_responses_api(
+        self, mock_get_settings, mock_client_cls
+    ):
+        """Responses APIは設定されたResponses用APIバージョンでclientを生成すること"""
+        mock_get_settings.return_value = MagicMock(
+            api_version="unused", responses_api_version="2026-02-01-preview"
+        )
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.responses.create = AsyncMock(return_value=_AsyncChunkIterator([]))
+
+        async for _ in AzureLlmChatClient.stream_chat(
+            "https://example.openai.azure.com",
+            "api-key",
+            "gpt-4o",
+            [ChatMessage(role="user", content="hi")],
+            0.0,
+            None,
+            [ToolConfig(name="web_search")],
+        ):
+            pass
+
+        mock_client_cls.assert_called_once_with(
+            azure_endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+            api_version="2026-02-01-preview",
+        )
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
     async def test_yields_text_delta_then_usage(self, mock_client_cls):
         """テキスト差分を順にyieldし、最後にトークン使用量を持つチャンクをyieldすること"""
         mock_client = MagicMock()
@@ -422,6 +483,35 @@ class TestAzureLlmChatClient:
 
 class TestAzureLlmEmbeddingClient:
     """AzureLlmEmbeddingClient.create_embedding のテスト"""
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    @patch("app.core.llm_client.get_azure_openai_settings")
+    async def test_uses_configured_api_version_for_embeddings(
+        self, mock_get_settings, mock_client_cls
+    ):
+        """Embeddings APIは設定されたAPIバージョンでclientを生成すること"""
+        mock_get_settings.return_value = MagicMock(api_version="2026-01-01")
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        response = MagicMock()
+        response.data = [MagicMock(embedding=[0.1])]
+        response.usage.prompt_tokens = 3
+        mock_client.embeddings.create = AsyncMock(return_value=response)
+
+        await AzureLlmEmbeddingClient.create_embedding(
+            "https://example.openai.azure.com",
+            "api-key",
+            "text-embedding-3-small",
+            "hello",
+            None,
+        )
+
+        mock_client_cls.assert_called_once_with(
+            azure_endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+            api_version="2026-01-01",
+        )
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
     async def test_returns_embedding_and_tokens(self, mock_client_cls):

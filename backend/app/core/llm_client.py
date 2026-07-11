@@ -16,15 +16,7 @@ from dataclasses import dataclass
 
 from openai import AsyncAzureOpenAI
 
-# Azure OpenAI REST APIのAPIバージョン。移植元Java版のAzure SDK
-# (`OpenAIServiceVersion.V2024_06_01`相当)より新しい、Chat Completions
-# ストリーミングでの`stream_options.include_usage`に対応したバージョンを固定で使う。
-AZURE_OPENAI_API_VERSION = "2024-10-21"
-
-# Responses API(tools指定時のweb_search/mcp呼び出しに使用)用のAPIバージョン。
-# Responses APIはAzure OpenAIでは`AZURE_OPENAI_API_VERSION`より新しいプレビュー
-# バージョンでのみ提供されるため、Chat Completions用とは別定数で固定する。
-AZURE_OPENAI_RESPONSES_API_VERSION = "2025-04-01-preview"
+from app.core.config import get_azure_openai_settings
 
 
 @dataclass(frozen=True)
@@ -179,13 +171,15 @@ class AzureLlmChatClient:
         if response_format is not None:
             create_kwargs["response_format"] = response_format
 
+        settings = get_azure_openai_settings()
+
         # クライアントは`async with`でリクエスト単位に生成・破棄する。ストリーム消費が
         # 終わるまで(このジェネレータが最後までイテレートされるまで)コンテキストマネージャ
         # を閉じないよう、ストリームの読み取りも`async with`ブロック内で行う。
         async with AsyncAzureOpenAI(
             azure_endpoint=endpoint,
             api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
+            api_version=settings.api_version,
         ) as client:
             stream = await client.chat.completions.create(**create_kwargs)
             async for chunk in stream:
@@ -243,10 +237,12 @@ class AzureLlmChatClient:
         if max_tokens is not None:
             create_kwargs["max_output_tokens"] = max_tokens
 
+        settings = get_azure_openai_settings()
+
         async with AsyncAzureOpenAI(
             azure_endpoint=endpoint,
             api_key=api_key,
-            api_version=AZURE_OPENAI_RESPONSES_API_VERSION,
+            api_version=settings.responses_api_version,
         ) as client:
             stream = await client.responses.create(**create_kwargs)
             async for event in stream:
@@ -299,10 +295,12 @@ class AzureLlmEmbeddingClient:
         if dimensions is not None:
             create_kwargs["dimensions"] = dimensions
 
+        settings = get_azure_openai_settings()
+
         async with AsyncAzureOpenAI(
             azure_endpoint=endpoint,
             api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
+            api_version=settings.api_version,
         ) as client:
             response = await client.embeddings.create(**create_kwargs)
             return EmbeddingResult(

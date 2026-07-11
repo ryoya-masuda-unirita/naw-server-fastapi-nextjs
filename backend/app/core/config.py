@@ -106,6 +106,23 @@ class LlmCreditSettings(BaseSettings):
     input_credit_weight: float = Field(default=1 / 3, alias="INPUT_CREDIT_WEIGHT")
 
 
+class AzureOpenAISettings(BaseSettings):
+    """Azure OpenAI API呼び出し用のアプリ共通設定。
+
+    テナントごとのendpoint・api_key・deploymentはDBで管理するため、この設定では
+    SDKクライアント生成時に共通で使うAPIバージョンだけを扱う。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    api_version: str = Field(default="2024-10-21", alias="AZURE_OPENAI_API_VERSION")
+    responses_api_version: str = Field(
+        default="2025-04-01-preview", alias="AZURE_OPENAI_RESPONSES_API_VERSION"
+    )
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
@@ -124,3 +141,8 @@ def get_azure_cost_settings() -> AzureCostSettings:
 @lru_cache
 def get_llm_credit_settings() -> LlmCreditSettings:
     return LlmCreditSettings()
+
+
+@lru_cache
+def get_azure_openai_settings() -> AzureOpenAISettings:
+    return AzureOpenAISettings()
