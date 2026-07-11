@@ -1,4 +1,4 @@
-from app.core.config import CorsSettings, Settings
+from app.core.config import AzureOpenAISettings, CorsSettings, Settings
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
@@ -26,6 +26,11 @@ def _build_settings(**env_overrides: str) -> Settings:
     base = {"database_url": "postgresql+asyncpg://test", "secret_key": "test-secret"}
     base.update(env_overrides)
     return Settings(_env_file=None, **base)  # type: ignore[arg-type]
+
+
+def _build_azure_openai_settings(**env_overrides: str) -> AzureOpenAISettings:
+    """テスト用に `.env` を読み込まずに `AzureOpenAISettings` を組み立てる。"""
+    return AzureOpenAISettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
 
 
 class TestCorsAllowedOrigins:
@@ -92,6 +97,25 @@ class TestCookieSecure:
         settings = _build_settings(COOKIE_SECURE="true")
 
         assert settings.cookie_secure is True
+
+
+class TestAzureOpenAISettings:
+    def test_defaults_to_current_api_versions(self):
+        """Azure OpenAI APIバージョン未設定時は現行デフォルト値になること"""
+        settings = _build_azure_openai_settings()
+
+        assert settings.api_version == "2024-10-21"
+        assert settings.responses_api_version == "2025-04-01-preview"
+
+    def test_reflects_env_overrides(self):
+        """Azure OpenAI APIバージョンを環境変数相当の値で上書きできること"""
+        settings = _build_azure_openai_settings(
+            AZURE_OPENAI_API_VERSION="2026-01-01",
+            AZURE_OPENAI_RESPONSES_API_VERSION="2026-02-01-preview",
+        )
+
+        assert settings.api_version == "2026-01-01"
+        assert settings.responses_api_version == "2026-02-01-preview"
 
 
 class TestSettingsImportIndependence:
