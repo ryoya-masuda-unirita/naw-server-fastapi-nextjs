@@ -148,6 +148,7 @@ async def get_group_users(
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
     sort: str = Query("name,asc"),
+    includeUsage: bool = Query(False),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -163,6 +164,7 @@ async def get_group_users(
         page,
         size,
         session,
+        include_usage=includeUsage,
     )
 
 

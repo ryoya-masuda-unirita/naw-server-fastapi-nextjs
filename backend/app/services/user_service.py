@@ -4,17 +4,24 @@ import string
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.credit_quota import (
+    TOTAL_CREDITS_SORT_PROPERTY,
+    resolve_active_billing_period,
+    total_credits_correlated_subquery,
+    validate_total_credits_sort,
+)
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.repositories.password_history_repository import PasswordHistoryRepository
 from app.repositories.tenant_repository import TenantRepository
+from app.repositories.token_usage_repository import TokenUsageRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     PagedUserResponse,
@@ -52,22 +59,36 @@ class UserService:
         role: str | None,
         exclude_group_id: str | None,
         session: AsyncSession,
+        *,
+        include_usage: bool = False,
     ) -> PagedUserResponse:
         """ユーザー一覧をページネーションで取得する。
+
+        NAW-1172: `include_usage=True`の場合、有効な請求期間内の`totalCredits`
+        （クレジット利用量合計）をレスポンスに付与する。`sort=totalCredits`は
+        `include_usage=True`の場合のみ許可され、有効な請求期間が存在する場合に限り
+        DBクエリでその合計値によりソートする。
 
         Args:
             tenant_id: テナントID。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
-            sort: ソート指定（例: "created_at,desc"）。
+            sort: ソート指定（例: "created_at,desc"、"totalCredits,desc"）。
             search_text: loginId・name の部分一致検索文字列。
             role: ロールフィルター。
             exclude_group_id: 除外グループID（グループ機能実装時に対応）。
             session: 非同期DBセッション。
+            include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
         Returns:
             ページネーション済みのユーザー一覧。
+
+        Raises:
+            HTTPException: `sort=totalCredits`が指定されているのに
+                `include_usage=False`の場合400を返す。
         """
+        validate_total_credits_sort(sort, include_usage)
+
         # SYSTEM ロール（Waha等の内部連携用ユーザー）は管理画面の一覧に表示しない。
         # role=SYSTEM が明示的に指定された場合もこの条件は外さず、結果は0件になる
         # （NAW-1096: naw-server側の UserSpecifications.visibleToAdmin() と同一の挙動）。
@@ -95,15 +116,54 @@ class UserService:
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-        col = UserService._resolve_sort_column(sort_col_name)
-        stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())
+
+        billing_period = (
+            await resolve_active_billing_period(tenant_id, session)
+            if include_usage
+            else None
+        )
+        # period_from・period_toは常に両方Noneか両方datetimeのペアなので、
+        # タプルとして一括で保持しmypy上もペアで narrow されるようにする。
+        period: tuple[datetime, datetime] | None = (
+            (billing_period[2], billing_period[3])
+            if billing_period is not None
+            else None
+        )
+
+        if sort_col_name == TOTAL_CREDITS_SORT_PROPERTY and period is not None:
+            period_from, period_to = period
+            credits_subq = total_credits_correlated_subquery(
+                tenant_id, period_from, period_to, User.id
+            )
+            order_col = (
+                credits_subq.desc() if sort_dir == "desc" else credits_subq.asc()
+            )
+            # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
+            stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
+        else:
+            col = UserService._resolve_sort_column(sort_col_name)
+            stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())
+
         stmt = stmt.offset(page * size).limit(size)
 
         users = (await session.execute(stmt)).scalars().all()
         total_pages = math.ceil(total / size) if size > 0 else 0
 
+        if include_usage and period is not None:
+            period_from, period_to = period
+            totals = await TokenUsageRepository.sum_total_credits_by_user_ids(
+                tenant_id, period_from, period_to, [u.id for u in users], session
+            )
+            content = [UserResponse.from_user(u, totals.get(u.id, 0)) for u in users]
+        elif include_usage:
+            # 有効な請求期間が存在しない（契約なし等）場合はtotalCreditsをNoneのまま返す
+            # （移植元同様、クレジット利用量の集計自体を行わない）。
+            content = [UserResponse.from_user(u, None) for u in users]
+        else:
+            content = [UserResponse.from_user(u) for u in users]
+
         return PagedUserResponse(
-            content=[UserResponse.from_user(u) for u in users],
+            content=content,
             totalElements=total,
             totalPages=total_pages,
             page=page,

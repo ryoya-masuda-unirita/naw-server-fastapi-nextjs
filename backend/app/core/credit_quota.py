@@ -7,13 +7,16 @@
 """
 
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing_cycle import current_billing_reset_instant_utc
 from app.models.plan import Plan
 from app.models.subscription import Subscription
+from app.models.token_usage import TokenUsage
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.token_usage_repository import TokenUsageRepository
@@ -21,6 +24,10 @@ from app.repositories.token_usage_repository import TokenUsageRepository
 CREDIT_QUOTA_EXCEEDED_MESSAGE = (
     "今月のクレジット利用量の上限に達しているため、チャットが送信できません"
 )
+
+# NAW-1172: sort=totalCreditsで利用クレジット順ソートする際に指定するソートキー。
+# 移植元(Spring Boot)`UserBillingUsageService.SORT_PROPERTY_TOTAL_CREDITS`に対応する。
+TOTAL_CREDITS_SORT_PROPERTY = "totalCredits"
 
 
 async def resolve_active_billing_period(
@@ -113,3 +120,76 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=CREDIT_QUOTA_EXCEEDED_MESSAGE,
         )
+
+
+def is_sort_by_total_credits(sort: str) -> bool:
+    """ソート指定がtotalCreditsによるものかどうかを判定する。
+
+    Args:
+        sort: ソート指定文字列（例: "totalCredits,desc"）。
+
+    Returns:
+        ソート対象列がtotalCreditsであればTrue。
+    """
+    return sort.split(",")[0] == TOTAL_CREDITS_SORT_PROPERTY
+
+
+def validate_total_credits_sort(sort: str, include_usage: bool) -> None:
+    """sort=totalCredits指定時はincludeUsage=trueが必須であることを検証する。
+
+    移植元(Spring Boot)`UserBillingUsageService.validateTotalCreditsSort`に対応する。
+    `UserService.get_users`・`GroupService.list_group_users`の双方から呼ぶため、
+    「serviceが別serviceを呼ばない」規約に抵触しないよう`core/`に置く。
+
+    Args:
+        sort: ソート指定文字列（例: "totalCredits,desc"）。
+        include_usage: クレジット利用量をレスポンスに含めるかどうか（includeUsageクエリパラメータ）。
+
+    Raises:
+        HTTPException: sort=totalCreditsが指定されているのにinclude_usage=Falseの場合400を返す。
+    """
+    if is_sort_by_total_credits(sort) and not include_usage:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="sort=totalCredits requires includeUsage=true",
+        )
+
+
+def total_credits_correlated_subquery(
+    tenant_id: str, from_: datetime, to: datetime, user_id_column: Any
+) -> Any:
+    """ユーザー単位のクレジット合計を算出する相関サブクエリを構築する。
+
+    `sort=totalCredits`をDBクエリのORDER BYに反映するために使う。
+    `UserService.get_users`・`GroupUserRepository.find_page_by_group`の双方から
+    利用するため、クエリ組み立てロジックを共通化する。
+
+    Args:
+        tenant_id: テナントID。
+        from_: 請求期間の開始（この値以上）。
+        to: 請求期間の終了（この値以下）。
+        user_id_column: 相関させるユーザーID列（`User.id`または`GroupUser.user_id`）。
+
+    Returns:
+        ORDER BYにそのまま使えるスカラーサブクエリ。
+    """
+    return (
+        select(
+            func.coalesce(
+                func.sum(
+                    TokenUsage.input_credits
+                    + TokenUsage.output_credits
+                    + TokenUsage.embedding_credits
+                ),
+                0,
+            )
+        )
+        .where(
+            TokenUsage.tenant_id == tenant_id,
+            TokenUsage.user_id == user_id_column,
+            TokenUsage.created_at >= from_,
+            TokenUsage.created_at <= to,
+        )
+        .correlate_except(TokenUsage)
+        .scalar_subquery()
+    )

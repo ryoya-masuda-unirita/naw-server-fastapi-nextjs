@@ -1,3 +1,4 @@
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -13,8 +14,11 @@ from app.models.assistant import (
 )
 from app.models.assistant_category import AssistantCategory
 from app.models.group import Group, GroupUser
+from app.models.plan import Plan
 from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
+from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
 
 
@@ -562,6 +566,167 @@ class TestGroupUsers:
             )
 
         assert response.status_code == 204
+
+
+@pytest.fixture
+async def usage_plan(session):
+    """テスト用プラン（NAW-1172: includeUsage検証用）"""
+    plan = Plan(
+        id="plan-groups-usage-test",
+        name="Standard",
+        max_users=10,
+        max_credits_per_month=1000,
+    )
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    return plan
+
+
+async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
+    """2日前を契約開始日とする有効なサブスクリプションを作成する。
+
+    契約開始日を「今日」ちょうどにすると、テスト実行環境のローカルタイムゾーンと
+    請求期間解決ロジック（UTC基準）のずれにより period が None になる場合があるため、
+    十分なマージンを持たせている。
+    """
+    session.add(
+        Subscription(
+            tenant_id=tenant_id,
+            plan_id=plan_id,
+            status=SubscriptionStatus.ACTIVE,
+            start_date=date.today() - timedelta(days=2),
+            end_date=None,
+        )
+    )
+    await session.commit()
+
+
+def _token_usage(tenant_id: str, user_id, input_credits: int = 0) -> TokenUsage:
+    return TokenUsage(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        model="gpt-4",
+        input_tokens=100,
+        output_tokens=100,
+        input_credits=input_credits,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+class TestGroupUsersWithUsage:
+    """GET /api/admin/groups/{groupId}/users?includeUsage=true (NAW-1172)"""
+
+    async def test_include_usage_false_omits_total_credits(
+        self, client, admin_headers, group_with_admin_member
+    ):
+        """includeUsage未指定時はtotalCreditsがレスポンスに含まれないこと"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert "totalCredits" not in response.json()["content"][0]
+
+    async def test_include_usage_true_returns_total_credits(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        usage_plan,
+        group_with_admin_member,
+        member_user,
+    ):
+        """includeUsage=trueの場合、請求期間内のtotalCreditsが返ること"""
+        await _create_active_subscription(session, tenant.id, usage_plan.id)
+        session.add(_token_usage(tenant.id, member_user.id, input_credits=42))
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+                params={"includeUsage": "true"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["content"][0]["totalCredits"] == 42
+
+    async def test_include_usage_true_without_subscription_omits_total_credits(
+        self, client, admin_headers, group_with_admin_member
+    ):
+        """有効なサブスクリプションがない場合、totalCreditsが含まれないこと"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+                params={"includeUsage": "true"},
+            )
+
+        assert response.status_code == 200
+        assert "totalCredits" not in response.json()["content"][0]
+
+    async def test_sort_total_credits_without_include_usage_returns_400(
+        self, client, admin_headers, group_with_admin_member
+    ):
+        """includeUsage未指定でsort=totalCreditsを指定すると400になること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+                params={"sort": "totalCredits,desc"},
+            )
+
+        assert response.status_code == 400
+
+    async def test_sort_total_credits_orders_by_credit_amount(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        usage_plan,
+        group,
+        member_user,
+        other_user,
+    ):
+        """includeUsage=trueかつsort=totalCreditsで利用クレジット降順に並ぶこと"""
+        session.add(
+            GroupUser(
+                group_id=group.id,
+                tenant_id=tenant.id,
+                user_id=member_user.id,
+                is_admin=False,
+            )
+        )
+        session.add(
+            GroupUser(
+                group_id=group.id,
+                tenant_id=tenant.id,
+                user_id=other_user.id,
+                is_admin=False,
+            )
+        )
+        await session.commit()
+        await _create_active_subscription(session, tenant.id, usage_plan.id)
+        session.add(_token_usage(tenant.id, member_user.id, input_credits=5))
+        session.add(_token_usage(tenant.id, other_user.id, input_credits=99))
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/users",
+                headers=admin_headers,
+                params={"includeUsage": "true", "sort": "totalCredits,desc"},
+            )
+
+        assert response.status_code == 200
+        user_ids = [u["userId"] for u in response.json()["content"]]
+        assert user_ids.index(str(other_user.id)) < user_ids.index(str(member_user.id))
 
 
 @pytest.fixture

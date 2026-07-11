@@ -1,8 +1,14 @@
+from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.credit_quota import (
+    TOTAL_CREDITS_SORT_PROPERTY,
+    total_credits_correlated_subquery,
+)
 from app.core.search import escape_like_pattern
 from app.models.group import GroupUser
 from app.models.user import User
@@ -131,6 +137,8 @@ class GroupUserRepository:
         page: int,
         size: int,
         session: AsyncSession,
+        *,
+        billing_period: tuple[datetime, datetime] | None = None,
     ) -> tuple[list[tuple[GroupUser, User]], int]:
         """グループ所属ユーザーをページネーションで取得する（Userを結合）。
 
@@ -139,11 +147,16 @@ class GroupUserRepository:
             tenant_id: テナントID。
             search_text: ユーザー名・loginIdの部分一致検索文字列。
             role: グループ内ロール（"ADMIN"はis_admin=true、"USER"はis_admin=false）。
-            sort_col_name: ソート対象列名（"name" または "role" または "updatedAt"）。
+            sort_col_name: ソート対象列名（"name"、"role"、"updatedAt"、"totalCredits"）。
             sort_dir: ソート方向（"asc" または "desc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
+            billing_period: `(period_from, period_to)`のタプル。NAW-1172:
+                `sort_col_name=="totalCredits"`かつこの値が与えられた場合のみ、
+                請求期間内クレジット合計でDBソートする（Noneの場合は既定のソートに
+                フォールバックする。呼び出し側で有効な請求期間がない旨をtotalCredits=None
+                として扱うのと整合させるため）。
 
         Returns:
             ((GroupUser, User) のリスト, 総件数) のタプル。
@@ -169,13 +182,26 @@ class GroupUserRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        if sort_col_name == "role":
-            sort_col = GroupUser.is_admin
-        elif sort_col_name == "updatedAt":
-            sort_col = GroupUser.updated_at
+        if sort_col_name == TOTAL_CREDITS_SORT_PROPERTY and billing_period is not None:
+            period_from, period_to = billing_period
+            credits_subq = total_credits_correlated_subquery(
+                tenant_id, period_from, period_to, GroupUser.user_id
+            )
+            order_col = (
+                credits_subq.desc() if sort_dir == "desc" else credits_subq.asc()
+            )
+            # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
+            stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
         else:
-            sort_col = User.name
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+            if sort_col_name == "role":
+                sort_col = GroupUser.is_admin
+            elif sort_col_name == "updatedAt":
+                sort_col = GroupUser.updated_at
+            else:
+                sort_col = User.name
+            stmt = stmt.order_by(
+                sort_col.desc() if sort_dir == "desc" else sort_col.asc()
+            )
         stmt = stmt.offset(page * size).limit(size)
 
         rows = (await session.execute(stmt)).all()

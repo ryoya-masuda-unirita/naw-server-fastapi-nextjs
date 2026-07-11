@@ -1,8 +1,13 @@
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.credit_quota import (
+    resolve_active_billing_period,
+    validate_total_credits_sort,
+)
 from app.models.group import Group
 from app.models.assistant import AssistantType
 from app.models.user import User, UserRole
@@ -14,6 +19,7 @@ from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_repository import GroupRepository
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.prompt_template_repository import PromptTemplateRepository
+from app.repositories.token_usage_repository import TokenUsageRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.assistant import PagedAssistantResponse
 from app.schemas.group import (
@@ -421,8 +427,15 @@ class GroupService:
         page: int,
         size: int,
         session: AsyncSession,
+        *,
+        include_usage: bool = False,
     ) -> PagedGroupMemberResponse:
         """グループ所属ユーザー一覧をページネーションで取得する。
+
+        NAW-1172: `include_usage=True`の場合、有効な請求期間内の`totalCredits`
+        （クレジット利用量合計）をレスポンスに付与する。`sort=totalCredits`は
+        `include_usage=True`の場合のみ許可され、有効な請求期間が存在する場合に限り
+        DBクエリでその合計値によりソートする。
 
         Args:
             group_id: グループID。
@@ -430,17 +443,21 @@ class GroupService:
             current_user: 認証済みユーザー。
             search: ユーザー名・loginIdの部分一致検索文字列。
             role: グループ内ロールでの絞り込み（"ADMIN"または"USER"）。
-            sort: ソート指定（例: "updatedAt,desc"）。
+            sort: ソート指定（例: "updatedAt,desc"、"totalCredits,desc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
+            include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
         Returns:
             ページネーション済み所属ユーザー一覧。
 
         Raises:
-            HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
+            HTTPException: グループが存在しない場合404、権限がない場合403、
+                `sort=totalCredits`指定時に`include_usage=False`の場合400を返す。
         """
+        validate_total_credits_sort(sort, include_usage)
+
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
             group_id, tenant_id, current_user, session
@@ -449,6 +466,19 @@ class GroupService:
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
+
+        billing_period = (
+            await resolve_active_billing_period(tenant_id, session)
+            if include_usage
+            else None
+        )
+        # period_from・period_toは常に両方Noneか両方datetimeのペアなので、
+        # タプルとして一括で保持しmypy上もペアで narrow されるようにする。
+        period: tuple[datetime, datetime] | None = (
+            (billing_period[2], billing_period[3])
+            if billing_period is not None
+            else None
+        )
 
         rows, total = await GroupUserRepository.find_page_by_group(
             group_id,
@@ -460,7 +490,15 @@ class GroupService:
             page,
             size,
             session,
+            billing_period=period,
         )
+
+        totals: dict[UUID, int] = {}
+        if include_usage and period is not None:
+            period_from, period_to = period
+            totals = await TokenUsageRepository.sum_total_credits_by_user_ids(
+                tenant_id, period_from, period_to, [u.id for _, u in rows], session
+            )
 
         content = [
             GroupMemberUserResponse(
@@ -470,6 +508,11 @@ class GroupService:
                 loginKey=u.login_key,
                 groupAdmin=gu.is_admin,
                 updatedAt=gu.updated_at,
+                totalCredits=(
+                    totals.get(u.id, 0)
+                    if include_usage and period is not None
+                    else None
+                ),
             )
             for gu, u in rows
         ]

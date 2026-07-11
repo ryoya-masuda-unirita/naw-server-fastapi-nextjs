@@ -2,8 +2,14 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
-from app.core.credit_quota import CREDIT_QUOTA_EXCEEDED_MESSAGE, enforce_within_quota
+from app.core.credit_quota import (
+    CREDIT_QUOTA_EXCEEDED_MESSAGE,
+    enforce_within_quota,
+    is_sort_by_total_credits,
+    validate_total_credits_sort,
+)
 from app.models.plan import Plan
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
@@ -111,8 +117,6 @@ class TestEnforceWithinQuota:
         mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_summarize.return_value = _summary_row(input_credits=1000)
 
-        from fastapi import HTTPException
-
         with pytest.raises(HTTPException) as exc_info:
             await enforce_within_quota("tenant-1", session=None)
 
@@ -138,9 +142,39 @@ class TestEnforceWithinQuota:
         mock_find_tenant.return_value = None
         mock_summarize.return_value = _summary_row(input_credits=1000)
 
-        from fastapi import HTTPException
-
         with pytest.raises(HTTPException) as exc_info:
             await enforce_within_quota("tenant-1", session=None)
 
         assert exc_info.value.status_code == 429
+
+
+class TestIsSortByTotalCredits:
+    """is_sort_by_total_credits のテスト（NAW-1172）"""
+
+    def test_true_when_sort_property_is_total_credits(self):
+        """sort=totalCredits,descの場合Trueを返すこと"""
+        assert is_sort_by_total_credits("totalCredits,desc") is True
+
+    def test_false_for_other_sort_property(self):
+        """totalCredits以外のsortの場合Falseを返すこと"""
+        assert is_sort_by_total_credits("name,asc") is False
+
+
+class TestValidateTotalCreditsSort:
+    """validate_total_credits_sort のテスト（NAW-1172）"""
+
+    def test_raises_400_when_sort_total_credits_without_include_usage(self):
+        """sort=totalCreditsかつinclude_usage=Falseの場合400を返すこと"""
+        with pytest.raises(HTTPException) as exc_info:
+            validate_total_credits_sort("totalCredits,desc", False)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "sort=totalCredits requires includeUsage=true"
+
+    def test_allows_sort_total_credits_with_include_usage(self):
+        """sort=totalCreditsかつinclude_usage=Trueの場合例外にならないこと"""
+        validate_total_credits_sort("totalCredits,desc", True)
+
+    def test_allows_other_sort_without_include_usage(self):
+        """totalCredits以外のsortの場合include_usage=Falseでも例外にならないこと"""
+        validate_total_credits_sort("name,asc", False)
