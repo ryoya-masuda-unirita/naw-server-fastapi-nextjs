@@ -1,3 +1,11 @@
+"""テナントの当月クレジット利用量が契約プランの上限を超えていないかを検証する。
+
+移植元(Spring Boot)の`TenantMonthlyCreditQuotaService.enforceWithinQuota`に対応する。
+`credit_usage_service.py`・`file_service.py`・`index_service.py`・LLM関連の複数service
+（`llm_chat_service.py`・`llm_embedding_service.py`）から共通で呼ぶDBクエリを伴う
+チェックのため、「serviceが別serviceを呼ばない」規約に抵触しないよう`core/`に置く。
+"""
+
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -9,6 +17,10 @@ from app.models.subscription import Subscription
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.token_usage_repository import TokenUsageRepository
+
+CREDIT_QUOTA_EXCEEDED_MESSAGE = (
+    "今月のクレジット利用量の上限に達しているため、チャットが送信できません"
+)
 
 
 async def resolve_active_billing_period(
@@ -79,7 +91,9 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
         session: 非同期DBセッション。
 
     Raises:
-        HTTPException: 当月のクレジット利用量が上限に達している場合、429を返す。
+        HTTPException: 請求期間内の利用クレジット合計が
+            「プランのクレジット枠 + テナント個別の利用ベース上限」以上の場合、
+            429（Too Many Requests）を返す。
     """
     billing_period = await resolve_active_billing_period(tenant_id, session)
     if billing_period is None:
@@ -97,5 +111,5 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
     if total_credits >= credit_limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="当月のクレジット利用量が上限に達しています。",
+            detail=CREDIT_QUOTA_EXCEEDED_MESSAGE,
         )
