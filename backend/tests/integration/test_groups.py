@@ -170,6 +170,71 @@ class TestGetGroups:
         assert group_with_admin_member.id in ids
         assert other_group.id not in ids
 
+    async def test_returns_assistants_and_prompt_templates(
+        self,
+        client,
+        admin_headers,
+        group_with_assistant,
+        assistant,
+        group_with_prompt_template,
+        prompt_template,
+    ):
+        """紐づくアシスタント・プロンプトテンプレートの実データがレスポンスに含まれること"""
+        async with client as c:
+            response = await c.get("/api/groups", headers=admin_headers)
+
+        assert response.status_code == 200
+        body = next(g for g in response.json() if g["id"] == group_with_assistant.id)
+        assert body["assistantIds"] == [assistant.id]
+        assert body["assistants"] == [assistant.name]
+        assert body["promptTemplateIds"] == [prompt_template.id]
+        assert body["promptTemplates"] == [prompt_template.name]
+
+    async def test_returns_empty_lists_when_nothing_linked(
+        self, client, admin_headers, group
+    ):
+        """アシスタント・プロンプトテンプレートが紐づいていない場合は空リストのままであること"""
+        async with client as c:
+            response = await c.get("/api/groups", headers=admin_headers)
+
+        assert response.status_code == 200
+        body = next(g for g in response.json() if g["id"] == group.id)
+        assert body["assistantIds"] == []
+        assert body["assistants"] == []
+        assert body["promptTemplateIds"] == []
+        assert body["promptTemplates"] == []
+
+    async def test_multiple_groups_do_not_mix_assistant_data(
+        self, client, admin_headers, session, tenant, group, assistant, other_assistant
+    ):
+        """複数グループを一覧取得したとき、紐付けデータが他グループと混在しないこと"""
+        other_group = Group(tenant_id=tenant.id, name="Other Group")
+        session.add(other_group)
+        await session.commit()
+        await session.refresh(other_group)
+
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
+        session.add(
+            GroupAssistant(
+                group_id=other_group.id,
+                tenant_id=tenant.id,
+                assistant_id=other_assistant.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/groups", headers=admin_headers)
+
+        assert response.status_code == 200
+        body_by_id = {g["id"]: g for g in response.json()}
+        assert body_by_id[group.id]["assistantIds"] == [assistant.id]
+        assert body_by_id[other_group.id]["assistantIds"] == [other_assistant.id]
+
 
 @pytest.mark.asyncio
 class TestListAdminGroups:

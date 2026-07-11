@@ -161,6 +161,48 @@ class GroupPromptTemplateRepository:
         return grouped
 
     @staticmethod
+    async def find_grouped_by_group_ids(
+        group_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> dict[str, list[tuple[str, str]]]:
+        """グループID一覧に対して、それぞれに紐づくプロンプトテンプレート (id, name) 一覧を1クエリでまとめて取得する。
+
+        グループごとに個別クエリを発行するとN+1になるため、対象グループID一覧に対する
+        (group_id, prompt_template_id, prompt_template_name) の組を1クエリで取得しPython側で集約する。
+
+        Args:
+            group_ids: 対象のグループID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            グループIDをキーとした (プロンプトテンプレートID, プロンプトテンプレート名) 一覧の辞書。
+        """
+        if not group_ids:
+            return {}
+        stmt = (
+            select(
+                GroupPromptTemplate.group_id,
+                PromptTemplate.id,
+                PromptTemplate.name,
+            )
+            .join(
+                PromptTemplate,
+                PromptTemplate.id == GroupPromptTemplate.prompt_template_id,
+            )
+            .where(
+                GroupPromptTemplate.group_id.in_(group_ids),
+                GroupPromptTemplate.tenant_id == tenant_id,
+                PromptTemplate.tenant_id == tenant_id,
+            )
+        )
+        result = await session.execute(stmt)
+
+        grouped: dict[str, list[tuple[str, str]]] = {gid: [] for gid in group_ids}
+        for group_id, template_id, template_name in result.all():
+            grouped[group_id].append((template_id, template_name))
+        return grouped
+
+    @staticmethod
     async def replace_groups_for_template(
         template_id: str,
         tenant_id: str,

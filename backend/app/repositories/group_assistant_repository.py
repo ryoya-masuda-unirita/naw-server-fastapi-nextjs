@@ -204,6 +204,41 @@ class GroupAssistantRepository:
         return grouped
 
     @staticmethod
+    async def find_grouped_by_group_ids(
+        group_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> dict[str, list[tuple[str, str]]]:
+        """グループID一覧に対して、それぞれに紐づくアシスタント (id, name) 一覧を1クエリでまとめて取得する。
+
+        グループごとに個別クエリを発行するとN+1になるため、対象グループID一覧に対する
+        (group_id, assistant_id, assistant_name) の組を1クエリで取得しPython側で集約する。
+
+        Args:
+            group_ids: 対象のグループID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            グループIDをキーとした (アシスタントID, アシスタント名) 一覧の辞書。
+        """
+        if not group_ids:
+            return {}
+        stmt = (
+            select(GroupAssistant.group_id, Assistant.id, Assistant.name)
+            .join(Assistant, Assistant.id == GroupAssistant.assistant_id)
+            .where(
+                GroupAssistant.group_id.in_(group_ids),
+                GroupAssistant.tenant_id == tenant_id,
+                Assistant.tenant_id == tenant_id,
+            )
+        )
+        result = await session.execute(stmt)
+
+        grouped: dict[str, list[tuple[str, str]]] = {gid: [] for gid in group_ids}
+        for group_id, assistant_id, assistant_name in result.all():
+            grouped[group_id].append((assistant_id, assistant_name))
+        return grouped
+
+    @staticmethod
     async def replace_groups_for_assistant(
         assistant_id: str,
         tenant_id: str,
