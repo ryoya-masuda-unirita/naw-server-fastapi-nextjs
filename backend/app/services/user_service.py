@@ -68,7 +68,12 @@ class UserService:
         Returns:
             ページネーション済みのユーザー一覧。
         """
-        stmt = select(User).where(User.tenant_id == tenant_id)
+        # SYSTEM ロール（Waha等の内部連携用ユーザー）は管理画面の一覧に表示しない。
+        # role=SYSTEM が明示的に指定された場合もこの条件は外さず、結果は0件になる
+        # （NAW-1096: naw-server側の UserSpecifications.visibleToAdmin() と同一の挙動）。
+        stmt = select(User).where(
+            User.tenant_id == tenant_id, User.role != UserRole.SYSTEM
+        )
 
         if search_text:
             pattern = UserService._escape_like_pattern(search_text.lower())
