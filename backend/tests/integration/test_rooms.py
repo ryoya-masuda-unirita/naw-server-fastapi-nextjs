@@ -10,6 +10,7 @@ from app.main import app
 from app.models.assistant import Assistant, AssistantType, GroupAssistant
 from app.models.group import Group, GroupUser
 from app.models.room import Room, RoomPin, RoomRating
+from app.models.share import Share, ShareRoom
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
@@ -187,6 +188,59 @@ async def other_users_room(
     return room
 
 
+@pytest.fixture
+async def shared_room(session, rooms_tenant, room_owner_user, room_assistant):
+    """共有リンクで他ユーザーに共有されるルーム（room_owner_userが所有）"""
+    room = Room(
+        tenant_id=rooms_tenant.id,
+        name="Shared Room",
+        default_assistant_id=room_assistant.id,
+        user_id=room_owner_user.id,
+    )
+    session.add(room)
+    await session.commit()
+    await session.refresh(room)
+    return room
+
+
+@pytest.fixture
+async def share_target_group(session, rooms_tenant, another_user_same_tenant):
+    """another_user_same_tenantが所属する共有先グループ"""
+    group = Group(tenant_id=rooms_tenant.id, name="Share Target Group")
+    session.add(group)
+    await session.commit()
+    await session.refresh(group)
+    session.add(
+        GroupUser(
+            group_id=group.id,
+            tenant_id=rooms_tenant.id,
+            user_id=another_user_same_tenant.id,
+            is_admin=False,
+        )
+    )
+    await session.commit()
+    return group
+
+
+@pytest.fixture
+async def shared_room_share(session, rooms_tenant, shared_room, share_target_group):
+    """shared_roomをshare_target_groupに共有する共有リンク"""
+    share = Share(tenant_id=rooms_tenant.id, room_id=shared_room.id)
+    session.add(share)
+    await session.commit()
+    await session.refresh(share)
+    session.add(
+        ShareRoom(
+            tenant_id=rooms_tenant.id,
+            share_id=share.id,
+            room_id=shared_room.id,
+            group_id=share_target_group.id,
+        )
+    )
+    await session.commit()
+    return share
+
+
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
@@ -230,6 +284,26 @@ class TestGetRooms:
         body = response.json()
         assert body["totalElements"] == 1
         assert [room["id"] for room in body["content"]] == [owned_room.id]
+
+    async def test_get_rooms_includes_shared_room_for_group_member(
+        self,
+        client,
+        other_user_headers,
+        other_users_room,
+        shared_room,
+        shared_room_share,
+    ):
+        """共有先グループのメンバーの一覧には自分のルームと共有ルームの両方が含まれ、
+        共有されていない他人のルームは含まれないこと"""
+        async with client as c:
+            response = await c.get("/api/rooms", headers=other_user_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        room_ids = {room["id"] for room in body["content"]}
+        assert other_users_room.id in room_ids
+        assert shared_room.id in room_ids
+        assert body["totalElements"] == 2
 
     async def test_get_rooms_orders_pinned_first_then_updated_at_desc(
         self,
@@ -554,16 +628,16 @@ class TestGetRoom:
         assert response.status_code == 200
         assert response.json()["id"] == owned_room.id
 
-    async def test_get_room_returns_404_for_other_users_room(
+    async def test_get_room_returns_403_for_other_users_room(
         self, client, room_owner_headers, other_users_room
     ):
-        """他ユーザー所有ルームは404になること"""
+        """共有されていない他ユーザー所有ルームは403になること"""
         async with client as c:
             response = await c.get(
                 f"/api/rooms/{other_users_room.id}", headers=room_owner_headers
             )
 
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     async def test_get_room_returns_404_for_unknown_room(
         self, client, room_owner_headers
@@ -573,6 +647,18 @@ class TestGetRoom:
             response = await c.get("/api/rooms/unknown", headers=room_owner_headers)
 
         assert response.status_code == 404
+
+    async def test_get_room_with_shared_group_member_returns_200(
+        self, client, other_user_headers, shared_room, shared_room_share
+    ):
+        """共有リンクを持つ共有先グループのメンバーはルームを取得できること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/rooms/{shared_room.id}", headers=other_user_headers
+            )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == shared_room.id
 
 
 @pytest.mark.asyncio
@@ -686,6 +772,20 @@ class TestUpdateRoom:
                 f"/api/rooms/{other_users_room.id}",
                 json={"name": "Denied"},
                 headers=room_owner_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_update_room_with_shared_group_member_returns_404(
+        self, client, other_user_headers, shared_room, shared_room_share
+    ):
+        """共有先グループのメンバーは書き込み系（更新）を行えず404になること
+        （書き込み系は引き続き所有者限定のため、_get_owned_room_or_404の挙動どおり）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/rooms/{shared_room.id}",
+                json={"name": "Denied"},
+                headers=other_user_headers,
             )
 
         assert response.status_code == 404
