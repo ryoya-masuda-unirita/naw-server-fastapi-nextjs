@@ -12,8 +12,7 @@ class LlmChatRequest(BaseModel):
     """LLMチャットAPIのリクエスト。
 
     移植元(Spring Boot)の`LlmChatTextDataRequest`に対応するが、本Issueのスコープでは
-    tools（Function Calling）・添付ファイル・ライブラリ生成（createLibrary）・
-    response_formatは対象外のため含めない。
+    tools（Function Calling）・添付ファイルは対象外のため含めない。
     """
 
     deployName: str = Field(min_length=1)
@@ -22,6 +21,11 @@ class LlmChatRequest(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=1.0)
     maxTokens: int | None = Field(default=None, gt=0)
     messages: list[LlmChatTurn] = Field(min_length=1)
+    # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
+    # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
+    # ストリーミングする。trueの場合はmessageIdの指定が必須(生成したライブラリの
+    # 紐付け先が必要なため)。
+    createLibrary: bool = False
 
 
 class LlmEmbeddingRequest(BaseModel):

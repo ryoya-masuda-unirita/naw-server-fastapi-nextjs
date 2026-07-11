@@ -1,8 +1,7 @@
 """LLMチャットAPI(SSEストリーミング応答)のビジネスロジック。
 
 移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、tools
-（Function Calling）・添付ファイル・ライブラリ生成（createLibrary）・response_format
-は対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+（Function Calling）・添付ファイルは対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
 """
 
 import json
@@ -17,6 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
+from app.core.library_stream_router import (
+    DEFAULT_LIBRARY_TITLE,
+    LIBRARY_USER_INSTRUCTION_PREFIX,
+    LibraryStreamRouter,
+)
 from app.core.llm_client import AzureLlmChatClient, ChatMessage
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
@@ -25,15 +29,26 @@ from app.core.token_usage_credit import (
     positive_token_weight,
 )
 from app.models.ai_model import AIModelEndpointType
+from app.models.library import Library
 from app.models.tenant_endpoint import EndpointType
 from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.repositories.ai_model_repository import AIModelRepository
+from app.repositories.library_repository import LibraryRepository
 from app.repositories.message_repository import MessageRepository
+from app.repositories.system_prompt_template_repository import (
+    SystemPromptTemplateRepository,
+)
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.llm import LlmChatRequest
 
 logger = logging.getLogger(__name__)
+
+# ライブラリ生成用固定システムプロンプトの種別キー(system_prompt_templates.type)。
+_LIBRARY_PROMPT_TYPE = "LIBRARY"
+
+# タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
+_LIBRARY_TITLE_MAX_LENGTH = 255
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -76,10 +91,16 @@ class LlmChatService:
 
         Raises:
             HTTPException: クレジット上限超過時は429、指定deployNameのAIモデルが
-                存在しない・テナントにAzure OpenAI Chatエンドポイントが存在しない
-                場合は400、指定messageIdがテナント内に存在しない場合は404、
-                所属ルームの所有者でない場合は403を返す。
+                存在しない・テナントにAzure OpenAI Chatエンドポイントが存在しない・
+                createLibrary=trueなのにmessageId未指定の場合は400、指定messageIdが
+                テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
         """
+        if req.createLibrary and not req.messageId:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ライブラリを生成するには、保存先のメッセージ ID（messageId）を指定してください。",
+            )
+
         await enforce_within_quota(tenant_id, session)
 
         ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
@@ -129,6 +150,25 @@ class LlmChatService:
             req.additionalPrompt,
         )
 
+        if req.createLibrary:
+            chat_messages = LlmChatService._downgrade_system_turns_to_user(
+                LlmChatService._apply_library_instruction_to_last_user_turn(
+                    chat_messages
+                )
+            )
+            library_prompt = await SystemPromptTemplateRepository.find_by_type(
+                _LIBRARY_PROMPT_TYPE, session
+            )
+            if library_prompt is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="ライブラリ生成用のシステムプロンプトが見つかりません。",
+                )
+            chat_messages = [
+                ChatMessage(role="system", content=library_prompt.content),
+                *chat_messages,
+            ]
+
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
         api_key = tenant_endpoint.api_key
@@ -138,11 +178,20 @@ class LlmChatService:
         user_id = current_user.id
         model_name = ai_model.name
         token_weight = positive_token_weight(float(ai_model.token_weight))
+        create_library = req.createLibrary
+        library_tenant_id = tenant_id
+        library_message_id = message_id_for_usage
 
         async def event_stream() -> AsyncIterator[bytes]:
-            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信する。"""
+            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信する。
+
+            `createLibrary=true`の場合は、`text_delta`の代わりに`LibraryStreamRouter`
+            経由でタイトル/本文/補足コメントの3区分に振り分けて配信し、完了後に
+            ライブラリを新規永続化する。
+            """
             input_tokens = 0
             output_tokens = 0
+            router = LibraryStreamRouter() if create_library else None
             try:
                 async for chunk in AzureLlmChatClient.stream_chat(
                     endpoint_url,
@@ -153,11 +202,43 @@ class LlmChatService:
                     max_tokens,
                 ):
                     if chunk.text_delta is not None:
-                        yield _sse("text_delta", {"text": chunk.text_delta})
+                        if router is not None:
+                            for kind, text in router.feed(chunk.text_delta):
+                                event = (
+                                    "text_delta"
+                                    if kind == "comment"
+                                    else f"library_{kind}_delta"
+                                )
+                                yield _sse(event, {"text": text})
+                        else:
+                            yield _sse("text_delta", {"text": chunk.text_delta})
                     if chunk.input_tokens is not None:
                         input_tokens = chunk.input_tokens
                     if chunk.output_tokens is not None:
                         output_tokens = chunk.output_tokens
+
+                if router is not None:
+                    for kind, text in router.flush():
+                        event = (
+                            "text_delta"
+                            if kind == "comment"
+                            else f"library_{kind}_delta"
+                        )
+                        yield _sse(event, {"text": text})
+                    title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
+                        :_LIBRARY_TITLE_MAX_LENGTH
+                    ]
+                    comment = router.final_comment()
+                    await LlmChatService._persist_library(
+                        tenant_id=library_tenant_id,
+                        message_id=library_message_id,
+                        user_id=user_id,
+                        title=title,
+                        content=router.final_content(),
+                    )
+                    if not comment:
+                        yield _sse("text_delta", {"text": f"「{title}」を作成しました"})
+
                 yield _sse(
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
@@ -165,7 +246,8 @@ class LlmChatService:
             except Exception as e:
                 # SSEは開始後にHTTPステータスでエラーを返せないため、専用イベントとして
                 # クライアントへ通知する（例外を握り潰すのではなく、ログに残したうえで
-                # クライアントへ伝わる形に変換する）。
+                # クライアントへ伝わる形に変換する）。ライブラリ生成が正常完了した場合のみ
+                # 永続化する移植元の挙動に合わせ、エラー時はライブラリを永続化しない。
                 logger.exception("LLMチャット呼び出し中にエラーが発生しました")
                 yield _sse("error", {"message": str(e)})
             finally:
@@ -211,6 +293,91 @@ class LlmChatService:
                 )
                 return updated
         return messages
+
+    @staticmethod
+    def _apply_library_instruction_to_last_user_turn(
+        messages: list[ChatMessage],
+    ) -> list[ChatMessage]:
+        """ライブラリ生成時のみ、末尾から見て最後の"user"ロール発話の先頭に固定の指示を前置する。
+
+        移植元Java版`applyLibraryInstructionToLastUserTurn`に対応する。
+        `_apply_additional_prompt`で結合済みの発話にさらに被せる想定のため、必ず
+        `_apply_additional_prompt`の後に呼ぶこと。
+
+        Args:
+            messages: 会話履歴。
+
+        Returns:
+            指示前置後の会話履歴。該当する"user"ロール発話がない場合はそのまま返す。
+        """
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role.lower() == "user":
+                updated = list(messages)
+                updated[index] = ChatMessage(
+                    role=messages[index].role,
+                    content=f"{LIBRARY_USER_INSTRUCTION_PREFIX}{messages[index].content}",
+                )
+                return updated
+        return messages
+
+    @staticmethod
+    def _downgrade_system_turns_to_user(
+        messages: list[ChatMessage],
+    ) -> list[ChatMessage]:
+        """ライブラリ生成時、クライアント由来の"system"ロール発話を"user"へ降格する。
+
+        移植元Java版`buildSpringAiMessages`の`downgradeSystemToUser`相当。ライブラリ用
+        システムプロンプトより後ろに別のsystem発話が並ぶと出力形式が不安定になるため、
+        `messages`由来のsystem発話はuserへ降格する。
+
+        Args:
+            messages: 会話履歴。
+
+        Returns:
+            system発話をuserへ降格した会話履歴。
+        """
+        return [
+            ChatMessage(role="user", content=message.content)
+            if message.role.lower() == "system"
+            else message
+            for message in messages
+        ]
+
+    @staticmethod
+    async def _persist_library(
+        *,
+        tenant_id: str,
+        message_id: str | None,
+        user_id: UUID,
+        title: str,
+        content: str,
+    ) -> None:
+        """生成したライブラリを新規セッションで永続化する（移植元`persistLibraryInNewTransaction`相当）。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 紐づくメッセージID(`createLibrary=true`時は必須のため非None)。
+            user_id: 生成したユーザーのID。
+            title: 確定したタイトル(255文字以内に切り詰め済み)。
+            content: 確定した本文(md)。
+        """
+        if message_id is None:
+            # createLibrary=trueの場合、stream_chat冒頭のバリデーションでmessageId
+            # 必須としているため実際には到達しないが、型上のNoneガードとして残す。
+            logger.error("ライブラリ生成に必要なmessageIdが解決できませんでした")
+            return
+        session_maker = get_session_maker()
+        async with session_maker() as new_session:
+            await LibraryRepository.save(
+                Library(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    user_id=user_id,
+                    title=title,
+                    content=content,
+                ),
+                new_session,
+            )
 
     @staticmethod
     async def _persist_token_usage(

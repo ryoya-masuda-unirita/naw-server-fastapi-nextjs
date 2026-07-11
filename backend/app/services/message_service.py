@@ -11,6 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
+from app.core.library_stream_router import (
+    DEFAULT_LIBRARY_TITLE,
+    LIBRARY_USER_INSTRUCTION_PREFIX,
+    LibraryStreamRouter,
+)
 from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
@@ -22,6 +27,7 @@ from app.core.token_usage_credit import (
 from app.core.vector_store import AzureAiSearchVectorStoreClient, DEFAULT_TOP_K
 from app.models.ai_model import AIModelEndpointType
 from app.models.assistant import Assistant, AssistantType
+from app.models.library import Library
 from app.models.message import (
     Message,
     MessageContent,
@@ -37,10 +43,14 @@ from app.repositories.assistant_endpoint_repository import AssistantEndpointRepo
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.file_repository import FileRepository
 from app.repositories.index_repository import IndexRepository
+from app.repositories.library_repository import LibraryRepository
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.room_repository import RoomRepository
+from app.repositories.system_prompt_template_repository import (
+    SystemPromptTemplateRepository,
+)
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.message import (
     AssistantResponse,
@@ -67,6 +77,12 @@ EMBEDDING_MODEL_NAME = "text-embedding-ada-002"
 # 返す`StreamMessageContentContext.tokenWeight`は、SAAS_CHATと異なりAIモデルの
 # token_weightを使わず固定値1.0のため、その挙動をそのまま踏襲する。
 RAG_CHAT_TOKEN_WEIGHT = 1.0
+
+# ライブラリ生成用固定システムプロンプトの種別キー(system_prompt_templates.type)。
+_LIBRARY_PROMPT_TYPE = "LIBRARY"
+
+# タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
+_LIBRARY_TITLE_MAX_LENGTH = 255
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -113,6 +129,54 @@ def _apply_additional_prompt(
             )
             return updated
     return messages
+
+
+def _apply_library_instruction_to_last_user_turn(
+    messages: list[ChatMessage],
+) -> list[ChatMessage]:
+    """ライブラリ生成時のみ、末尾から見て最後の"user"ロール発話の先頭に固定の指示を前置する。
+
+    移植元Java版`applyLibraryInstructionToLastUserTurn`に対応する。`llm_chat_service.py`の
+    `LlmChatService._apply_library_instruction_to_last_user_turn`と同一ロジックだが、
+    「serviceが別serviceを呼ばない」規約により複製している。`_apply_additional_prompt`で
+    結合済みの発話にさらに被せる想定のため、必ずその後に呼ぶこと。
+
+    Args:
+        messages: 会話履歴。
+
+    Returns:
+        指示前置後の会話履歴。該当する"user"ロール発話がない場合はそのまま返す。
+    """
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].role.lower() == "user":
+            updated = list(messages)
+            updated[index] = ChatMessage(
+                role=messages[index].role,
+                content=f"{LIBRARY_USER_INSTRUCTION_PREFIX}{messages[index].content}",
+            )
+            return updated
+    return messages
+
+
+def _downgrade_system_turns_to_user(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """ライブラリ生成時、クライアント由来の"system"ロール発話を"user"へ降格する。
+
+    移植元Java版`CreateMessageContentViewModel.getChatHistoryMessages`のcreateLibrary分岐に
+    対応する。`llm_chat_service.py`の`LlmChatService._downgrade_system_turns_to_user`と
+    同一ロジックだが、「serviceが別serviceを呼ばない」規約により複製している。
+
+    Args:
+        messages: 会話履歴。
+
+    Returns:
+        system発話をuserへ降格した会話履歴。
+    """
+    return [
+        ChatMessage(role="user", content=message.content)
+        if message.role.lower() == "system"
+        else message
+        for message in messages
+    ]
 
 
 def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
@@ -616,14 +680,22 @@ class MessageService:
                 detail=f"AI model not found: {assistant_endpoint.model}",
             )
 
+        history_messages = [
+            ChatMessage(role=turn.role, content=turn.content)
+            for turn in req.historyMessages
+        ]
+        if req.isCreateLibrary:
+            # ライブラリ用システムプロンプトより後ろに別のsystem発話が並ぶと出力形式が
+            # 不安定になるため、クライアント由来のsystem発話はuserへ降格する
+            # （移植元`CreateMessageContentViewModel.getChatHistoryMessages`相当）。
+            history_messages = _downgrade_system_turns_to_user(history_messages)
+
         chat_messages = _apply_additional_prompt(
-            [
-                ChatMessage(role=turn.role, content=turn.content)
-                for turn in req.historyMessages
-            ]
-            + [ChatMessage(role="user", content=req.userInput)],
+            history_messages + [ChatMessage(role="user", content=req.userInput)],
             req.additionalPrompt,
         )
+        if req.isCreateLibrary:
+            chat_messages = _apply_library_instruction_to_last_user_turn(chat_messages)
 
         rag_context = ""
         reference_paths: list[str] = []
@@ -650,6 +722,20 @@ class MessageService:
                     *chat_messages,
                 ]
 
+        if req.isCreateLibrary:
+            library_prompt = await SystemPromptTemplateRepository.find_by_type(
+                _LIBRARY_PROMPT_TYPE, session
+            )
+            if library_prompt is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="ライブラリ生成用のシステムプロンプトが見つかりません。",
+                )
+            chat_messages = [
+                ChatMessage(role="system", content=library_prompt.content),
+                *chat_messages,
+            ]
+
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
         api_key = tenant_endpoint.api_key
@@ -666,6 +752,7 @@ class MessageService:
         room_id = message.room_id
         user_id = current_user.id
         question_text = req.userInput
+        create_library = req.isCreateLibrary
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
@@ -676,12 +763,21 @@ class MessageService:
             捕捉できない）場合でも、Azureで既に消費したトークンの記録・応答の永続化が
             必ず行われるようにする。ただし`GeneratorExit`処理中は`yield`できないため、
             `complete`イベントの送出はストリームが正常に完了/エラー終了した場合のみ行う。
+
+            `create_library=true`の場合は、`text_delta`の代わりに`LibraryStreamRouter`
+            経由でタイトル/本文/補足コメントの3区分に振り分けて配信する。補足コメント
+            区間のテキストのみ`answer_text`へ積算し、`MessageContent.answer`として
+            永続化する（コメントが空ならデフォルトの案内文を使う）。ライブラリ自体の
+            永続化は、移植元同様ストリーミングが正常に完了した場合のみ行う。
             """
             input_tokens = 0
             output_tokens = 0
             answer_text = ""
             content_status = MessageContentStatus.OK
             stream_finished = False
+            router = LibraryStreamRouter() if create_library else None
+            library_title: str | None = None
+            library_content: str | None = None
             try:
                 # temperature・max_tokensは`MessageContentCreateRequest`に含めていない
                 # （`01_要件定義.md`のスコープ外）ため、Issue #88の`LlmChatRequest`の
@@ -696,12 +792,36 @@ class MessageService:
                     None,
                 ):
                     if chunk.text_delta is not None:
-                        answer_text += chunk.text_delta
-                        yield _sse("text_delta", {"text": chunk.text_delta})
+                        if router is not None:
+                            for kind, text in router.feed(chunk.text_delta):
+                                if kind == "comment":
+                                    answer_text += text
+                                    yield _sse("text_delta", {"text": text})
+                                else:
+                                    yield _sse(f"library_{kind}_delta", {"text": text})
+                        else:
+                            answer_text += chunk.text_delta
+                            yield _sse("text_delta", {"text": chunk.text_delta})
                     if chunk.input_tokens is not None:
                         input_tokens = chunk.input_tokens
                     if chunk.output_tokens is not None:
                         output_tokens = chunk.output_tokens
+
+                if router is not None:
+                    for kind, text in router.flush():
+                        if kind == "comment":
+                            answer_text += text
+                            yield _sse("text_delta", {"text": text})
+                        else:
+                            yield _sse(f"library_{kind}_delta", {"text": text})
+                    library_title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
+                        :_LIBRARY_TITLE_MAX_LENGTH
+                    ]
+                    library_content = router.final_content()
+                    if not answer_text.strip():
+                        answer_text = f"「{library_title}」を作成しました"
+                        yield _sse("text_delta", {"text": answer_text})
+
                 yield _sse(
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
@@ -728,6 +848,18 @@ class MessageService:
                     context=rag_context or None,
                     reference_paths=reference_paths,
                 )
+                if (
+                    library_title is not None
+                    and library_content is not None
+                    and content_status == MessageContentStatus.OK
+                ):
+                    await MessageService._persist_library(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        user_id=user_id,
+                        title=library_title,
+                        content=library_content,
+                    )
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -952,6 +1084,40 @@ class MessageService:
                 attachmentFiles=[],
                 referencePaths=reference_paths,
                 isRated=False,
+            )
+
+    @staticmethod
+    async def _persist_library(
+        *,
+        tenant_id: str,
+        message_id: str,
+        user_id: UUID,
+        title: str,
+        content: str,
+    ) -> None:
+        """生成したライブラリを新規セッションで永続化する（移植元`persistLibrary`相当）。
+
+        `llm_chat_service.LlmChatService._persist_library`と同等のロジックだが、
+        「serviceが別serviceを呼ばない」規約により複製している。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 紐づくメッセージID。
+            user_id: 生成したユーザーのID。
+            title: 確定したタイトル(255文字以内に切り詰め済み)。
+            content: 確定した本文(md)。
+        """
+        session_maker = get_session_maker()
+        async with session_maker() as new_session:
+            await LibraryRepository.save(
+                Library(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    user_id=user_id,
+                    title=title,
+                    content=content,
+                ),
+                new_session,
             )
 
     @staticmethod
