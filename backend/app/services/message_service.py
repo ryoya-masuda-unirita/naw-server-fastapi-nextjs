@@ -12,6 +12,7 @@ from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
 from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
+from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
@@ -143,6 +144,37 @@ def _deserialize_tools(tools_json: str | None) -> list[ToolConfig] | None:
     if not tools_json:
         return None
     return [ToolConfig(**item) for item in json.loads(tools_json)]
+
+
+def _to_core_tool_configs(
+    tools: list[ToolConfig] | None,
+) -> list[CoreToolConfig] | None:
+    """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
+
+    `llm_chat_service.py`の同名関数と実装が重複するが、「serviceが別serviceを呼ばない」
+    規約により`LlmChatService`側の実装をインポートできないため、小さな純粋関数として
+    このファイル内に複製する。
+
+    Args:
+        tools: リクエストで指定されたツール設定一覧。
+
+    Returns:
+        LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
+    """
+    if not tools:
+        return None
+    return [
+        CoreToolConfig(
+            name=tool.name,
+            server_label=tool.server_label,
+            server_url=tool.server_url,
+            require_approval=tool.require_approval,
+            authorization=tool.authorization,
+            headers=tool.headers,
+            allowed_tools=tool.allowed_tools,
+        )
+        for tool in tools
+    ]
 
 
 def _split_reference_paths(file_paths: str | None) -> list[str]:
@@ -666,6 +698,7 @@ class MessageService:
         room_id = message.room_id
         user_id = current_user.id
         question_text = req.userInput
+        tools = _to_core_tool_configs(req.tools)
 
         async def event_stream() -> AsyncIterator[bytes]:
             """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
@@ -694,6 +727,7 @@ class MessageService:
                     chat_messages,
                     0.0,
                     None,
+                    tools,
                 ):
                     if chunk.text_delta is not None:
                         answer_text += chunk.text_delta

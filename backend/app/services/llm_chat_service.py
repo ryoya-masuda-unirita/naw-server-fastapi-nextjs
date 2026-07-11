@@ -1,8 +1,9 @@
 """LLMチャットAPI(SSEストリーミング応答)のビジネスロジック。
 
-移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、tools
-（Function Calling）・添付ファイル・ライブラリ生成（createLibrary）・response_format
-は対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、添付ファイル・
+ライブラリ生成（createLibrary）・response_formatは対象外のため扱わない
+（`docs/issue-88/01_要件定義.md`参照）。tools（web_search/mcp）はissue-98で対応した
+（`docs/issue-98/01_要件定義.md`参照）。
 """
 
 import json
@@ -18,6 +19,7 @@ from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
 from app.core.llm_client import AzureLlmChatClient, ChatMessage
+from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
     input_credits,
@@ -32,6 +34,7 @@ from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.llm import LlmChatRequest
+from app.schemas.message import ToolConfig as SchemaToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,33 @@ def _sse(event: str, data: dict) -> bytes:
         SSE形式にエンコードされたバイト列。
     """
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+def _to_core_tool_configs(
+    tools: list[SchemaToolConfig] | None,
+) -> list[CoreToolConfig] | None:
+    """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
+
+    Args:
+        tools: リクエストで指定されたツール設定一覧。
+
+    Returns:
+        LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
+    """
+    if not tools:
+        return None
+    return [
+        CoreToolConfig(
+            name=tool.name,
+            server_label=tool.server_label,
+            server_url=tool.server_url,
+            require_approval=tool.require_approval,
+            authorization=tool.authorization,
+            headers=tool.headers,
+            allowed_tools=tool.allowed_tools,
+        )
+        for tool in tools
+    ]
 
 
 class LlmChatService:
@@ -135,6 +165,7 @@ class LlmChatService:
         deploy_name = req.deployName
         temperature = req.temperature
         max_tokens = req.maxTokens
+        tools = _to_core_tool_configs(req.tools)
         user_id = current_user.id
         model_name = ai_model.name
         token_weight = positive_token_weight(float(ai_model.token_weight))
@@ -151,6 +182,7 @@ class LlmChatService:
                     chat_messages,
                     temperature,
                     max_tokens,
+                    tools,
                 ):
                     if chunk.text_delta is not None:
                         yield _sse("text_delta", {"text": chunk.text_delta})

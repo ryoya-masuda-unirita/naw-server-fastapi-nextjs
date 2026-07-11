@@ -119,14 +119,16 @@ class MessageContentCreateRequest(BaseModel):
     """メッセージ送信（アシスタント応答生成）のリクエスト。
 
     移植元(Spring Boot)の`CreateMessageContentRequest`に対応するが、本Issueのスコープでは
-    RAG・添付ファイル・tools・ライブラリ生成（createLibrary）・response_format・
-    メッセージ再生成（messageContentId指定）は対象外のため含めない（`docs/issue-93/01_要件定義.md`参照）。
+    ライブラリ生成（createLibrary）・response_format・メッセージ再生成（messageContentId指定）は
+    対象外のため含めない（`docs/issue-93/01_要件定義.md`参照）。`tools`（web_search/mcp）は
+    issue-98で対応した（`docs/issue-98/01_要件定義.md`参照）。
     """
 
     messageId: str = Field(min_length=1)
     userInput: str = Field(min_length=1)
     additionalPrompt: str | None = None
     historyMessages: list[MessageContentHistoryTurn] = []
+    tools: list[ToolConfig] | None = None
 
 
 class MessageFeedbackCreateRequest(BaseModel):
