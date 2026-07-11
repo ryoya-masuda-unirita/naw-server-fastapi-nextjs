@@ -1,15 +1,36 @@
 import json
+import logging
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import LlmCreditSettings, get_llm_credit_settings
+from app.core.credit_quota import enforce_within_quota
+from app.core.database import get_session_maker
+from app.core.llm_client import AzureLlmChatClient, ChatMessage
 from app.core.room_access import require_owned_room
+from app.core.token_usage_credit import (
+    input_credits,
+    output_credits,
+    positive_token_weight,
+)
+from app.models.ai_model import AIModelEndpointType
 from app.models.assistant import AssistantType
-from app.models.message import Message, MessageFeedback
+from app.models.message import (
+    Message,
+    MessageContent,
+    MessageContentStatus,
+    MessageFeedback,
+)
 from app.models.room import Room
 from app.models.tenant_endpoint import EndpointType
+from app.models.token_usage import TokenUsage
 from app.models.user import User
+from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.message_content_repository import MessageContentRepository
@@ -21,6 +42,7 @@ from app.schemas.message import (
     EndpointResponse,
     GetMessagesResponse,
     MessageContentAttachmentFileResponse,
+    MessageContentCreateRequest,
     MessageContentResponse,
     MessageCreateRequest,
     MessageCreateResponse,
@@ -29,6 +51,54 @@ from app.schemas.message import (
     MessageItemResponse,
     ToolConfig,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _sse(event: str, data: dict) -> bytes:
+    """SSE(Server-Sent Events)形式の1イベントを組み立てる。
+
+    `llm_chat_service.py`の同名関数と実装が重複するが、「serviceが別serviceを呼ばない」
+    規約により`LlmChatService`側の実装をインポートできないため、小さな純粋関数として
+    このファイル内に複製する。
+
+    Args:
+        event: イベント名。
+        data: イベントデータ(JSONへ変換される)。
+
+    Returns:
+        SSE形式にエンコードされたバイト列。
+    """
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+def _apply_additional_prompt(
+    messages: list[ChatMessage], additional_prompt: str | None
+) -> list[ChatMessage]:
+    """末尾から見て最後の"user"ロール発話の前に追加プロンプトを前置する。
+
+    移植元Java版`applyAdditionalPromptToLastUserTurn`に対応する。`llm_chat_service.py`の
+    `LlmChatService._apply_additional_prompt`と同一ロジックだが、「serviceが別serviceを
+    呼ばない」規約により複製している。
+
+    Args:
+        messages: 会話履歴。
+        additional_prompt: 前置きするプロンプト。未指定・空白のみなら何もしない。
+
+    Returns:
+        追加プロンプト適用後の会話履歴。
+    """
+    if not additional_prompt or not additional_prompt.strip():
+        return messages
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].role.lower() == "user":
+            updated = list(messages)
+            updated[index] = ChatMessage(
+                role=messages[index].role,
+                content=f"{additional_prompt}\n\n{messages[index].content}",
+            )
+            return updated
+    return messages
 
 
 def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
@@ -451,3 +521,275 @@ class MessageService:
             createdAt=feedback.created_at,
             updatedAt=feedback.updated_at,
         )
+
+    @staticmethod
+    async def stream_message_content(
+        tenant_id: str,
+        current_user: User,
+        req: MessageContentCreateRequest,
+        session: AsyncSession,
+    ) -> StreamingResponse:
+        """メッセージ送信によるアシスタント応答生成をSSEでストリーミング返却する。
+
+        本Issueのスコープは`SAAS_CHAT`アシスタントによる基本チャットのみで、
+        `SAAS_RAG`・`SECURE`は非対応（400）。クレジット上限チェック・アシスタント/
+        エンドポイント/AIモデル解決は、ここで注入された`session`を使いストリーミング
+        開始前に行う。ストリーミング完了後の`MessageContent`永続化・ルーム更新日時の
+        更新・トークン使用量永続化は、`session`のライフサイクル（StreamingResponse
+        返却後にリクエストのDIスコープが終了しうる）とは独立させる必要があるため、
+        新規セッションで行う。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            req: メッセージ送信リクエスト。
+            session: 非同期DBセッション（呼び出し前のDB検証にのみ使用する）。
+
+        Returns:
+            `text/event-stream`のストリーミングレスポンス。
+
+        Raises:
+            HTTPException: 指定messageIdのメッセージが存在しない場合は404、所属
+                ルームの所有者でない場合は403、アシスタントが未解決・`SAAS_CHAT`
+                以外・チャットエンドポイント/AIモデルが解決できない場合は400、
+                クレジット上限超過時は429。
+        """
+        message = await MessageRepository.find_by_tenant_id_and_id(
+            tenant_id, req.messageId, session
+        )
+        if message is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+            )
+        await require_owned_room(tenant_id, current_user, message.room_id, session)
+
+        assistant = (
+            await AssistantRepository.find_by_id_and_tenant_id(
+                message.assistant_id, tenant_id, session
+            )
+            if message.assistant_id is not None
+            else None
+        )
+        if assistant is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid assistant"
+            )
+        if assistant.type != AssistantType.SAAS_CHAT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Unsupported assistant type (SAAS_RAG/SECURE are not supported yet)"
+                ),
+            )
+
+        await enforce_within_quota(tenant_id, session)
+
+        endpoint_pair = await AssistantEndpointRepository.find_chat_endpoint(
+            assistant.id, tenant_id, session
+        )
+        if endpoint_pair is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No chat endpoint found for this assistant",
+            )
+        assistant_endpoint, tenant_endpoint = endpoint_pair
+
+        ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
+            AIModelEndpointType.AZURE_OPENAI_CHAT, assistant_endpoint.model, session
+        )
+        if ai_model is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"AI model not found: {assistant_endpoint.model}",
+            )
+
+        chat_messages = _apply_additional_prompt(
+            [
+                ChatMessage(role=turn.role, content=turn.content)
+                for turn in req.historyMessages
+            ]
+            + [ChatMessage(role="user", content=req.userInput)],
+            req.additionalPrompt,
+        )
+
+        credit_settings = get_llm_credit_settings()
+        endpoint_url = tenant_endpoint.endpoint
+        api_key = tenant_endpoint.api_key
+        deploy_name = assistant_endpoint.model
+        model_name = ai_model.name
+        token_weight = positive_token_weight(float(ai_model.token_weight))
+        message_id = message.id
+        room_id = message.room_id
+        user_id = current_user.id
+        question_text = req.userInput
+
+        async def event_stream() -> AsyncIterator[bytes]:
+            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。"""
+            input_tokens = 0
+            output_tokens = 0
+            answer_text = ""
+            content_status = MessageContentStatus.OK
+            try:
+                async for chunk in AzureLlmChatClient.stream_chat(
+                    endpoint_url,
+                    api_key,
+                    deploy_name,
+                    chat_messages,
+                    0.0,
+                    None,
+                ):
+                    if chunk.text_delta is not None:
+                        answer_text += chunk.text_delta
+                        yield _sse("text_delta", {"text": chunk.text_delta})
+                    if chunk.input_tokens is not None:
+                        input_tokens = chunk.input_tokens
+                    if chunk.output_tokens is not None:
+                        output_tokens = chunk.output_tokens
+                yield _sse(
+                    "message_stop",
+                    {"inputTokens": input_tokens, "outputTokens": output_tokens},
+                )
+            except Exception as e:
+                # SSEは開始後にHTTPステータスでエラーを返せないため、専用イベントとして
+                # クライアントへ通知したうえで、ERRORステータスのMessageContentとして
+                # 永続化する（クライアントがエラー後も応答IDを認識できるようにするため）。
+                logger.exception("メッセージ送信中にエラーが発生しました")
+                content_status = MessageContentStatus.ERROR
+                answer_text = str(e)
+                yield _sse("error", {"message": answer_text})
+
+            content_response = await MessageService._persist_message_content(
+                tenant_id=tenant_id,
+                message_id=message_id,
+                room_id=room_id,
+                question=question_text,
+                answer=answer_text,
+                content_status=content_status,
+            )
+            yield _sse("complete", content_response.model_dump())
+
+            await MessageService._persist_token_usage(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                room_id=room_id,
+                message_id=message_id,
+                model_name=model_name,
+                token_weight=token_weight,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                credit_settings=credit_settings,
+            )
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @staticmethod
+    async def _persist_message_content(
+        *,
+        tenant_id: str,
+        message_id: str,
+        room_id: str,
+        question: str,
+        answer: str,
+        content_status: MessageContentStatus,
+    ) -> MessageContentResponse:
+        """ストリーミング完了後、回答内容を新規セッションで永続化し、ルームの更新日時を進める。
+
+        Args:
+            tenant_id: テナントID。
+            message_id: 紐づくメッセージID。
+            room_id: 紐づくルームID(更新日時を進める対象)。
+            question: 質問本文。
+            answer: 回答本文(エラー時は例外メッセージ)。
+            content_status: 永続化するステータス(`OK`/`ERROR`)。
+
+        Returns:
+            永続化した内容を表す`complete`イベント用のレスポンス。
+        """
+        session_maker = get_session_maker()
+        async with session_maker() as new_session:
+            content = await MessageContentRepository.save(
+                MessageContent(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    status=content_status,
+                    question=question,
+                    answer=answer,
+                ),
+                new_session,
+            )
+
+            room = await RoomRepository.find_by_id_and_tenant_id(
+                room_id, tenant_id, new_session
+            )
+            if room is not None:
+                room.updated_at = datetime.now(timezone.utc)
+                new_session.add(room)
+                await new_session.commit()
+
+            return MessageContentResponse(
+                id=content.id,
+                messageId=content.message_id,
+                status=content.status,
+                question=content.question,
+                answer=content.answer,
+                context=content.context,
+                attachmentFiles=[],
+                referencePaths=[],
+                isRated=False,
+            )
+
+    @staticmethod
+    async def _persist_token_usage(
+        *,
+        tenant_id: str,
+        user_id: UUID,
+        room_id: str | None,
+        message_id: str | None,
+        model_name: str,
+        token_weight: float,
+        input_tokens: int,
+        output_tokens: int,
+        credit_settings: LlmCreditSettings,
+    ) -> None:
+        """メッセージ送信のトークン使用量を新規セッションで永続化する。
+
+        `llm_chat_service.LlmChatService._persist_token_usage`と同等のロジックだが、
+        「serviceが別serviceを呼ばない」規約により複製している。
+
+        Args:
+            tenant_id: テナントID。
+            user_id: 呼び出したユーザーのID。
+            room_id: 紐づくルームID。
+            message_id: 紐づくメッセージID。
+            model_name: 呼び出したAIモデル名。
+            token_weight: 呼び出したAIモデルの重み係数。
+            input_tokens: 入力トークン数。
+            output_tokens: 出力トークン数。
+            credit_settings: クレジット換算設定。
+        """
+        if input_tokens <= 0 and output_tokens <= 0:
+            return
+
+        token_usage = TokenUsage(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            room_id=room_id,
+            message_id=message_id,
+            endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT.value,
+            model=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            input_credits=input_credits(
+                input_tokens,
+                credit_settings.tokens_per_credit,
+                credit_settings.input_credit_weight,
+                token_weight,
+            ),
+            output_credits=output_credits(
+                output_tokens, credit_settings.tokens_per_credit, token_weight
+            ),
+        )
+        session_maker = get_session_maker()
+        async with session_maker() as new_session:
+            new_session.add(token_usage)
+            await new_session.commit()

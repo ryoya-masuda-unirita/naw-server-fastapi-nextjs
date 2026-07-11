@@ -2,11 +2,48 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant import AssistantEndpoint
-from app.models.tenant_endpoint import TenantEndpoint
+from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemResponse
 
 
 class AssistantEndpointRepository:
+    @staticmethod
+    async def find_chat_endpoint(
+        assistant_id: str, tenant_id: str, session: AsyncSession
+    ) -> tuple[AssistantEndpoint, TenantEndpoint] | None:
+        """アシスタントに紐づくAzure OpenAI Chatエンドポイントを解決する。
+
+        メッセージ送信(SSEストリーミング)は単一アシスタントに対して呼び出されるため、
+        一覧取得用の`find_tenant_endpoints_grouped_by_assistant_id`とは異なり、
+        デプロイ名(`AssistantEndpoint.model`)とAPIキーを含む`TenantEndpoint`を
+        あわせて1件解決する。
+
+        Args:
+            assistant_id: 対象のアシスタントID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            (アシスタントとエンドポイントの紐付け, テナントエンドポイント) のタプル。
+            紐づくAzure OpenAI Chatエンドポイントが存在しない場合はNone。複数存在する
+            場合は`AssistantEndpoint.endpoint_id`が最小のものを採用する
+            （`AssistantEndpoint`の主キーは`(assistant_id, endpoint_id)`の複合キーのため）。
+        """
+        stmt = (
+            select(AssistantEndpoint, TenantEndpoint)
+            .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
+            .where(
+                AssistantEndpoint.assistant_id == assistant_id,
+                AssistantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.type == EndpointType.AZURE_OPENAI_CHAT,
+            )
+            .order_by(AssistantEndpoint.endpoint_id)
+        )
+        result = await session.execute(stmt)
+        row = result.first()
+        return (row[0], row[1]) if row else None
+
     @staticmethod
     async def find_endpoints_grouped_by_assistant_id(
         assistant_ids: list[str], tenant_id: str, session: AsyncSession

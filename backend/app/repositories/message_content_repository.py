@@ -6,6 +6,25 @@ from app.models.message import MessageContent, MessageFile
 
 class MessageContentRepository:
     @staticmethod
+    async def save(content: MessageContent, session: AsyncSession) -> MessageContent:
+        """メッセージ内容を新規追加してコミットする。
+
+        メッセージ送信(SSEストリーミング)完了後の永続化は、リクエストのDIスコープとは
+        独立した新規セッションで行われるため、呼び出し元は保存専用のセッションを渡すこと。
+
+        Args:
+            content: 保存対象のメッセージ内容。
+            session: 非同期DBセッション。
+
+        Returns:
+            保存後のメッセージ内容（DBが払い出した値を反映済み）。
+        """
+        session.add(content)
+        await session.commit()
+        await session.refresh(content)
+        return content
+
+    @staticmethod
     async def find_by_message_id_in(
         message_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[MessageContent]:

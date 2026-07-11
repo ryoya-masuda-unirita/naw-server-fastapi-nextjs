@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -6,6 +7,7 @@ from app.core.security import get_current_user, get_verified_tenant_id
 from app.models.user import User
 from app.schemas.message import (
     GetMessagesResponse,
+    MessageContentCreateRequest,
     MessageContentListRequest,
     MessageContentResponse,
     MessageCreateRequest,
@@ -52,6 +54,19 @@ async def get_message_contents(
     """メッセージ内容一覧取得"""
     return await MessageService.get_message_contents(
         x_tenant_id, current_user, req.messageIds, session
+    )
+
+
+@router.post("/content")
+async def create_message_content(
+    req: MessageContentCreateRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    """メッセージ送信（アシスタント応答生成・SSEストリーミング）"""
+    return await MessageService.stream_message_content(
+        x_tenant_id, current_user, req, session
     )
 
 
