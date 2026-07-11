@@ -771,8 +771,8 @@ class MessageService:
 
         Raises:
             HTTPException: インデックスが未紐付け・未検出、埋め込みエンドポイントが
-                見つからない、ベクトルDB接続情報が見つからない、ベクトルDBへの
-                接続・検索に失敗した場合は400。
+                見つからない、ベクトルDB接続情報が見つからない、埋め込みAPI呼び出し・
+                ベクトルDBへの接続・検索に失敗した場合は400。
         """
         if assistant.index_id is None:
             raise HTTPException(
@@ -817,15 +817,26 @@ class MessageService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No vector database connection found for this tenant",
             )
-        vdb = vdb_endpoints[0]
+        # 複数存在する場合の選び方を決定的にする（埋め込みエンドポイント選択と同様）。
+        vdb = min(vdb_endpoints, key=lambda e: e.id)
 
-        embedding_result = await AzureLlmEmbeddingClient.create_embedding(
-            embedding_endpoint.endpoint,
-            embedding_endpoint.api_key,
-            EMBEDDING_MODEL_NAME,
-            user_input,
-            None,
-        )
+        try:
+            embedding_result = await AzureLlmEmbeddingClient.create_embedding(
+                embedding_endpoint.endpoint,
+                embedding_endpoint.api_key,
+                EMBEDDING_MODEL_NAME,
+                user_input,
+                None,
+            )
+        except Exception:
+            # AzureAiSearchVectorStoreClient.similarity_searchと同様、ストリーミング
+            # 開始前のエラーはHTTPステータスで返す必要があるため、Azure OpenAI
+            # Embeddings API呼び出しの失敗（認証・ネットワーク等）もここで400へ変換する。
+            logger.exception("埋め込みAPIの呼び出しに失敗しました")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to create embedding for RAG search",
+            ) from None
 
         # 移植元同様、Azure Searchのインデックス名にはベクトルDB接続情報が属する
         # テナントIDを使う（`assistant.index_id`ではない）。

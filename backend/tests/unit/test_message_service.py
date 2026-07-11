@@ -901,6 +901,73 @@ class TestStreamMessageContentRag:
 
         assert exc_info.value.status_code == 400
 
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_rag_embedding_creation_fails(
+        self, mock_find_message, mock_require_owned_room, test_user
+    ):
+        """埋め込みAPI呼び出しが例外を送出した場合、500ではなく400になること"""
+        mock_find_message.return_value = _message()
+
+        with (
+            patch(
+                "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_assistant,
+            patch(
+                "app.services.message_service.enforce_within_quota",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+            ) as mock_find_endpoint,
+            patch(
+                "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+            ) as mock_find_model,
+            patch(
+                "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+            ) as mock_find_index,
+            patch(
+                "app.services.message_service.IndexRepository"
+                ".find_tenant_endpoints_grouped_by_index_ids",
+                new_callable=AsyncMock,
+            ) as mock_find_index_endpoints,
+            patch(
+                "app.services.message_service.TenantEndpointRepository"
+                ".find_by_tenant_id_and_type",
+                new_callable=AsyncMock,
+            ) as mock_find_vdb_endpoints,
+            patch(
+                "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+                new_callable=AsyncMock,
+            ) as mock_create_embedding,
+        ):
+            mock_find_assistant.return_value = _rag_assistant()
+            mock_find_endpoint.return_value = (
+                _assistant_endpoint(),
+                _tenant_endpoint(),
+            )
+            mock_find_model.return_value = _ai_model()
+            mock_find_index.return_value = _index()
+            mock_find_index_endpoints.return_value = {
+                "index-1": [_embedding_endpoint()]
+            }
+            mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+            mock_create_embedding.side_effect = RuntimeError("azure auth error")
+
+            with pytest.raises(HTTPException) as exc_info:
+                await MessageService.stream_message_content(
+                    "tenant-1", test_user, _request(), session=None
+                )
+
+        assert exc_info.value.status_code == 400
+
     @patch("app.services.message_service.get_session_maker")
     @patch("app.services.message_service.MessageContentRepository.save")
     @patch(
