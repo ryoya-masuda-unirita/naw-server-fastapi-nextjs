@@ -274,6 +274,106 @@ class TestStreamChat:
         assert "event: error" in body
         assert "azure error" in body
 
+    async def test_raises_400_when_create_library_without_message_id(self, test_user):
+        """createLibrary=trueかつmessageId未指定の場合400になること"""
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1",
+                test_user,
+                _request(createLibrary=True),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 400
+
+
+class TestStreamChatCreateLibrary:
+    """LlmChatService.stream_chat のライブラリ生成(createLibrary)モードのテスト"""
+
+    def _library_prompt(self) -> MagicMock:
+        return MagicMock(content="ライブラリ生成用システムプロンプト")
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch(
+        "app.services.llm_chat_service.LibraryRepository.save", new_callable=AsyncMock
+    )
+    @patch(
+        "app.services.llm_chat_service.SystemPromptTemplateRepository.find_by_type",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_streams_library_title_and_content_delta_then_persists_library(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_stream_chat,
+        mock_find_prompt,
+        mock_save_library,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """createLibrary=trueの場合、library_title_delta/library_content_deltaを配信しライブラリを永続化すること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_find_message.return_value = MagicMock(id="msg-1", room_id="room-1")
+        mock_find_prompt.return_value = self._library_prompt()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\nタイトルA\n"),
+                ChatStreamChunk(text_delta="<<<CONTENT>>>\n本文B\n"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(messageId="msg-1", createLibrary=True),
+            session=None,
+        )
+        chunks = await _consume(response)
+        body = b"".join(chunks).decode()
+
+        assert "event: library_title_delta" in body
+        assert '"text": "タイトルA' in body
+        assert "event: library_content_delta" in body
+        assert '"text": "本文B' in body
+        # コメント区間が省略された場合、デフォルトの案内文がtext_deltaで配信されること
+        assert "event: text_delta" in body
+        assert "「タイトルA" in body
+        assert "を作成しました" in body
+
+        mock_save_library.assert_awaited_once()
+        saved_library = mock_save_library.await_args.args[0]
+        assert saved_library.title == "タイトルA"
+        assert saved_library.content == "本文B"
+        assert saved_library.message_id == "msg-1"
+
 
 class TestApplyAdditionalPrompt:
     """LlmChatService._apply_additional_prompt のテスト"""
