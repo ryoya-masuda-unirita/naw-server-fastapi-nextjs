@@ -584,8 +584,15 @@ class MessageService:
             )
         else:
             # スキーマの相関バリデーション(`_validate_target_specified`)により、
-            # messageContentIdがNoneの場合はmessageIdが必ず指定されている。
-            assert req.messageId is not None
+            # messageContentIdがNoneの場合はmessageIdが必ず指定されているはずだが、
+            # `assert`は`-O`実行時に無効化され得るため、型narrowingを兼ねて明示的に
+            # 例外を送出する（`docs/backend/.claude/CLAUDE.md`のエラー処理を握り
+            # 潰さない方針に合わせる）。
+            if req.messageId is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="messageId or messageContentId is required",
+                )
             message = await MessageRepository.find_by_tenant_id_and_id(
                 tenant_id, req.messageId, session
             )
@@ -743,17 +750,26 @@ class MessageService:
                 yield _sse("error", {"message": str(e)})
                 stream_finished = True
             finally:
-                content_response = await MessageService._persist_message_content(
-                    tenant_id=tenant_id,
-                    message_id=message_id,
-                    room_id=room_id,
-                    question=question_text,
-                    answer=answer_text,
-                    content_status=content_status,
-                    context=rag_context or None,
-                    reference_paths=reference_paths,
-                    existing_content_id=existing_content_id,
-                )
+                try:
+                    content_response = await MessageService._persist_message_content(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        room_id=room_id,
+                        question=question_text,
+                        answer=answer_text,
+                        content_status=content_status,
+                        context=rag_context or None,
+                        reference_paths=reference_paths,
+                        existing_content_id=existing_content_id,
+                    )
+                except ValueError:
+                    # 再生成対象がストリーミング中に削除される等の稀な競合。
+                    # ここで例外を伝播させるとfinally節の途中で処理が打ち切られ、
+                    # トークン使用量の永続化やcompleteイベント送出が行われないまま
+                    # ジェネレータが異常終了してしまうため、ログのみ残してcomplete
+                    # イベントの送出をスキップする。
+                    logger.exception("メッセージ内容の永続化に失敗しました")
+                    content_response = None
                 await MessageService._persist_token_usage(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -767,7 +783,7 @@ class MessageService:
                     embedding_tokens=embedding_tokens,
                     embedding_token_weight=embedding_token_weight,
                 )
-                if stream_finished:
+                if stream_finished and content_response is not None:
                     yield _sse("complete", content_response.model_dump())
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
