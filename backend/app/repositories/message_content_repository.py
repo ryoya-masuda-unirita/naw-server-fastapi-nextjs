@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.message import MessageContent, MessageFile
+from app.models.message import MessageContent, MessageContentStatus, MessageFile
 
 
 class MessageContentRepository:
@@ -19,6 +19,58 @@ class MessageContentRepository:
         Returns:
             保存後のメッセージ内容（DBが払い出した値を反映済み）。
         """
+        session.add(content)
+        await session.commit()
+        await session.refresh(content)
+        return content
+
+    @staticmethod
+    async def find_by_id_and_tenant_id(
+        content_id: str, tenant_id: str, session: AsyncSession
+    ) -> MessageContent | None:
+        """メッセージ内容IDとテナントIDから対象を1件取得する（再生成対象の解決用）。
+
+        Args:
+            content_id: メッセージ内容ID。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するメッセージ内容。存在しない場合はNone。
+        """
+        stmt = select(MessageContent).where(
+            MessageContent.id == content_id, MessageContent.tenant_id == tenant_id
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def update_answer(
+        content: MessageContent,
+        *,
+        status: MessageContentStatus,
+        answer: str,
+        context: str | None,
+        file_paths: str | None,
+        session: AsyncSession,
+    ) -> MessageContent:
+        """既存のメッセージ内容を再生成結果で上書き保存する（`question`は変更しない）。
+
+        Args:
+            content: 更新対象のメッセージ内容（同一セッションで取得済みのもの）。
+            status: 更新後のステータス。
+            answer: 更新後の回答本文。
+            context: 更新後のRAGコンテキスト（SAAS_CHATの場合はNone）。
+            file_paths: 更新後の参照ファイルパス（カンマ区切り文字列）。
+            session: 非同期DBセッション。
+
+        Returns:
+            更新後のメッセージ内容。
+        """
+        content.status = status
+        content.answer = answer
+        content.context = context
+        content.file_paths = file_paths
         session.add(content)
         await session.commit()
         await session.refresh(content)

@@ -991,6 +991,219 @@ class TestStreamMessageContent:
         assert saved_content.answer == "途中まで"
 
 
+class TestStreamMessageContentRegenerate:
+    """MessageService.stream_message_content のmessageContentId(再生成)分岐のテスト"""
+
+    @patch(
+        "app.services.message_service.MessageContentRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_404_when_message_content_not_found_for_regenerate(
+        self, mock_find_content, test_user
+    ):
+        """指定messageContentIdのメッセージ内容が存在しない場合404になること"""
+        mock_find_content.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await MessageService.stream_message_content(
+                "tenant-1",
+                test_user,
+                _request(messageId=None, messageContentId="content-1"),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 404
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.update_answer")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.MessageContentRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_regenerates_existing_content_and_overwrites_answer(
+        self,
+        mock_find_content,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_update_answer,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """messageContentId指定時、既存の回答が上書きされ質問文は変更されないこと"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="元の質問",
+            answer="元の回答",
+        )
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="新しい回答"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_update_answer.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="元の質問",
+            answer="新しい回答",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(messageId=None, messageContentId="content-1"),
+            session=None,
+        )
+        chunks = await _consume(response)
+        body = b"".join(chunks).decode()
+
+        assert "event: complete" in body
+        assert '"question": "元の質問"' in body
+        assert '"answer": "新しい回答"' in body
+
+        mock_update_answer.assert_awaited_once()
+        _, update_kwargs = mock_update_answer.await_args
+        assert update_kwargs["answer"] == "新しい回答"
+        assert update_kwargs["status"] == MessageContentStatus.OK
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.update_answer")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.MessageContentRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_regenerate_preserves_question_when_error_occurs(
+        self,
+        mock_find_content,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_update_answer,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """再生成中にエラーが発生した場合もERRORステータスで上書きされ質問文は保持されること"""
+        from app.models.message import MessageContent, MessageContentStatus
+
+        async def _raise(*args, **kwargs):
+            raise RuntimeError("azure error")
+            yield  # pragma: no cover - ジェネレータにするためのダミー
+
+        mock_find_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="元の質問",
+            answer="元の回答",
+        )
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _raise()
+        mock_update_answer.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.ERROR,
+            question="元の質問",
+            answer="",
+        )
+        mock_find_room.return_value = None
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(messageId=None, messageContentId="content-1"),
+            session=None,
+        )
+        await _consume(response)
+
+        mock_update_answer.assert_awaited_once()
+        _, update_kwargs = mock_update_answer.await_args
+        assert update_kwargs["status"] == MessageContentStatus.ERROR
+        assert update_kwargs["answer"] == ""
+
+
 class TestStreamMessageContentCreateLibrary:
     """MessageService.stream_message_content のライブラリ生成(isCreateLibrary)モードのテスト"""
 

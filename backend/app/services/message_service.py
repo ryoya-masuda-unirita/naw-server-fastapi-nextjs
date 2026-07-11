@@ -749,9 +749,33 @@ class MessageService:
                 インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
                 ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
         """
-        message = await MessageRepository.find_by_tenant_id_and_id(
-            tenant_id, req.messageId, session
-        )
+        existing_content: MessageContent | None = None
+        if req.messageContentId is not None:
+            existing_content = await MessageContentRepository.find_by_id_and_tenant_id(
+                req.messageContentId, tenant_id, session
+            )
+            if existing_content is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Message content not found",
+                )
+            message = await MessageRepository.find_by_tenant_id_and_id(
+                tenant_id, existing_content.message_id, session
+            )
+        else:
+            # スキーマの相関バリデーション(`_validate_target_specified`)により、
+            # messageContentIdがNoneの場合はmessageIdが必ず指定されているはずだが、
+            # `assert`は`-O`実行時に無効化され得るため、型narrowingを兼ねて明示的に
+            # 例外を送出する（`docs/backend/.claude/CLAUDE.md`のエラー処理を握り
+            # 潰さない方針に合わせる）。
+            if req.messageId is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="messageId or messageContentId is required",
+                )
+            message = await MessageRepository.find_by_tenant_id_and_id(
+                tenant_id, req.messageId, session
+            )
         if message is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
@@ -878,7 +902,15 @@ class MessageService:
         message_id = message.id
         room_id = message.room_id
         user_id = current_user.id
-        question_text = req.userInput
+        # 再生成(messageContentId指定)時は元の質問文を保持し、新規生成時のみ
+        # リクエストのuserInputを質問文として永続化する（移植元`persistMessageContent`
+        # の挙動に合わせる）。LLMへの入力自体は再生成時もリクエストのuserInputを使う。
+        question_text = (
+            existing_content.question if existing_content is not None else req.userInput
+        )
+        existing_content_id = (
+            existing_content.id if existing_content is not None else None
+        )
         create_library = req.isCreateLibrary
         attachment_files = req.attachmentFiles
         tools = _to_core_tool_configs(req.tools)
@@ -969,19 +1001,31 @@ class MessageService:
                 yield _sse("error", {"message": str(e)})
                 stream_finished = True
             finally:
-                content_response = await MessageService._persist_message_content(
-                    tenant_id=tenant_id,
-                    message_id=message_id,
-                    room_id=room_id,
-                    question=question_text,
-                    answer=answer_text,
-                    content_status=content_status,
-                    attachment_files=attachment_files,
-                    context=rag_context or None,
-                    reference_paths=reference_paths,
-                )
+                try:
+                    content_response = await MessageService._persist_message_content(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        room_id=room_id,
+                        question=question_text,
+                        answer=answer_text,
+                        content_status=content_status,
+                        attachment_files=attachment_files,
+                        context=rag_context or None,
+                        reference_paths=reference_paths,
+                        existing_content_id=existing_content_id,
+                    )
+                except ValueError:
+                    # 再生成対象がストリーミング中に削除される等の稀な競合。
+                    # ここで例外を伝播させるとfinally節の途中で処理が打ち切られ、
+                    # トークン使用量の永続化やcompleteイベント送出が行われないまま
+                    # ジェネレータが異常終了してしまうため、ログのみ残してcomplete
+                    # イベントの送出をスキップする。
+                    logger.exception("メッセージ内容の永続化に失敗しました")
+                    content_response = None
+
                 if (
-                    library_title is not None
+                    content_response is not None
+                    and library_title is not None
                     and library_content is not None
                     and content_status == MessageContentStatus.OK
                 ):
@@ -1005,7 +1049,7 @@ class MessageService:
                     embedding_tokens=embedding_tokens,
                     embedding_token_weight=embedding_token_weight,
                 )
-                if stream_finished:
+                if stream_finished and content_response is not None:
                     # attachmentFilesの`data`がbytesの場合、素の.model_dump()では
                     # json.dumpsがシリアライズできないため、mode="json"でBase64
                     # 文字列へ変換してから渡す。
@@ -1170,38 +1214,70 @@ class MessageService:
         attachment_files: list[AttachmentFile],
         context: str | None = None,
         reference_paths: list[str] | None = None,
+        existing_content_id: str | None = None,
     ) -> MessageContentResponse:
         """ストリーミング完了後、回答内容を新規セッションで永続化し、ルームの更新日時を進める。
+
+        `existing_content_id`が指定されている場合は、新規作成ではなく既存の
+        `MessageContent`を再生成結果で上書きする（`question`は変更しない）。
 
         Args:
             tenant_id: テナントID。
             message_id: 紐づくメッセージID。
             room_id: 紐づくルームID(更新日時を進める対象)。
-            question: 質問本文。
+            question: 質問本文(再生成時は元の質問文をそのまま渡すこと)。
             answer: 回答本文(エラー時は例外メッセージ)。
             content_status: 永続化するステータス(`OK`/`ERROR`)。
             attachment_files: 今回のユーザー発話に添付されたファイル一覧。
             context: RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
             reference_paths: 参照ファイルパス一覧(SAAS_CHATの場合は空)。
+            existing_content_id: 再生成対象の既存メッセージ内容ID。新規作成の
+                場合はNone。
 
         Returns:
             永続化した内容を表す`complete`イベント用のレスポンス。
+
+        Raises:
+            ValueError: `existing_content_id`指定時、対象がストリーミング中に
+                削除される等の稀な競合で見つからない場合。
         """
         reference_paths = reference_paths or []
+        file_paths = ",".join(reference_paths) or None
         session_maker = get_session_maker()
         async with session_maker() as new_session:
-            content = await MessageContentRepository.save(
-                MessageContent(
-                    tenant_id=tenant_id,
-                    message_id=message_id,
+            if existing_content_id is not None:
+                existing = await MessageContentRepository.find_by_id_and_tenant_id(
+                    existing_content_id, tenant_id, new_session
+                )
+                if existing is None:
+                    # ストリーミング開始時点では存在確認済みのため、通常は到達しない
+                    # （ストリーミング中に対象が削除された等の競合時のみ）。移植元
+                    # (`persistMessageContent`)も同様にここでは救済せず例外を送出する。
+                    raise ValueError(
+                        "Message content not found for regeneration: "
+                        f"{existing_content_id}"
+                    )
+                content = await MessageContentRepository.update_answer(
+                    existing,
                     status=content_status,
-                    question=question,
                     answer=answer,
                     context=context,
-                    file_paths=",".join(reference_paths) or None,
-                ),
-                new_session,
-            )
+                    file_paths=file_paths,
+                    session=new_session,
+                )
+            else:
+                content = await MessageContentRepository.save(
+                    MessageContent(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        status=content_status,
+                        question=question,
+                        answer=answer,
+                        context=context,
+                        file_paths=file_paths,
+                    ),
+                    new_session,
+                )
 
             saved_files: list[MessageFile] = []
             if attachment_files:

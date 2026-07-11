@@ -145,15 +145,17 @@ class MessageContentHistoryTurn(BaseModel):
 class MessageContentCreateRequest(BaseModel):
     """メッセージ送信（アシスタント応答生成）のリクエスト。
 
-    移植元(Spring Boot)の`CreateMessageContentRequest`に対応するが、
-    メッセージ再生成（messageContentId指定）は対象外のため含めない
-    （`docs/issue-93/01_要件定義.md`参照）。添付ファイル(`attachmentFiles`/
-    `historyAttachmentFiles`)はissue-97で、`tools`（web_search/mcp）はissue-98で、
-    ライブラリ生成（createLibrary）はissue-99で、response_formatはissue-100で
-    対応済み（`docs/issue-100/01_要件定義.md`参照）。
+    移植元(Spring Boot)の`CreateMessageContentRequest`に対応する。`messageId`
+    （新規生成・質問再生成用）と`messageContentId`（回答再生成用）はどちらか
+    一方が必須で、`messageContentId`指定時は既存の`MessageContent`を上書き
+    再生成する（issue-101）。添付ファイル(`attachmentFiles`/`historyAttachmentFiles`)は
+    issue-97で、`tools`（web_search/mcp）はissue-98で、ライブラリ生成（createLibrary）は
+    issue-99で、response_formatはissue-100で対応済み（`docs/issue-100/01_要件定義.md`
+    参照）。
     """
 
-    messageId: str = Field(min_length=1)
+    messageId: str | None = Field(default=None, min_length=1)
+    messageContentId: str | None = Field(default=None, min_length=1)
     userInput: str = Field(min_length=1)
     additionalPrompt: str | None = None
     historyMessages: list[MessageContentHistoryTurn] = []
@@ -178,6 +180,14 @@ class MessageContentCreateRequest(BaseModel):
         if len(self.historyAttachmentFiles) != expected:
             raise ValueError(
                 "historyAttachmentFilesの件数がhistoryMessagesのattachmentsCount合計と一致しません"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_target_specified(self) -> "MessageContentCreateRequest":
+        if self.messageId is None and self.messageContentId is None:
+            raise ValueError(
+                "messageId または messageContentId のいずれかを指定してください"
             )
         return self
 
