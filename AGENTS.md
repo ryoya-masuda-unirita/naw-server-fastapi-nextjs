@@ -30,6 +30,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 - `frontend/`（React）は当面不問とする。動作確認・code review 等で `frontend/` 側の不具合を発見しても、その場で新規 Issue を起票したり修正したりしない。気づいた点があれば会話内で一言触れる程度に留め、対応要否の判断はユーザーに委ねる
 - フロントエンド側の対応が必要な Issue が来た場合は、優先順位についてユーザーに確認すること
 - 新しいチケットに着手する際は、作業を始める前に必ず「今回もバックエンド（FastAPI実装）でいいですか？」とユーザーに確認すること
+- frontend 移植 Issue を起票・着手・自動処理する場合は、`frontend-port` ラベルを使って backend Issue と区別すること
 
 ### 参照リポジトリの注意点
 
@@ -74,7 +75,19 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X
 bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW-XXXX
 ```
 
-### 2. Issue 一括起票
+### 2. frontend 移植 Issue / 設計 / HITL / 全自動
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-frontend-issue-workflow/SKILL.md` を読むこと。
+
+- frontend 移植 Issue 対応開始
+- frontend 向け `docs/issue-*` 作成
+- Angular `secuaigent-client` → React `frontend/` の要件定義、基本設計、詳細設計、テスト設計
+- frontend 移植 Issue の Human in the Loop
+- frontend 移植 Issue の全自動実装
+
+この skill は backend 用 `naw-issue-workflow` と対になる frontend 専用フローである。`frontend-port` ラベル運用、frontend 向け動作確認、`frontend/AGENTS.md` を前提にした移植方針をここで扱う。
+
+### 3. Issue 一括起票
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-issue-batch/SKILL.md` を読むこと。
 
@@ -84,7 +97,17 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 
 この skill は Issue 起票のみを行う。ブランチ作成、`docs/issue-*` 作成、実装、PR 作成には進まない。
 
-### 3. Todo Issue 自動処理ループ
+### 4. frontend 移植 Issue 一括起票
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-frontend-issue-batch/SKILL.md` を読むこと。
+
+- `/naw-frontend-issue-batch`
+- 未移植の frontend 機能をまとめて Issue 起票する
+- `~/Documents/secuaigent-client` から未移植候補を検出し、frontend 向け Issue 作成だけを繰り返す
+
+この skill は frontend 移植 Issue の起票のみを行う。ブランチ作成、`docs/issue-*` 作成、実装、PR 作成には進まない。起票時は `frontend-port` ラベルを必ず付与する。
+
+### 5. Todo Issue 自動処理ループ
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-issue-loop/SKILL.md` を読むこと。
 
@@ -94,7 +117,27 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 
 この skill は `naw-issue-workflow` と `naw-pr-workflow` を組み合わせ、承認フローを省略して全自動モードで進める専用フローである。単一Issueを対話的に進める場合は使わず、`naw-issue-workflow` を使う。
 
-### 4. PR / レビュー / 動作確認まとめ
+### 6. frontend 移植 Todo Issue 自動処理ループ
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-frontend-issue-loop/SKILL.md` を読むこと。
+
+- `/naw-frontend-issue-loop`
+- GitHub Projects の `frontend-port` ラベル付き `Todo` Issue を1件ずつ、着手からPR作成まで進める
+- 「open frontend porting Issues を順番に最後まで進めて」等、frontend 移植 Issue の自動処理ループを明示されたとき
+
+この skill は `naw-frontend-issue-workflow` と `naw-pr-workflow` を組み合わせ、frontend 移植 Issue を全自動で進める専用フローである。対象は `frontend-port` ラベル付き Issue のみとする。
+
+### 7. frontend 移植の伴走支援
+
+以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-frontend-mentor/SKILL.md` を読むこと。
+
+- `/naw-frontend-mentor`
+- frontend 移植 Issue をユーザー自身が実装したいので、教えながら進めてほしいとき
+- React 初学者向けに Angular → React の対応を説明しながら伴走するとき
+
+この skill では、AI は実装主体ではなく講師・レビュアーとして振る舞う。通常の `naw-frontend-issue-workflow` と混同しないこと。
+
+### 8. PR / レビュー / 動作確認まとめ
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/naw-pr-workflow/SKILL.md` を読むこと。
 
@@ -105,7 +148,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 
 Codex では、**PR 作成依頼は `gh pr create` で終わりではなく、必ず同じ作業フローの中でコードレビュー実行と `code-review.md` 作成まで完了させること**。Codex は自分で差分レビューを実行し、結果をドキュメントへ反映すること。
 
-### 5. secuaigent-client → frontend-angular 同期
+### 9. secuaigent-client → frontend-angular 同期
 
 以下の依頼に着手するときは、作業前に必ず `.codex/skills/frontend-angular-sync/SKILL.md` を読むこと。
 
