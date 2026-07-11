@@ -56,6 +56,7 @@ from app.schemas.message import (
     MessageItemResponse,
     ToolConfig,
 )
+from app.schemas.response_format import ResponseFormatRequest
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,10 @@ EMBEDDING_MODEL_NAME = "text-embedding-ada-002"
 # 返す`StreamMessageContentContext.tokenWeight`は、SAAS_CHATと異なりAIモデルの
 # token_weightを使わず固定値1.0のため、その挙動をそのまま踏襲する。
 RAG_CHAT_TOKEN_WEIGHT = 1.0
+
+# responseFormat指定時にメッセージ列の先頭へ前置する固定指示文。`llm_chat_service.py`の
+# 同名定数と同一値だが、「serviceが別serviceを呼ばない」規約により複製している。
+_JSON_RESPONSE_INSTRUCTION = "回答は JSON 形式で出力してください。"
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -113,6 +118,47 @@ def _apply_additional_prompt(
             )
             return updated
     return messages
+
+
+def _build_llm_response_format(
+    response_format: ResponseFormatRequest | None,
+) -> dict | None:
+    """responseFormat指定をAzure OpenAI呼び出し用のresponse_format辞書へ変換する。
+
+    `llm_chat_service.py`の同名関数と同一ロジックだが、「serviceが別serviceを呼ばない」
+    規約により複製している。移植元同様、typeの値(json_object/json_schema)によらず
+    常にJSONモード(`{"type": "json_object"}`)として扱う（`docs/issue-100/01_要件定義.md`
+    参照）。
+
+    Args:
+        response_format: リクエストのresponseFormat指定。
+
+    Returns:
+        Azure OpenAI呼び出し用のresponse_format辞書。未指定の場合はNone。
+    """
+    if response_format is None:
+        return None
+    return {"type": "json_object"}
+
+
+def _prepend_json_response_instruction(
+    messages: list[ChatMessage], response_format: ResponseFormatRequest | None
+) -> list[ChatMessage]:
+    """responseFormat指定時、JSON出力を促すsystemメッセージを先頭に追加する。
+
+    `llm_chat_service.py`の同名関数と同一ロジックだが、「serviceが別serviceを呼ばない」
+    規約により複製している。
+
+    Args:
+        messages: 会話履歴。
+        response_format: リクエストのresponseFormat指定。未指定なら何もしない。
+
+    Returns:
+        指示文を前置した会話履歴。
+    """
+    if response_format is None:
+        return messages
+    return [ChatMessage(role="system", content=_JSON_RESPONSE_INSTRUCTION), *messages]
 
 
 def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
@@ -624,6 +670,12 @@ class MessageService:
             + [ChatMessage(role="user", content=req.userInput)],
             req.additionalPrompt,
         )
+        # JSON出力指示は最も外側の振る舞い指定として、RAGコンテキストのsystemメッセージ
+        # より先頭に置く（`docs/issue-100/03_詳細設計.md`参照）。
+        chat_messages = _prepend_json_response_instruction(
+            chat_messages, req.responseFormat
+        )
+        response_format_param = _build_llm_response_format(req.responseFormat)
 
         rag_context = ""
         reference_paths: list[str] = []
@@ -694,6 +746,7 @@ class MessageService:
                     chat_messages,
                     0.0,
                     None,
+                    response_format_param,
                 ):
                     if chunk.text_delta is not None:
                         answer_text += chunk.text_delta

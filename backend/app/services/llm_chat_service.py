@@ -1,8 +1,8 @@
 """LLMチャットAPI(SSEストリーミング応答)のビジネスロジック。
 
-移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、tools
-（Function Calling）・添付ファイル・ライブラリ生成（createLibrary）・response_format
-は対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+移植元(Spring Boot)の`LlmChatService`に対応する。tools（Function Calling）・
+添付ファイル・ライブラリ生成（createLibrary）は対象外のため扱わない
+（`docs/issue-88/01_要件定義.md`参照。response_formatはissue-100で対応済み）。
 """
 
 import json
@@ -32,8 +32,14 @@ from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.llm import LlmChatRequest
+from app.schemas.response_format import ResponseFormatRequest
 
 logger = logging.getLogger(__name__)
+
+# responseFormat指定時にメッセージ列の先頭へ前置する固定指示文。移植元Java版
+# `OpenAiLlmChatAdapter`に対応する。OpenAIのJSONモードは、メッセージ内に"json"という
+# 語を含めることが要件のため、この指示文の前置が必須となる。
+_JSON_RESPONSE_INSTRUCTION = "回答は JSON 形式で出力してください。"
 
 
 def _sse(event: str, data: dict) -> bytes:
@@ -47,6 +53,43 @@ def _sse(event: str, data: dict) -> bytes:
         SSE形式にエンコードされたバイト列。
     """
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+def _build_llm_response_format(
+    response_format: ResponseFormatRequest | None,
+) -> dict | None:
+    """responseFormat指定をAzure OpenAI呼び出し用のresponse_format辞書へ変換する。
+
+    移植元同様、typeの値(json_object/json_schema)によらず常にJSONモード
+    (`{"type": "json_object"}`)として扱う。json_schemaによる構造強制は移植元でも
+    未実装のため踏襲しない（`docs/issue-100/01_要件定義.md`参照）。
+
+    Args:
+        response_format: リクエストのresponseFormat指定。
+
+    Returns:
+        Azure OpenAI呼び出し用のresponse_format辞書。未指定の場合はNone。
+    """
+    if response_format is None:
+        return None
+    return {"type": "json_object"}
+
+
+def _prepend_json_response_instruction(
+    messages: list[ChatMessage], response_format: ResponseFormatRequest | None
+) -> list[ChatMessage]:
+    """responseFormat指定時、JSON出力を促すsystemメッセージを先頭に追加する。
+
+    Args:
+        messages: 会話履歴。
+        response_format: リクエストのresponseFormat指定。未指定なら何もしない。
+
+    Returns:
+        指示文を前置した会話履歴。
+    """
+    if response_format is None:
+        return messages
+    return [ChatMessage(role="system", content=_JSON_RESPONSE_INSTRUCTION), *messages]
 
 
 class LlmChatService:
@@ -128,6 +171,10 @@ class LlmChatService:
             ],
             req.additionalPrompt,
         )
+        chat_messages = _prepend_json_response_instruction(
+            chat_messages, req.responseFormat
+        )
+        response_format_param = _build_llm_response_format(req.responseFormat)
 
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
@@ -151,6 +198,7 @@ class LlmChatService:
                     chat_messages,
                     temperature,
                     max_tokens,
+                    response_format_param,
                 ):
                     if chunk.text_delta is not None:
                         yield _sse("text_delta", {"text": chunk.text_delta})
