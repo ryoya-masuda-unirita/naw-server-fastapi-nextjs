@@ -1317,6 +1317,137 @@ class TestStreamMessageContentRag:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
+    async def test_json_response_instruction_precedes_rag_context_message(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_find_index,
+        mock_find_index_endpoints,
+        mock_find_vdb_endpoints,
+        mock_create_embedding,
+        mock_similarity_search,
+        mock_find_files,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """SAAS_RAGでresponseFormat指定時、JSON指示のsystemメッセージがRAGコンテキストの
+        systemメッセージより先頭に来ること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _rag_assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+
+        def _find_model_side_effect(endpoint_type, name, session):
+            if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
+                return _ai_model()
+            return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
+
+        mock_find_model.side_effect = _find_model_side_effect
+        mock_find_index.return_value = _index()
+        mock_find_index_endpoints.return_value = {"index-1": [_embedding_endpoint()]}
+        mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+        mock_create_embedding.return_value = EmbeddingResult(
+            embedding=[0.1, 0.2], tokens=7
+        )
+        mock_similarity_search.return_value = [
+            VectorSearchResult(content="資料1", file_unique_id="f001"),
+        ]
+        mock_find_files.return_value = [_file("f001", reference="ref1.pdf")]
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(text_delta="回答")]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="回答",
+            context="資料1",
+            file_paths="ref1.pdf",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(responseFormat={"type": "json_object"}),
+            session=None,
+        )
+        await _consume(response)
+
+        chat_messages_arg = mock_stream_chat.call_args.args[3]
+        assert chat_messages_arg[0] == ChatMessage(
+            role="system", content="回答は JSON 形式で出力してください。"
+        )
+        assert chat_messages_arg[1].role == "system"
+        assert "資料1" in chat_messages_arg[1].content
+        assert mock_stream_chat.call_args.args[6] == {"type": "json_object"}
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureAiSearchVectorStoreClient.similarity_search",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.TenantEndpointRepository"
+        ".find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository"
+        ".find_tenant_endpoints_grouped_by_index_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
     async def test_rag_skips_files_not_found_in_tenant(
         self,
         mock_find_message,

@@ -670,12 +670,6 @@ class MessageService:
             + [ChatMessage(role="user", content=req.userInput)],
             req.additionalPrompt,
         )
-        # JSON出力指示は最も外側の振る舞い指定として、RAGコンテキストのsystemメッセージ
-        # より先頭に置く（`docs/issue-100/03_詳細設計.md`参照）。
-        chat_messages = _prepend_json_response_instruction(
-            chat_messages, req.responseFormat
-        )
-        response_format_param = _build_llm_response_format(req.responseFormat)
 
         rag_context = ""
         reference_paths: list[str] = []
@@ -701,6 +695,15 @@ class MessageService:
                     ),
                     *chat_messages,
                 ]
+
+        # JSON出力指示は最も外側の振る舞い指定として、RAGコンテキストのsystemメッセージ
+        # より先頭に置く（`docs/issue-100/03_詳細設計.md`参照）。RAGコンテキスト挿入の
+        # 後に適用することで、SAAS_RAGでrag_contextが存在する場合でもJSON出力指示が
+        # 常に先頭に来るようにする。
+        chat_messages = _prepend_json_response_instruction(
+            chat_messages, req.responseFormat
+        )
+        response_format_param = _build_llm_response_format(req.responseFormat)
 
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
