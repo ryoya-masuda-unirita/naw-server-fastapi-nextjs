@@ -212,6 +212,57 @@ class TestGetUsersSearchAndSort:
         assert response.status_code == 200
 
 
+class TestGetUsersExcludesSystemRole:
+    async def test_excludes_system_role_users(
+        self, client, admin_headers, session, tenant, admin_user
+    ):
+        """SYSTEMロールのユーザーが一覧・件数から除外されること"""
+        system_user = User(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="system-test",
+            name="System User",
+            role=UserRole.SYSTEM,
+            is_required_password_reset=False,
+        )
+        session.add(system_user)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/admin/users", headers=admin_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        login_ids = [u["loginId"] for u in body["content"]]
+        assert "system-test" not in login_ids
+        assert body["totalElements"] == 1
+
+    async def test_role_filter_with_system_returns_empty(
+        self, client, admin_headers, session, tenant, admin_user
+    ):
+        """role=SYSTEMを指定しても除外条件が外れず0件になること"""
+        system_user = User(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="system-test-2",
+            name="System User 2",
+            role=UserRole.SYSTEM,
+            is_required_password_reset=False,
+        )
+        session.add(system_user)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"role": "SYSTEM"}
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["content"] == []
+        assert body["totalElements"] == 0
+
+
 class TestCreateUser:
     async def test_creates_user_with_initial_password(self, client, admin_headers):
         """ユーザーを作成でき initialPassword が返ること"""
