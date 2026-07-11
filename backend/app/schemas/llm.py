@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.attachment import AttachmentFile
+from app.schemas.message import ToolConfig
 
 
 class LlmChatTurn(BaseModel):
@@ -14,8 +15,9 @@ class LlmChatRequest(BaseModel):
     """LLMチャットAPIのリクエスト。
 
     移植元(Spring Boot)の`LlmChatTextDataRequest`に対応するが、本Issueのスコープでは
-    tools（Function Calling）・ライブラリ生成（createLibrary）・response_formatは
-    対象外のため含めない。添付ファイル(`attachmentFiles`)はissue-97で対応済み。
+    ライブラリ生成（createLibrary）・response_formatは対象外のため含めない。
+    添付ファイル(`attachmentFiles`)はissue-97で、`tools`（web_search/mcp）はissue-98で
+    対応済み（`docs/issue-98/01_要件定義.md`参照）。
     """
 
     deployName: str = Field(min_length=1)
@@ -25,6 +27,7 @@ class LlmChatRequest(BaseModel):
     maxTokens: int | None = Field(default=None, gt=0)
     messages: list[LlmChatTurn] = Field(min_length=1)
     attachmentFiles: list[AttachmentFile] = []
+    tools: list[ToolConfig] | None = None
 
 
 class LlmEmbeddingRequest(BaseModel):

@@ -34,6 +34,29 @@ class FileRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_ids_and_tenant_id(
+        file_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> list[File]:
+        """ファイルID一覧とテナントIDでファイルをまとめて取得する。
+
+        RAGのベクトル検索結果に対応するファイルを解決する際、結果件数分の
+        個別クエリ（N+1）を発行しないよう、対象ファイルID一覧を1クエリでまとめて取得する。
+
+        Args:
+            file_ids: 取得対象のファイルID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するファイル一覧。
+        """
+        if not file_ids:
+            return []
+        stmt = select(File).where(File.id.in_(file_ids), File.tenant_id == tenant_id)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     def _apply_name_filter(
         stmt: sa.Select, display_name: str | None, file_name: str | None
     ) -> sa.Select:
