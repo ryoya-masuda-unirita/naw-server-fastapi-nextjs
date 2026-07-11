@@ -248,6 +248,17 @@ class AzureLlmChatClient:
                             input_tokens=usage.input_tokens,
                             output_tokens=usage.output_tokens,
                         )
+                elif event.type == "error":
+                    # web検索・MCPサーバー呼び出しの失敗等は例外を送出せず、この専用
+                    # イベントとしてストリーム内で通知される場合がある(移植元Java版
+                    # `OpenAiResponsesClient`も`error`イベントを明示的に処理している)。
+                    # 例外化して呼び出し元の`try/except`に流し込み、空回答がOKステータス
+                    # で永続化されてしまわないようにする。
+                    raise RuntimeError(event.message)
+                elif event.type == "response.failed":
+                    error = event.response.error
+                    message = error.message if error is not None else "response.failed"
+                    raise RuntimeError(message)
 
 
 class AzureLlmEmbeddingClient:

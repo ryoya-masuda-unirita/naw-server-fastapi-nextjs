@@ -75,6 +75,22 @@ def _responses_completed_event(input_tokens: int, output_tokens: int) -> MagicMo
     return event
 
 
+def _responses_error_event(message: str) -> MagicMock:
+    event = MagicMock()
+    event.type = "error"
+    event.message = message
+    return event
+
+
+def _responses_failed_event(message: str) -> MagicMock:
+    event = MagicMock()
+    event.type = "response.failed"
+    error = MagicMock()
+    error.message = message
+    event.response = MagicMock(error=error)
+    return event
+
+
 class TestBuildResponsesTool:
     """_build_responses_tool のテスト"""
 
@@ -300,6 +316,60 @@ class TestAzureLlmChatClient:
         _, kwargs = mock_client.responses.create.call_args
         assert "max_output_tokens" not in kwargs
         assert kwargs["temperature"] == 0.5
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    async def test_responses_api_raises_on_error_event(self, mock_client_cls):
+        """Responses APIのerrorイベント受信時は例外を送出すること(web_search/mcp失敗時等)"""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.responses.create = AsyncMock(
+            return_value=_AsyncChunkIterator(
+                [_responses_error_event("web_search呼び出しに失敗しました")]
+            )
+        )
+
+        with pytest.raises(RuntimeError, match="web_search呼び出しに失敗しました"):
+            async for _ in AzureLlmChatClient.stream_chat(
+                "https://example.openai.azure.com",
+                "api-key",
+                "gpt-4o",
+                [ChatMessage(role="user", content="hi")],
+                0.0,
+                None,
+                [ToolConfig(name="web_search")],
+            ):
+                pass
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    async def test_responses_api_raises_on_failed_event(self, mock_client_cls):
+        """Responses APIのresponse.failedイベント受信時は例外を送出すること"""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.responses.create = AsyncMock(
+            return_value=_AsyncChunkIterator(
+                [_responses_failed_event("mcpサーバーに接続できませんでした")]
+            )
+        )
+
+        with pytest.raises(RuntimeError, match="mcpサーバーに接続できませんでした"):
+            async for _ in AzureLlmChatClient.stream_chat(
+                "https://example.openai.azure.com",
+                "api-key",
+                "gpt-4o",
+                [ChatMessage(role="user", content="hi")],
+                0.0,
+                None,
+                [
+                    ToolConfig(
+                        name="mcp",
+                        server_label="s",
+                        server_url="https://mcp.example.com",
+                    )
+                ],
+            ):
+                pass
 
 
 class TestAzureLlmEmbeddingClient:
