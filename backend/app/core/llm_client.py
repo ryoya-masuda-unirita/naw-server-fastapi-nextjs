@@ -29,10 +29,15 @@ AZURE_OPENAI_RESPONSES_API_VERSION = "2025-04-01-preview"
 
 @dataclass(frozen=True)
 class ChatMessage:
-    """チャットの1発話。"""
+    """チャットの1発話。
+
+    `content`は添付ファイルがない場合は`str`のまま、添付ファイルがある場合は
+    OpenAI Chat Completions APIのマルチモーダル形式(`build_user_content`が
+    組み立てるテキストパート・画像パートのリスト)を許容する。
+    """
 
     role: str
-    content: str
+    content: str | list[dict[str, object]]
 
 
 @dataclass(frozen=True)

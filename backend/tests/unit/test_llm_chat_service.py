@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.core.llm_client import ChatMessage
 from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
+from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.services.llm_chat_service import LlmChatService
 
@@ -395,3 +396,88 @@ class TestApplyAdditionalPrompt:
         """user発話が存在しない場合は何もしないこと"""
         messages = [ChatMessage(role="assistant", content="回答のみ")]
         assert LlmChatService._apply_additional_prompt(messages, "追加指示") == messages
+
+
+class TestApplyAttachmentFiles:
+    """LlmChatService._apply_attachment_files のテスト"""
+
+    def _file(self, name: str = "photo.png") -> AttachmentFile:
+        return AttachmentFile(name=name, type="image/png", data=b"data")
+
+    def test_returns_as_is_when_no_files(self):
+        """添付ファイルがない場合そのまま返すこと"""
+        messages = [ChatMessage(role="user", content="こんにちは")]
+        assert LlmChatService._apply_attachment_files(messages, []) == messages
+
+    def test_converts_last_user_turn_content_to_multimodal_list(self):
+        """末尾のuser発話のcontentがマルチモーダル形式に変換されること"""
+        messages = [
+            ChatMessage(role="system", content="system prompt"),
+            ChatMessage(role="user", content="質問1"),
+        ]
+        result = LlmChatService._apply_attachment_files(messages, [self._file()])
+
+        assert result[0] == messages[0]
+        assert isinstance(result[1].content, list)
+        assert result[1].content[0] == {"type": "text", "text": "質問1"}
+        assert result[1].content[1]["type"] == "image_url"
+
+    def test_returns_as_is_when_no_user_turn_exists(self):
+        """user発話が存在しない場合は何もしないこと"""
+        messages = [ChatMessage(role="assistant", content="回答のみ")]
+        assert (
+            LlmChatService._apply_attachment_files(messages, [self._file()]) == messages
+        )
+
+
+class TestStreamChatWithAttachmentFiles:
+    """LlmChatService.stream_chat の添付ファイル関連テスト"""
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_multimodal_content_to_azure_when_attachment_files_present(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """attachmentFilesを含むリクエストの場合、最後のuser発話がマルチモーダル形式で渡されること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(text_delta="回答")]
+        )
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        req = _request(
+            attachmentFiles=[
+                AttachmentFile(name="photo.png", type="image/png", data=b"data")
+            ]
+        )
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, req, session=None
+        )
+        await _consume(response)
+
+        sent_messages = mock_stream_chat.call_args.args[3]
+        assert isinstance(sent_messages[-1].content, list)
+        assert sent_messages[-1].content[1]["type"] == "image_url"
