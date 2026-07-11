@@ -224,6 +224,21 @@ async def owned_message_content(session, messages_tenant, owned_message):
     return content
 
 
+@pytest.fixture
+async def other_users_message_content(session, messages_tenant, other_users_message):
+    content = MessageContent(
+        tenant_id=messages_tenant.id,
+        message_id=other_users_message.id,
+        status=MessageContentStatus.OK,
+        question="他人の質問です",
+        answer="他人の回答です",
+    )
+    session.add(content)
+    await session.commit()
+    await session.refresh(content)
+    return content
+
+
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
@@ -521,6 +536,95 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 403
+
+        async def test_regenerates_existing_content_and_keeps_question(
+            self,
+            client,
+            owner_headers,
+            owned_message_content,
+            message_chat_endpoint,
+            engine,
+        ):
+            """messageContentId指定時、既存の回答が上書きされ質問文は変更されないこと"""
+
+            async def _stream_chunks(*args, **kwargs):
+                yield ChatStreamChunk(text_delta="新しい回答")
+                yield ChatStreamChunk(input_tokens=10, output_tokens=5)
+
+            test_session_maker = sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+            with (
+                patch(
+                    "app.services.message_service.AzureLlmChatClient.stream_chat",
+                    side_effect=_stream_chunks,
+                ),
+                patch(
+                    "app.services.message_service.get_session_maker",
+                    return_value=test_session_maker,
+                ),
+            ):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        json={
+                            "messageContentId": owned_message_content.id,
+                            "userInput": "もう一度答えて",
+                        },
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            body = response.text
+            assert "event: complete" in body
+            assert '"question": "質問です"' in body
+            assert '"answer": "新しい回答"' in body
+            assert f'"id": "{owned_message_content.id}"' in body
+
+        async def test_regenerate_returns_404_when_message_content_not_found(
+            self, client, owner_headers
+        ):
+            """存在しないmessageContentIdを指定すると404になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    json={
+                        "messageContentId": "nonexistent",
+                        "userInput": "もう一度答えて",
+                    },
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_regenerate_returns_403_when_room_not_owned(
+            self, client, owner_headers, other_users_message_content
+        ):
+            """他人のルームに属するmessageContentIdを指定するとエラーになること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    json={
+                        "messageContentId": other_users_message_content.id,
+                        "userInput": "もう一度答えて",
+                    },
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 403
+
+        async def test_returns_422_when_neither_message_id_nor_content_id_given(
+            self, client, owner_headers
+        ):
+            """messageId・messageContentIdのいずれも指定しないとバリデーションエラーになること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    json={"userInput": "こんにちは"},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
 
     class TestDeleteMessage:
         async def test_delete_message_removes_message(
