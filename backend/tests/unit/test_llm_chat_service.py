@@ -373,6 +373,95 @@ class TestStreamChat:
         args, _ = mock_stream_chat.call_args
         assert args[6] is None
 
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_response_format_and_prepends_instruction_when_specified(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """responseFormat指定時、JSON指示のsystemメッセージを前置しresponse_formatを渡すこと"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(responseFormat={"type": "json_object"}),
+            session=None,
+        )
+        await _consume(response)
+
+        call_args = mock_stream_chat.call_args.args
+        messages = call_args[3]
+        response_format_arg = call_args[7]
+        assert messages[0] == ChatMessage(
+            role="system", content="回答は JSON 形式で出力してください。"
+        )
+        assert response_format_arg == {"type": "json_object"}
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_does_not_pass_response_format_when_not_specified(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """responseFormat未指定時、response_formatを渡さずJSON指示文も前置しないこと"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        call_args = mock_stream_chat.call_args.args
+        messages = call_args[3]
+        response_format_arg = call_args[7]
+        assert messages[0] == ChatMessage(role="user", content="こんにちは")
+        assert response_format_arg is None
+
 
 class TestStreamChatCreateLibrary:
     """LlmChatService.stream_chat のライブラリ生成(createLibrary)モードのテスト"""

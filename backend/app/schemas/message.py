@@ -12,6 +12,7 @@ from pydantic import (
 
 from app.models.message import MessageContentStatus, MessageRating
 from app.schemas.attachment import AttachmentFile
+from app.schemas.response_format import ResponseFormatRequest
 
 
 class ToolConfig(BaseModel):
@@ -144,11 +145,12 @@ class MessageContentHistoryTurn(BaseModel):
 class MessageContentCreateRequest(BaseModel):
     """メッセージ送信（アシスタント応答生成）のリクエスト。
 
-    移植元(Spring Boot)の`CreateMessageContentRequest`に対応するが、本Issueのスコープでは
-    response_format・メッセージ再生成（messageContentId指定）は対象外のため含めない
+    移植元(Spring Boot)の`CreateMessageContentRequest`に対応するが、
+    メッセージ再生成（messageContentId指定）は対象外のため含めない
     （`docs/issue-93/01_要件定義.md`参照）。添付ファイル(`attachmentFiles`/
     `historyAttachmentFiles`)はissue-97で、`tools`（web_search/mcp）はissue-98で、
-    ライブラリ生成（createLibrary）はissue-99で対応済み（`docs/issue-99/01_要件定義.md`参照）。
+    ライブラリ生成（createLibrary）はissue-99で、response_formatはissue-100で
+    対応済み（`docs/issue-100/01_要件定義.md`参照）。
     """
 
     messageId: str = Field(min_length=1)
@@ -162,6 +164,7 @@ class MessageContentCreateRequest(BaseModel):
     # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
     # ストリーミングする。
     isCreateLibrary: bool = False
+    responseFormat: ResponseFormatRequest | None = None
 
     @model_validator(mode="after")
     def _validate_history_attachment_count(self) -> "MessageContentCreateRequest":

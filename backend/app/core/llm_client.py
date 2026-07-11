@@ -133,6 +133,7 @@ class AzureLlmChatClient:
         temperature: float,
         max_tokens: int | None,
         tools: list[ToolConfig] | None = None,
+        response_format: dict | None = None,
     ) -> AsyncIterator[ChatStreamChunk]:
         """Azure OpenAI Chatモデルへ会話履歴を送信し、応答をストリーミングで受け取る。
 
@@ -149,6 +150,9 @@ class AzureLlmChatClient:
             temperature: 応答のランダム性(0.0〜1.0)。
             max_tokens: 出力トークン数の上限。未指定の場合はモデルの既定値に従う。
             tools: 有効化するツール(web_search / mcp)。未指定・空の場合はツールなし。
+            response_format: 構造化出力の指定(例: `{"type": "json_object"}`)。
+                未指定の場合は自由文で応答する。tools指定時はResponses APIへ切り替わり
+                response_formatは使用しない(組み合わせ非対応)。
 
         Yields:
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
@@ -172,6 +176,8 @@ class AzureLlmChatClient:
         }
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
+        if response_format is not None:
+            create_kwargs["response_format"] = response_format
 
         # クライアントは`async with`でリクエスト単位に生成・破棄する。ストリーム消費が
         # 終わるまで(このジェネレータが最後までイテレートされるまで)コンテキストマネージャ
