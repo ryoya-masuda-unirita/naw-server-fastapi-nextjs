@@ -128,13 +128,20 @@ class GroupService:
 
     @staticmethod
     async def _to_list_item(
-        group: Group, session: AsyncSession
+        group: Group,
+        session: AsyncSession,
+        assistant_map: dict[str, list[tuple[str, str]]],
+        template_map: dict[str, list[tuple[str, str]]],
     ) -> GroupListItemResponse:
         """GroupをGroupListItemResponseに変換する（所属ユーザーを結合して取得する）。
 
         Args:
             group: 変換対象のGroup。
             session: 非同期DBセッション。
+            assistant_map: グループIDをキーとした (アシスタントID, アシスタント名) 一覧の辞書
+                （呼び出し側で対象グループID一覧を一括取得したもの）。
+            template_map: グループIDをキーとした (プロンプトテンプレートID, プロンプトテンプレート名) 一覧の辞書
+                （呼び出し側で対象グループID一覧を一括取得したもの）。
 
         Returns:
             グループ一覧の1件分のレスポンス。
@@ -144,6 +151,8 @@ class GroupService:
         )
         users = [user for _, user in rows]
         admins = [user for group_user, user in rows if group_user.is_admin]
+        assistant_pairs = assistant_map.get(group.id, [])
+        template_pairs = template_map.get(group.id, [])
         return GroupListItemResponse(
             id=group.id,
             tenantId=group.tenant_id,
@@ -152,8 +161,35 @@ class GroupService:
             adminUserIds=[str(u.id) for u in admins],
             adminUserNames=[u.name for u in admins],
             userNames=[u.name for u in users],
+            assistants=[name for _, name in assistant_pairs],
+            assistantIds=[assistant_id for assistant_id, _ in assistant_pairs],
+            promptTemplates=[name for _, name in template_pairs],
+            promptTemplateIds=[template_id for template_id, _ in template_pairs],
             updatedAt=group.updated_at,
         )
+
+    @staticmethod
+    async def _build_link_maps(
+        group_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]:
+        """グループID一覧に紐づくアシスタント・プロンプトテンプレートのマップをまとめて取得する。
+
+        Args:
+            group_ids: 対象のグループID一覧。
+            tenant_id: テナントID。
+            session: 非同期DBセッション。
+
+        Returns:
+            (アシスタントマップ, プロンプトテンプレートマップ) のタプル。
+            それぞれグループIDをキーとした (ID, 名前) 一覧の辞書。
+        """
+        assistant_map = await GroupAssistantRepository.find_grouped_by_group_ids(
+            group_ids, tenant_id, session
+        )
+        template_map = await GroupPromptTemplateRepository.find_grouped_by_group_ids(
+            group_ids, tenant_id, session
+        )
+        return assistant_map, template_map
 
     @staticmethod
     async def get_groups(
@@ -182,7 +218,13 @@ class GroupService:
             )
             groups = [g for g in groups if g.id in belonging_ids]
 
-        return [await GroupService._to_list_item(g, session) for g in groups]
+        assistant_map, template_map = await GroupService._build_link_maps(
+            [g.id for g in groups], tenant_id, session
+        )
+        return [
+            await GroupService._to_list_item(g, session, assistant_map, template_map)
+            for g in groups
+        ]
 
     @staticmethod
     async def list_groups(
@@ -234,8 +276,16 @@ class GroupService:
             session,
         )
 
+        assistant_map, template_map = await GroupService._build_link_maps(
+            [g.id for g in groups], tenant_id, session
+        )
         return GroupListPageResponse(
-            data=[await GroupService._to_list_item(g, session) for g in groups],
+            data=[
+                await GroupService._to_list_item(
+                    g, session, assistant_map, template_map
+                )
+                for g in groups
+            ],
             total=total,
             page=page,
             size=size,

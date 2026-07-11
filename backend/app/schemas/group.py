@@ -28,7 +28,7 @@ class GroupUserRoleUpdateRequest(BaseModel):
 
 
 class GroupListItemResponse(BaseModel):
-    """グループ一覧の1件分。assistants/promptTemplates関連は未実装ドメインのため常に空リスト。"""
+    """グループ一覧の1件分。"""
 
     id: str
     tenantId: str
@@ -37,10 +37,10 @@ class GroupListItemResponse(BaseModel):
     adminUserIds: list[str]
     adminUserNames: list[str]
     userNames: list[str]
-    assistants: list[str] = []
-    assistantIds: list[str] = []
-    promptTemplates: list[str] = []
-    promptTemplateIds: list[str] = []
+    assistants: list[str]
+    assistantIds: list[str]
+    promptTemplates: list[str]
+    promptTemplateIds: list[str]
     updatedAt: datetime
 
 
