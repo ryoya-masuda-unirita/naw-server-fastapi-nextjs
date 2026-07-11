@@ -624,12 +624,25 @@ class MessageService:
         question_text = req.userInput
 
         async def event_stream() -> AsyncIterator[bytes]:
-            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。"""
+            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
+
+            永続化（`_persist_message_content`・`_persist_token_usage`）は`finally`で
+            実行し、クライアントが切断してStarletteがこのジェネレータを`aclose()`する
+            （`GeneratorExit`は`BaseException`のサブクラスであり`except Exception`では
+            捕捉できない）場合でも、Azureで既に消費したトークンの記録・応答の永続化が
+            必ず行われるようにする。ただし`GeneratorExit`処理中は`yield`できないため、
+            `complete`イベントの送出はストリームが正常に完了/エラー終了した場合のみ行う。
+            """
             input_tokens = 0
             output_tokens = 0
             answer_text = ""
             content_status = MessageContentStatus.OK
+            stream_finished = False
             try:
+                # temperature・max_tokensは`MessageContentCreateRequest`に含めていない
+                # （`01_要件定義.md`のスコープ外）ため、Issue #88の`LlmChatRequest`の
+                # デフォルト値(temperature=0.0)に合わせて固定値で呼び出す。将来モデル別に
+                # 調整したい場合は`AIModel`側にデフォルト値を持たせる形での対応を検討する。
                 async for chunk in AzureLlmChatClient.stream_chat(
                     endpoint_url,
                     api_key,
@@ -649,36 +662,39 @@ class MessageService:
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
                 )
+                stream_finished = True
             except Exception as e:
                 # SSEは開始後にHTTPステータスでエラーを返せないため、専用イベントとして
                 # クライアントへ通知したうえで、ERRORステータスのMessageContentとして
                 # 永続化する（クライアントがエラー後も応答IDを認識できるようにするため）。
+                # 既に配信済みのanswer_text（部分的な回答）は上書きせず保持し、内部の
+                # 例外メッセージが回答内容としてクライアントへ露出・永続化されないようにする。
                 logger.exception("メッセージ送信中にエラーが発生しました")
                 content_status = MessageContentStatus.ERROR
-                answer_text = str(e)
-                yield _sse("error", {"message": answer_text})
-
-            content_response = await MessageService._persist_message_content(
-                tenant_id=tenant_id,
-                message_id=message_id,
-                room_id=room_id,
-                question=question_text,
-                answer=answer_text,
-                content_status=content_status,
-            )
-            yield _sse("complete", content_response.model_dump())
-
-            await MessageService._persist_token_usage(
-                tenant_id=tenant_id,
-                user_id=user_id,
-                room_id=room_id,
-                message_id=message_id,
-                model_name=model_name,
-                token_weight=token_weight,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                credit_settings=credit_settings,
-            )
+                yield _sse("error", {"message": str(e)})
+                stream_finished = True
+            finally:
+                content_response = await MessageService._persist_message_content(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    room_id=room_id,
+                    question=question_text,
+                    answer=answer_text,
+                    content_status=content_status,
+                )
+                await MessageService._persist_token_usage(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    room_id=room_id,
+                    message_id=message_id,
+                    model_name=model_name,
+                    token_weight=token_weight,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    credit_settings=credit_settings,
+                )
+                if stream_finished:
+                    yield _sse("complete", content_response.model_dump())
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 

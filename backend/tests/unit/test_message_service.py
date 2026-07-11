@@ -453,7 +453,7 @@ class TestStreamMessageContent:
             message_id="msg-1",
             status=MessageContentStatus.ERROR,
             question="こんにちは",
-            answer="azure error",
+            answer="",
         )
         mock_find_room.return_value = None
 
@@ -473,7 +473,169 @@ class TestStreamMessageContent:
 
         saved_content = mock_save_content.await_args.args[0]
         assert saved_content.status == MessageContentStatus.ERROR
-        assert saved_content.answer == "azure error"
+        # 例外メッセージで回答本文を上書きせず、ストリーム済みの内容(この場合は空)を保持すること
+        assert saved_content.answer == ""
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_preserves_partial_answer_when_azure_call_fails_mid_stream(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """途中までtext_deltaを配信後に例外が発生した場合、例外メッセージで回答を上書きしないこと"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        async def _raise_after_first_chunk(*args, **kwargs):
+            yield ChatStreamChunk(text_delta="途中まで回答")
+            raise RuntimeError("azure error")
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _raise_after_first_chunk()
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.ERROR,
+            question="こんにちは",
+            answer="途中まで回答",
+        )
+        mock_find_room.return_value = None
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        saved_content = mock_save_content.await_args.args[0]
+        assert saved_content.status == MessageContentStatus.ERROR
+        assert saved_content.answer == "途中まで回答"
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_persists_content_and_usage_even_when_client_disconnects_mid_stream(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """クライアント切断でジェネレータがaclose()された場合でも、内容とトークン使用量を永続化すること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        async def _hang_after_first_chunk(*args, **kwargs):
+            yield ChatStreamChunk(text_delta="途中まで")
+            yield ChatStreamChunk(input_tokens=3, output_tokens=2)
+            # クライアント切断を模すため、ここで無期限に待つ(aclose()でGeneratorExitが
+            # 送出される想定の待機ポイント)。
+            import asyncio
+
+            await asyncio.Event().wait()
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _hang_after_first_chunk()
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="途中まで",
+        )
+        mock_find_room.return_value = None
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        agen = response.body_iterator
+        # message_stopまで届く前に切断された状況を模すため、text_deltaイベントを
+        # 1件読み進めた直後にaclose()し、GeneratorExitを送出させる。
+        await agen.__anext__()
+        await agen.aclose()
+
+        # GeneratorExitはfinallyでの永続化を妨げないこと（try/exceptでは捕捉されない
+        # BaseException派生のため、finallyへ確実に到達している必要がある）。
+        mock_save_content.assert_awaited_once()
+        saved_content = mock_save_content.await_args.args[0]
+        assert saved_content.answer == "途中まで"
 
 
 class TestApplyAdditionalPrompt:
