@@ -1,14 +1,19 @@
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from app.core.file_storage import FileStorage, LocalFileStorage, get_file_storage
 from app.core.security import create_access_token
 from app.main import app
 from app.models.assistant import Assistant, AssistantType, GroupAssistant
+from app.models.file import File
 from app.models.group import Group, GroupUser
 from app.models.index import Index, IndexEndpoint, IndexGroup, IndexType
+from app.models.message import Message, MessageFeedback, MessageRating
+from app.models.room import Room
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
@@ -261,6 +266,106 @@ async def unrelated_index(session, tenant, unmanaged_group):
     )
     await session.commit()
     return idx
+
+
+@pytest.fixture
+async def local_index(session, tenant, tenant_endpoint_local):
+    """LOCALタイプのインデックス（追加学習400系テスト用）"""
+    idx = Index(
+        tenant_id=tenant.id,
+        type=IndexType.LOCAL,
+        name="Local Index",
+        add="waha-add",
+        delete="waha-delete",
+        get="waha-get",
+    )
+    session.add(idx)
+    await session.commit()
+    await session.refresh(idx)
+
+    session.add(
+        IndexEndpoint(
+            index_id=idx.id, tenant_id=tenant.id, endpoint_id=tenant_endpoint_local.id
+        )
+    )
+    await session.commit()
+    return idx
+
+
+@pytest.fixture
+def index_storage_root(tmp_path) -> Path:
+    return tmp_path / "index-file-storage"
+
+
+@pytest.fixture
+def override_index_file_storage(index_storage_root):
+    """追加学習テストでファイルストレージを一時ディレクトリへ差し替える（実ストレージへは接続しない）"""
+
+    def _get_storage() -> FileStorage:
+        return LocalFileStorage(root=index_storage_root)
+
+    app.dependency_overrides[get_file_storage] = _get_storage
+    yield
+    del app.dependency_overrides[get_file_storage]
+
+
+@pytest.fixture
+async def feedback_assistant(session, tenant):
+    """フィードバック紐付け用の最小限のアシスタント"""
+    a = Assistant(
+        tenant_id=tenant.id,
+        type=AssistantType.SAAS_RAG,
+        name="Feedback Assistant",
+        include_history=False,
+    )
+    session.add(a)
+    await session.commit()
+    await session.refresh(a)
+    return a
+
+
+@pytest.fixture
+async def feedback_room(session, tenant, feedback_assistant, admin_user):
+    """フィードバック紐付け用の最小限のルーム"""
+    room = Room(
+        tenant_id=tenant.id,
+        name="Feedback Room",
+        default_assistant_id=feedback_assistant.id,
+        user_id=admin_user.id,
+    )
+    session.add(room)
+    await session.commit()
+    await session.refresh(room)
+    return room
+
+
+@pytest.fixture
+async def feedback_message(session, tenant, feedback_room, feedback_assistant):
+    """フィードバック紐付け用の最小限のメッセージ"""
+    m = Message(
+        tenant_id=tenant.id,
+        room_id=feedback_room.id,
+        assistant_id=feedback_assistant.id,
+    )
+    session.add(m)
+    await session.commit()
+    await session.refresh(m)
+    return m
+
+
+@pytest.fixture
+async def message_feedback(session, tenant, feedback_message, admin_user):
+    """追加学習のデータソースとするフィードバック"""
+    fb = MessageFeedback(
+        tenant_id=tenant.id,
+        user_id=admin_user.id,
+        message_id=feedback_message.id,
+        rating=MessageRating.GOOD,
+    )
+    session.add(fb)
+    await session.commit()
+    await session.refresh(fb)
+    return fb
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
@@ -833,3 +938,347 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 404
+
+    class TestSync:
+        """POST /api/admin/indexes/{id}/sync"""
+
+        async def test_sync_always_returns_bad_request(
+            self, client, admin_headers, saas_index
+        ):
+            """同期APIは常に400（ローカルAPIサーバ限定機能）を返すこと"""
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/sync", headers=admin_headers
+                )
+
+            assert response.status_code == 400
+            assert (
+                response.json()["detail"]
+                == "ファイル一括同期機能はローカルAPIサーバしか対応していません。"
+            )
+
+    class TestAdditionalLearning:
+        """POST /api/admin/indexes/{id}/additionalLearning"""
+
+        async def test_neither_feedback_id_nor_room_id_raises_error(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """feedbackId・roomIdどちらも未指定だと400になること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data={},
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert (
+                response.json()["detail"]
+                == "追加学習のデータソースが正しく指定されていません。"
+            )
+
+        async def test_both_feedback_id_and_room_id_raises_error(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """feedbackId・roomIdを両方指定すると400になること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "some-feedback-id", "roomId": "some-room-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert (
+                response.json()["detail"]
+                == "追加学習のデータソースが正しく指定されていません。"
+            )
+
+        async def test_create_file_with_feedback_id(
+            self,
+            client,
+            session,
+            admin_headers,
+            saas_index,
+            message_feedback,
+            override_index_file_storage,
+        ):
+            """feedbackId指定で追加学習ファイルが作成されること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": message_feedback.id}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 204
+
+            created = (
+                (
+                    await session.execute(
+                        select(File).where(File.feedback_id == message_feedback.id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            assert created is not None
+            assert created.name == f"追加学習_{message_feedback.id}.md"
+            assert created.reference == f"フィードバック_{message_feedback.id}"
+            assert created.display_name == "フィードバック学習"
+            assert created.index_id == saas_index.id
+
+        async def test_update_message_feedback_index_id(
+            self,
+            client,
+            session,
+            admin_headers,
+            saas_index,
+            message_feedback,
+            override_index_file_storage,
+        ):
+            """feedbackId指定後に対象MessageFeedbackのindex_idが更新されること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": message_feedback.id}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 204
+
+            await session.refresh(message_feedback)
+            assert message_feedback.index_id == saas_index.id
+
+        async def test_create_file_with_room_id(
+            self,
+            client,
+            session,
+            admin_headers,
+            saas_index,
+            feedback_room,
+            override_index_file_storage,
+        ):
+            """roomId指定で追加学習ファイルが作成されること"""
+            room_id = feedback_room.id
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"roomId": room_id}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 204
+
+            created = (
+                (await session.execute(select(File).where(File.room_id == room_id)))
+                .scalars()
+                .first()
+            )
+            assert created is not None
+            assert created.name == f"追加学習_ルーム_{room_id}.md"
+            # 移植元同様、roomId指定時もreferenceの接頭辞は「フィードバック_」のまま
+            assert created.reference == f"フィードバック_{room_id}"
+
+        async def test_nonexistent_feedback_id_raises_404(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """存在しないfeedbackIdを指定すると404になること（ファイルは作成されない）"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "nonexistent-feedback-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_nonexistent_room_id_raises_404(
+            self, client, admin_headers, saas_index, override_index_file_storage
+        ):
+            """存在しないroomIdを指定すると404になること（ファイルは作成されない）"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"roomId": "nonexistent-room-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_other_tenant_feedback_id_raises_404(
+            self,
+            client,
+            session,
+            admin_headers,
+            saas_index,
+            unrelated_index,
+        ):
+            """他テナントのfeedbackIdを指定すると404になり、テナントをまたいで紐付かないこと
+
+            `files.feedback_id`は`message_feedbacks.id`への単一列FK（テナント条件を含まない）
+            のため、テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
+            黙って紐付いてしまう懸念がある（回帰確認）。
+            """
+            other_tenant = Tenant(
+                id="tenant-indexes-test-other",
+                name="Other Tenant",
+                owner="admin",
+                pw_policy_min_length=8,
+                pw_policy_use_uppercase=True,
+                pw_policy_use_lowercase=True,
+                pw_policy_use_digits=True,
+                pw_policy_use_symbols=True,
+                pw_policy_valid_symbols="!@#$",
+                pw_validity_period_days=90,
+                pw_histories_limit=3,
+            )
+            session.add(other_tenant)
+            await session.commit()
+            await session.refresh(other_tenant)
+
+            other_user = User(
+                id=uuid4(),
+                tenant_id=other_tenant.id,
+                login_id="other-tenant-admin",
+                name="OtherAdmin",
+                role=UserRole.ADMIN,
+                is_required_password_reset=False,
+            )
+            other_assistant = Assistant(
+                tenant_id=other_tenant.id,
+                type=AssistantType.SAAS_RAG,
+                name="Other Assistant",
+                include_history=False,
+            )
+            session.add_all([other_user, other_assistant])
+            await session.commit()
+            await session.refresh(other_user)
+            await session.refresh(other_assistant)
+
+            other_room = Room(
+                tenant_id=other_tenant.id,
+                name="Other Room",
+                default_assistant_id=other_assistant.id,
+                user_id=other_user.id,
+            )
+            session.add(other_room)
+            await session.commit()
+            await session.refresh(other_room)
+
+            other_message = Message(
+                tenant_id=other_tenant.id,
+                room_id=other_room.id,
+                assistant_id=other_assistant.id,
+            )
+            session.add(other_message)
+            await session.commit()
+            await session.refresh(other_message)
+
+            other_feedback = MessageFeedback(
+                tenant_id=other_tenant.id,
+                user_id=other_user.id,
+                message_id=other_message.id,
+                rating=MessageRating.GOOD,
+            )
+            session.add(other_feedback)
+            await session.commit()
+            await session.refresh(other_feedback)
+
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": other_feedback.id}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+            created = (
+                (
+                    await session.execute(
+                        select(File).where(File.feedback_id == other_feedback.id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            assert created is None
+
+            await session.refresh(other_feedback)
+            assert other_feedback.index_id is None
+
+        async def test_index_not_found_raises_404(
+            self, client, admin_headers, override_index_file_storage
+        ):
+            """存在しないindex_idを指定すると404になること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "some-feedback-id"}
+            async with client as c:
+                response = await c.post(
+                    "/api/admin/indexes/nonexistent-index/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 404
+
+        async def test_local_index_raises_bad_request(
+            self, client, admin_headers, local_index, override_index_file_storage
+        ):
+            """LOCALタイプのインデックスを指定すると400になること"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "some-feedback-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{local_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert (
+                response.json()["detail"]
+                == "ローカルAPIサーバへのリクエストを処理できません。"
+            )
+
+        async def test_member_user_forbidden(
+            self, client, member_headers, saas_index, override_index_file_storage
+        ):
+            """一般ユーザーは追加学習APIを呼べないこと"""
+            files = {"content": ("learn.md", b"content", "text/markdown")}
+            data = {"feedbackId": "some-feedback-id"}
+            async with client as c:
+                response = await c.post(
+                    f"/api/admin/indexes/{saas_index.id}/additionalLearning",
+                    files=files,
+                    data=data,
+                    headers=member_headers,
+                )
+
+            assert response.status_code == 403

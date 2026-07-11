@@ -4,10 +4,10 @@ from datetime import datetime
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import credit_quota
+from app.core import credit_quota, file_creation
 from app.core.file_storage import FileStorage
 from app.models.file import File, FileStatus
-from app.models.index import Index, IndexType
+from app.models.index import Index
 from app.models.user import User
 from app.repositories.file_repository import FileRepository
 from app.repositories.index_repository import IndexRepository
@@ -53,22 +53,6 @@ class FileService:
                 detail="インデックスが存在しません。",
             )
         return index
-
-    @staticmethod
-    def _ensure_not_local(index: Index) -> None:
-        """ローカルAPIサーバ向けインデックスへのファイル操作を拒否する。
-
-        Args:
-            index: 検証対象のインデックス。
-
-        Raises:
-            HTTPException: `index.type == LOCAL`の場合400を返す。
-        """
-        if index.type == IndexType.LOCAL:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="ローカルAPIサーバへのリクエストを処理できません。",
-            )
 
     @staticmethod
     def _parse_status(status_str: str | None) -> FileStatus | None:
@@ -248,62 +232,6 @@ class FileService:
         )
 
     @staticmethod
-    async def _save_to_storage_and_create(
-        index: Index,
-        form_name: str,
-        form_display_name: str | None,
-        form_reference: str | None,
-        current_user: User,
-        upload: UploadFile,
-        tenant_id: str,
-        storage: FileStorage,
-        session: AsyncSession,
-    ) -> File:
-        """ファイル実体をストレージへ保存し、メタデータをDBに作成する。
-
-        移植元`FileService.createFileWithAzureStorage`相当。本Issue（#87）のスコープでは
-        コンテンツ抽出（Tika）・分割・ベクトルDB登録（Issue #88スコープ）は行わない。
-
-        Args:
-            index: 保存先インデックス。
-            form_name: ファイルの内部名。
-            form_display_name: 表示名。
-            form_reference: 参照情報。
-            current_user: アップロードを行うユーザー。
-            upload: アップロードされたファイル。
-            tenant_id: テナントID。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
-
-        Returns:
-            作成された File。
-
-        Raises:
-            HTTPException: ストレージ保存後のDB保存に失敗した場合、保存済みの実体を
-                ロールバック削除した上で例外を送出する（移植元の例外時Blob削除を踏襲）。
-        """
-        file_id = uuid.uuid4().hex
-        content = await upload.read()
-        filename = upload.filename or form_name
-        storage_url = await storage.upload(tenant_id, file_id, filename, content)
-        try:
-            file = File(
-                id=file_id,
-                tenant_id=tenant_id,
-                name=form_name,
-                display_name=form_display_name,
-                reference=form_reference,
-                status=FileStatus.ENABLE,
-                user_id=current_user.id,
-                index_id=index.id,
-                storage_url=storage_url,
-            )
-            return await FileRepository.create(file, session)
-        except Exception:
-            await storage.delete(storage_url)
-            raise
-
-    @staticmethod
     async def create_file(
         index_id: str,
         tenant_id: str,
@@ -332,10 +260,10 @@ class FileService:
                 当月クレジット上限超過の場合429を返す。
         """
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
-        FileService._ensure_not_local(index)
+        file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
 
-        file = await FileService._save_to_storage_and_create(
+        file = await file_creation.create_file_record(
             index,
             form.name,
             form.display_name,
@@ -453,13 +381,13 @@ class FileService:
             )
 
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
-        FileService._ensure_not_local(index)
+        file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
 
         await FileService.delete_file(
             index_id, file_id, tenant_id, True, storage, session
         )
-        file = await FileService._save_to_storage_and_create(
+        file = await file_creation.create_file_record(
             index,
             form.name,
             form.display_name,
@@ -497,7 +425,7 @@ class FileService:
                 ファイルが存在しない場合404を返す。
         """
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
-        FileService._ensure_not_local(index)
+        file_creation.ensure_not_local(index)
 
         file = await FileRepository.find_by_id_and_tenant_id(
             file_id, tenant_id, session

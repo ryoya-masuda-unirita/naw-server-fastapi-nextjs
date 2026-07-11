@@ -1,5 +1,7 @@
 from datetime import datetime
+from typing import Annotated
 
+from fastapi import Form
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.index import IndexType
@@ -72,3 +74,27 @@ class PagedIndexResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+
+
+class IndexAdditionalLearningForm:
+    """追加学習用のmultipart/form-dataを受け取る依存クラス。
+
+    移植元`IndexAdditionalLearningRequest`（`@ModelAttribute`）相当。`feedbackId`・`roomId`は
+    どちらか一方が必須だが、これは複数フィールドにまたがる相関チェックであり、かつ本クラスは
+    （`FileUploadForm`等と同様）pydanticモデルではなくForm依存クラスのため、検証は
+    サービス層（`IndexService.additional_learning`）で行う。
+    """
+
+    def __init__(
+        self,
+        feedbackId: Annotated[str | None, Form()] = None,
+        roomId: Annotated[str | None, Form()] = None,
+    ) -> None:
+        """追加学習フォームの各フィールドを保持する。
+
+        Args:
+            feedbackId: 追加学習のデータソースとするフィードバックID。
+            roomId: 追加学習のデータソースとするルームID。
+        """
+        self.feedback_id = feedbackId
+        self.room_id = roomId

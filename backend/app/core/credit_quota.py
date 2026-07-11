@@ -91,7 +91,9 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
         session: 非同期DBセッション。
 
     Raises:
-        HTTPException: 当月のクレジット利用量が上限に達している場合、429を返す。
+        HTTPException: 請求期間内の利用クレジット合計が
+            「プランのクレジット枠 + テナント個別の利用ベース上限」以上の場合、
+            429（Too Many Requests）を返す。
     """
     billing_period = await resolve_active_billing_period(tenant_id, session)
     if billing_period is None:
