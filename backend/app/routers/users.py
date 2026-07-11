@@ -19,7 +19,11 @@ admin_router = APIRouter(prefix="/api/admin/users", tags=["admin-users"])
 user_router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@admin_router.get("", response_model=PagedUserResponse)
+@admin_router.get(
+    "",
+    response_model=PagedUserResponse,
+    response_model_exclude_none=True,
+)
 async def get_users(
     x_tenant_id: str = Depends(get_verified_tenant_id),
     page: int = Query(0, ge=0),
@@ -28,11 +32,20 @@ async def get_users(
     searchText: str | None = Query(None),
     role: str | None = Query(None),
     excludeGroupId: str | None = Query(None),
+    includeUsage: bool = Query(False),
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PagedUserResponse:
     return await UserService.get_users(
-        x_tenant_id, page, size, sort, searchText, role, excludeGroupId, session
+        x_tenant_id,
+        page,
+        size,
+        sort,
+        searchText,
+        role,
+        excludeGroupId,
+        session,
+        include_usage=includeUsage,
     )
 
 

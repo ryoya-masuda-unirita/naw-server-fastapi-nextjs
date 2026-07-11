@@ -30,9 +30,12 @@ class UserResponse(BaseModel):
     role: UserRole
     loginKey: str | None
     isRequiredPasswordReset: bool
+    # NAW-1172: includeUsage=true時のみ設定される請求期間内クレジット利用量合計。
+    # includeUsage未指定・falseの場合は常にNone。
+    totalCredits: int | None = None
 
     @classmethod
-    def from_user(cls, user: User) -> "UserResponse":
+    def from_user(cls, user: User, total_credits: int | None = None) -> "UserResponse":
         return cls(
             id=str(user.id),
             loginId=user.login_id,
@@ -40,6 +43,7 @@ class UserResponse(BaseModel):
             role=user.role,
             loginKey=user.login_key,
             isRequiredPasswordReset=user.is_required_password_reset,
+            totalCredits=total_credits,
         )
 
 

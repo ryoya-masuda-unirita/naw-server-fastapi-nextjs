@@ -1,10 +1,15 @@
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from uuid import uuid4
 
 from app.core.security import create_access_token, hash_password
 from app.main import app
+from app.models.plan import Plan
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
+from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
 from app.models.password_history import PasswordHistory
 
@@ -102,6 +107,193 @@ def user_headers(user_token, tenant):
 @pytest.fixture
 def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.fixture
+async def credit_plan(session):
+    """テスト用プラン（NAW-1172: includeUsage検証用）"""
+    plan = Plan(
+        id="plan-users-usage-test",
+        name="Standard",
+        max_users=10,
+        max_credits_per_month=1000,
+    )
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    return plan
+
+
+async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
+    """2日前を契約開始日とする有効なサブスクリプションを作成する。
+
+    契約開始日を「今日」ちょうどにすると、テスト実行環境のローカルタイムゾーンと
+    請求期間解決ロジック（UTC基準）のずれにより period が None になる場合があるため、
+    十分なマージンを持たせている。
+    """
+    session.add(
+        Subscription(
+            tenant_id=tenant_id,
+            plan_id=plan_id,
+            status=SubscriptionStatus.ACTIVE,
+            start_date=date.today() - timedelta(days=2),
+            end_date=None,
+        )
+    )
+    await session.commit()
+
+
+def _token_usage(
+    tenant_id: str,
+    user_id,
+    input_credits: int = 0,
+    output_credits: int = 0,
+    embedding_credits: int = 0,
+) -> TokenUsage:
+    return TokenUsage(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        model="gpt-4",
+        input_tokens=100,
+        output_tokens=100,
+        input_credits=input_credits,
+        output_credits=output_credits,
+        embedding_credits=embedding_credits,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+class TestGetUsersWithUsage:
+    """GET /api/admin/users?includeUsage=true (NAW-1172)"""
+
+    async def test_include_usage_false_omits_total_credits(
+        self, client, admin_headers, admin_user
+    ):
+        """includeUsage未指定時はtotalCreditsがレスポンスに含まれないこと"""
+        async with client as c:
+            response = await c.get("/api/admin/users", headers=admin_headers)
+
+        assert response.status_code == 200
+        assert "totalCredits" not in response.json()["content"][0]
+
+    async def test_include_usage_true_returns_total_credits(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        credit_plan,
+        admin_user,
+        normal_user,
+    ):
+        """includeUsage=trueの場合、請求期間内のtotalCreditsが返ること"""
+        await _create_active_subscription(session, tenant.id, credit_plan.id)
+        session.add(
+            _token_usage(
+                tenant.id,
+                admin_user.id,
+                input_credits=10,
+                output_credits=20,
+                embedding_credits=5,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"includeUsage": "true"},
+            )
+
+        assert response.status_code == 200
+        body = {u["loginId"]: u["totalCredits"] for u in response.json()["content"]}
+        assert body[admin_user.login_id] == 35
+        assert body[normal_user.login_id] == 0
+
+    async def test_include_usage_true_without_subscription_omits_total_credits(
+        self, client, admin_headers, admin_user
+    ):
+        """有効なサブスクリプションがない場合、totalCreditsがレスポンスに含まれないこと
+
+        （None値はレスポンスからexclude_noneで除外されるため、キー自体が存在しない）
+        """
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"includeUsage": "true"},
+            )
+
+        assert response.status_code == 200
+        assert "totalCredits" not in response.json()["content"][0]
+
+    async def test_sort_total_credits_without_include_usage_returns_400(
+        self, client, admin_headers
+    ):
+        """includeUsage未指定でsort=totalCreditsを指定すると400になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"sort": "totalCredits,desc"},
+            )
+
+        assert response.status_code == 400
+
+    async def test_sort_total_credits_orders_by_credit_amount(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        credit_plan,
+        admin_user,
+        normal_user,
+    ):
+        """includeUsage=trueかつsort=totalCreditsで利用クレジット降順に並ぶこと"""
+        await _create_active_subscription(session, tenant.id, credit_plan.id)
+        session.add(_token_usage(tenant.id, admin_user.id, input_credits=5))
+        session.add(_token_usage(tenant.id, normal_user.id, input_credits=50))
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"includeUsage": "true", "sort": "totalCredits,desc"},
+            )
+
+        assert response.status_code == 200
+        login_ids = [u["loginId"] for u in response.json()["content"]]
+        assert login_ids.index(normal_user.login_id) < login_ids.index(
+            admin_user.login_id
+        )
+
+    async def test_expired_subscription_is_treated_as_no_usage(
+        self, client, admin_headers, session, tenant, credit_plan, admin_user
+    ):
+        """期限切れサブスクリプションの場合、有効な契約なしとしてtotalCreditsが省略されること"""
+        session.add(
+            Subscription(
+                tenant_id=tenant.id,
+                plan_id=credit_plan.id,
+                status=SubscriptionStatus.ACTIVE,
+                start_date=date.today() - timedelta(days=60),
+                end_date=date.today() - timedelta(days=3),
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"includeUsage": "true"},
+            )
+
+        assert response.status_code == 200
+        assert "totalCredits" not in response.json()["content"][0]
 
 
 class TestGetUsers:

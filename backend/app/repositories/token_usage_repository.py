@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -117,3 +118,56 @@ class TokenUsageRepository:
         ).where(*conditions)
         result = await session.execute(stmt)
         return result.one()
+
+    @staticmethod
+    async def sum_total_credits_by_user_ids(
+        tenant_id: str,
+        from_: datetime,
+        to: datetime,
+        user_ids: list[UUID],
+        session: AsyncSession,
+    ) -> dict[UUID, int]:
+        """複数ユーザーの請求期間内クレジット合計を1クエリで一括取得する。
+
+        NAW-1172: ユーザー一覧・グループメンバー一覧の`includeUsage=true`応答を
+        組み立てる際、ページ内のユーザーごとに個別クエリを発行しない（N+1回避）ために使う。
+        移植元(Spring Boot)`TokenUsageRepository.sumTotalCreditsByUserIdsInPeriod`に対応する。
+
+        Args:
+            tenant_id: テナントID。
+            from_: 請求期間の開始（この値以上）。
+            to: 請求期間の終了（この値以下）。
+            user_ids: 集計対象のユーザーID一覧。
+            session: 非同期DBセッション。
+
+        Returns:
+            ユーザーIDをキーとしたクレジット合計の辞書。`user_ids`が空の場合はクエリを
+            発行せず空辞書を返す。
+        """
+        if not user_ids:
+            return {}
+
+        stmt = (
+            select(
+                TokenUsage.user_id,
+                func.coalesce(
+                    func.sum(
+                        TokenUsage.input_credits
+                        + TokenUsage.output_credits
+                        + TokenUsage.embedding_credits
+                    ),
+                    0,
+                ).label("total_credits"),
+            )
+            .where(
+                TokenUsage.tenant_id == tenant_id,
+                TokenUsage.created_at >= from_,
+                TokenUsage.created_at <= to,
+                # user_idはUUID | None型注釈のため、mypy上は.in_()を持つ
+                # InstrumentedAttributeと認識されない（SQLModelの制約）。castで明示する。
+                cast(InstrumentedAttribute, TokenUsage.user_id).in_(user_ids),
+            )
+            .group_by(TokenUsage.user_id)
+        )
+        result = await session.execute(stmt)
+        return {row.user_id: int(row.total_credits) for row in result.all()}
