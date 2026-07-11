@@ -474,6 +474,151 @@ class TestStreamMessageContent:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
+    async def test_passes_tools_to_llm_client_for_saas_chat(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """SAAS_CHATでtoolsを指定した場合、AzureLlmChatClient.stream_chatへ変換済みtoolsが渡ること"""
+        from app.models.message import MessageContent, MessageContentStatus
+        from app.schemas.message import ToolConfig
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(tools=[ToolConfig(name="web_search")]),
+            session=None,
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        passed_tools = args[6]
+        assert passed_tools is not None
+        assert len(passed_tools) == 1
+        assert passed_tools[0].name == "web_search"
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_tools_none_by_default(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """tools未指定時はAzureLlmChatClient.stream_chatへtools=Noneが渡ること（回帰確認）"""
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        assert args[6] is None
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
     async def test_emits_error_event_and_persists_error_status_when_azure_call_fails(
         self,
         mock_find_message,
@@ -1116,6 +1261,127 @@ class TestStreamMessageContentRag:
         assert len(token_usages) == 1
         assert token_usages[0].embedding_tokens == 7
         assert token_usages[0].embedding_credits == 1
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureAiSearchVectorStoreClient.similarity_search",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AzureLlmEmbeddingClient.create_embedding",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.TenantEndpointRepository"
+        ".find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository"
+        ".find_tenant_endpoints_grouped_by_index_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.IndexRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_tools_to_llm_client_for_saas_rag(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_find_index,
+        mock_find_index_endpoints,
+        mock_find_vdb_endpoints,
+        mock_create_embedding,
+        mock_similarity_search,
+        mock_find_files,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """SAAS_RAGでtoolsを指定した場合、AzureLlmChatClient.stream_chatへ変換済みtoolsが渡ること"""
+        from app.models.message import MessageContent, MessageContentStatus
+        from app.schemas.message import ToolConfig
+
+        def _find_model_side_effect(endpoint_type, name, session):
+            if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
+                return _ai_model()
+            return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _rag_assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.side_effect = _find_model_side_effect
+        mock_find_index.return_value = _index()
+        mock_find_index_endpoints.return_value = {"index-1": [_embedding_endpoint()]}
+        mock_find_vdb_endpoints.return_value = [_vdb_endpoint()]
+        mock_create_embedding.return_value = EmbeddingResult(
+            embedding=[0.1, 0.2], tokens=7
+        )
+        mock_similarity_search.return_value = []
+        mock_find_files.return_value = []
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(tools=[ToolConfig(name="web_search")]),
+            session=None,
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        passed_tools = args[6]
+        assert passed_tools is not None
+        assert len(passed_tools) == 1
+        assert passed_tools[0].name == "web_search"
 
     @patch("app.services.message_service.get_session_maker")
     @patch("app.services.message_service.MessageContentRepository.save")

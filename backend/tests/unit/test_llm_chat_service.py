@@ -274,6 +274,92 @@ class TestStreamChat:
         assert "event: error" in body
         assert "azure error" in body
 
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_tools_to_llm_client(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """toolsを指定した場合、AzureLlmChatClient.stream_chatへ変換済みtoolsが渡ること"""
+        from app.schemas.message import ToolConfig
+
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(tools=[ToolConfig(name="web_search")]),
+            session=None,
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        passed_tools = args[6]
+        assert passed_tools is not None
+        assert len(passed_tools) == 1
+        assert passed_tools[0].name == "web_search"
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    async def test_tools_none_by_default(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_stream_chat,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """tools未指定時はAzureLlmChatClient.stream_chatへtools=Noneが渡ること"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        args, _ = mock_stream_chat.call_args
+        assert args[6] is None
+
 
 class TestApplyAdditionalPrompt:
     """LlmChatService._apply_additional_prompt のテスト"""
