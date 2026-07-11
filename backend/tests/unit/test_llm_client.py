@@ -115,6 +115,53 @@ class TestAzureLlmChatClient:
         assert kwargs["temperature"] == 0.5
         assert kwargs["stream_options"] == {"include_usage": True}
 
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    async def test_omits_response_format_when_not_specified(self, mock_client_cls):
+        """response_format未指定時はcreate呼び出しにresponse_formatを含めないこと"""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=_AsyncChunkIterator([])
+        )
+
+        async for _ in AzureLlmChatClient.stream_chat(
+            "https://example.openai.azure.com",
+            "api-key",
+            "gpt-4o",
+            [ChatMessage(role="user", content="hi")],
+            0.0,
+            None,
+        ):
+            pass
+
+        _, kwargs = mock_client.chat.completions.create.call_args
+        assert "response_format" not in kwargs
+
+    @patch("app.core.llm_client.AsyncAzureOpenAI")
+    async def test_passes_response_format_when_specified(self, mock_client_cls):
+        """response_format指定時はcreate呼び出しにそのまま渡すこと"""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        _as_async_context_manager(mock_client)
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=_AsyncChunkIterator([])
+        )
+
+        async for _ in AzureLlmChatClient.stream_chat(
+            "https://example.openai.azure.com",
+            "api-key",
+            "gpt-4o",
+            [ChatMessage(role="user", content="hi")],
+            0.0,
+            None,
+            {"type": "json_object"},
+        ):
+            pass
+
+        _, kwargs = mock_client.chat.completions.create.call_args
+        assert kwargs["response_format"] == {"type": "json_object"}
+
 
 class TestAzureLlmEmbeddingClient:
     """AzureLlmEmbeddingClient.create_embedding のテスト"""

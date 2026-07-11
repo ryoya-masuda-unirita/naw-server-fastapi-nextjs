@@ -474,6 +474,155 @@ class TestStreamMessageContent:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
+    async def test_passes_response_format_and_prepends_instruction_when_specified(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """responseFormat指定時、JSON指示のsystemメッセージを前置しresponse_formatを渡すこと"""
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(responseFormat={"type": "json_object"}),
+            session=None,
+        )
+        await _consume(response)
+
+        call_args = mock_stream_chat.call_args.args
+        messages = call_args[3]
+        response_format_arg = call_args[6]
+        assert messages[0] == ChatMessage(
+            role="system", content="回答は JSON 形式で出力してください。"
+        )
+        assert response_format_arg == {"type": "json_object"}
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_does_not_pass_response_format_when_not_specified(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """responseFormat未指定時、response_formatを渡さずJSON指示文も前置しないこと"""
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator([])
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        call_args = mock_stream_chat.call_args.args
+        messages = call_args[3]
+        response_format_arg = call_args[6]
+        assert messages[0] == ChatMessage(role="user", content="こんにちは")
+        assert response_format_arg is None
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
     async def test_emits_error_event_and_persists_error_status_when_azure_call_fails(
         self,
         mock_find_message,
