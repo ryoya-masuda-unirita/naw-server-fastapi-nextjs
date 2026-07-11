@@ -228,6 +228,7 @@ class GroupAssistantRepository:
             .where(
                 GroupAssistant.group_id.in_(group_ids),
                 GroupAssistant.tenant_id == tenant_id,
+                Assistant.tenant_id == tenant_id,
             )
         )
         result = await session.execute(stmt)

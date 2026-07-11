@@ -192,6 +192,7 @@ class GroupPromptTemplateRepository:
             .where(
                 GroupPromptTemplate.group_id.in_(group_ids),
                 GroupPromptTemplate.tenant_id == tenant_id,
+                PromptTemplate.tenant_id == tenant_id,
             )
         )
         result = await session.execute(stmt)
