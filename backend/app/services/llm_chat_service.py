@@ -192,6 +192,8 @@ class LlmChatService:
             input_tokens = 0
             output_tokens = 0
             router = LibraryStreamRouter() if create_library else None
+            library_title: str | None = None
+            library_content: str | None = None
             try:
                 async for chunk in AzureLlmChatClient.stream_chat(
                     endpoint_url,
@@ -225,19 +227,19 @@ class LlmChatService:
                             else f"library_{kind}_delta"
                         )
                         yield _sse(event, {"text": text})
-                    title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
+                    # 永続化(`_persist_library`)自体は`finally`で行う。ここで確定させて
+                    # おくことで、直後の`yield`中にクライアントが切断してGeneratorExitが
+                    # 送出された場合でも、`finally`到達時点でタイトル・本文が確定済みなら
+                    # ライブラリが永続化される(message_service.pyの同様の堅牢性方針を踏襲)。
+                    library_title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
                         :_LIBRARY_TITLE_MAX_LENGTH
                     ]
+                    library_content = router.final_content()
                     comment = router.final_comment()
-                    await LlmChatService._persist_library(
-                        tenant_id=library_tenant_id,
-                        message_id=library_message_id,
-                        user_id=user_id,
-                        title=title,
-                        content=router.final_content(),
-                    )
                     if not comment:
-                        yield _sse("text_delta", {"text": f"「{title}」を作成しました"})
+                        yield _sse(
+                            "text_delta", {"text": f"「{library_title}」を作成しました"}
+                        )
 
                 yield _sse(
                     "message_stop",
@@ -247,10 +249,20 @@ class LlmChatService:
                 # SSEは開始後にHTTPステータスでエラーを返せないため、専用イベントとして
                 # クライアントへ通知する（例外を握り潰すのではなく、ログに残したうえで
                 # クライアントへ伝わる形に変換する）。ライブラリ生成が正常完了した場合のみ
-                # 永続化する移植元の挙動に合わせ、エラー時はライブラリを永続化しない。
+                # 永続化する移植元の挙動に合わせ、エラー時はライブラリを永続化しない
+                # （`library_title`/`library_content`はflush後にのみ設定されるため、
+                # 生成完了前の例外では自動的に永続化がスキップされる）。
                 logger.exception("LLMチャット呼び出し中にエラーが発生しました")
                 yield _sse("error", {"message": str(e)})
             finally:
+                if library_title is not None and library_content is not None:
+                    await LlmChatService._persist_library(
+                        tenant_id=library_tenant_id,
+                        message_id=library_message_id,
+                        user_id=user_id,
+                        title=library_title,
+                        content=library_content,
+                    )
                 await LlmChatService._persist_token_usage(
                     tenant_id=tenant_id,
                     user_id=user_id,
