@@ -21,6 +21,32 @@ Angular 実装: `~/Documents/secuaigent-client`
 - MSW
 - Vitest + React Testing Library
 
+## デザイン移行の方針
+
+Angular のデザインを忠実に React へ移行すること。独自の簡易実装で代替しない。
+
+### 移行元デザインリソース
+
+| リソース | パス |
+|---|---|
+| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/secuaigent-client/src/styles.css` |
+| 翻訳ファイル（日本語） | `~/Documents/secuaigent-client/public/i18n/ja.json` |
+| 翻訳ファイル（英語） | `~/Documents/secuaigent-client/public/i18n/en.json` |
+| 各ページの HTML テンプレート | `*.component.html` |
+
+### 移行手順
+
+1. Angular の HTML テンプレートを必ず先に読む
+2. `styles.css` のカスタムカラー・カスタムクラスを `src/index.css` に移す
+3. Tailwind クラスは Angular の見た目に対応させて選ぶ
+4. Angular 固有の UI 部品は React コンポーネントへ置き換える
+
+### やってはいけないこと
+
+- `bg-blue-600` などの汎用 Tailwind クラスで Angular のカスタムカラーを代用しない
+- Angular HTML を読まずに独自レイアウトを実装しない
+- デザイン差異を未確認のまま放置しない
+
 ## レイヤー責務
 
 ```text
@@ -38,6 +64,19 @@ api-client.ts         fetch ラッパー
 - 型定義は `src/types/` に作る
 - 文言は必ず i18n を通す
 - コメントは「なぜ」を書く
+
+## Angular → React 対応表
+
+| Angular | React |
+|---|---|
+| Standalone Component | React Component |
+| signalStore（API 呼び出し部分） | TanStack Query |
+| signalStore（UI 状態部分） | Zustand store |
+| `withComputed` | 必要に応じた導出 state |
+| `@Injectable({ providedIn: 'root' })` Service | hooks / Zustand による共有ロジック |
+| Guard | React Router loader または認証チェック |
+| `HttpInterceptor`（モック） | MSW |
+| `ngx-translate` | `react-i18next` |
 
 ## Angular からの移植指針
 
@@ -58,10 +97,17 @@ api-client.ts         fetch ラッパー
 ```text
 src/
 ├── routes/
+│   ├── auth/
+│   ├── admin/
+│   └── chat/
 ├── components/
+│   ├── features/
+│   ├── layouts/
+│   └── shared/
 ├── hooks/
 ├── store/
 ├── lib/
+│   └── constants/
 └── types/
 ```
 
@@ -85,3 +131,8 @@ npm run lint
 
 - UI 実装やテストが完了したら、その単位で `06_タスクリスト.md` を更新する
 - 動作確認結果は `08_動作確認.md` に事実のみ記録する
+
+## 補足
+
+- frontend 移植 Issue に着手するときは、ルート `AGENTS.md` と `.codex/skills/naw-frontend-issue-workflow/SKILL.md` を先に読むこと
+- backend API の実装が未完了なら、frontend 単独で無理に進めず依存関係を整理すること
