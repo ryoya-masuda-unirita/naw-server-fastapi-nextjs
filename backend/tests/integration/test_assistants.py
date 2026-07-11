@@ -873,7 +873,7 @@ class TestUpdateAssistant:
 class TestDeleteAssistant:
     """DELETE /api/admin/assistants/{assistant_id}"""
 
-    async def test_delete_assistant_returns_400_when_used_as_default_assistant_of_room(
+    async def test_delete_assistant_returns_409_when_used_as_default_assistant_of_room(
         self,
         client,
         session,
@@ -882,7 +882,7 @@ class TestDeleteAssistant:
         member_user,
         assistant,
     ):
-        """デフォルトアシスタントとして参照中のルームがある場合400になること"""
+        """デフォルトアシスタントとして参照中のルームがある場合409になること"""
         session.add(
             Room(
                 tenant_id=tenant.id,
@@ -898,10 +898,10 @@ class TestDeleteAssistant:
                 f"/api/admin/assistants/{assistant.id}", headers=admin_headers
             )
 
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert (
             response.json()["detail"]
-            == "このアシスタントを使用中のルームが存在するため削除できません。"
+            == "このアシスタントはルームのデフォルトアシスタントとして使用されているため削除できません。"
         )
 
     async def test_delete_assistant_succeeds_when_no_room_references_it(

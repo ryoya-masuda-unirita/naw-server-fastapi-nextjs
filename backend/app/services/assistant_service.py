@@ -376,8 +376,9 @@ class AssistantService:
     ) -> None:
         """アシスタントを削除する。
 
-        room（チャット本体）ドメインが未移植のため、移植元にあるデフォルトアシスタント
-        使用中判定（409）はここでは行わない。
+        いずれかのルームのデフォルトアシスタントとして使用中の場合、
+        FK制約（`rooms.default_assistant_id` の `ON DELETE RESTRICT`）違反により
+        `IntegrityError` が発生するため、これを捕捉してHTTP 409を返す。
 
         Args:
             assistant_id: 削除対象のアシスタントID。
@@ -386,6 +387,7 @@ class AssistantService:
 
         Raises:
             HTTPException: 存在しない場合404を返す。
+                いずれかのルームのデフォルトアシスタントとして使用中の場合409を返す。
         """
         assistant = await AssistantService._get_assistant_or_404(
             assistant_id, tenant_id, session
@@ -395,8 +397,8 @@ class AssistantService:
         except IntegrityError as exc:
             await session.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="このアシスタントを使用中のルームが存在するため削除できません。",
+                status_code=status.HTTP_409_CONFLICT,
+                detail="このアシスタントはルームのデフォルトアシスタントとして使用されているため削除できません。",
             ) from exc
 
     @staticmethod
