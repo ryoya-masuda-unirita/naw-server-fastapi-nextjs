@@ -590,6 +590,9 @@ class IndexService:
             name = f"追加学習_{feedback_id}.md"
             reference = f"フィードバック_{feedback_id}"
         else:
+            # 直前の`learning_source_not_specified`/`confused_learning_source`チェックにより、
+            # このelse節に到達する時点でfeedback_idがNoneかつroom_idはNoneではないと確定している。
+            assert room_id is not None
             room = await RoomRepository.find_by_id_and_tenant_id(
                 room_id, tenant_id, session
             )

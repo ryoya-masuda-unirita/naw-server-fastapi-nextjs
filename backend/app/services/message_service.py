@@ -1005,6 +1005,10 @@ class MessageService:
                 yield _sse("error", {"message": str(e)})
                 stream_finished = True
             finally:
+                # ValueError発生時にNoneを代入するため、事前に`| None`を明示しておく
+                # （型注釈がないと最初の代入式からMessageContentResponse確定型と
+                # 推論され、後続のNone代入が型エラーになる）。
+                content_response: MessageContentResponse | None
                 try:
                     content_response = await MessageService._persist_message_content(
                         tenant_id=tenant_id,
