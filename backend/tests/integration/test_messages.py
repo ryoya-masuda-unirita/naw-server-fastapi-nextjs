@@ -626,6 +626,69 @@ class TestMessageRouter:
 
             assert response.status_code == 422
 
+        async def test_persists_attachment_files_and_returns_them_in_complete_event(
+            self,
+            client,
+            owner_headers,
+            owned_message,
+            message_chat_endpoint,
+            engine,
+        ):
+            """attachmentFilesを送信した場合、message_filesに永続化されcompleteイベントに反映されること"""
+            import base64
+
+            async def _stream_chunks(*args, **kwargs):
+                yield ChatStreamChunk(text_delta="こんにちは")
+                yield ChatStreamChunk(input_tokens=10, output_tokens=5)
+
+            test_session_maker = sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+            encoded = base64.b64encode(b"binary-image-data").decode("ascii")
+            with (
+                patch(
+                    "app.services.message_service.AzureLlmChatClient.stream_chat",
+                    side_effect=_stream_chunks,
+                ),
+                patch(
+                    "app.services.message_service.get_session_maker",
+                    return_value=test_session_maker,
+                ),
+            ):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        json={
+                            "messageId": owned_message.id,
+                            "userInput": "こんにちは",
+                            "attachmentFiles": [
+                                {
+                                    "name": "photo.png",
+                                    "type": "image/png",
+                                    "data": encoded,
+                                }
+                            ],
+                        },
+                        headers=owner_headers,
+                    )
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [owned_message.id]},
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            body = response.text
+            assert "event: complete" in body
+            assert "photo.png" in body
+
+            saved_names = [
+                f["name"]
+                for content in contents_response.json()
+                for f in content["attachmentFiles"]
+            ]
+            assert "photo.png" in saved_names
+
     class TestDeleteMessage:
         async def test_delete_message_removes_message(
             self, client, owner_headers, owned_message

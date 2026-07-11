@@ -21,13 +21,82 @@ from openai import AsyncAzureOpenAI
 # ストリーミングでの`stream_options.include_usage`に対応したバージョンを固定で使う。
 AZURE_OPENAI_API_VERSION = "2024-10-21"
 
+# Responses API(tools指定時のweb_search/mcp呼び出しに使用)用のAPIバージョン。
+# Responses APIはAzure OpenAIでは`AZURE_OPENAI_API_VERSION`より新しいプレビュー
+# バージョンでのみ提供されるため、Chat Completions用とは別定数で固定する。
+AZURE_OPENAI_RESPONSES_API_VERSION = "2025-04-01-preview"
+
 
 @dataclass(frozen=True)
 class ChatMessage:
-    """チャットの1発話。"""
+    """チャットの1発話。
+
+    `content`は添付ファイルがない場合は`str`のまま、添付ファイルがある場合は
+    OpenAI Chat Completions APIのマルチモーダル形式(`build_user_content`が
+    組み立てるテキストパート・画像パートのリスト)を許容する。
+    """
 
     role: str
-    content: str
+    content: str | list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class ToolConfig:
+    """チャット送信時に指定するツール設定(web_search / mcp)。
+
+    `schemas.message.ToolConfig`(Pydanticモデル)とは別に、呼び出しクライアントが
+    必要とする最小限のフィールドのみを持つ軽量なdataclassとして定義する
+    (`core/`は`schemas/`に依存しない既存レイヤー規約のため、`ChatMessage`と同じ設計方針)。
+    `authorization` / `headers`はAzure OpenAIへの送信のみに使う秘密情報のため、
+    呼び出し元でログ出力・永続化しないこと。
+    """
+
+    name: str
+    server_label: str | None = None
+    server_url: str | None = None
+    require_approval: str | None = None
+    authorization: str | None = None
+    headers: dict[str, str] | None = None
+    allowed_tools: list[str] | None = None
+
+
+def _build_responses_tool(tool: ToolConfig) -> dict:
+    """`ToolConfig`をAzure OpenAI Responses APIの`tools`要素へ変換する。
+
+    移植元Java版`OpenAiLlmChatAdapter.toTool`/`buildMcpTool`に対応する。Azure OpenAI
+    (OpenAI)側がサーバーサイドでweb検索・MCPサーバー呼び出しを実行する組み込みツール
+    (built-in tools)の宣言をそのまま渡すだけで、このクライアント自身がWeb検索・MCP
+    プロトコルを実装するわけではない。
+
+    Args:
+        tool: 変換対象のツール設定。
+
+    Returns:
+        Responses APIの`tools`パラメータへ渡す辞書。
+
+    Raises:
+        ValueError: `name`が`web_search`/`mcp`のいずれでもない場合
+            (リクエストスキーマのバリデーションで通常は到達しない防御的分岐)。
+    """
+    name = tool.name.lower()
+    if name == "web_search":
+        return {"type": "web_search"}
+    if name == "mcp":
+        param: dict = {
+            "type": "mcp",
+            "server_label": tool.server_label,
+            "server_url": tool.server_url,
+        }
+        if tool.authorization:
+            param["authorization"] = tool.authorization
+        if tool.headers:
+            param["headers"] = tool.headers
+        if tool.allowed_tools:
+            param["allowed_tools"] = tool.allowed_tools
+        if tool.require_approval:
+            param["require_approval"] = tool.require_approval
+        return param
+    raise ValueError(f"未対応のツール名: {tool.name}")
 
 
 @dataclass(frozen=True)
@@ -63,8 +132,15 @@ class AzureLlmChatClient:
         messages: list[ChatMessage],
         temperature: float,
         max_tokens: int | None,
+        tools: list[ToolConfig] | None = None,
+        response_format: dict | None = None,
     ) -> AsyncIterator[ChatStreamChunk]:
         """Azure OpenAI Chatモデルへ会話履歴を送信し、応答をストリーミングで受け取る。
+
+        `tools`未指定時は既存どおりChat Completions APIを使用する。`tools`指定時は
+        web_search/mcp組み込みツールをサポートするResponses APIへ切り替える
+        (Chat Completions APIには、OpenAI側がサーバーサイドで実行を管理する
+        web_search/mcpのような組み込みツールという概念自体が存在しないため)。
 
         Args:
             endpoint: テナントに紐づくAzure OpenAIエンドポイントURL。
@@ -73,10 +149,21 @@ class AzureLlmChatClient:
             messages: 会話履歴。
             temperature: 応答のランダム性(0.0〜1.0)。
             max_tokens: 出力トークン数の上限。未指定の場合はモデルの既定値に従う。
+            tools: 有効化するツール(web_search / mcp)。未指定・空の場合はツールなし。
+            response_format: 構造化出力の指定(例: `{"type": "json_object"}`)。
+                未指定の場合は自由文で応答する。tools指定時はResponses APIへ切り替わり
+                response_formatは使用しない(組み合わせ非対応)。
 
         Yields:
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
         """
+        if tools:
+            async for chunk in AzureLlmChatClient._stream_chat_responses_api(
+                endpoint, api_key, deploy_name, messages, temperature, max_tokens, tools
+            ):
+                yield chunk
+            return
+
         create_kwargs: dict = {
             "model": deploy_name,
             "messages": [
@@ -89,6 +176,8 @@ class AzureLlmChatClient:
         }
         if max_tokens is not None:
             create_kwargs["max_tokens"] = max_tokens
+        if response_format is not None:
+            create_kwargs["response_format"] = response_format
 
         # クライアントは`async with`でリクエスト単位に生成・破棄する。ストリーム消費が
         # 終わるまで(このジェネレータが最後までイテレートされるまで)コンテキストマネージャ
@@ -111,6 +200,76 @@ class AzureLlmChatClient:
                 delta = chunk.choices[0].delta
                 if delta is not None and delta.content:
                     yield ChatStreamChunk(text_delta=delta.content)
+
+    @staticmethod
+    async def _stream_chat_responses_api(
+        endpoint: str,
+        api_key: str,
+        deploy_name: str,
+        messages: list[ChatMessage],
+        temperature: float,
+        max_tokens: int | None,
+        tools: list[ToolConfig],
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Azure OpenAI Responses APIでweb_search/mcp組み込みツールを使いストリーミング呼び出しする。
+
+        移植元Java版`OpenAiLlmChatAdapter`/`OpenAiResponsesClient`に対応する。
+        ツール呼び出し(web検索の実行・MCPサーバーへの接続等)はAzure OpenAI側で
+        完結し、その中間過程はSSEの専用イベントとして個別通知せず、最終テキストが
+        通常のテキスト差分として配信される(移植元も同様の挙動)。
+
+        Args:
+            endpoint: テナントに紐づくAzure OpenAIエンドポイントURL。
+            api_key: テナントに紐づくAzure OpenAI APIキー。
+            deploy_name: 呼び出すデプロイ名（モデル名）。
+            messages: 会話履歴。
+            temperature: 応答のランダム性(0.0〜1.0)。
+            max_tokens: 出力トークン数の上限。未指定の場合はモデルの既定値に従う。
+            tools: 有効化するツール(web_search / mcp)。
+
+        Yields:
+            テキスト差分、および完了時の入出力トークン数を持つチャンク。
+        """
+        create_kwargs: dict = {
+            "model": deploy_name,
+            "input": [
+                {"role": message.role, "content": message.content}
+                for message in messages
+            ],
+            "tools": [_build_responses_tool(tool) for tool in tools],
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            create_kwargs["max_output_tokens"] = max_tokens
+
+        async with AsyncAzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version=AZURE_OPENAI_RESPONSES_API_VERSION,
+        ) as client:
+            stream = await client.responses.create(**create_kwargs)
+            async for event in stream:
+                if event.type == "response.output_text.delta":
+                    yield ChatStreamChunk(text_delta=event.delta)
+                elif event.type == "response.completed":
+                    usage = event.response.usage
+                    if usage is not None:
+                        yield ChatStreamChunk(
+                            input_tokens=usage.input_tokens,
+                            output_tokens=usage.output_tokens,
+                        )
+                elif event.type == "error":
+                    # web検索・MCPサーバー呼び出しの失敗等は例外を送出せず、この専用
+                    # イベントとしてストリーム内で通知される場合がある(移植元Java版
+                    # `OpenAiResponsesClient`も`error`イベントを明示的に処理している)。
+                    # 例外化して呼び出し元の`try/except`に流し込み、空回答がOKステータス
+                    # で永続化されてしまわないようにする。
+                    raise RuntimeError(event.message)
+                elif event.type == "response.failed":
+                    error = event.response.error
+                    message = error.message if error is not None else "response.failed"
+                    raise RuntimeError(message)
 
 
 class AzureLlmEmbeddingClient:

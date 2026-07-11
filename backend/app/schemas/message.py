@@ -1,8 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+import base64
+
+from pydantic import (
+    BaseModel,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.models.message import MessageContentStatus, MessageRating
+from app.schemas.attachment import AttachmentFile
+from app.schemas.response_format import ResponseFormatRequest
 
 
 class ToolConfig(BaseModel):
@@ -91,9 +101,25 @@ class MessageContentListRequest(BaseModel):
 
 
 class MessageContentAttachmentFileResponse(BaseModel):
+    """メッセージ内容に紐づく添付ファイル1件のレスポンス。
+
+    `data`はDBから取得した生のバイト列(`MessageFile.data`)をそのまま保持する
+    （リクエスト側の`AttachmentFile`のような`Base64Bytes`型は使わない。
+    `Base64Bytes`は代入時に値がBase64エンコード済みであることを前提に
+    デコードするため、DBの生バイト列をそのまま渡すレスポンス構築には使えない）。
+    JSON出力時のみ`@field_serializer`で明示的にBase64エンコードする
+    （画像等の任意バイナリは、素の`bytes`のデフォルトJSONシリアライズ(UTF-8
+    デコード)ではシリアライズ時に例外になりうるため。issue-97で判明）。
+    """
+
     name: str
     type: str
     data: bytes
+
+    @field_serializer("data", when_used="json")
+    def _serialize_data(self, value: bytes) -> str:
+        """バイナリデータをBase64エンコードしたJSON文字列として出力する。"""
+        return base64.b64encode(value).decode("ascii")
 
 
 class MessageContentResponse(BaseModel):
@@ -113,6 +139,7 @@ class MessageContentHistoryTurn(BaseModel):
 
     role: str = Field(min_length=1)
     content: str = Field(min_length=1)
+    attachmentsCount: int = Field(default=0, ge=0)
 
 
 class MessageContentCreateRequest(BaseModel):
@@ -121,9 +148,10 @@ class MessageContentCreateRequest(BaseModel):
     移植元(Spring Boot)の`CreateMessageContentRequest`に対応する。`messageId`
     （新規生成・質問再生成用）と`messageContentId`（回答再生成用）はどちらか
     一方が必須で、`messageContentId`指定時は既存の`MessageContent`を上書き
-    再生成する（issue-101）。本Issueのスコープでは引き続きRAG・添付ファイル・
-    tools・ライブラリ生成（createLibrary）・response_formatは対象外のため
-    含めない（`docs/issue-93/01_要件定義.md`参照）。
+    再生成する（issue-101）。添付ファイル(`attachmentFiles`/`historyAttachmentFiles`)は
+    issue-97で、`tools`（web_search/mcp）はissue-98で、ライブラリ生成（createLibrary）は
+    issue-99で、response_formatはissue-100で対応済み（`docs/issue-100/01_要件定義.md`
+    参照）。
     """
 
     messageId: str | None = Field(default=None, min_length=1)
@@ -131,6 +159,29 @@ class MessageContentCreateRequest(BaseModel):
     userInput: str = Field(min_length=1)
     additionalPrompt: str | None = None
     historyMessages: list[MessageContentHistoryTurn] = []
+    attachmentFiles: list[AttachmentFile] = []
+    historyAttachmentFiles: list[AttachmentFile] = []
+    tools: list[ToolConfig] | None = None
+    # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
+    # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
+    # ストリーミングする。
+    isCreateLibrary: bool = False
+    responseFormat: ResponseFormatRequest | None = None
+
+    @model_validator(mode="after")
+    def _validate_history_attachment_count(self) -> "MessageContentCreateRequest":
+        """historyAttachmentFilesの件数がhistoryMessagesのattachmentsCount合計と一致することを検証する。
+
+        移植元(Spring Boot)の`CreateMessageContentViewModel.isHistoryAttachmentCountCorrect`
+        に対応する。過去ターンの添付ファイル内容自体はLLMに再送しない設計
+        （`docs/issue-97/01_要件定義.md`参照）のため、ここでは件数の整合性のみを検証する。
+        """
+        expected = sum(turn.attachmentsCount for turn in self.historyMessages)
+        if len(self.historyAttachmentFiles) != expected:
+            raise ValueError(
+                "historyAttachmentFilesの件数がhistoryMessagesのattachmentsCount合計と一致しません"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_target_specified(self) -> "MessageContentCreateRequest":
