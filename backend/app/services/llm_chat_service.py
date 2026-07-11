@@ -1,7 +1,9 @@
 """LLMチャットAPI(SSEストリーミング応答)のビジネスロジック。
 
-移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、tools
-（Function Calling）・添付ファイルは対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+移植元(Spring Boot)の`LlmChatService`に対応する。本Issueのスコープでは、
+response_formatは対象外のため扱わない（`docs/issue-88/01_要件定義.md`参照）。
+添付ファイル(`attachmentFiles`)はissue-97で、tools（web_search/mcp）はissue-98で、
+ライブラリ生成（createLibrary）はissue-99で対応済み（`docs/issue-99/01_要件定義.md`参照）。
 """
 
 import json
@@ -13,6 +15,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
@@ -22,6 +25,7 @@ from app.core.library_stream_router import (
     LibraryStreamRouter,
 )
 from app.core.llm_client import AzureLlmChatClient, ChatMessage
+from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
     input_credits,
@@ -40,7 +44,9 @@ from app.repositories.system_prompt_template_repository import (
     SystemPromptTemplateRepository,
 )
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
+from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest
+from app.schemas.message import ToolConfig as SchemaToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +68,33 @@ def _sse(event: str, data: dict) -> bytes:
         SSE形式にエンコードされたバイト列。
     """
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+def _to_core_tool_configs(
+    tools: list[SchemaToolConfig] | None,
+) -> list[CoreToolConfig] | None:
+    """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
+
+    Args:
+        tools: リクエストで指定されたツール設定一覧。
+
+    Returns:
+        LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
+    """
+    if not tools:
+        return None
+    return [
+        CoreToolConfig(
+            name=tool.name,
+            server_label=tool.server_label,
+            server_url=tool.server_url,
+            require_approval=tool.require_approval,
+            authorization=tool.authorization,
+            headers=tool.headers,
+            allowed_tools=tool.allowed_tools,
+        )
+        for tool in tools
+    ]
 
 
 class LlmChatService:
@@ -149,13 +182,19 @@ class LlmChatService:
             ],
             req.additionalPrompt,
         )
-
         if req.createLibrary:
+            # attachmentFiles適用より前に行う。build_user_content適用後はcontentが
+            # マルチモーダルのリストになりうり、その後にf-string結合すると壊れるため。
             chat_messages = LlmChatService._downgrade_system_turns_to_user(
                 LlmChatService._apply_library_instruction_to_last_user_turn(
                     chat_messages
                 )
             )
+        chat_messages = LlmChatService._apply_attachment_files(
+            chat_messages, req.attachmentFiles
+        )
+
+        if req.createLibrary:
             library_prompt = await SystemPromptTemplateRepository.find_by_type(
                 _LIBRARY_PROMPT_TYPE, session
             )
@@ -175,6 +214,7 @@ class LlmChatService:
         deploy_name = req.deployName
         temperature = req.temperature
         max_tokens = req.maxTokens
+        tools = _to_core_tool_configs(req.tools)
         user_id = current_user.id
         model_name = ai_model.name
         token_weight = positive_token_weight(float(ai_model.token_weight))
@@ -202,6 +242,7 @@ class LlmChatService:
                     chat_messages,
                     temperature,
                     max_tokens,
+                    tools,
                 ):
                     if chunk.text_delta is not None:
                         if router is not None:
@@ -328,6 +369,40 @@ class LlmChatService:
                 updated[index] = ChatMessage(
                     role=messages[index].role,
                     content=f"{LIBRARY_USER_INSTRUCTION_PREFIX}{messages[index].content}",
+                )
+                return updated
+        return messages
+
+    @staticmethod
+    def _apply_attachment_files(
+        messages: list[ChatMessage], files: list[AttachmentFile]
+    ) -> list[ChatMessage]:
+        """末尾から見て最後の"user"ロール発話に添付ファイルを付与する。
+
+        移植元Java版はターンごとにファイル名で紐付けるが、本ポートでは複雑さ低減のため
+        `attachmentFiles`は常に最後のユーザー発話に一括で適用する
+        （`docs/issue-97/01_要件定義.md`参照）。
+
+        Args:
+            messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
+            files: 添付ファイル一覧。
+
+        Returns:
+            添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない
+            場合はそのまま返す。
+        """
+        if not files:
+            return messages
+        for index in range(len(messages) - 1, -1, -1):
+            if messages[index].role.lower() == "user":
+                updated = list(messages)
+                content = messages[index].content
+                # additionalPrompt適用直後はcontentが常にstrであることを前提とする
+                # (このメソッドは_apply_additional_promptの直後にのみ呼ばれる)。
+                assert isinstance(content, str)
+                updated[index] = ChatMessage(
+                    role=messages[index].role,
+                    content=build_user_content(content, files),
                 )
                 return updated
         return messages
