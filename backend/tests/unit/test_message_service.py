@@ -842,6 +842,288 @@ class TestStreamMessageContent:
         assert saved_content.answer == "途中まで"
 
 
+class TestStreamMessageContentCreateLibrary:
+    """MessageService.stream_message_content のライブラリ生成(isCreateLibrary)モードのテスト"""
+
+    def _library_prompt(self) -> MagicMock:
+        return MagicMock(content="ライブラリ生成用システムプロンプト")
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch(
+        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+    )
+    @patch(
+        "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_streams_library_title_and_content_delta_then_persists_library(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_find_prompt,
+        mock_save_library,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """isCreateLibrary=trueの場合、library_title_delta/library_content_deltaを配信しライブラリを永続化すること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_find_prompt.return_value = self._library_prompt()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\nタイトルA\n"),
+                ChatStreamChunk(text_delta="<<<CONTENT>>>\n本文B\n"),
+                ChatStreamChunk(text_delta="<<<COMMENT>>>\nコメントC"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="コメントC",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(isCreateLibrary=True), session=None
+        )
+        chunks = await _consume(response)
+        body = b"".join(chunks).decode()
+
+        assert "event: library_title_delta" in body
+        assert '"text": "タイトルA' in body
+        assert "event: library_content_delta" in body
+        assert '"text": "本文B' in body
+        assert "event: text_delta" in body
+        assert '"text": "コメントC"' in body
+        assert "event: message_stop" in body
+
+        mock_save_library.assert_awaited_once()
+        saved_library = mock_save_library.await_args.args[0]
+        assert saved_library.title == "タイトルA"
+        assert saved_library.content == "本文B"
+        assert saved_library.tenant_id == "tenant-1"
+        assert saved_library.message_id == "msg-1"
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch(
+        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+    )
+    @patch(
+        "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_falls_back_to_default_title_when_title_empty(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_find_prompt,
+        mock_save_library,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """タイトルが空の場合、デフォルト値「ライブラリ」で永続化され案内文がtext_deltaで配信されること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_find_prompt.return_value = self._library_prompt()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\n<<<CONTENT>>>\n本文のみ"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="「ライブラリ」を作成しました",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(isCreateLibrary=True), session=None
+        )
+        chunks = await _consume(response)
+        body = b"".join(chunks).decode()
+
+        assert '"text": "「ライブラリ」を作成しました"' in body
+        saved_library = mock_save_library.await_args.args[0]
+        assert saved_library.title == "ライブラリ"
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch(
+        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+    )
+    @patch(
+        "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.MessageContentRepository.save")
+    @patch(
+        "app.services.message_service.RoomRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_truncates_title_to_255_characters(
+        self,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_find_room,
+        mock_save_content,
+        mock_find_prompt,
+        mock_save_library,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """タイトルが255文字を超える場合、255文字に切り詰められて永続化されること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        long_title = "あ" * 300
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_find_prompt.return_value = self._library_prompt()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(
+                    text_delta=f"<<<TITLE>>>\n{long_title}\n<<<CONTENT>>>\n本文"
+                ),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_save_content.return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="",
+        )
+        mock_find_room.return_value = MagicMock(updated_at=None)
+
+        mock_new_session = _mock_new_session()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(isCreateLibrary=True), session=None
+        )
+        await _consume(response)
+
+        saved_library = mock_save_library.await_args.args[0]
+        assert len(saved_library.title) == 255
+
+
 class TestStreamMessageContentRag:
     """MessageService.stream_message_content のSAAS_RAG分岐のテスト"""
 

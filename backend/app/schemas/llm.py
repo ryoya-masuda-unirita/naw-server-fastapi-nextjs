@@ -15,9 +15,9 @@ class LlmChatRequest(BaseModel):
     """LLMチャットAPIのリクエスト。
 
     移植元(Spring Boot)の`LlmChatTextDataRequest`に対応するが、本Issueのスコープでは
-    ライブラリ生成（createLibrary）・response_formatは対象外のため含めない。
-    添付ファイル(`attachmentFiles`)はissue-97で、`tools`（web_search/mcp）はissue-98で
-    対応済み（`docs/issue-98/01_要件定義.md`参照）。
+    response_formatは対象外のため含めない。添付ファイル(`attachmentFiles`)はissue-97で、
+    `tools`（web_search/mcp）はissue-98で、ライブラリ生成（createLibrary）はissue-99で
+    対応済み（`docs/issue-99/01_要件定義.md`参照）。
     """
 
     deployName: str = Field(min_length=1)
@@ -28,6 +28,11 @@ class LlmChatRequest(BaseModel):
     messages: list[LlmChatTurn] = Field(min_length=1)
     attachmentFiles: list[AttachmentFile] = []
     tools: list[ToolConfig] | None = None
+    # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
+    # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
+    # ストリーミングする。trueの場合はmessageIdの指定が必須(生成したライブラリの
+    # 紐付け先が必要なため)。
+    createLibrary: bool = False
 
 
 class LlmEmbeddingRequest(BaseModel):

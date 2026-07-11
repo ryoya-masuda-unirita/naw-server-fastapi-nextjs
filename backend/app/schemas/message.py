@@ -145,10 +145,10 @@ class MessageContentCreateRequest(BaseModel):
     """メッセージ送信（アシスタント応答生成）のリクエスト。
 
     移植元(Spring Boot)の`CreateMessageContentRequest`に対応するが、本Issueのスコープでは
-    ライブラリ生成（createLibrary）・response_format・メッセージ再生成（messageContentId指定）は
-    対象外のため含めない（`docs/issue-93/01_要件定義.md`参照）。
-    添付ファイル(`attachmentFiles`/`historyAttachmentFiles`)はissue-97で、
-    `tools`（web_search/mcp）はissue-98で対応済み（`docs/issue-98/01_要件定義.md`参照）。
+    response_format・メッセージ再生成（messageContentId指定）は対象外のため含めない
+    （`docs/issue-93/01_要件定義.md`参照）。添付ファイル(`attachmentFiles`/
+    `historyAttachmentFiles`)はissue-97で、`tools`（web_search/mcp）はissue-98で、
+    ライブラリ生成（createLibrary）はissue-99で対応済み（`docs/issue-99/01_要件定義.md`参照）。
     """
 
     messageId: str = Field(min_length=1)
@@ -158,6 +158,10 @@ class MessageContentCreateRequest(BaseModel):
     attachmentFiles: list[AttachmentFile] = []
     historyAttachmentFiles: list[AttachmentFile] = []
     tools: list[ToolConfig] | None = None
+    # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
+    # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
+    # ストリーミングする。
+    isCreateLibrary: bool = False
 
     @model_validator(mode="after")
     def _validate_history_attachment_count(self) -> "MessageContentCreateRequest":
