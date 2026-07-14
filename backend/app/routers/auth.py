@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, Header, Response
+import redis.asyncio as redis
+from fastapi import APIRouter, Cookie, Depends, Header, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import session_store
 from app.core.security import (
-    clear_access_token_cookie,
+    clear_session_cookie,
     create_access_token,
     get_current_user,
-    set_access_token_cookie,
+    set_session_cookie,
 )
 from app.core.database import get_session
+from app.core.redis_client import get_redis_client
 from app.models.user import User
 from app.schemas.auth import (
     LoginKeyRequest,
@@ -27,13 +30,17 @@ async def login(
     response: Response,
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     session: AsyncSession = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AuthResponse:
     """ログイン"""
     auth_response = await AuthService.login(
         request.username, request.password, x_tenant_id, session
     )
     if auth_response.token:
-        set_access_token_cookie(response, auth_response.token)
+        session_id = await session_store.create_session(
+            auth_response.id, x_tenant_id, redis_client
+        )
+        set_session_cookie(response, session_id)
     return auth_response
 
 
@@ -43,20 +50,32 @@ async def login_with_login_key(
     response: Response,
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     session: AsyncSession = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AuthResponse:
     """ログインキーによるログイン"""
     auth_response = await AuthService.login_with_login_key(
         request.loginKey, x_tenant_id, session
     )
     if auth_response.token:
-        set_access_token_cookie(response, auth_response.token)
+        session_id = await session_store.create_session(
+            auth_response.id, x_tenant_id, redis_client
+        )
+        set_session_cookie(response, session_id)
     return auth_response
 
 
 @router.post("/logout")
-async def logout(response: Response) -> dict[str, str]:
+async def logout(
+    response: Response,
+    session_id: str | None = Cookie(
+        default=None, alias=session_store.SESSION_COOKIE_NAME
+    ),
+    redis_client: redis.Redis = Depends(get_redis_client),
+) -> dict[str, str]:
     """ログアウト"""
-    clear_access_token_cookie(response)
+    if session_id:
+        await session_store.delete_session(session_id, redis_client)
+    clear_session_cookie(response)
     return {"message": "Logout successful."}
 
 
@@ -66,6 +85,7 @@ async def reset_password(
     response: Response,
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
     session: AsyncSession = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AuthResponse:
     """パスワードリセット"""
     auth_response = await AuthService.reset_password(
@@ -76,20 +96,27 @@ async def reset_password(
         session,
     )
     if auth_response.token:
-        set_access_token_cookie(response, auth_response.token)
+        session_id = await session_store.create_session(
+            auth_response.id, x_tenant_id, redis_client
+        )
+        set_session_cookie(response, session_id)
     return auth_response
 
 
 @api_router.get("/auth", response_model=AuthResponse)
 async def get_auth(
-    response: Response,
     current_user: User = Depends(get_current_user),
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    session: AsyncSession = Depends(get_session),
+    session_id: str | None = Cookie(
+        default=None, alias=session_store.SESSION_COOKIE_NAME
+    ),
+    redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AuthResponse:
     """認証トークン取得（新しいトークンを再発行）"""
+    if session_id:
+        await session_store.touch_session(session_id, redis_client)
+
     token = create_access_token(current_user.login_id, x_tenant_id)
-    set_access_token_cookie(response, token)
 
     return AuthResponse(
         id=current_user.login_id,
