@@ -453,7 +453,8 @@ FROM (VALUES ('tenant-demo-a'), ('tenant-demo-b')) AS t(tenant_id)
 CROSS JOIN generate_series(1, 6) AS s
 ON CONFLICT (assistant_id, category_id) DO NOTHING;
 
--- アシスタントをグループに割り当てる (4グループに2件ずつ回す)
+-- アシスタントをグループに割り当てる (6件を4グループへ順繰りに割り当てるため、
+-- グループ1・2は2件ずつ、グループ3・4は1件ずつになる)
 INSERT INTO groups_assistants (group_id, assistant_id, tenant_id)
 SELECT
     md5(t.tenant_id || '-group-' || ((s - 1) % 4 + 1)::text),
