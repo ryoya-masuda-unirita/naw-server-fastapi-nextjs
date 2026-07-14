@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -12,23 +12,34 @@ from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.services.llm_chat_service import LlmChatService
 
 
-def _ai_model(name: str = "gpt-4o", token_weight: str = "1.0") -> AIModel:
+def _ai_model(
+    name: str = "gpt-4o",
+    token_weight: str = "1.0",
+    endpoint_type: AIModelEndpointType = AIModelEndpointType.AZURE_OPENAI_CHAT,
+) -> AIModel:
     return AIModel(
         id=1,
-        endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT,
+        endpoint_type=endpoint_type,
         name=name,
         max_tokens=4096,
         token_weight=Decimal(token_weight),
     )
 
 
-def _tenant_endpoint(endpoint_id: str = "endpoint-1") -> TenantEndpoint:
+def _tenant_endpoint(
+    endpoint_id: str = "endpoint-1",
+    type: EndpointType = EndpointType.AZURE_OPENAI_CHAT,
+) -> TenantEndpoint:
     return TenantEndpoint(
         id=endpoint_id,
         tenant_id="tenant-1",
-        type=EndpointType.AZURE_OPENAI_CHAT,
-        endpoint_name="azure",
-        endpoint="https://example.openai.azure.com",
+        type=type,
+        endpoint_name="azure" if type == EndpointType.AZURE_OPENAI_CHAT else "bedrock",
+        endpoint=(
+            "https://example.openai.azure.com"
+            if type == EndpointType.AZURE_OPENAI_CHAT
+            else "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic"
+        ),
         api_key="api-key",
     )
 
@@ -63,7 +74,7 @@ class TestStreamChat:
 
     @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_ai_model_not_found(
@@ -85,7 +96,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_no_tenant_endpoint(
@@ -112,7 +123,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_raises_404_when_message_not_found(
@@ -146,7 +157,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_raises_403_when_message_room_not_owned(
@@ -184,7 +195,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_streams_text_delta_then_message_stop_and_persists_usage(
@@ -238,7 +249,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_emits_error_event_when_azure_call_fails(
@@ -295,7 +306,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_passes_tools_to_llm_client(
@@ -342,7 +353,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_tools_none_by_default(
@@ -381,7 +392,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_passes_response_format_and_prepends_instruction_when_specified(
@@ -428,7 +439,7 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_does_not_pass_response_format_when_not_specified(
@@ -463,6 +474,126 @@ class TestStreamChat:
         assert response_format_arg is None
 
 
+class TestStreamChatBedrockDispatch:
+    """LlmChatService.stream_chat のBedrock分岐テスト"""
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.BedrockLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
+        new_callable=AsyncMock,
+    )
+    async def test_dispatches_to_bedrock_client_for_bedrock_model(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_bedrock_stream,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """BedrockのAIモデルが解決された場合、BedrockLlmChatClientが呼ばれること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mock_find_model.return_value = _ai_model(
+            name="anthropic.claude-sonnet-5",
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        )
+        mock_find_endpoints.return_value = [
+            _tenant_endpoint(type=EndpointType.BEDROCK_CHAT)
+        ]
+        mock_bedrock_stream.return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(text_delta="こんにちは")]
+        )
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(deployName="anthropic.claude-sonnet-5"),
+            session=None,
+        )
+        await _consume(response)
+
+        mock_find_endpoints.assert_awaited_once_with(
+            "tenant-1", EndpointType.BEDROCK_CHAT, ANY
+        )
+        mock_bedrock_stream.assert_called_once()
+        call_kwargs = mock_bedrock_stream.call_args.kwargs
+        assert call_kwargs["max_tokens_fallback"] == 4096
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
+        new_callable=AsyncMock,
+    )
+    async def test_still_dispatches_to_azure_client_for_azure_model(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_azure_stream,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """Azure OpenAIのAIモデルが解決された場合、従来通りAzureLlmChatClientが呼ばれること（回帰確認）"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_azure_stream.return_value = _AsyncChunkIterator([])
+
+        mock_new_session = AsyncMock()
+        mock_new_session.__aenter__.return_value = mock_new_session
+        mock_new_session.add = MagicMock()
+        mock_session_maker = MagicMock(return_value=mock_new_session)
+        mock_get_session_maker.return_value = mock_session_maker
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        mock_find_endpoints.assert_awaited_once_with(
+            "tenant-1", EndpointType.AZURE_OPENAI_CHAT, ANY
+        )
+        mock_azure_stream.assert_called_once()
+
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    async def test_raises_400_for_unsupported_endpoint_type(
+        self, mock_enforce, mock_find_model, test_user
+    ):
+        """未対応のエンドポイント種別（クライアント未実装）の場合400になること"""
+        mock_find_model.return_value = _ai_model(
+            name="gemini-pro", endpoint_type=AIModelEndpointType.GEMINI_CHAT
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1", test_user, _request(deployName="gemini-pro"), session=None
+            )
+
+        assert exc_info.value.status_code == 400
+
+
 class TestStreamChatCreateLibrary:
     """LlmChatService.stream_chat のライブラリ生成(createLibrary)モードのテスト"""
 
@@ -489,7 +620,7 @@ class TestStreamChatCreateLibrary:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_streams_library_title_and_content_delta_then_persists_library(
@@ -630,7 +761,7 @@ class TestStreamChatWithAttachmentFiles:
         new_callable=AsyncMock,
     )
     @patch(
-        "app.services.llm_chat_service.AIModelRepository.find_by_endpoint_type_and_name",
+        "app.services.llm_chat_service.AIModelRepository.find_by_name",
         new_callable=AsyncMock,
     )
     async def test_passes_multimodal_content_to_azure_when_attachment_files_present(

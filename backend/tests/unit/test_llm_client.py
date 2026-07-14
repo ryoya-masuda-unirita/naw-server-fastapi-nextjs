@@ -5,6 +5,7 @@ import pytest
 from app.core.llm_client import (
     AzureLlmChatClient,
     AzureLlmEmbeddingClient,
+    BedrockLlmChatClient,
     ChatMessage,
     ToolConfig,
     _build_responses_tool,
@@ -558,3 +559,159 @@ class TestAzureLlmEmbeddingClient:
 
         _, kwargs = mock_client.embeddings.create.call_args
         assert kwargs["dimensions"] == 512
+
+
+def _bedrock_content_block_delta_event(text: str) -> MagicMock:
+    event = MagicMock()
+    event.type = "content_block_delta"
+    event.delta = MagicMock(type="text_delta", text=text)
+    return event
+
+
+def _bedrock_message_start_event(input_tokens: int) -> MagicMock:
+    event = MagicMock()
+    event.type = "message_start"
+    event.message = MagicMock(usage=MagicMock(input_tokens=input_tokens))
+    return event
+
+
+def _bedrock_message_delta_event(output_tokens: int) -> MagicMock:
+    event = MagicMock()
+    event.type = "message_delta"
+    event.usage = MagicMock(output_tokens=output_tokens)
+    return event
+
+
+def _mock_bedrock_client(events: list) -> MagicMock:
+    """`AsyncAnthropic`のモック（`async with`・`messages.stream`両方に対応）。"""
+    mock_client = MagicMock()
+    _as_async_context_manager(mock_client)
+    mock_stream_cm = MagicMock()
+    mock_stream_cm.__aenter__ = AsyncMock(return_value=_AsyncChunkIterator(events))
+    mock_stream_cm.__aexit__ = AsyncMock(return_value=False)
+    mock_client.messages.stream = MagicMock(return_value=mock_stream_cm)
+    return mock_client
+
+
+class TestBedrockLlmChatClient:
+    async def test_streams_text_delta_chunks(self):
+        """テキスト差分イベントがChatStreamChunkに変換されること"""
+        mock_client = _mock_bedrock_client(
+            [
+                _bedrock_message_start_event(input_tokens=10),
+                _bedrock_content_block_delta_event("こんにちは"),
+                _bedrock_message_delta_event(output_tokens=5),
+            ]
+        )
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            chunks = [
+                chunk
+                async for chunk in BedrockLlmChatClient.stream_chat(
+                    "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                    "dummy-api-key",
+                    "anthropic.claude-sonnet-5",
+                    [ChatMessage(role="user", content="こんにちは")],
+                    0.4,
+                    1024,
+                )
+            ]
+
+        text_chunks = [c for c in chunks if c.text_delta is not None]
+        assert text_chunks[0].text_delta == "こんにちは"
+        assert chunks[0].input_tokens == 10
+        assert chunks[-1].output_tokens == 5
+
+    async def test_extracts_system_messages_into_system_param(self):
+        """system役割の発話がsystemパラメータへ変換されること"""
+        mock_client = _mock_bedrock_client([])
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-sonnet-5",
+                [
+                    ChatMessage(role="system", content="丁寧に回答してください"),
+                    ChatMessage(role="user", content="こんにちは"),
+                ],
+                0.4,
+                1024,
+            ):
+                pass
+
+        _, kwargs = mock_client.messages.stream.call_args
+        assert kwargs["system"] == "丁寧に回答してください"
+        assert kwargs["messages"] == [{"role": "user", "content": "こんにちは"}]
+
+    async def test_omits_system_param_when_no_system_message(self):
+        """system役割の発話がない場合systemパラメータを渡さないこと"""
+        mock_client = _mock_bedrock_client([])
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-sonnet-5",
+                [ChatMessage(role="user", content="こんにちは")],
+                0.4,
+                1024,
+            ):
+                pass
+
+        _, kwargs = mock_client.messages.stream.call_args
+        assert "system" not in kwargs
+
+    async def test_falls_back_max_tokens_when_none(self):
+        """max_tokens未指定時にフォールバック値が使われること"""
+        mock_client = _mock_bedrock_client([])
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-sonnet-5",
+                [ChatMessage(role="user", content="こんにちは")],
+                0.4,
+                None,
+                max_tokens_fallback=8192,
+            ):
+                pass
+
+        _, kwargs = mock_client.messages.stream.call_args
+        assert kwargs["max_tokens"] == 8192
+
+    async def test_raises_value_error_when_max_tokens_and_fallback_both_none(self):
+        """max_tokens・max_tokens_fallbackどちらも未指定の場合ValueErrorが送出されること"""
+        with pytest.raises(ValueError):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-sonnet-5",
+                [ChatMessage(role="user", content="こんにちは")],
+                0.4,
+                None,
+            ):
+                pass
+
+    async def test_raises_value_error_when_tools_specified(self):
+        """toolsを指定した場合ValueErrorが送出されること"""
+        with pytest.raises(ValueError):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-sonnet-5",
+                [ChatMessage(role="user", content="こんにちは")],
+                0.4,
+                1024,
+                tools=[ToolConfig(name="web_search")],
+            ):
+                pass
