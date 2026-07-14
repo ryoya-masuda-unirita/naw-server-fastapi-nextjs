@@ -17,7 +17,7 @@ def _settings() -> AzureCostSettings:
         AZURE_APP_TENANT_ID="azure-tenant-1",
         AZURE_APP_CLIENT_ID="client-1",
         AZURE_APP_CLIENT_SECRET_VALUE="secret-1",
-    )  # type: ignore[arg-type]
+    )
 
 
 def _columns(names: list[str] | None = None) -> list[SimpleNamespace]:
