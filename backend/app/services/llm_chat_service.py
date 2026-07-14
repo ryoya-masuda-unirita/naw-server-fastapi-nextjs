@@ -23,7 +23,7 @@ from app.core.library_stream_router import (
     LIBRARY_USER_INSTRUCTION_PREFIX,
     LibraryStreamRouter,
 )
-from app.core.llm_client import AzureLlmChatClient, ChatMessage
+from app.core.llm_client import AzureLlmChatClient, BedrockLlmChatClient, ChatMessage
 from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.token_usage_credit import (
@@ -178,17 +178,28 @@ class LlmChatService:
 
         await enforce_within_quota(tenant_id, session)
 
-        ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
-            AIModelEndpointType.AZURE_OPENAI_CHAT, req.deployName, session
-        )
+        ai_model = await AIModelRepository.find_by_name(req.deployName, session)
         if ai_model is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"指定された deployName の AI モデルが見つかりません: {req.deployName}",
             )
+        if ai_model.endpoint_type not in (
+            AIModelEndpointType.AZURE_OPENAI_CHAT,
+            AIModelEndpointType.BEDROCK_CHAT,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"未対応のエンドポイント種別です: {ai_model.endpoint_type.value}",
+            )
+        tenant_endpoint_type = (
+            EndpointType.AZURE_OPENAI_CHAT
+            if ai_model.endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT
+            else EndpointType.BEDROCK_CHAT
+        )
 
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
-            tenant_id, EndpointType.AZURE_OPENAI_CHAT, session
+            tenant_id, tenant_endpoint_type, session
         )
         if not endpoints:
             raise HTTPException(
@@ -264,13 +275,15 @@ class LlmChatService:
         tools = _to_core_tool_configs(req.tools)
         user_id = current_user.id
         model_name = ai_model.name
+        model_endpoint_type = ai_model.endpoint_type
+        model_max_tokens = ai_model.max_tokens
         token_weight = positive_token_weight(float(ai_model.token_weight))
         create_library = req.createLibrary
         library_tenant_id = tenant_id
         library_message_id = message_id_for_usage
 
         async def event_stream() -> AsyncIterator[bytes]:
-            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信する。
+            """LLMの応答をSSEイベントへ変換しつつ配信する。
 
             `createLibrary=true`の場合は、`text_delta`の代わりに`LibraryStreamRouter`
             経由でタイトル/本文/補足コメントの3区分に振り分けて配信し、完了後に
@@ -281,8 +294,8 @@ class LlmChatService:
             router = LibraryStreamRouter() if create_library else None
             library_title: str | None = None
             library_content: str | None = None
-            try:
-                async for chunk in AzureLlmChatClient.stream_chat(
+            if model_endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
+                chat_stream = AzureLlmChatClient.stream_chat(
                     endpoint_url,
                     api_key,
                     deploy_name,
@@ -291,7 +304,20 @@ class LlmChatService:
                     max_tokens,
                     tools,
                     response_format_param,
-                ):
+                )
+            else:
+                chat_stream = BedrockLlmChatClient.stream_chat(
+                    endpoint_url,
+                    api_key,
+                    deploy_name,
+                    chat_messages,
+                    temperature,
+                    max_tokens,
+                    tools,
+                    max_tokens_fallback=model_max_tokens,
+                )
+            try:
+                async for chunk in chat_stream:
                     if chunk.text_delta is not None:
                         if router is not None:
                             for kind, text in router.feed(chunk.text_delta):
@@ -358,6 +384,7 @@ class LlmChatService:
                     room_id=room_id,
                     message_id=message_id_for_usage,
                     model_name=model_name,
+                    endpoint_type=model_endpoint_type,
                     token_weight=token_weight,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
@@ -522,6 +549,7 @@ class LlmChatService:
         room_id: str | None,
         message_id: str | None,
         model_name: str,
+        endpoint_type: AIModelEndpointType,
         token_weight: float,
         input_tokens: int,
         output_tokens: int,
@@ -539,6 +567,7 @@ class LlmChatService:
             room_id: 紐づくルームID(messageId未指定時はNone)。
             message_id: 紐づくメッセージID(messageId未指定時はNone)。
             model_name: 呼び出したAIモデル名。
+            endpoint_type: 実際に呼び出したプロバイダのエンドポイント種別。
             token_weight: 呼び出したAIモデルの重み係数。
             input_tokens: 入力トークン数。
             output_tokens: 出力トークン数。
@@ -552,7 +581,7 @@ class LlmChatService:
             user_id=user_id,
             room_id=room_id,
             message_id=message_id,
-            endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT.value,
+            endpoint_type=endpoint_type.value,
             model=model_name,
             input_tokens=input_tokens,
             output_tokens=output_tokens,

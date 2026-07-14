@@ -201,6 +201,24 @@ INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
 SELECT 'CLAUDE_CHAT', 'claude-3-5-sonnet', 200000, true, 1.0
 WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'claude-3-5-sonnet');
 
+INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
+SELECT 'BEDROCK_CHAT', 'anthropic.claude-sonnet-5', 200000, true, 1.0
+WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'anthropic.claude-sonnet-5');
+
+-- 動作確認用Bedrockエンドポイント (id固定)
+-- 実機確認する場合は api_key を実際のBedrock API keyに、endpointを実際のリージョンの
+-- Bedrock Mantleエンドポイントに書き換えること
+INSERT INTO tenant_endpoints (id, tenant_id, type, endpoint_name, endpoint, api_key)
+VALUES (
+    '30000000000040008000000000000003',
+    'test-tenant',
+    'BEDROCK_CHAT',
+    'AWS Bedrock (動作確認用)',
+    'https://bedrock-mantle.ap-northeast-1.api.aws/anthropic',
+    'dummy-bedrock-api-key-for-seed'
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- フィードバックユーザー一覧API 動作確認用ルーム
 INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id, rating)
 VALUES
