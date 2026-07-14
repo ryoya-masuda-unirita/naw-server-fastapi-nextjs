@@ -42,12 +42,24 @@ async def get_session(
         redis_client: Redis非同期クライアント。
 
     Returns:
-        `login_id`・`tenant_id`を含む辞書。セッションが存在しない場合は`None`。
+        `login_id`・`tenant_id`を含む辞書。セッションが存在しない、または保存データが
+        壊れている場合は`None`（呼び出し元でbearerフォールバックに回すため、例外は
+        送出しない）。
     """
     stored = await redis_client.get(_session_key(session_id))
     if stored is None:
         return None
-    return json.loads(stored)
+    try:
+        payload = json.loads(stored)
+    except json.JSONDecodeError:
+        return None
+    if (
+        not isinstance(payload, dict)
+        or "login_id" not in payload
+        or "tenant_id" not in payload
+    ):
+        return None
+    return payload
 
 
 async def delete_session(session_id: str, redis_client: redis.Redis) -> None:

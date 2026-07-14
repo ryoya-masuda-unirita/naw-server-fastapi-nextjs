@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -17,6 +17,20 @@ class Settings(BaseSettings):
         default="lax", alias="COOKIE_SAME_SITE"
     )
     file_storage_root: str = Field(default="./data/files", alias="FILE_STORAGE_ROOT")
+
+    @model_validator(mode="after")
+    def _validate_cookie_same_site_requires_secure(self) -> "Settings":
+        """`SameSite=None`は`Secure`が伴わないとブラウザに拒否されるため整合性を検証する。
+
+        Raises:
+            ValueError: `cookie_same_site`が`none`なのに`cookie_secure`が`False`の場合。
+        """
+        if self.cookie_same_site == "none" and not self.cookie_secure:
+            raise ValueError(
+                "COOKIE_SAME_SITE=none には COOKIE_SECURE=true が必須です"
+                "（SameSite=NoneのみだとブラウザがCookieを拒否します）"
+            )
+        return self
 
 
 class CorsSettings(BaseSettings):

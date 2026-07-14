@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.config import AzureOpenAISettings, CorsSettings, Settings
 
 
@@ -97,6 +99,36 @@ class TestCookieSecure:
         settings = _build_settings(COOKIE_SECURE="true")
 
         assert settings.cookie_secure is True
+
+
+class TestCookieSameSite:
+    def test_defaults_to_lax_when_unset(self):
+        """COOKIE_SAME_SITE未設定時はlaxになること"""
+        settings = _build_settings()
+
+        assert settings.cookie_same_site == "lax"
+
+    def test_reflects_value_when_set(self):
+        """COOKIE_SAME_SITEを設定した値が反映されること"""
+        settings = _build_settings(COOKIE_SAME_SITE="strict")
+
+        assert settings.cookie_same_site == "strict"
+
+    def test_none_with_secure_true_is_allowed(self):
+        """COOKIE_SAME_SITE=noneかつCOOKIE_SECURE=trueの組み合わせは許可されること"""
+        settings = _build_settings(COOKIE_SAME_SITE="none", COOKIE_SECURE="true")
+
+        assert settings.cookie_same_site == "none"
+        assert settings.cookie_secure is True
+
+    def test_none_with_secure_false_raises_error(self):
+        """COOKIE_SAME_SITE=noneかつCOOKIE_SECURE=falseの組み合わせはエラーになること
+
+        SameSite=NoneはSecure属性が伴わないとブラウザにCookieを拒否されるため、
+        この組み合わせを設定時点で検出する。
+        """
+        with pytest.raises(ValueError, match="COOKIE_SECURE=true"):
+            _build_settings(COOKIE_SAME_SITE="none", COOKIE_SECURE="false")
 
 
 class TestAzureOpenAISettings:

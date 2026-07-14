@@ -323,6 +323,7 @@ class TestAuthAPI:
         from app.core import config
 
         monkeypatch.setenv("COOKIE_SAME_SITE", "none")
+        monkeypatch.setenv("COOKIE_SECURE", "true")
         config.get_settings.cache_clear()
 
         async with client as c:
