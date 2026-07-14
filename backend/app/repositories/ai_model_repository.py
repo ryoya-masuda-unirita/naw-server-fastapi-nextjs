@@ -20,6 +20,21 @@ class AIModelRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def find_by_name(name: str, session: AsyncSession) -> AIModel | None:
+        """モデル名(デプロイ名)でAIモデルを取得する。エンドポイント種別は問わない。
+
+        Args:
+            name: モデル名(デプロイ名)。
+            session: 非同期DBセッション。
+
+        Returns:
+            該当するAIモデル。存在しない場合はNone。
+        """
+        stmt = select(AIModel).where(AIModel.name == name)
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
+    @staticmethod
     async def find_by_endpoint_type_and_name(
         endpoint_type: AIModelEndpointType, name: str, session: AsyncSession
     ) -> AIModel | None:

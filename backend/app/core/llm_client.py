@@ -14,6 +14,7 @@ Python公式`openai`SDKの`AsyncAzureOpenAI`クライアント1本に統一す�
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+import anthropic
 from openai import AsyncAzureOpenAI
 
 from app.core.config import get_azure_openai_settings
@@ -266,6 +267,98 @@ class AzureLlmChatClient:
                     error = event.response.error
                     message = error.message if error is not None else "response.failed"
                     raise RuntimeError(message)
+
+
+class BedrockLlmChatClient:
+    """AWS Bedrock（Bedrock Mantle経由）でClaudeをストリーミング呼び出しするクライアント。
+
+    Bedrock MantleのBearerトークン方式（Bedrock API keys）は、Anthropic公式APIと
+    同一のMessages API形式で呼び出せるため、AWS SigV4署名や`boto3`を使わず、標準の
+    `anthropic`公式SDKに`base_url`とAPIキーを指定するだけで利用できる。
+    """
+
+    @staticmethod
+    async def stream_chat(
+        endpoint: str,
+        api_key: str,
+        model_id: str,
+        messages: list[ChatMessage],
+        temperature: float,
+        max_tokens: int | None,
+        tools: list[ToolConfig] | None = None,
+        max_tokens_fallback: int | None = None,
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Bedrock経由でClaudeモデルへ会話履歴を送信し、応答をストリーミングで受け取る。
+
+        Args:
+            endpoint: テナントに紐づくBedrock Mantleエンドポイント
+                （例: `https://bedrock-mantle.ap-northeast-1.api.aws/anthropic`）。
+            api_key: テナントに紐づくBedrock API key（Bearerトークン）。
+            model_id: 呼び出すモデルID（例: `anthropic.claude-sonnet-5`）。
+            messages: 会話履歴。
+            temperature: 応答のランダム性(0.0〜1.0)。
+            max_tokens: 出力トークン数の上限。未指定の場合は`max_tokens_fallback`を使う。
+            tools: 有効化するツール。Bedrock Mantleはサーバーサイドの組み込みツール
+                （web_search/mcp）に対応していないため、指定された場合は例外にする。
+            max_tokens_fallback: `max_tokens`未指定時に使うフォールバック値
+                （呼び出し元がAIモデルの`max_tokens`を渡す想定）。Anthropic Messages APIは
+                `max_tokens`が必須パラメータのため、どちらも未指定の場合はエラーになる。
+
+        Yields:
+            テキスト差分、および完了時の入出力トークン数を持つチャンク。
+
+        Raises:
+            ValueError: `tools`が指定された場合、または`max_tokens`・
+                `max_tokens_fallback`のいずれも指定されていない場合。
+        """
+        if tools:
+            raise ValueError(
+                "Bedrock Mantle経由のClaude呼び出しはweb_search/mcp組み込みツールに"
+                "対応していません"
+            )
+
+        resolved_max_tokens = (
+            max_tokens if max_tokens is not None else max_tokens_fallback
+        )
+        if resolved_max_tokens is None:
+            raise ValueError(
+                "max_tokensを指定するか、max_tokens_fallbackを渡してください"
+            )
+
+        system_prompt = "\n\n".join(
+            message.content
+            for message in messages
+            if message.role.lower() == "system" and isinstance(message.content, str)
+        )
+        conversation_messages = [
+            {"role": message.role, "content": message.content}
+            for message in messages
+            if message.role.lower() != "system"
+        ]
+
+        create_kwargs: dict = {
+            "model": model_id,
+            "messages": conversation_messages,
+            "max_tokens": resolved_max_tokens,
+            "temperature": temperature,
+        }
+        if system_prompt:
+            create_kwargs["system"] = system_prompt
+
+        async with anthropic.AsyncAnthropic(
+            base_url=endpoint, api_key=api_key
+        ) as client:
+            async with client.messages.stream(**create_kwargs) as stream:
+                async for event in stream:
+                    if event.type == "message_start":
+                        yield ChatStreamChunk(
+                            input_tokens=event.message.usage.input_tokens
+                        )
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            yield ChatStreamChunk(text_delta=event.delta.text)
+                    elif event.type == "message_delta":
+                        yield ChatStreamChunk(output_tokens=event.usage.output_tokens)
 
 
 class AzureLlmEmbeddingClient:
