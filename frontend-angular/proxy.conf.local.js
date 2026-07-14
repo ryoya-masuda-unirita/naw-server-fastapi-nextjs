@@ -1,11 +1,16 @@
+// バックエンドの転送先。docker-compose経由で起動する場合、コンテナ間通信用のアドレス
+// （例: http://backend:8000）を環境変数BACKEND_PROXY_TARGETで注入する。未設定時は
+// ホストで直接 `npm start` する既存の運用に合わせ、localhost:8001にフォールバックする。
+const backendTarget = process.env.BACKEND_PROXY_TARGET || 'http://localhost:8001';
+
 module.exports = {
   '/api': {
-    target: 'http://localhost:8001',
+    target: backendTarget,
     secure: false,
     changeOrigin: true,
   },
   '/auth': {
-    target: 'http://localhost:8001',
+    target: backendTarget,
     secure: false,
     changeOrigin: true,
     // ブラウザのページナビゲーション（Accept: text/html）はAngularに返す
