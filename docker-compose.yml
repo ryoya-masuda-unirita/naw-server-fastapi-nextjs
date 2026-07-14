@@ -18,5 +18,19 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7
+    container_name: naw-fastapi-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - naw_fastapi_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   naw_fastapi_pgdata:
+  naw_fastapi_redisdata:
