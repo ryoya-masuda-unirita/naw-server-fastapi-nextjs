@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
+import fakeredis.aioredis
 import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.security import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.core.database import Base, get_session
+from app.core.redis_client import get_redis_client
 from app.main import app
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -110,7 +112,24 @@ def override_get_session(session):
 
 
 @pytest.fixture
-def client(override_get_session):
+async def fake_redis():
+    """fakeredis によるインメモリ Redis（テスト用）"""
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    yield redis
+    await redis.flushall()
+    await redis.aclose()
+
+
+@pytest.fixture
+def override_get_redis_client(fake_redis):
+    """get_redis_client の依存性をオーバーライド"""
+    app.dependency_overrides[get_redis_client] = lambda: fake_redis
+    yield
+    app.dependency_overrides.pop(get_redis_client, None)
+
+
+@pytest.fixture
+def client(override_get_session, override_get_redis_client):
     """ASGITransport を利用したテストクライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 

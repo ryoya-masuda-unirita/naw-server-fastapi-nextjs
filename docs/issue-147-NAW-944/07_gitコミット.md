@@ -8,7 +8,7 @@
 | 2 | ローカル開発用にRedisをdocker-composeへ追加 | `docker-compose.yml` |
 | 3 | Redisクライアントとセッションストアを追加 | `backend/pyproject.toml`, `backend/.env`, `backend/.env.example`, `backend/app/core/config.py`, `backend/app/core/redis_client.py`, `backend/app/core/session_store.py` |
 | 4 | 認証方式をセッションID Cookie＋Redis方式に置き換え | `backend/app/core/security.py`, `backend/app/routers/auth.py` |
-| 5 | 認証系テストをセッション方式に対応させる | `backend/tests/integration/conftest.py`, `backend/tests/integration/test_auth.py` |
+| 5 | 認証系テストをセッション方式に対応させる | `backend/tests/integration/conftest.py`, `backend/tests/integration/test_auth.py`, `backend/tests/unit/test_security.py`, `backend/tests/integration/test_users.py` |
 
 ## 各コミットメッセージ案
 
@@ -42,4 +42,5 @@
 #147 issue-147 NAW-944 認証系テストをセッション方式に対応させる
     - fakeredisによるテスト用Redisフィクスチャをconftest.pyに追加
     - Cookie名変更・セッションのRedis保存/削除を検証するテストケースに更新
+    - test_security.py・test_users.pyに残っていた旧Cookie方式（access_token）前提のテストを更新
 ```

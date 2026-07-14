@@ -5,17 +5,17 @@ import jwt
 from fastapi import Response
 
 from app.core.security import (
-    ACCESS_TOKEN_COOKIE_NAME,
-    clear_access_token_cookie,
+    clear_session_cookie,
     create_access_token,
     decode_token,
     hash_password,
-    set_access_token_cookie,
+    set_session_cookie,
     verify_password,
     verify_password_async,
     SECRET_KEY,
     ALGORITHM,
 )
+from app.core.session_store import SESSION_COOKIE_NAME
 
 
 class TestSecurityUtilities:
@@ -118,26 +118,26 @@ class TestVerifyPasswordAsync:
         assert await verify_password_async("WrongPassword", hashed) is False
 
 
-class TestAccessTokenCookie:
-    """認証トークンCookie発行・削除テスト"""
+class TestSessionCookie:
+    """セッションCookie発行・削除テスト"""
 
-    def test_set_access_token_cookie_sets_httponly_cookie(self):
+    def test_set_session_cookie_sets_httponly_cookie(self):
         """Cookieがhttponly・samesite=laxで設定されること"""
         response = Response()
 
-        set_access_token_cookie(response, "dummy-token")
+        set_session_cookie(response, "dummy-session-id")
 
         set_cookie_header = response.headers["set-cookie"]
-        assert f"{ACCESS_TOKEN_COOKIE_NAME}=dummy-token" in set_cookie_header
+        assert f"{SESSION_COOKIE_NAME}=dummy-session-id" in set_cookie_header
         assert "HttpOnly" in set_cookie_header
         assert "samesite=lax" in set_cookie_header.lower()
 
-    def test_clear_access_token_cookie_expires_cookie(self):
+    def test_clear_session_cookie_expires_cookie(self):
         """Cookie削除時に即時失効するSet-Cookieが設定されること"""
         response = Response()
 
-        clear_access_token_cookie(response)
+        clear_session_cookie(response)
 
         set_cookie_header = response.headers["set-cookie"]
-        assert ACCESS_TOKEN_COOKIE_NAME in set_cookie_header
+        assert SESSION_COOKIE_NAME in set_cookie_header
         assert "Max-Age=0" in set_cookie_header or "01 Jan 1970" in set_cookie_header
