@@ -14,6 +14,7 @@ class EndpointType(str, Enum):
     OPENAI_CHAT = "OPENAI_CHAT"
     OPENAI_WEB_SEARCH_CHAT = "OPENAI_WEB_SEARCH_CHAT"
     AZURE_OPENAI_EMBEDDING = "AZURE_OPENAI_EMBEDDING"
+    BEDROCK_CHAT = "BEDROCK_CHAT"
 
 
 class TenantEndpoint(SQLModel, table=True):

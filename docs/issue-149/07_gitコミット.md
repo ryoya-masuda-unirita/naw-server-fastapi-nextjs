@@ -8,7 +8,7 @@
 | 2 | Bedrock用のEndpointType追加とAnthropic SDK依存追加 | `backend/pyproject.toml`, `backend/app/models/tenant_endpoint.py`, `backend/app/models/ai_model.py` |
 | 3 | BedrockLlmChatClientとAIModelRepository.find_by_nameを追加 | `backend/app/core/llm_client.py`, `backend/app/repositories/ai_model_repository.py` |
 | 4 | チャットAPIの呼び出し分岐をマルチプロバイダ対応に一般化 | `backend/app/services/llm_chat_service.py`, `backend/seed.sql` |
-| 5 | Bedrock対応のテストを追加 | `backend/tests/unit/test_ai_model_repository.py`, `backend/tests/unit/test_llm_client.py`, `backend/tests/unit/test_llm_chat_service.py` |
+| 5 | Bedrock対応のテストを追加 | `backend/tests/integration/test_ai_model_repository.py`, `backend/tests/unit/test_llm_client.py`, `backend/tests/unit/test_llm_chat_service.py` |
 
 ## 各コミットメッセージ案
 
