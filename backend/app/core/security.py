@@ -2,23 +2,23 @@ import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
+import redis.asyncio as redis
 from fastapi import Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
+from app.core import session_store
 from app.core.config import get_settings
 from app.core.database import get_session
+from app.core.redis_client import get_redis_client
 from app.models.user import User, UserRole
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.user_repository import UserRepository
 
-# JWT 設定
+# JWT 設定（Authorizationヘッダーによるbearer認証のフォールバック経路用）
 SECRET_KEY = "your-secret-key-change-in-production"
 ALGORITHM = "HS512"
 ACCESS_TOKEN_EXPIRE_HOURS = 5
-
-# 認証トークンCookie設定
-ACCESS_TOKEN_COOKIE_NAME = "access_token"
 
 # パスワードハッシュ設定
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -86,28 +86,42 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    access_token: str | None = Cookie(default=None, alias=ACCESS_TOKEN_COOKIE_NAME),
+    session_id: str | None = Cookie(
+        default=None, alias=session_store.SESSION_COOKIE_NAME
+    ),
+    redis_client: redis.Redis = Depends(get_redis_client),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """認証済みユーザーを取得（/api/** の保護に使用）。
 
-    Cookie（`access_token`）を優先して認証し、Cookieが無い場合は
-    `Authorization: Bearer <token>` ヘッダーにフォールバックする。移植元
-    （Spring Boot + Spring Session）がCookieセッション認証を採用しており、
-    ブラウザ側もCookie送信前提のため、Cookieを優先経路とする。
+    セッションCookie（`session_id`）による認証を優先し、Cookieが無い・
+    セッションが見つからない場合のみ `Authorization: Bearer <token>` ヘッダーの
+    JWTにフォールバックする。移植元（Spring Boot + Spring Session + Redis）が
+    同様の優先順位（セッション認証が成立していればbearerトークンは検証しない）を
+    採用しているため、これに揃える。
 
     Args:
         credentials: Authorization ヘッダーから取得した Bearer トークン（任意）。
-        access_token: Cookie から取得したトークン（任意）。
+        session_id: Cookie から取得したセッションID（任意）。
+        redis_client: Redis 非同期クライアント。
         session: 非同期DBセッション。
 
     Returns:
         認証済みの User オブジェクト。
 
     Raises:
-        HTTPException: トークンが存在しない・不正、またはユーザーが存在しない場合 401 を返す。
+        HTTPException: セッション・トークンいずれでも認証できない場合 401 を返す。
     """
-    token = access_token or (credentials.credentials if credentials else None)
+    if session_id:
+        session_data = await session_store.get_session(session_id, redis_client)
+        if session_data is not None:
+            user = await UserRepository.find_by_login_id(
+                session_data["login_id"], session_data["tenant_id"], session
+            )
+            if user:
+                return user
+
+    token = credentials.credentials if credentials else None
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
@@ -131,35 +145,35 @@ async def get_current_user(
     return user
 
 
-def set_access_token_cookie(response: Response, token: str) -> None:
-    """認証トークンをHttpOnly Cookieとしてレスポンスに設定する。
+def set_session_cookie(response: Response, session_id: str) -> None:
+    """セッションIDをHttpOnly Cookieとしてレスポンスに設定する。
 
-    移植元（Spring Boot + Spring Session）がCookieセッション認証を採用しており、
-    frontend-angular側もCookie送信（withCredentials）前提で作られているため、
-    ブラウザ経由の認証を成立させるにはCookie発行が必要になる。
+    移植元（Spring Boot + Spring Session + Redis）がセッションCookie認証を
+    採用しており、frontend-angular側もCookie送信（withCredentials）前提で
+    作られているため、ブラウザ経由の認証を成立させるにはCookie発行が必要になる。
 
     Args:
         response: Cookieを設定する対象のレスポンス。
-        token: 設定するJWT文字列。
+        session_id: 設定するセッションID。
     """
     settings = get_settings()
     response.set_cookie(
-        key=ACCESS_TOKEN_COOKIE_NAME,
-        value=token,
-        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        key=session_store.SESSION_COOKIE_NAME,
+        value=session_id,
+        max_age=session_store.SESSION_TTL_SECONDS,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite=settings.cookie_same_site,
     )
 
 
-def clear_access_token_cookie(response: Response) -> None:
-    """認証トークンのCookieを削除する（ログアウト時に使用）。
+def clear_session_cookie(response: Response) -> None:
+    """セッションCookieを削除する（ログアウト時に使用）。
 
     Args:
         response: Cookieを削除する対象のレスポンス。
     """
-    response.delete_cookie(key=ACCESS_TOKEN_COOKIE_NAME)
+    response.delete_cookie(key=session_store.SESSION_COOKIE_NAME)
 
 
 def get_tenant_id_from_header(x_tenant_id: str) -> str:

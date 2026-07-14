@@ -1,4 +1,8 @@
+import json
+
 import pytest
+
+from app.core.session_store import SESSION_COOKIE_NAME
 
 
 @pytest.mark.asyncio
@@ -90,10 +94,10 @@ class TestAuthAPI:
 
         assert response.status_code == 422
 
-    async def test_post_auth_login_key_sets_access_token_cookie(
-        self, client, test_tenant, test_user_with_login_key
+    async def test_post_auth_login_key_sets_session_cookie_and_creates_session(
+        self, client, fake_redis, test_tenant, test_user_with_login_key
     ):
-        """POST /auth/login-key 成功時にaccess_token Cookieが発行されること"""
+        """POST /auth/login-key 成功時にsession_id Cookieが発行され、Redisにセッションが作られること"""
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
@@ -101,7 +105,13 @@ class TestAuthAPI:
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
-        assert "access_token" in response.cookies
+        assert SESSION_COOKIE_NAME in response.cookies
+        session_id = response.cookies[SESSION_COOKIE_NAME]
+        stored = await fake_redis.get(f"session:{session_id}")
+        assert stored is not None
+        payload = json.loads(stored)
+        assert payload["login_id"] == test_user_with_login_key.login_id
+        assert payload["tenant_id"] == test_tenant.id
 
     async def test_post_auth_logout(self, client):
         """POST /auth/logout"""
@@ -185,10 +195,10 @@ class TestAuthAPI:
 
         assert response.status_code == 401
 
-    async def test_post_auth_login_sets_access_token_cookie(
-        self, client, test_tenant, test_user_with_password
+    async def test_post_auth_login_sets_session_cookie_and_creates_session(
+        self, client, fake_redis, test_tenant, test_user_with_password
     ):
-        """POST /auth/login 成功時にaccess_token Cookieが発行されること"""
+        """POST /auth/login 成功時にsession_id Cookieが発行され、Redisにセッションが作られること"""
         async with client as c:
             response = await c.post(
                 "/auth/login",
@@ -199,12 +209,18 @@ class TestAuthAPI:
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
-        assert "access_token" in response.cookies
+        assert SESSION_COOKIE_NAME in response.cookies
+        session_id = response.cookies[SESSION_COOKIE_NAME]
+        stored = await fake_redis.get(f"session:{session_id}")
+        assert stored is not None
+        payload = json.loads(stored)
+        assert payload["login_id"] == test_user_with_password["user"].login_id
+        assert payload["tenant_id"] == test_tenant.id
 
-    async def test_post_auth_login_requires_password_reset_does_not_set_cookie(
+    async def test_post_auth_login_requires_password_reset_does_not_create_session(
         self, client, test_tenant, test_user_with_password
     ):
-        """初回パスワードリセットが必要な場合はaccess_token Cookieが発行されないこと"""
+        """初回パスワードリセットが必要な場合はsession_id Cookieもセッションも作られないこと"""
         test_user_with_password["user"].is_required_password_reset = True
 
         async with client as c:
@@ -218,28 +234,111 @@ class TestAuthAPI:
             )
 
         assert response.json()["loginStatus"] == "REQUIRES_PASSWORD_RESET"
-        assert "access_token" not in response.cookies
+        assert SESSION_COOKIE_NAME not in response.cookies
 
-    async def test_post_auth_logout_clears_access_token_cookie(self, client):
-        """POST /auth/logout でaccess_token Cookieが失効すること"""
-        async with client as c:
-            response = await c.post("/auth/logout")
-
-        set_cookie_header = response.headers.get("set-cookie", "")
-        assert "access_token=" in set_cookie_header
-
-    async def test_get_api_auth_with_cookie_only(
-        self, client, test_tenant, valid_jwt_token
+    async def test_post_auth_logout_deletes_session_and_clears_cookie(
+        self, client, fake_redis, test_tenant, test_user_with_password
     ):
-        """GET /api/auth をCookieのみで認証できること"""
+        """ログアウトでRedis上のセッションが削除され、Cookieが失効すること"""
         async with client as c:
-            c.cookies.set("access_token", valid_jwt_token)
+            login_response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            session_id = login_response.cookies[SESSION_COOKIE_NAME]
+
+            logout_response = await c.post("/auth/logout")
+
+        assert await fake_redis.get(f"session:{session_id}") is None
+        set_cookie_header = logout_response.headers.get("set-cookie", "")
+        assert f"{SESSION_COOKIE_NAME}=" in set_cookie_header
+
+    async def test_get_api_auth_with_session_cookie_only(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """session_id Cookieのみで保護APIを認証できること"""
+        async with client as c:
+            login_response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
             response = await c.get(
                 "/api/auth",
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
+        assert login_response.status_code == 200
         assert response.status_code == 200
+
+    async def test_get_api_auth_after_session_deleted_returns_401(
+        self, client, fake_redis, test_tenant, test_user_with_password
+    ):
+        """Redis上のセッションが失効した場合、同じCookieでは401になること"""
+        async with client as c:
+            login_response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            session_id = login_response.cookies[SESSION_COOKIE_NAME]
+            await fake_redis.delete(f"session:{session_id}")
+
+            response = await c.get(
+                "/api/auth",
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 401
+
+    async def test_get_api_auth_with_bearer_fallback_when_no_session_cookie(
+        self, client, test_tenant, valid_jwt_token
+    ):
+        """session_id CookieなしでもAuthorizationヘッダーのJWTで認証できること（フォールバック）"""
+        async with client as c:
+            response = await c.get(
+                "/api/auth",
+                headers={
+                    "Authorization": f"Bearer {valid_jwt_token}",
+                    "X-Tenant-ID": test_tenant.id,
+                },
+            )
+
+        assert response.status_code == 200
+
+    async def test_post_auth_login_uses_configured_same_site(
+        self, client, monkeypatch, test_tenant, test_user_with_password
+    ):
+        """COOKIE_SAME_SITE環境変数で設定した値がSet-CookieのSameSite属性に反映されること"""
+        from app.core import config
+
+        monkeypatch.setenv("COOKIE_SAME_SITE", "none")
+        monkeypatch.setenv("COOKIE_SECURE", "true")
+        config.get_settings.cache_clear()
+
+        async with client as c:
+            response = await c.post(
+                "/auth/login",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        config.get_settings.cache_clear()
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "samesite=none" in set_cookie_header.lower()
 
     async def test_get_api_auth_without_cookie_or_header_returns_401(
         self, client, test_tenant

@@ -105,7 +105,7 @@ def user_headers(user_token, tenant):
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session, override_get_redis_client):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -542,16 +542,19 @@ class TestProfile:
 
         assert response.status_code == 200
 
-    async def test_get_profile_with_cookie_only(
-        self, client, user_token, tenant, normal_user
-    ):
-        """GET /api/users/profile をCookieのみで認証できること"""
+    async def test_get_profile_with_cookie_only(self, client, tenant, normal_user):
+        """GET /api/users/profile をセッションCookieのみで認証できること"""
         async with client as c:
-            c.cookies.set("access_token", user_token)
+            login_response = await c.post(
+                "/auth/login",
+                json={"username": normal_user.login_id, "password": "UserPass1!"},
+                headers={"X-Tenant-ID": tenant.id},
+            )
             response = await c.get(
                 "/api/users/profile",
                 headers={"X-Tenant-ID": tenant.id},
             )
 
+        assert login_response.status_code == 200
         assert response.status_code == 200
         assert response.json()["loginId"] == normal_user.login_id

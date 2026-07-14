@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -13,7 +13,24 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str
     cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    cookie_same_site: Literal["lax", "strict", "none"] = Field(
+        default="lax", alias="COOKIE_SAME_SITE"
+    )
     file_storage_root: str = Field(default="./data/files", alias="FILE_STORAGE_ROOT")
+
+    @model_validator(mode="after")
+    def _validate_cookie_same_site_requires_secure(self) -> "Settings":
+        """`SameSite=None`は`Secure`が伴わないとブラウザに拒否されるため整合性を検証する。
+
+        Raises:
+            ValueError: `cookie_same_site`が`none`なのに`cookie_secure`が`False`の場合。
+        """
+        if self.cookie_same_site == "none" and not self.cookie_secure:
+            raise ValueError(
+                "COOKIE_SAME_SITE=none には COOKIE_SECURE=true が必須です"
+                "（SameSite=NoneのみだとブラウザがCookieを拒否します）"
+            )
+        return self
 
 
 class CorsSettings(BaseSettings):
@@ -106,6 +123,22 @@ class LlmCreditSettings(BaseSettings):
     input_credit_weight: float = Field(default=1 / 3, alias="INPUT_CREDIT_WEIGHT")
 
 
+class RedisSettings(BaseSettings):
+    """Redis接続設定。
+
+    `Settings` とは別クラスにする。理由は`CorsSettings`と同様（Redisを使わない
+    単体テスト等で`app.main`をインポートするだけで必須値エラーになるのを防ぐため）。
+    移植元Java版の`spring.data.redis.host`/`port`（環境変数`REDIS_HOST`/`REDIS_PORT`）に
+    対応するが、`redis-py`の慣例に合わせて接続文字列1本（`REDIS_URL`）にまとめる。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    redis_url: str = Field(default="redis://localhost:6380/0", alias="REDIS_URL")
+
+
 class AzureOpenAISettings(BaseSettings):
     """Azure OpenAI API呼び出し用のアプリ共通設定。
 
@@ -146,3 +179,8 @@ def get_llm_credit_settings() -> LlmCreditSettings:
 @lru_cache
 def get_azure_openai_settings() -> AzureOpenAISettings:
     return AzureOpenAISettings()
+
+
+@lru_cache
+def get_redis_settings() -> RedisSettings:
+    return RedisSettings()
