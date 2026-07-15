@@ -26,7 +26,7 @@ DEFAULT_PAGE_SIZE = 20
 async def get_prompt_templates(
     search: str | None = Query(None),
     page: int = Query(0, ge=0),
-    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=100),
+    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=1000),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -48,7 +48,7 @@ async def get_admin_prompt_templates(
     team: str | None = Query(None),
     exclude_group_id: str | None = Query(None, alias="excludeGroupId"),
     page: int = Query(0, ge=0),
-    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=100),
+    size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=1000),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),

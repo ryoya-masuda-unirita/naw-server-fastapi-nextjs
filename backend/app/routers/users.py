@@ -27,7 +27,7 @@ user_router = APIRouter(prefix="/api/users", tags=["users"])
 async def get_users(
     x_tenant_id: str = Depends(get_verified_tenant_id),
     page: int = Query(0, ge=0),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=1000),
     sort: str = Query("created_at,desc"),
     searchText: str | None = Query(None),
     role: str | None = Query(None),
