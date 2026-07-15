@@ -1,3 +1,5 @@
+import math
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant_endpoint import EndpointType
@@ -19,6 +21,7 @@ from app.schemas.feedback import (
     FeedbackUserInfo,
     FeedbackUserItemResponse,
     FeedbackUserListRequest,
+    FeedbackUserListResponse,
     PagedFeedbackMessageResponse,
     PagedFeedbackRoomResponse,
     PagedFeedbackUserResponse,
@@ -127,12 +130,16 @@ class FeedbackService:
             for row in rows
         ]
 
+        total_pages = math.ceil(total / query.size) if query.size > 0 else 0
+
         return FeedbackMessageListResponse(
             feedbacks=PagedFeedbackMessageResponse(
                 content=content,
                 totalElements=total,
                 number=query.page,
                 size=query.size,
+                totalPages=total_pages,
+                numberOfElements=len(content),
             ),
             assistantIdToServerMap=assistant_id_to_server_map,
         )
@@ -140,7 +147,7 @@ class FeedbackService:
     @staticmethod
     async def get_feedback_users(
         tenant_id: str, query: FeedbackUserListRequest, session: AsyncSession
-    ) -> PagedFeedbackUserResponse:
+    ) -> FeedbackUserListResponse:
         """テナント内のフィードバックユーザー一覧を取得する。
 
         Args:
@@ -184,11 +191,17 @@ class FeedbackService:
             for row in rows
         ]
 
-        return PagedFeedbackUserResponse(
-            content=content,
-            totalElements=total,
-            number=query.page,
-            size=query.size,
+        total_pages = math.ceil(total / query.size) if query.size > 0 else 0
+
+        return FeedbackUserListResponse(
+            feedbacks=PagedFeedbackUserResponse(
+                content=content,
+                totalElements=total,
+                number=query.page,
+                size=query.size,
+                totalPages=total_pages,
+                numberOfElements=len(content),
+            )
         )
 
     @staticmethod
@@ -229,11 +242,15 @@ class FeedbackService:
             for row in rows
         ]
 
+        total_pages = math.ceil(total / query.size) if query.size > 0 else 0
+
         return FeedbackRoomListResponse(
             feedbacks=PagedFeedbackRoomResponse(
                 content=content,
                 totalElements=total,
                 number=query.page,
                 size=query.size,
+                totalPages=total_pages,
+                numberOfElements=len(content),
             )
         )
