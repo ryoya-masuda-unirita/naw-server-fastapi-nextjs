@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1200" viewBox="0 0 1920 1200">
+  <defs>
+    <style>
+      .tx{font-family:"Hiragino Sans","Yu Gothic",sans-serif;fill:#162238}.title{font-size:34px;font-weight:700}.sub{font-size:18px;fill:#596b82}.section{font-size:21px;font-weight:700;fill:#fff}.h{font-size:22px;font-weight:700}.p{font-size:18px}.small{font-size:16px}.tiny{font-size:14px}.shell{fill:#f7faff;stroke:#285783;stroke-width:2.5}.vpc{fill:#f8fffa;stroke:#23864d;stroke-width:2.5}.az{fill:#f7faff;stroke:#4f86c3;stroke-width:2.3;stroke-dasharray:9 6}.public{fill:#fffaf0;stroke:#dc9c23;stroke-width:2}.private{fill:#f4fff6;stroke:#48a369;stroke-width:2}.card{fill:#fff;stroke:#315f91;stroke-width:2.5}.compute{fill:#fff9ef;stroke:#ed8b16;stroke-width:2.5}.db{fill:#f7f4ff;stroke:#6854bd;stroke-width:2.5}.cache{fill:#effbf9;stroke:#258b81;stroke-width:2.5}.orange{fill:#ed7d0c}.green{fill:#2d913d}.purple{fill:#7554d9}.pink{fill:#d64069}.navy{fill:#194b79}.icon{font-family:Arial,sans-serif;font-size:16px;font-weight:700;fill:#fff;text-anchor:middle}.data{fill:none;stroke:#263a55;stroke-width:3;marker-end:url(#arrow)}.egress{fill:none;stroke:#b06b10;stroke-width:3;marker-end:url(#arrowGold)}.deploy{fill:none;stroke:#58708c;stroke-width:3;stroke-dasharray:10 8;marker-end:url(#arrowGray)}.manage{fill:none;stroke:#7655d8;stroke-width:3;stroke-dasharray:10 8;marker-end:url(#arrowPurple)}.repl{fill:none;stroke:#7b5bbd;stroke-width:3;stroke-dasharray:9 7;marker-end:url(#arrowPurple)}.replcache{fill:none;stroke:#218b80;stroke-width:3;stroke-dasharray:9 7;marker-end:url(#arrowTeal)}.legend{fill:#f5f8fc;stroke:#8ca6c2;stroke-width:1.5}.pill{fill:#e7f1ff;stroke:#4b82bd;stroke-width:1.2}.good{fill:#ddf6e6;stroke:#2b9858;stroke-width:1.2}.portdb{fill:#eee9ff;stroke:#6854bd;stroke-width:1.2}.portcache{fill:#ddf6f2;stroke:#258b81;stroke-width:1.2}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#263a55"/></marker>
+    <marker id="arrowGold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b06b10"/></marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#58708c"/></marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7655d8"/></marker>
+    <marker id="arrowTeal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#218b80"/></marker>
+  </defs>
+  <rect width="1920" height="1200" fill="#fff"/>
+  <text class="tx title" x="55" y="55">ベストプラクティス構成（本番相当・参考）</text>
+  <text class="tx sub" x="55" y="84">Multi-AZ / プライベートサブネット / AZごとのNAT Gateway / SSM Session Manager</text>
+
+  <rect class="shell" x="50" y="108" width="1820" height="135" rx="14"/>
+  <rect class="navy" x="50" y="108" width="220" height="38" rx="12"/>
+  <text class="tx section" x="75" y="135">インターネット</text>
+  <rect class="card" x="145" y="160" width="320" height="58" rx="9"/>
+  <text class="tx h" x="305" y="197" text-anchor="middle">利用者のブラウザ</text>
+  <rect class="card" x="1430" y="150" width="350" height="72" rx="9"/>
+  <text class="tx h" x="1605" y="180" text-anchor="middle">作業者</text>
+  <text class="tx small" x="1605" y="206" text-anchor="middle">SSM Session Manager経由 / SSH鍵不要</text>
+
+  <rect class="card" x="650" y="270" width="620" height="102" rx="12"/>
+  <rect class="purple" x="650" y="270" width="90" height="102" rx="12"/>
+  <text class="icon" x="695" y="330">CF</text>
+  <text class="tx h" x="770" y="309">CloudFront（グローバル）</text>
+  <text class="tx small" x="770" y="339">default: /* → S3　　/api/*, /auth/* → ALB</text>
+
+  <rect class="shell" x="50" y="405" width="1820" height="720" rx="14"/>
+  <rect class="navy" x="50" y="405" width="455" height="40" rx="12"/>
+  <text class="tx section" x="75" y="433">AWSアカウント（ap-northeast-1）</text>
+
+  <rect class="compute" x="90" y="485" width="305" height="95" rx="11"/>
+  <rect class="green" x="90" y="485" width="72" height="95" rx="11"/>
+  <text class="icon" x="126" y="541">S3</text>
+  <text class="tx h" x="185" y="523">S3</text>
+  <text class="tx small" x="185" y="552">frontend静的ホスティング</text>
+
+  <rect class="compute" x="90" y="850" width="305" height="95" rx="11"/>
+  <rect class="orange" x="90" y="850" width="72" height="95" rx="11"/>
+  <text class="icon" x="126" y="906">ECR</text>
+  <text class="tx h" x="185" y="888">ECR</text>
+  <text class="tx small" x="185" y="917">ECSイメージリポジトリ</text>
+
+  <rect class="card" x="1485" y="485" width="335" height="95" rx="11"/>
+  <rect class="pink" x="1485" y="485" width="72" height="95" rx="11"/>
+  <text class="icon" x="1521" y="541">SSM</text>
+  <text class="tx h" x="1580" y="523">Systems Manager</text>
+  <text class="tx small" x="1580" y="552">Session Manager</text>
+
+  <rect class="card" x="1510" y="820" width="285" height="82" rx="10"/>
+  <text class="tx h" x="1652" y="853" text-anchor="middle">Internet Gateway</text>
+  <text class="tx small" x="1652" y="880" text-anchor="middle">NAT #1 / #2 の出口</text>
+
+  <rect class="vpc" x="430" y="460" width="1010" height="620" rx="14"/>
+  <text class="tx h" x="460" y="497">VPC</text>
+  <rect class="good" x="1240" y="472" width="175" height="29" rx="14"/>
+  <text class="tx small" x="1327" y="492" text-anchor="middle">Multi-AZ 冗長構成</text>
+
+  <rect class="card" x="640" y="515" width="590" height="82" rx="11"/>
+  <rect class="purple" x="640" y="515" width="80" height="82" rx="11"/>
+  <text class="icon" x="680" y="564">ALB</text>
+  <text class="tx h" x="748" y="547">ALB（2AZにまたがる）</text>
+  <text class="tx small" x="748" y="574">ACM証明書 / HTTPS終端</text>
+
+  <rect class="az" x="465" y="650" width="430" height="255" rx="12"/>
+  <text class="tx h" x="490" y="663">AZ: ap-northeast-1a</text>
+  <rect class="public" x="490" y="680" width="380" height="80" rx="10"/>
+  <text class="tx small" x="510" y="704">パブリックサブネット</text>
+  <rect class="compute" x="615" y="692" width="230" height="54" rx="9"/>
+  <text class="tx h" x="730" y="716" text-anchor="middle">NAT Gateway #1</text>
+  <text class="tx small" x="730" y="739" text-anchor="middle">→ Internet Gateway</text>
+  <rect class="private" x="490" y="785" width="380" height="95" rx="10"/>
+  <text class="tx small" x="510" y="809">プライベートサブネット</text>
+  <rect class="compute" x="515" y="830" width="330" height="48" rx="9"/>
+  <text class="tx h" x="680" y="861" text-anchor="middle">ECSタスク #1</text>
+
+  <rect class="az" x="975" y="650" width="430" height="255" rx="12"/>
+  <text class="tx h" x="1000" y="663">AZ: ap-northeast-1c</text>
+  <rect class="public" x="1000" y="680" width="380" height="80" rx="10"/>
+  <text class="tx small" x="1020" y="704">パブリックサブネット</text>
+  <rect class="compute" x="1125" y="692" width="230" height="54" rx="9"/>
+  <text class="tx h" x="1240" y="716" text-anchor="middle">NAT Gateway #2</text>
+  <text class="tx small" x="1240" y="739" text-anchor="middle">→ Internet Gateway</text>
+  <rect class="private" x="1000" y="785" width="380" height="95" rx="10"/>
+  <text class="tx small" x="1020" y="809">プライベートサブネット</text>
+  <rect class="compute" x="1025" y="830" width="330" height="48" rx="9"/>
+  <text class="tx h" x="1190" y="861" text-anchor="middle">ECSタスク #2</text>
+
+  <!-- logical connection point prevents four application lines from crossing -->
+  <rect class="card" x="815" y="915" width="240" height="42" rx="10"/>
+  <text class="tx small" x="935" y="941" text-anchor="middle">アプリ接続先（5432 / 6379）</text>
+
+  <!-- data services are shown as cross-AZ logical groups -->
+  <rect class="private" x="465" y="975" width="940" height="85" rx="11"/>
+  <text class="tx small" x="485" y="997">データ層（2AZ配置）</text>
+  <rect class="db" x="490" y="1002" width="430" height="45" rx="8"/>
+  <text class="tx h" x="510" y="1031">RDS :5432</text>
+  <rect class="portdb" x="680" y="1010" width="105" height="28" rx="14"/><text class="tx tiny" x="732" y="1029" text-anchor="middle">Primary 1a</text>
+  <path class="repl" d="M787 1024H817"/>
+  <rect class="portdb" x="819" y="1010" width="90" height="28" rx="14"/><text class="tx tiny" x="864" y="1029" text-anchor="middle">Standby 1c</text>
+  <rect class="cache" x="950" y="1002" width="430" height="45" rx="8"/>
+  <text class="tx h" x="970" y="1031">Redis :6379</text>
+  <rect class="portcache" x="1165" y="1010" width="105" height="28" rx="14"/><text class="tx tiny" x="1217" y="1029" text-anchor="middle">Primary 1a</text>
+  <path class="replcache" d="M1272 1024H1310"/>
+  <rect class="portcache" x="1312" y="1010" width="58" height="28" rx="14"/><text class="tx tiny" x="1341" y="1029" text-anchor="middle">Replica</text>
+
+  <!-- user origins -->
+  <path class="data" d="M305 218V270H650"/>
+  <path class="data" d="M790 372V455H395V485"/>
+  <path class="data" d="M950 372V515"/>
+
+  <!-- ALB fan-out uses its own lane -->
+  <path class="data" d="M820 597V640H455V854H515"/>
+  <path class="data" d="M1050 597V640H1415V854H1355"/>
+
+  <!-- both ECS tasks connect to one logical connection point, then to both data services -->
+  <path class="data" d="M680 878V895H875V915"/>
+  <path class="data" d="M1190 878V895H995V915"/>
+  <path class="data" d="M885 957V965H650V1002"/>
+  <path class="data" d="M985 957V965H1100V1002"/>
+
+  <!-- private subnet outbound routes terminate at the same-AZ NAT -->
+  <path class="egress" d="M845 830V780H730V746"/>
+  <path class="egress" d="M1355 830V780H1240V746"/>
+
+  <!-- ECR pull and SSM access each have a separate non-data-plane lane -->
+  <path class="deploy" d="M395 897H420V625H440V842H515"/>
+  <path class="deploy" d="M420 625H1430V800H1390V842H1355"/>
+  <path class="data" d="M1605 222V485"/>
+  <path class="manage" d="M1485 545H1460V610H930V842H845"/>
+
+  <rect class="legend" x="50" y="1145" width="1820" height="42" rx="8"/>
+  <line x1="78" y1="1166" x2="138" y2="1166" stroke="#263a55" stroke-width="3"/><text class="tx small" x="152" y="1172">アプリ通信</text>
+  <line x1="340" y1="1166" x2="400" y2="1166" stroke="#b06a10" stroke-width="3"/><text class="tx small" x="414" y="1172">NATアウトバウンド</text>
+  <line x1="705" y1="1166" x2="765" y2="1166" stroke="#58708c" stroke-width="3" stroke-dasharray="10 8"/><text class="tx small" x="779" y="1172">image pull</text>
+  <line x1="975" y1="1166" x2="1035" y2="1166" stroke="#7655d8" stroke-width="3" stroke-dasharray="10 8"/><text class="tx small" x="1049" y="1172">SSM / レプリケーション</text>
+  <rect class="good" x="1390" y="1152" width="455" height="28" rx="14"/><text class="tx small" x="1617" y="1172" text-anchor="middle">本番相当: Multi-AZ / private / NAT×2 / SSM</text>
+</svg>
