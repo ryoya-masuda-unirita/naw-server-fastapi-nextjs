@@ -1,1 +1,2 @@
-db_password = "changeme"
+db_password       = "changeme"
+allowed_ssh_cidrs = ["xxx.xxx.xxx.xx/32",]
