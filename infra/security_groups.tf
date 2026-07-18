@@ -50,4 +50,81 @@ resource "aws_security_group_rule" "alb_http_in_cloudfront" {
   security_group_id = aws_security_group.alb.id
 }
 
+resource "aws_security_group" "ecs" {
+  name        = "${var.project_name}-sg-ecs"
+  description = "ECS task access from alb"
+  vpc_id      = aws_vpc.main.id
+
+  tags = {
+    Name    = "${var.project_name}-sg-ecs"
+    Project = var.project_name
+  }
+}
+
+resource "aws_security_group_rule" "ecs_http_in_alb" {
+  type      = "ingress"
+  from_port = 8000
+  to_port   = 8000
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.ecs.id
+  // 送信元
+  source_security_group_id = aws_security_group.alb.id
+}
+
+// rds
+resource "aws_security_group" "rds" {
+  name        = "${var.project_name}-sg-rds"
+  description = "RDS access from ecs and bastion"
+  vpc_id      = aws_vpc.main.id
+
+  tags = {
+    Name    = "${var.project_name}-sg-rds"
+    Project = var.project_name
+  }
+}
+
+resource "aws_security_group_rule" "rds_postgres_in_ecs" {
+  type      = "ingress"
+  from_port = 5432
+  to_port   = 5432
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.rds.id
+  // 送信元
+  source_security_group_id = aws_security_group.ecs.id
+}
+
+resource "aws_security_group_rule" "rds_postgres_in_bastion" {
+  type      = "ingress"
+  from_port = 5432
+  to_port   = 5432
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.rds.id
+  // 送信元
+  source_security_group_id = aws_security_group.bastion.id
+}
+
+resource "aws_security_group" "elasticache" {
+  name        = "${var.project_name}-sg-elasticache"
+  description = "Elasticache access from ecs"
+  vpc_id      = aws_vpc.main.id
+
+  tags = {
+    Name    = "${var.project_name}-sg-elasticache"
+    Project = var.project_name
+  }
+}
+
+resource "aws_security_group_rule" "elasticache_redis_in_ecs" {
+  type      = "ingress"
+  from_port = 6379
+  to_port   = 6379
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.elasticache.id
+  // 送信元
+  source_security_group_id = aws_security_group.ecs.id
+}
 
