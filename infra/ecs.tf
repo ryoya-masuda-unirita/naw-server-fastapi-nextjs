@@ -160,3 +160,30 @@ resource "aws_ecs_task_definition" "backend" {
     Project = var.project_name
   }
 }
+
+// タスク定義を実際に起動し続け、ALBターゲットグループに紐付けるサービス
+resource "aws_ecs_service" "backend" {
+  name            = "${var.project_name}-backend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.backend.arn
+  desired_count   = 1
+
+  // Issue #158で1台構成+ホストポート固定によるデプロイのデッドロックを経験したため0にする
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
+
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.main.name
+    // 1台構成なのでweight=1で固定
+    weight = 1
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.backend.arn
+    container_name   = "backend"
+    container_port   = 8000
+  }
+
+  // ALBリスナーが先に作られていないと登録に失敗するため明示的に依存を指定
+  depends_on = [aws_lb_listener.http]
+}
