@@ -68,3 +68,24 @@ resource "aws_autoscaling_group" "ecs" {
     propagate_at_launch = true
   }
 }
+
+// ASGをECSクラスタが使える計算資源として登録する
+resource "aws_ecs_capacity_provider" "main" {
+  name = "${var.project_name}-cp"
+
+  auto_scaling_group_provider {
+    auto_scaling_group_arn = aws_autoscaling_group.ecs.arn
+
+    // ASGの利用率が100%に達するまでスケールアウトしない設定（今回はmin=max=1固定なので実質影響なし）
+    managed_scaling {
+      status          = "ENABLED"
+      target_capacity = 100
+    }
+  }
+}
+
+// クラスタに上記のCapacity Providerを紐付ける
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name       = aws_ecs_cluster.main.name
+  capacity_providers = [aws_ecs_capacity_provider.main.name]
+}
