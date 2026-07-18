@@ -99,3 +99,64 @@ resource "aws_cloudwatch_log_group" "backend" {
     Project = var.project_name
   }
 }
+
+// backendコンテナの｢タスク定義｣。DB・Redis接続情報や各種設定を環境変数として渡す
+resource "aws_ecs_task_definition" "backend" {
+  family = "${var.project_name}-backend"
+  // EC2モードで実行するため、bridgeモードを指定
+  network_mode             = "bridge"
+  requires_compatibilities = ["EC2"]
+  // ECSタスク実行ロールを指定
+  execution_role_arn = aws_iam_role.ecs_task_execution.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "backend"
+      image     = "${aws_ecr_repository.backend.repository_url}:latest"
+      memory    = 128
+      essential = true
+
+      portMappings = [
+        {
+          // コンテナ内のポート8000をホストの8000番ポートにマッピングする
+          containerPort = 8000
+          // ホストの8000番ポートにマッピングする
+          hostPort = 8000
+          protocol = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgresql+asyncpg://${aws_db_instance.main.username}:${var.db_password}@${aws_db_instance.main.address}:5432/${aws_db_instance.main.db_name}"
+        },
+        {
+          name  = "REDIS_URL"
+          value = "redis://${aws_elasticache_replication_group.main.primary_endpoint_address}:6379/0"
+        },
+        { name = "SECRET_KEY", value = var.secret_key },
+        { name = "COOKIE_SECURE", value = "true" },
+        { name = "COOKIE_SAME_SITE", value = "lax" },
+        { name = "CORS_ALLOWED_ORIGINS", value = "" },
+        {
+          name  = "CORS_ALLOWED_ORIGIN_REGEX"
+          value = "https://([a-z0-9-]+\\.)?${replace(var.domain_name, ".", "\\.")}"
+        },
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "backend"
+        }
+      }
+    }
+  ])
+  tags = {
+    Name    = "${var.project_name}-backend-task"
+    Project = var.project_name
+  }
+}
