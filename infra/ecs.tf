@@ -89,3 +89,13 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   cluster_name       = aws_ecs_cluster.main.name
   capacity_providers = [aws_ecs_capacity_provider.main.name]
 }
+
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.project_name}-backend"
+  retention_in_days = 7
+
+  tags = {
+    Name    = "${var.project_name}-backend-logs"
+    Project = var.project_name
+  }
+}
