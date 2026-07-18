@@ -46,18 +46,19 @@ resource "aws_autoscaling_group" "ecs" {
   vpc_zone_identifier = [for s in aws_subnet.public : s.id]
   min_size            = 1
   max_size            = 1
-  // 
+  // 常に1台だけ維持する（学習・コスト重視のため、min/max/desired全て1で固定）
   desired_capacity = 1
 
-  // 
+  // 起動時に使うテンプレートを指定。$Latestで常に最新バージョンのLaunch Templateを使う
   launch_template {
     id      = aws_launch_template.ecs.id
     version = "$Latest"
   }
 
   tag {
-    key                 = "Name"
-    value               = "${var.project_name}-ecs-instance"
+    key   = "Name"
+    value = "${var.project_name}-ecs-instance"
+    // trueにすると、このタグがASGが起動する各EC2インスタンスにも自動で付与される
     propagate_at_launch = true
   }
 
