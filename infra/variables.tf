@@ -10,7 +10,8 @@ variable "project_name" {
 }
 
 variable "db_password" {
-  type      = string
+  type = string
+  // シークレットなデータを扱う場合はsensitive = trueを指定する
   sensitive = true
 }
 
@@ -32,4 +33,10 @@ variable "key_pair_name" {
 variable "domain_name" {
   type        = string
   description = "ムームードメインで取得したドメイン名"
+}
+
+variable "secret_key" {
+  type        = string
+  sensitive   = true
+  description = "backendのSECRET_KEY"
 }
