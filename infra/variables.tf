@@ -23,3 +23,8 @@ variable "allowed_admin_cidrs" {
   type        = list(string)
   description = "管理サーバーへの接続を許可するCIDRブロックのリスト"
 }
+
+variable "key_pair_name" {
+  type        = string
+  description = "bastionへのSSH接続に使うキーペア名"
+}
