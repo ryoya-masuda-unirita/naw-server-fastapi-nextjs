@@ -28,3 +28,8 @@ variable "key_pair_name" {
   type        = string
   description = "bastionへのSSH接続に使うキーペア名"
 }
+
+variable "domain_name" {
+  type        = string
+  description = "ムームードメインで取得したドメイン名"
+}
