@@ -41,3 +41,29 @@ data "aws_ssm_parameter" "ecs_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id"
 }
 
+resource "aws_autoscaling_group" "ecs" {
+  name                = "${var.project_name}-ecs-asg"
+  vpc_zone_identifier = [for s in aws_subnet.public : s.id]
+  min_size            = 1
+  max_size            = 1
+  // 
+  desired_capacity = 1
+
+  // 
+  launch_template {
+    id      = aws_launch_template.ecs.id
+    version = "$Latest"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${var.project_name}-ecs-instance"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Project"
+    value               = var.project_name
+    propagate_at_launch = true
+  }
+}
