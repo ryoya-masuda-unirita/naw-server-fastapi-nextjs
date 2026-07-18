@@ -52,6 +52,39 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+// privateルートテーブル
+resource "aws_subnet" "private" {
+  for_each = {
+    "1a" = "10.0.11.0/24"
+    "1c" = "10.0.12.0/24"
+  }
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = each.value
+  availability_zone = "ap-northeast-${each.key}"
+  tags = {
+    Name           = "${var.project_name}-private-${each.key}"
+    Project        = var.project_name
+    RouteTableType = "private"
+  }
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  # routeブロックなし＝localルートのみ
+
+  tags = {
+    Name    = "${var.project_name}-private-rt"
+    Project = var.project_name
+  }
+}
+
+// サブネットとルートテーブルを紐づける
+resource "aws_route_table_association" "private" {
+  for_each       = aws_subnet.private
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
+}
+
 
 
 
