@@ -7,22 +7,37 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-resource "aws_iam_role" "ecs_task_execution" {
-  name = "${var.project_name}-ecs-task-execution-role"
+resource "aws_launch_template" "ecs" {
+  name_prefix = "${var.project_name}-ecs-"
+  // SSMパラメータストアからECS最適化AMIの最新IDを取得する
+  image_id      = data.aws_ssm_parameter.ecs_ami.value
+  instance_type = "t4g.nano"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      }
-    }]
-  })
+  // このテンプレートで起動するEC2に、iam.tfで作ったインスタンスプロファイル(ecs_instanceロール入り)をアタッチする。
+  // これがないとEC2上のECSエージェントがクラスタと通信する権限を持てず、クラスタに参加できない。
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ecs.name
+  }
+
+  vpc_security_group_ids = [aws_security_group.ecs.id]
+
+  // EC2起動時に実行するスクリプト。このEC2がどのECSクラスタに参加するかをecs.configに書き込む
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    echo ECS_CLUSTER=${aws_ecs_cluster.main.name} >> /etc/ecs/ecs.config
+  EOF
+  )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name    = "${var.project_name}-ecs-instance"
+      Project = var.project_name
+    }
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+data "aws_ssm_parameter" "ecs_ami" {
+  name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id"
 }
+
