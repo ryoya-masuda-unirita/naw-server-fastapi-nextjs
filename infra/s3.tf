@@ -2,6 +2,9 @@
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.project_name}-frontend"
 
+  // 中身が空でないとterraform destroyが失敗するため、destroy時にオブジェクトごと削除させる
+  force_destroy = true
+
   tags = {
     Name    = "${var.project_name}-frontend"
     Project = var.project_name
