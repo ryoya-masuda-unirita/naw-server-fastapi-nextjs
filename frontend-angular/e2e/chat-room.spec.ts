@@ -27,10 +27,18 @@ function getRoomLink(page: Page, roomName: string) {
 
 async function openRoomMenu(page: Page, roomName: string): Promise<void> {
   const room = getRoomLink(page, roomName);
+  const menuButton = room.getByLabel('操作メニュー');
   // サイドバーのチャット一覧は縦スクロールするため、ホバー前に対象行を表示領域に入れる
   await room.scrollIntoViewIfNeeded();
-  await room.hover();
-  await room.getByLabel('操作メニュー').click();
+
+  // group-hoverでのボタン表示は、並列実行時の負荷でCSSの:hover反映が遅れて
+  // 一度で表示されないことがあるため、表示されるまでhoverをリトライする
+  await expect(async () => {
+    await room.hover();
+    await expect(menuButton).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+
+  await menuButton.click();
   // メニューは開閉アニメーションを伴うため、安定表示を待ってから操作する
   await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).waitFor({ state: 'visible' });
 }
