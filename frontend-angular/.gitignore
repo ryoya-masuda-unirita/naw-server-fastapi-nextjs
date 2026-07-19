@@ -52,6 +52,7 @@ src/environments/environment.local.ts
 
 # Playwright
 .playwright-cli
+/playwright-report
 
 # CI用テストレポート出力
 /test-results
