@@ -224,8 +224,8 @@ __marimo__/
 node_modules/
 
 # Terraform
-infra/.terraform/
-infra/*.tfstate
-infra/*.tfstate.*
-infra/*.tfvars
-!infra/*.tfvars.example
+**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/*.tfvars
+!infra/**/*.tfvars.example

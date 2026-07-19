@@ -116,7 +116,7 @@ resource "aws_cloudfront_distribution" "main" {
 // aliasはIPの代わりにAWSリソース（ここではCloudFront）を直接指定でき、ルートドメインにも使えて追加料金もない。
 // これでドメイン本体へのアクセスがCloudFrontに向く。
 resource "aws_route53_record" "root" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = var.domain_name
   type    = "A"
 
@@ -130,7 +130,7 @@ resource "aws_route53_record" "root" {
 // 上と同じくalias付きAレコード。ワイルドカード(*.ドメイン)なので、
 // tenantごとのサブドメイン（例: tenant1.secuaigent-ryoyamasuda.tech）へのアクセスもすべてCloudFrontに向く。
 resource "aws_route53_record" "wildcard" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = "*.${var.domain_name}"
   type    = "A"
 

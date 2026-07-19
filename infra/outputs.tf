@@ -1,8 +1,3 @@
-// ムームードメインのネームサーバー設定に登録する4つのNSレコード
-output "route53_name_servers" {
-  value = aws_route53_zone.main.name_servers
-}
-
 // CloudFrontのドメイン名（動作確認時にアクセスする）
 output "cloudfront_domain_name" {
   value = aws_cloudfront_distribution.main.domain_name

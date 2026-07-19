@@ -1,5 +1,6 @@
 // ドメインのDNS管理をRoute53で行うためのホストゾーン。
 // 作成後に発行されるNSレコードを、ムームードメインのネームサーバー設定に手動登録する必要がある。
+// メインのinfra/とはstateを分離しており、メイン側のterraform destroyでは消えない（運用B）。
 resource "aws_route53_zone" "main" {
   name = var.domain_name
 
