@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# secuaigent-client (Angular) を frontend-angular/ に丸ごと同期し、
+# secuaigent/client (Angular) を frontend-angular/ に丸ごと同期し、
 # モノレポ向けの設定差分を再適用する。
 #
 # Usage:
-#   bash .codex/skills/frontend-angular-sync/scripts/sync.sh [secuaigent-client のパス] [--force]
+#   bash .codex/skills/frontend-angular-sync/scripts/sync.sh [secuaigent/client のパス] [--force]
 #
-# デフォルトの参照元: ~/Documents/secuaigent-client
+# デフォルトの参照元: ~/Documents/secuaigent/client
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TARGET_DIR="$REPO_ROOT/frontend-angular"
 
-SRC_DIR="${1:-$HOME/Documents/secuaigent-client}"
+SRC_DIR="${1:-$HOME/Documents/secuaigent/client}"
 FORCE=""
 for arg in "$@"; do
   if [[ "$arg" == "--force" ]]; then
@@ -38,7 +38,7 @@ if [[ -z "$FORCE" ]]; then
   fi
 fi
 
-echo "== 0. secuaigent-client の develop ブランチを最新化 =="
+echo "== 0. secuaigent/client の develop ブランチを最新化 =="
 
 if ! git -C "$SRC_DIR" diff --quiet || ! git -C "$SRC_DIR" diff --cached --quiet; then
   echo "$SRC_DIR の追跡済みファイルに未コミットの変更があります。先にコミット/stashしてから実行してください。" >&2
@@ -49,7 +49,7 @@ git -C "$SRC_DIR" fetch origin
 git -C "$SRC_DIR" checkout develop
 git -C "$SRC_DIR" pull --ff-only origin develop
 
-echo "== 1. secuaigent-client を frontend-angular/ に同期 =="
+echo "== 1. secuaigent/client を frontend-angular/ に同期 =="
 echo "  参照元: $SRC_DIR"
 echo "  同期先: $TARGET_DIR"
 

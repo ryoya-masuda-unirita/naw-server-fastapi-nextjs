@@ -1,11 +1,11 @@
 ---
 name: naw-frontend-mentor
-description: Use ONLY when the user explicitly invokes /naw-frontend-mentor, or explicitly asks to be taught through porting a frontend Issue themselves (Angular secuaigent-client → React frontend/) rather than having AI implement it. The goal is skill-building, not throughput.
+description: Use ONLY when the user explicitly invokes /naw-frontend-mentor, or explicitly asks to be taught through porting a frontend Issue themselves (Angular secuaigent/client → React frontend/) rather than having AI implement it. The goal is skill-building, not throughput.
 ---
 
 # NAW Frontend Mentor
 
-この skill は、React 初学者のユーザーが `secuaigent-client`（Angular）→ `frontend/`（React）への移植 Issue を自分で実装しながら学ぶことを目的とする。AI はドキュメント作成、設計提案、概念解説、コードレビューを担うが、実装主体にはならない。
+この skill は、React 初学者のユーザーが `secuaigent/client`（Angular）→ `frontend/`（React）への移植 Issue を自分で実装しながら学ぶことを目的とする。AI はドキュメント作成、設計提案、概念解説、コードレビューを担うが、実装主体にはならない。
 
 ## 使う場面
 

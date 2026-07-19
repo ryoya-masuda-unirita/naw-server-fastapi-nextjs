@@ -1,30 +1,30 @@
 ---
 name: frontend-angular-sync
-description: Use when syncing frontend-angular/ in this monorepo with the upstream secuaigent-client (Angular) repo — copying the latest app and reapplying monorepo-specific config (backend port 8001, dev server port 4201, disabled standalone CI).
+description: Use when syncing frontend-angular/ in this monorepo with the upstream secuaigent/client (Angular) repo — copying the latest app and reapplying monorepo-specific config (backend port 8001, dev server port 4201, disabled standalone CI).
 ---
 
 # frontend-angular 同期 skill
 
-`frontend-angular/` は `~/Documents/secuaigent-client`（Angular、単独リポジトリ）をこのモノレポに
+`frontend-angular/` は `~/Documents/secuaigent/client`（Angular、単独リポジトリ）をこのモノレポに
 そのまま取り込んだもの。バックエンド（FastAPI, `backend/`）の動作確認用フロントエンドとして使う。
 
-`secuaigent-client` は日々更新されるため、`frontend-angular/` は定期的に**丸ごと同期**する。
+`secuaigent/client` は日々更新されるため、`frontend-angular/` は定期的に**丸ごと同期**する。
 `src/` 配下の個別ファイルだけを選んでコピーする方式は取らない
-（secuaigent-client 側の変更を追従し続けるコストが高く、取りこぼしが起きるため）。
+（secuaigent/client 側の変更を追従し続けるコストが高く、取りこぼしが起きるため）。
 
 ## 使う場面
 
-- `secuaigent-client` の最新実装を `frontend-angular/` に反映したいとき
+- `secuaigent/client` の最新実装を `frontend-angular/` に反映したいとき
 - `frontend-angular/` がモノレポ向け設定（バックエンドポート・devサーバーポート等）とズレていないか確認したいとき
 
 ## 同期の考え方
 
-1. `secuaigent-client` 側の `develop` ブランチを最新化する（`git fetch` → `git checkout develop` → `git pull --ff-only`）
-2. `frontend-angular/` 配下を一旦クリアし、`secuaigent-client/` を丸ごとコピーする
+1. `secuaigent/client` 側の `develop` ブランチを最新化する（`git fetch` → `git checkout develop` → `git pull --ff-only`）
+2. `frontend-angular/` 配下を一旦クリアし、`secuaigent/client/` を丸ごとコピーする
    （`.git/`, `node_modules/`, `.angular/`, `dist/`, `coverage/` は除外）
 3. モノレポ向けの設定差分を再適用する（下表）
 
-`secuaigent-client` 自体はこのモノレポに取り込まない（コピー元として参照するのみ）。
+`secuaigent/client` 自体はこのモノレポに取り込まない（コピー元として参照するのみ）。
 
 ### 再適用する設定差分
 
@@ -47,10 +47,10 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 ```bash
 bash .codex/skills/frontend-angular-sync/scripts/sync.sh
 # 参照元を変える場合
-bash .codex/skills/frontend-angular-sync/scripts/sync.sh /path/to/secuaigent-client
+bash .codex/skills/frontend-angular-sync/scripts/sync.sh /path/to/secuaigent/client
 ```
 
-- `frontend-angular/` または `secuaigent-client` 側に未コミットの変更がある場合はスクリプトが停止する（レビュー前の上書き事故・他リポジトリの作業中コードの巻き込みを防ぐため）。`frontend-angular/` 側は意図的に上書きするときのみ `--force` を付ける
+- `frontend-angular/` または `secuaigent/client` 側に未コミットの変更がある場合はスクリプトが停止する（レビュー前の上書き事故・他リポジトリの作業中コードの巻き込みを防ぐため）。`frontend-angular/` 側は意図的に上書きするときのみ `--force` を付ける
 - 実行後は必ず以下を行う
   1. `cd frontend-angular && npm install`（依存関係の差分を反映）
   2. `git status` / `git diff -- frontend-angular` で差分を確認する（意図しないモノレポ設定の巻き戻りがないかを見る）
@@ -60,4 +60,4 @@ bash .codex/skills/frontend-angular-sync/scripts/sync.sh /path/to/secuaigent-cli
 ## 注意事項
 
 - このskillは `frontend-angular/` の同期専用。`frontend/`（React移植）や `backend/` には触れない
-- 同期後にモノレポ向け設定（上表）が正しく再適用されているかを必ず確認すること。`secuaigent-client` 側の該当ファイルの書き方が変わると、`sed` の置換パターンが一致せず反映漏れが起きる可能性がある
+- 同期後にモノレポ向け設定（上表）が正しく再適用されているかを必ず確認すること。`secuaigent/client` 側の該当ファイルの書き方が変わると、`sed` の置換パターンが一致せず反映漏れが起きる可能性がある

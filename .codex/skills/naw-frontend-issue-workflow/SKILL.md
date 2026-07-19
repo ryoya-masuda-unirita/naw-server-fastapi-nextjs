@@ -1,11 +1,11 @@
 ---
 name: naw-frontend-issue-workflow
-description: Use when working on a frontend porting GitHub Issue (Angular secuaigent-client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
+description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
 ---
 
 # NAW Frontend Issue Workflow
 
-この skill は、このリポジトリで frontend 移植（Angular `secuaigent-client` → React `frontend/`）の Issue 対応を進めるときに使う。
+この skill は、このリポジトリで frontend 移植（Angular `secuaigent/client` → React `frontend/`）の Issue 対応を進めるときに使う。
 
 backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名、ドキュメント構成、承認フロー、コミット規約は共通であり、本 skill では frontend 固有の差分だけを上書きする。
 
@@ -20,7 +20,7 @@ backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は 
 
 | 項目 | naw-issue-workflow（backend） | naw-frontend-issue-workflow（本 skill） |
 |---|---|---|
-| 移植元 | `~/Documents/naw-server` | `~/Documents/secuaigent-client` |
+| 移植元 | `~/Documents/secuaigent/server` | `~/Documents/secuaigent/client` |
 | 移植先 | `backend/` | `frontend/` |
 | Issue ラベル | なし | 必ず `frontend-port` を付与する |
 | 自動テスト | `pytest` | `npm run test`, `npm run lint`, `npm run type-check` |
@@ -31,7 +31,7 @@ backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は 
 
 ## 最初の流れ
 
-1. 参照リポジトリ（`secuaigent-client`）を確認する
+1. 参照リポジトリ（`secuaigent/client`）を確認する
 2. `gh pr list` で依存 PR の有無を確認する
 3. `develop` を最新化する
 4. 適切なブランチを切る
@@ -43,7 +43,7 @@ backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は 
 
 ### 参照リポジトリ調査
 
-`secuaigent-client` の最新画面、コンポーネント実装、翻訳ファイル、`styles.css`、対応する React 実装の有無、依存する backend API の実装状況は、Codex が直接確認する。
+`secuaigent/client` の最新画面、コンポーネント実装、翻訳ファイル、`styles.css`、対応する React 実装の有無、依存する backend API の実装状況は、Codex が直接確認する。
 
 - 調査は読み取り専用で行い、`gh issue create` 等の書き込み操作は候補・仕様を整理した後に行う
 - 対象画面・コンポーネントの仕様、参照元ファイルパス、React 側の対応実装有無、依存する backend API の状況を整理する
@@ -88,7 +88,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-{番�
 〇〇画面（Angular）を React に移植する。
 
 ## 参照
-- 移植元（frontend）: `~/Documents/secuaigent-client/src/app/...`
+- 移植元（frontend）: `~/Documents/secuaigent/client/src/app/...`
 - 移植先: `frontend/src/...`
 - 依存する backend API: `GET /api/...`（実装状況も明記）
 ```
