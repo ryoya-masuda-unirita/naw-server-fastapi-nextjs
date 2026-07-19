@@ -222,3 +222,10 @@ __marimo__/
 
 .serena/
 node_modules/
+
+# Terraform
+**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/*.tfvars
+!infra/**/*.tfvars.example
