@@ -30,7 +30,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 
 | ファイル | 変更内容 | 理由 |
 |---|---|---|
-| `proxy.conf.local.js` | ファイル全体を`BACKEND_PROXY_TARGET`環境変数対応版で上書き（単純なsed置換ではない） | docker-compose経由(`BACKEND_PROXY_TARGET=http://backend:8000`)でもホスト直起動でも動く必要があり、単純なsed置換だとupstream側の形式変化でこの対応ロジックごと失われるため（過去に実際発生） |
+| `proxy.conf.local.js` | rsyncの段階で同期対象から除外（コピーしない、モノレポ側の既存ファイルを維持） | `BACKEND_PROXY_TARGET`環境変数対応がモノレポ固有の実装のため、`Dockerfile.dev`と同じく最初から同期対象に含めない（過去にsed置換・上書きコピーいずれの方式でも取りこぼしが発生したため） |
 | `proxy.conf.dev.js` | `DEV_SERVER` → `http://localhost:8001` | 同上 |
 | `angular.json` | `serve.options.port` → `4201` | `4200` は他プロジェクトと衝突する可能性があるため |
 | `src/environments/environment.development.ts` | `apiBaseUrl: '/api'`, `authBaseUrl: ''` | 外部URL直書きをやめ、プロキシ経由の相対パスにするため |

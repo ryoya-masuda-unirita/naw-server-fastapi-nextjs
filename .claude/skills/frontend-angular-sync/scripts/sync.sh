@@ -61,45 +61,16 @@ rsync -a --delete \
   --exclude "coverage/" \
   --exclude ".gitlab-ci.yml" \
   --exclude "Dockerfile.dev" \
+  --exclude "proxy.conf.local.js" \
   "$SRC_DIR/" "$TARGET_DIR/"
 
 echo "== 2. モノレポ向け設定を再適用 =="
 
-# proxy.conf.local.js: docker-compose経由(BACKEND_PROXY_TARGET環境変数)でもホスト直起動でも
-# 動くよう、単純なsed置換ではなくファイル全体を環境変数対応版で上書きする。
-# 単純なsed置換だと、upstream側のファイル形式が変わった際にこの環境変数対応ロジックごと
-# 失われてdocker-compose環境で接続不能になる（過去に実際発生した障害）。
-PROXY_LOCAL="$TARGET_DIR/proxy.conf.local.js"
-if [[ -f "$PROXY_LOCAL" ]]; then
-  cat > "$PROXY_LOCAL" <<'PROXYEOF'
-// バックエンドの転送先。docker-compose経由で起動する場合、コンテナ間通信用のアドレス
-// （例: http://backend:8000）を環境変数BACKEND_PROXY_TARGETで注入する。未設定時は
-// ホストで直接 `npm start` する既存の運用に合わせ、localhost:8001にフォールバックする。
-const backendTarget = process.env.BACKEND_PROXY_TARGET || 'http://localhost:8001';
-
-module.exports = {
-  '/api': {
-    target: backendTarget,
-    secure: false,
-    changeOrigin: true,
-  },
-  '/auth': {
-    target: backendTarget,
-    secure: false,
-    changeOrigin: true,
-    // ブラウザのページナビゲーション（Accept: text/html）はAngularに返す
-    // API呼び出し（POST /auth/login 等）はバックエンドに転送する
-    // /auth/login はAngularのページURL兼APIのパスです。ブラウザがページ遷移で GET /auth/login をリクエストするとき（Accept: text/html）はバックエンドに転送せず Angular の index.html を返します。POST /auth/login などのAPI呼び出しはそのままバックエンドへ転送します。
-    bypass: function (req) {
-      if (req.headers.accept && req.headers.accept.includes('text/html')) {
-        return '/index.html';
-      }
-    },
-  },
-};
-PROXYEOF
-  echo "  proxy.conf.local.js: BACKEND_PROXY_TARGET環境変数対応版で上書き"
-fi
+# proxy.conf.local.js は同期対象から除外している（Dockerfile.devと同じ扱い）。
+# BACKEND_PROXY_TARGET環境変数によるdocker-compose対応がモノレポ固有の実装であり、
+# upstream側の形式変化に追従する必要がない。sedによる部分置換・上書きコピーのどちらも
+# 「一度syncしてから書き換える」という余分な手順を生み、過去に実際に取りこぼして
+# docker-compose環境が壊れた（接続不能）ことがあるため、最初から同期対象に含めない。
 
 # proxy.conf.dev.js: 開発サーバーURLを FastAPI (8001) に向ける
 PROXY_DEV="$TARGET_DIR/proxy.conf.dev.js"

@@ -3,6 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  // ローカルの単一Postgresコンテナに対してテストを実行するため、コア数分のワーカーが
+  // 同時接続してコネクションプール枯渇を起こさないよう上限を設ける。
+  workers: 4,
   retries: 0,
   reporter: 'html',
   use: {

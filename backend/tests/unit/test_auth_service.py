@@ -101,29 +101,43 @@ class TestAuthServiceLogin:
 
         assert exc_info.value.status_code == 401
 
-    async def test_login_when_password_reset_required(self, test_tenant):
-        """is_required_password_reset=true の場合、REQUIRES_PASSWORD_RESET を返すこと"""
+    def _build_login_session(
+        self,
+        test_tenant,
+        login_id: str,
+        is_required_password_reset: bool,
+        expired_at: datetime | None,
+    ):
+        """パスワードリセット系のログインテストで共通のsession/user/get_latestパッチを組み立てる。"""
         session = AsyncMock()
         user = User(
             id=uuid4(),
             tenant_id=test_tenant.id,
-            login_id="resetuser",
-            name="Reset User",
+            login_id=login_id,
+            name=login_id,
             role=UserRole.USER,
-            is_required_password_reset=True,
+            is_required_password_reset=is_required_password_reset,
         )
         mock_user_result = MagicMock()
         mock_user_result.scalars.return_value.first.return_value = user
         session.execute = AsyncMock(return_value=mock_user_result)
-
-        with patch(
+        get_latest_patch = patch(
             f"{REPO_PATH}.get_latest",
             new=AsyncMock(
                 return_value=MagicMock(
-                    password=hash_password("TestPassword123!"), expired_at=None
+                    password=hash_password("TestPassword123!"), expired_at=expired_at
                 )
             ),
-        ):
+        )
+        return session, user, get_latest_patch
+
+    async def test_login_when_password_reset_required(self, test_tenant):
+        """is_required_password_reset=true の場合、REQUIRES_PASSWORD_RESET を返すこと"""
+        session, user, get_latest_patch = self._build_login_session(
+            test_tenant, "resetuser", is_required_password_reset=True, expired_at=None
+        )
+
+        with get_latest_patch:
             response = await AuthService.login(
                 user.login_id, "TestPassword123!", test_tenant.id, session
             )
@@ -134,28 +148,15 @@ class TestAuthServiceLogin:
 
     async def test_login_when_password_expired(self, test_tenant):
         """パスワード有効期限切れの場合、reason=EXPIREDでREQUIRES_PASSWORD_RESETを返すこと"""
-        session = AsyncMock()
-        user = User(
-            id=uuid4(),
-            tenant_id=test_tenant.id,
-            login_id="expireduser",
-            name="Expired User",
-            role=UserRole.USER,
-            is_required_password_reset=False,
-        )
-        mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = user
-        session.execute = AsyncMock(return_value=mock_user_result)
-
         expired_at = datetime.now(timezone.utc) - timedelta(days=1)
-        with patch(
-            f"{REPO_PATH}.get_latest",
-            new=AsyncMock(
-                return_value=MagicMock(
-                    password=hash_password("TestPassword123!"), expired_at=expired_at
-                )
-            ),
-        ):
+        session, user, get_latest_patch = self._build_login_session(
+            test_tenant,
+            "expireduser",
+            is_required_password_reset=False,
+            expired_at=expired_at,
+        )
+
+        with get_latest_patch:
             response = await AuthService.login(
                 user.login_id, "TestPassword123!", test_tenant.id, session
             )
@@ -168,28 +169,15 @@ class TestAuthServiceLogin:
         self, test_tenant
     ):
         """有効期限切れと初回ログインが両方該当する場合、EXPIREDが優先されること"""
-        session = AsyncMock()
-        user = User(
-            id=uuid4(),
-            tenant_id=test_tenant.id,
-            login_id="bothuser",
-            name="Both User",
-            role=UserRole.USER,
-            is_required_password_reset=True,
-        )
-        mock_user_result = MagicMock()
-        mock_user_result.scalars.return_value.first.return_value = user
-        session.execute = AsyncMock(return_value=mock_user_result)
-
         expired_at = datetime.now(timezone.utc) - timedelta(days=1)
-        with patch(
-            f"{REPO_PATH}.get_latest",
-            new=AsyncMock(
-                return_value=MagicMock(
-                    password=hash_password("TestPassword123!"), expired_at=expired_at
-                )
-            ),
-        ):
+        session, user, get_latest_patch = self._build_login_session(
+            test_tenant,
+            "bothuser",
+            is_required_password_reset=True,
+            expired_at=expired_at,
+        )
+
+        with get_latest_patch:
             response = await AuthService.login(
                 user.login_id, "TestPassword123!", test_tenant.id, session
             )
