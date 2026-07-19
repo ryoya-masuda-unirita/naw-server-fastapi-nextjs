@@ -1,6 +1,7 @@
 import type { MessageFeedback } from '@app-types/admin/feedback.types';
 import { API_PATHS } from '../../constants/api-paths.config';
 import { MOCK_FEEDBACK_MESSAGES } from '../../constants/mock-data/feedback.mock';
+import { MOCK_ASSISTANTS } from '../../constants/mock-data/assistants.mock';
 import {
   MOCK_MESSAGE_CONTENTS,
   MOCK_MESSAGE_LIST_ASSISTANTS,
@@ -104,6 +105,10 @@ function getParentQuestion(parentId: string | null): string {
   return parentId ? (MOCK_MESSAGE_CONTENTS[parentId]?.question ?? '') : '';
 }
 
+function getMessageAssistantName(assistantId: string): string | null {
+  return MOCK_ASSISTANTS.find((assistant) => assistant.id === assistantId)?.name ?? null;
+}
+
 function upsertMessageFeedback(
   messageId: string,
   rating: MessageFeedback['rating'],
@@ -136,6 +141,7 @@ function upsertMessageFeedback(
       tenantId: 'tenant-001',
       roomId: record.roomId ?? room?.id ?? 'room-001',
       assistantId,
+      assistantName: getMessageAssistantName(assistantId),
       parentId: record.parentId ?? '',
       rated: true,
       content: {

@@ -70,8 +70,14 @@
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7 disabled:cursor-not-allowed disabled:opacity-40"
       [attr.aria-label]="'CHAT.MESSAGE.EDIT' | translate"
+      [attr.title]="
+        assistantUnresolved()
+          ? ('CHAT.MESSAGE.ASSISTANT_UNRESOLVED_ACTION_DISABLED' | translate)
+          : null
+      "
+      [disabled]="assistantUnresolved()"
       (click)="handleOpenEdit()"
       [hidden]="!isUser() || isReadOnly()"
     >
@@ -79,8 +85,14 @@
     </button>
     <button
       type="button"
-      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7"
+      class="inline-flex items-center justify-center transition-colors duration-200 cursor-pointer rounded-full text-text-weak hover:bg-bg-brand-weak w-7 h-7 disabled:cursor-not-allowed disabled:opacity-40"
       aria-label="再生成"
+      [attr.title]="
+        assistantUnresolved()
+          ? ('CHAT.MESSAGE.ASSISTANT_UNRESOLVED_ACTION_DISABLED' | translate)
+          : null
+      "
+      [disabled]="assistantUnresolved()"
       (click)="handleRegenerate()"
       [hidden]="isUser() || isReadOnly()"
     >

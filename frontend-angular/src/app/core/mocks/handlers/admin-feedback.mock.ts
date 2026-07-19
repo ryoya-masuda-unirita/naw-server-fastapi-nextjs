@@ -6,7 +6,6 @@ import {
   MOCK_FEEDBACK_ROOMS,
   MOCK_LEARNING_FOLDERS,
   type AdditionalLearningRequest,
-  type BulkAdditionalLearningRequest,
 } from '../../constants/mock-data/feedback.mock';
 import { MOCK_COUNT_STATS, MOCK_ADMIN_USERS, MOCK_SATISFACTION_FEEDBACK } from '../admin-mock-data';
 import { MockRoute } from '../api-mock';
@@ -52,7 +51,7 @@ function updateFeedbackIndexId(feedbackIds: string[], folderId: string): number 
 function updateRoomFeedbackIndexId(feedbackIds: string[], folderId: string): number {
   let updatedCount = 0;
   MOCK_FEEDBACK_ROOMS.forEach((feedback, index) => {
-    if (!feedbackIds.includes(feedback.id)) return;
+    if (!feedbackIds.includes(feedback.roomId ?? '')) return;
     MOCK_FEEDBACK_ROOMS[index] = {
       ...feedback,
       indexId: folderId,
@@ -264,24 +263,18 @@ export const adminFeedbackMockRoutes: MockRoute[] = [
     handler: (url, body) => {
       const b = parseBody(body) as unknown as AdditionalLearningRequest;
       const pathParts = getPathOnly(url).split('/');
-      const feedbackId = pathParts[pathParts.length - 2];
-      const folderId = b.folderId ?? '';
+      const indexId = pathParts[pathParts.length - 2];
+      const feedbackId = typeof b.feedbackId === 'string' ? b.feedbackId : undefined;
+      const roomId = typeof b.roomId === 'string' ? b.roomId : undefined;
+      const hasContent = b.content instanceof Blob;
+      if ((!feedbackId && !roomId) || (feedbackId && roomId) || !hasContent) {
+        return [400, { message: '追加学習のデータソースが正しく指定されていません。' }];
+      }
       const updatedCount =
-        updateFeedbackIndexId([feedbackId], folderId) +
-        updateRoomFeedbackIndexId([feedbackId], folderId);
+        (feedbackId ? updateFeedbackIndexId([feedbackId], indexId) : 0) +
+        (roomId ? updateRoomFeedbackIndexId([roomId], indexId) : 0);
       if (updatedCount === 0) return [404, { message: 'Feedback not found' }];
-      return [200, { message: '追加学習を開始しました。', data: { folderId } }];
-    },
-  },
-  {
-    method: 'POST',
-    match: API_PATHS.INDEXES.BULK_ADDITIONAL_LEARNING,
-    handler: (_url, body) => {
-      const b = parseBody(body) as unknown as BulkAdditionalLearningRequest;
-      const folderId = b.folderId ?? '';
-      updateFeedbackIndexId(b.ids ?? [], folderId);
-      updateRoomFeedbackIndexId(b.ids ?? [], folderId);
-      return [200, { message: '一括追加学習を開始しました。', data: { folderId } }];
+      return [204, null];
     },
   },
 ];

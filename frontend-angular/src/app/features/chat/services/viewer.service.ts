@@ -15,6 +15,9 @@ export class ViewerService {
   readonly listLoadError = signal<boolean>(false);
   readonly contentLoadError = signal<boolean>(false);
 
+  /** loadList が完了した roomId（取得試行済みかの判定に使用） */
+  readonly listLoadedRoomId = signal<string | null>(null);
+
   /** ビューワーに表示中のライブラリ（選択状態の単一ソース） */
   readonly activeLibrary = signal<ViewerListItem | null>(null);
 
@@ -33,6 +36,10 @@ export class ViewerService {
   private listRequestToken = 0;
 
   private readonly api = inject(ApiClientService);
+
+  hasListLoadedFor(roomId: string): boolean {
+    return this.listLoadedRoomId() === roomId;
+  }
 
   beginLibraryStream(roomId: string | null): number {
     this.libraryStreamToken += 1;
@@ -138,6 +145,7 @@ export class ViewerService {
     } finally {
       if (this.listRequestToken === tokenAtStart) {
         this.isLoadingList.set(false);
+        this.listLoadedRoomId.set(roomId);
       }
     }
 

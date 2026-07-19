@@ -389,8 +389,12 @@ export class MessageService {
 
   async rateMessage(messageId: string, rating: 'GOOD' | 'BAD'): Promise<void> {
     const previousMessages = this._messages();
+    const previousRecords = this._messageRecords();
     this._messages.update((msgs) =>
       msgs.map((m) => (m.messageId === messageId ? { ...m, isRated: true, rating } : m)),
+    );
+    this._messageRecords.update((records) =>
+      records.map((r) => (r.id === messageId ? { ...r, isRated: true, rating } : r)),
     );
 
     try {
@@ -400,6 +404,7 @@ export class MessageService {
       });
     } catch (error) {
       this._messages.set(previousMessages);
+      this._messageRecords.set(previousRecords);
       console.error('Rate message failed', error);
       throw error;
     }

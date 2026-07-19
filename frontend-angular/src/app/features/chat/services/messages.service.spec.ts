@@ -175,7 +175,7 @@ describe('MessageService', () => {
   });
 
   describe('loadMessagesForRoom', () => {
-    it('contents API の isRated を assistant メッセージに反映すること', async () => {
+    it('messages 一覧 API の isRated / rating を assistant メッセージに反映すること', async () => {
       const listResponse: MessagesListApiResponse = {
         messages: [
           {
@@ -184,6 +184,7 @@ describe('MessageService', () => {
             assistantId: 'asst-1',
             parentId: null,
             isRated: true,
+            rating: 'BAD',
           },
         ],
       };
@@ -197,7 +198,7 @@ describe('MessageService', () => {
           context: null,
           attachmentFiles: [],
           referencePaths: null,
-          isRated: true,
+          isRated: false,
         },
       ];
 
@@ -211,8 +212,8 @@ describe('MessageService', () => {
 
       const messages = service.visibleMessages();
       expect(messages).toHaveLength(2);
-      expect(messages[0]).toMatchObject({ role: 'user', isRated: false });
-      expect(messages[1]).toMatchObject({ role: 'assistant', isRated: true });
+      expect(messages[0]).toMatchObject({ role: 'user', isRated: true, rating: 'BAD' });
+      expect(messages[1]).toMatchObject({ role: 'assistant', isRated: true, rating: 'BAD' });
       expect(mockMessageContentsApi.fetchContents).toHaveBeenCalledWith(listResponse);
       expect(api.post).not.toHaveBeenCalled();
     });

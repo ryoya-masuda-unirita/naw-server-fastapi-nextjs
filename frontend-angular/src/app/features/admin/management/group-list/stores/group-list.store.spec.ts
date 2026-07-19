@@ -64,6 +64,27 @@ describe('toViewModel', () => {
     expect(resolver).not.toHaveBeenCalledWith('user', expect.anything());
   });
 
+  it('表示名フィールドが空配列でもIDから名前を補完できること', () => {
+    const item = makeApiItem({
+      users: ['u1'],
+      adminUserIds: ['u2'],
+      userNames: [],
+      adminUserNames: [],
+      assistants: [],
+      assistantIds: ['a1'],
+      promptTemplates: [],
+      promptTemplateIds: ['t1'],
+    });
+    const resolver = vi.fn((_kind: string, ids: string[]) => ids.map((id) => `name:${id}`));
+
+    const vm = toViewModel(item, resolver as Parameters<typeof toViewModel>[1]);
+
+    expect(vm.userNames).toEqual(['name:u1']);
+    expect(vm.adminUserNames).toEqual(['name:u2']);
+    expect(vm.assistants).toEqual(['name:a1']);
+    expect(vm.templates).toEqual(['name:t1']);
+  });
+
   it('メンバー情報が未設定のグループでも正しく表示されること', () => {
     const item = makeApiItem({
       users: undefined,

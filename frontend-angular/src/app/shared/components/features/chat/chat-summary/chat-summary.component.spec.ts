@@ -65,6 +65,8 @@ const mockViewerService = {
   isLoadingList: signal(false),
   listLoadError: signal(false),
   contentLoadError: signal(false),
+  listLoadedRoomId: signal<string | null>(null),
+  hasListLoadedFor: vi.fn((roomId: string) => mockViewerService.listLoadedRoomId() === roomId),
   activeLibrary: signal<{ id: string; title: string } | null>(null),
   isLibraryStreaming: signal(false),
   streamingLibraryTitle: signal(''),
@@ -106,10 +108,15 @@ describe('ChatSummaryComponent', () => {
     mockViewerService.isLoadingList.set(false);
     mockViewerService.listLoadError.set(false);
     mockViewerService.contentLoadError.set(false);
+    mockViewerService.listLoadedRoomId.set(null);
+    mockViewerService.hasListLoadedFor.mockImplementation(
+      (roomId: string) => mockViewerService.listLoadedRoomId() === roomId,
+    );
     mockLibraryService.updateLibraryMetadata.mockResolvedValue({ id: 'lib-1' });
     await configureTestingModule();
     fixture = TestBed.createComponent(ChatSummaryComponent);
     component = fixture.componentInstance;
+    fixture.componentRef.setInput('headerOptions', [{ id: '1', title: 'Doc' }]);
     fixture.detectChanges();
   });
 
@@ -132,8 +139,13 @@ describe('ChatSummaryComponent', () => {
       expect(component.activeDoc()).toEqual({ id: '', title: '' });
     });
 
-    test('markdownDataゲッターがviewerServiceのmarkdownContentを返すこと', () => {
-      expect(component.markdownData).toBe('# テストコンテンツ');
+    test('markdownDataがviewerServiceのmarkdownContentを返すこと', () => {
+      expect(component.markdownData()).toBe('# テストコンテンツ');
+    });
+
+    test('markdownContent更新時にmarkdownDataが追従すること', () => {
+      mockViewerService.markdownContent.set('# 更新後コンテンツ');
+      expect(component.markdownData()).toBe('# 更新後コンテンツ');
     });
 
     test('activeDocがviewerServiceのactiveLibraryを反映すること', () => {
@@ -177,6 +189,61 @@ describe('ChatSummaryComponent', () => {
       fixture = TestBed.createComponent(ChatSummaryComponent);
       component = fixture.componentInstance;
       fixture.componentRef.setInput('chatId', 'room-abc');
+      fixture.detectChanges();
+      expect(component.isCollapsed()).toBe(false);
+    });
+
+    test('詳細ページではライブラリ0件でも折りたたまれないこと', async () => {
+      TestBed.resetTestingModule();
+      mockViewerService.viewers.set([]);
+      await configureTestingModule();
+      fixture = TestBed.createComponent(ChatSummaryComponent);
+      component = fixture.componentInstance;
+      fixture.componentRef.setInput('isDetailPage', true);
+      fixture.detectChanges();
+      expect(component.isCollapsed()).toBe(false);
+    });
+
+    test('chatIdありで一覧取得前は折りたたまれないこと', async () => {
+      TestBed.resetTestingModule();
+      mockViewerService.viewers.set([]);
+      mockViewerService.isLoadingList.set(false);
+      mockViewerService.listLoadedRoomId.set(null);
+      await configureTestingModule();
+      fixture = TestBed.createComponent(ChatSummaryComponent);
+      component = fixture.componentInstance;
+      fixture.componentRef.setInput('chatId', 'room-abc');
+      fixture.detectChanges();
+      expect(component.isCollapsed()).toBe(false);
+    });
+
+    test('chatIdありで一覧取得完了後0件の場合、折りたたまれること', async () => {
+      TestBed.resetTestingModule();
+      mockViewerService.viewers.set([]);
+      mockViewerService.isLoadingList.set(false);
+      mockViewerService.listLoadedRoomId.set('room-abc');
+      await configureTestingModule();
+      fixture = TestBed.createComponent(ChatSummaryComponent);
+      component = fixture.componentInstance;
+      fixture.componentRef.setInput('chatId', 'room-abc');
+      fixture.detectChanges();
+      expect(component.isCollapsed()).toBe(true);
+    });
+
+    test('一覧取得前の誤折りたたみ後にデータ到着すると自動展開されること', async () => {
+      TestBed.resetTestingModule();
+      mockViewerService.viewers.set([]);
+      mockViewerService.isLoadingList.set(false);
+      mockViewerService.listLoadedRoomId.set('room-abc');
+      await configureTestingModule();
+      fixture = TestBed.createComponent(ChatSummaryComponent);
+      component = fixture.componentInstance;
+      fixture.componentRef.setInput('chatId', 'room-abc');
+      fixture.detectChanges();
+      expect(component.isCollapsed()).toBe(true);
+
+      mockViewerService.viewers.set([{ id: 'lib-1', title: 'Doc' }]);
+      fixture.componentRef.setInput('headerOptions', [{ id: 'lib-1', title: 'Doc' }]);
       fixture.detectChanges();
       expect(component.isCollapsed()).toBe(false);
     });
@@ -418,6 +485,15 @@ describe('ChatSummaryComponent', () => {
     });
 
     test('openInNewTabでchatIdがある場合window.openが呼ばれること', () => {
+      const windowSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      fixture.componentRef.setInput('chatId', 'chat-123');
+      mockViewerService.activeLibrary.set({ id: 'lib-1', title: '会議メモ' });
+      fixture.detectChanges();
+      component.openInNewTab();
+      expect(windowSpy).toHaveBeenCalledWith('/chat/viewer/chat-123?libraryId=lib-1', '_blank');
+    });
+
+    test('openInNewTabでlibraryIdがない場合はroomIdのみのURLを開くこと', () => {
       const windowSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
       fixture.componentRef.setInput('chatId', 'chat-123');
       fixture.detectChanges();

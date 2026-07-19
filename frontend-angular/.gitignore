@@ -53,11 +53,14 @@ src/environments/environment.local.ts
 # Playwright
 .playwright-cli
 
+# CI用テストレポート出力
+/test-results
+
 private/
 
 .serena/
 GEMINI.md
 
 AGENTS.md
-!AGENTS.md
 .codex/
+.private/

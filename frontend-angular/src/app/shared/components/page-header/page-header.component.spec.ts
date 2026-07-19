@@ -173,6 +173,13 @@ describe('PageHeaderComponent', () => {
       expect(h2.nativeElement.textContent).toContain('テストタイトル');
     });
 
+    test('タイトル領域がflex-1 min-w-0で省略可能なレイアウトであること', () => {
+      const titleArea = fixture.debugElement.query(By.css('header h2')).parent?.parent;
+      expect(titleArea).toBeTruthy();
+      expect(titleArea!.nativeElement.classList.contains('flex-1')).toBe(true);
+      expect(titleArea!.nativeElement.classList.contains('min-w-0')).toBe(true);
+    });
+
     test('デスクトップh2にタイトルが表示されること', () => {
       const h2 = fixture.debugElement.query(By.css('header h2'));
       expect(h2).toBeTruthy();

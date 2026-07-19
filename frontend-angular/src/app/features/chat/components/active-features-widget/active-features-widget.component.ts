@@ -49,7 +49,7 @@ export class ActiveFeaturesWidgetComponent {
 
   // Internal state
   readonly isMultiPanelOpen = signal<boolean>(false);
-  readonly panelStyle = signal<{ bottom: string; right: string } | null>(null);
+  readonly panelStyle = signal<{ bottom: string; right: string; maxHeight: string } | null>(null);
 
   constructor() {
     // Update panel position when it opens
@@ -66,11 +66,13 @@ export class ActiveFeaturesWidgetComponent {
 
     const rect = button.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
+    const maxHeight = Math.max(Math.min(rect.top - 8, 320), 120);
 
     // Position panel above the button
     this.panelStyle.set({
       bottom: `${viewportHeight - rect.top + 8}px`,
       right: `${window.innerWidth - rect.right}px`,
+      maxHeight: `${maxHeight}px`,
     });
   }
 

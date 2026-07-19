@@ -19,6 +19,7 @@ import { Router, NavigationEnd, RouterEvent } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
@@ -229,6 +230,10 @@ const mockI18nService = {
   setLanguage: vi.fn().mockResolvedValue(undefined),
 };
 
+const mockQueryClient = {
+  invalidateQueries: vi.fn().mockResolvedValue(undefined),
+};
+
 // ── Default config factory ──
 function createDefaultConfig(): LayoutConfig {
   return {
@@ -319,6 +324,7 @@ describe('SidebarComponent', () => {
         { provide: TranslateService, useValue: mockTranslate },
         { provide: I18nService, useValue: mockI18nService },
         { provide: Location, useValue: mockLocation },
+        { provide: QueryClient, useValue: mockQueryClient },
       ],
     })
       .overrideComponent(SidebarComponent, {
@@ -934,6 +940,59 @@ describe('SidebarComponent', () => {
       fixture.componentRef.setInput('config', createDefaultConfig());
       fixture.detectChanges();
       expect(fixture.debugElement.query(By.css('img[alt="SecuAiGent"]'))).toBeTruthy();
+    });
+  });
+
+  // ── アシスタント/テンプレートの再取得 ──
+  describe('アシスタント/テンプレートの再取得', () => {
+    test('ダッシュボード画面に遷移するとアシスタント一覧とテンプレート一覧が再取得されること', () => {
+      routerEvents$.next(new NavigationEnd(1, '/admin/dashboard', '/admin/dashboard'));
+      fixture.detectChanges();
+
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['assistants'] });
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['prompt-templates'],
+      });
+    });
+
+    test('新規チャット画面に遷移するとアシスタント一覧とテンプレート一覧が再取得されること', () => {
+      routerEvents$.next(new NavigationEnd(1, '/admin/chat/new', '/admin/chat/new'));
+      fixture.detectChanges();
+
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['assistants'] });
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['prompt-templates'],
+      });
+    });
+
+    test('チャットルーム画面など対象外の画面に遷移した場合は再取得されないこと', () => {
+      routerEvents$.next(new NavigationEnd(1, '/admin/chat/room-1', '/admin/chat/room-1'));
+      fixture.detectChanges();
+
+      expect(mockQueryClient.invalidateQueries).not.toHaveBeenCalled();
+    });
+
+    test('クエリパラメータが付与されていてもダッシュボード遷移として再取得されること', () => {
+      routerEvents$.next(
+        new NavigationEnd(1, '/admin/dashboard?foo=bar', '/admin/dashboard?foo=bar'),
+      );
+      fixture.detectChanges();
+
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['assistants'] });
+    });
+
+    test('管理コンソール以外からの遷移でも再取得されること（遷移元を問わない）', () => {
+      routerEvents$.next(new NavigationEnd(1, '/admin/library', '/admin/library'));
+      fixture.detectChanges();
+      mockQueryClient.invalidateQueries.mockClear();
+
+      routerEvents$.next(new NavigationEnd(2, '/admin/chat/new', '/admin/chat/new'));
+      fixture.detectChanges();
+
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['assistants'] });
+      expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['prompt-templates'],
+      });
     });
   });
 });

@@ -16,9 +16,7 @@ import {
   FormSortInputComponent,
   SortOption,
 } from '@shared/components/form/form-sort-input/form-sort-input.component';
-import { IconButtonComponent } from '@shared/components/icon-button/icon-button.component';
 import { SvgIconComponent } from '@shared/components/icons/svg-icon.component';
-import { ButtonComponent } from '@shared/components/button/button.component';
 import { ContextMenuComponent } from '@shared/components/context-menu/context-menu.component';
 import { SelectOption } from '@app-types/common';
 import type { FeedbackItem } from '@app-types/admin/feedback.types';
@@ -27,6 +25,11 @@ import { DialogComponent, DialogData } from '@shared/components/dialog/dialog.co
 import { FolderModalComponent } from '../folder-modal/folder-modal.component';
 import { CircularLoadingComponent } from '@shared/components/circular-loading/circular-loading.component';
 import { FeedbackListOptionsService } from '../../services/feedback-list-options.service';
+import { buildAccuracyAdditionalLearningContent } from '../../utils/additional-learning-content';
+import {
+  resolveAssistantName,
+  UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY,
+} from '../../utils/assistant-name.util';
 
 @Component({
   selector: 'app-accuracy-tab',
@@ -40,9 +43,7 @@ import { FeedbackListOptionsService } from '../../services/feedback-list-options
     TableListComponent,
     TableListItemComponent,
     FormSortInputComponent,
-    IconButtonComponent,
     SvgIconComponent,
-    ButtonComponent,
     ContextMenuComponent,
     CircularLoadingComponent,
   ],
@@ -62,8 +63,6 @@ export class AccuracyTabComponent {
 
   readonly folders = this.feedbackListOptionsService.folders;
   readonly folderOptions = this.feedbackListOptionsService.folderOptions;
-
-  private readonly assistantNameMap = this.feedbackListOptionsService.assistantNameMap;
 
   private readonly queryClient = inject(QueryClient);
 
@@ -106,16 +105,16 @@ export class AccuracyTabComponent {
   });
 
   readonly items = computed<FeedbackItem[]>(() => {
+    this.currentLang();
+    const unknownAssistantLabel = this.translate.instant(UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY);
     const data = this.accuracyQuery.data();
     if (!data) return [];
     const folders = this.folders();
-    const nameMap = this.assistantNameMap();
     return data.feedbacks.content.map((fb) => {
-      const assistantId = fb.message?.assistantId ?? '';
       return {
         id: fb.id,
         accuracy: fb.rating === 'GOOD' ? 'accurate' : 'inaccurate',
-        assistantName: nameMap.get(assistantId) ?? assistantId,
+        assistantName: resolveAssistantName(fb.message?.assistantName, unknownAssistantLabel),
         indexId: fb.indexId,
         learningFolder: folders.find((f) => f.id === fb.indexId)?.name ?? '-',
         questionSummary: toPlainTableCellText(fb.message?.content?.question ?? ''),
@@ -126,9 +125,6 @@ export class AccuracyTabComponent {
   });
 
   readonly isLoading = computed(() => this.accuracyQuery.isLoading());
-
-  // Selection state
-  readonly selectedIds = signal<Set<string>>(new Set());
 
   // Filter options
   readonly assistantOptions = this.feedbackListOptionsService.assistantOptions;
@@ -181,18 +177,6 @@ export class AccuracyTabComponent {
     return this.translate.instant('FEEDBACK.PAGE_COUNT', r);
   });
 
-  readonly allPageSelected = computed(() => {
-    const paginated = this.paginatedItems();
-    return paginated.length > 0 && paginated.every((item) => this.selectedIds().has(item.id));
-  });
-
-  readonly someSelected = computed(() => {
-    const paginated = this.paginatedItems();
-    return paginated.some((item) => this.selectedIds().has(item.id)) && !this.allPageSelected();
-  });
-
-  readonly hasSelection = computed(() => this.selectedIds().size > 0);
-
   // Event handlers
   onAssistantChange(value: string | null) {
     this.selectedAssistant.set(value);
@@ -223,72 +207,14 @@ export class AccuracyTabComponent {
     this.currentPage.set(page);
   }
 
-  toggleSelectAll(checked: boolean) {
-    this.selectedIds.update((ids) => {
-      const newIds = new Set(ids);
-      this.paginatedItems().forEach((item) => {
-        if (checked) newIds.add(item.id);
-        else newIds.delete(item.id);
-      });
-      return newIds;
-    });
-  }
-
-  toggleItem(id: string, checked: boolean) {
-    this.selectedIds.update((ids) => {
-      const newIds = new Set(ids);
-      if (checked) newIds.add(id);
-      else newIds.delete(id);
-      return newIds;
-    });
-  }
-
-  isSelected(id: string): boolean {
-    return this.selectedIds().has(id);
-  }
-
   getAccuracyLabel(accuracy: string): string {
     return accuracy === 'accurate'
       ? this.translate.instant('FEEDBACK.ACCURATE')
       : this.translate.instant('FEEDBACK.INACCURATE');
   }
 
-  onDeselectAll() {
-    this.selectedIds.set(new Set());
-  }
-
   readonly folderModalSelected = signal<string | null>(null);
   readonly folderModalDisabled = computed(() => !this.folderModalSelected());
-
-  openBulkFolderModal(): void {
-    this.folderModalSelected.set(null);
-    const selectedIds = [...this.selectedIds()];
-    const dialogRef = this.dialog.open(DialogComponent, {
-      width: '800px',
-      maxWidth: '90vw',
-      data: {
-        title: this.translate.instant('FEEDBACK.SPECIFY_FOLDER'),
-        contentComponent: FolderModalComponent,
-        contentComponentInputs: { selectedFolderSignal: this.folderModalSelected },
-        showCancel: true,
-        cancelText: this.translate.instant('COMMON.CANCEL'),
-        showConfirm: true,
-        confirmText: this.translate.instant('FEEDBACK.ADD_LEARNING'),
-        confirmDisabledSignal: this.folderModalDisabled,
-        confirmLoadingSignal: this.feedbackApiService.isAddingBulkLearning,
-        buttonAlign: 'right',
-        confirmAction: () => {
-          const folderId = this.folderModalSelected();
-          if (!folderId) return;
-          void this.feedbackApiService.addBulkAdditionalLearning(selectedIds, folderId).then(() => {
-            void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'accuracy'] });
-            this.selectedIds.set(new Set());
-            dialogRef.close(true);
-          });
-        },
-      } as DialogData,
-    });
-  }
 
   openFolderModal(item: FeedbackItem): void {
     this.folderModalSelected.set(item.indexId ?? null);
@@ -309,10 +235,13 @@ export class AccuracyTabComponent {
         confirmAction: () => {
           const folderId = this.folderModalSelected();
           if (!folderId) return;
-          void this.feedbackApiService.addAdditionalLearning(item.id, folderId).then(() => {
-            void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'accuracy'] });
-            dialogRef.close(true);
-          });
+          const content = buildAccuracyAdditionalLearningContent(item);
+          void this.feedbackApiService
+            .addAdditionalLearning(folderId, item.id, content)
+            .then(() => {
+              void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'accuracy'] });
+              dialogRef.close(true);
+            });
         },
       } as DialogData,
     });

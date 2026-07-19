@@ -4,7 +4,7 @@
  * sessionStorage の TENANT_ID を優先し、無ければ hostname の先頭ラベルをテナント ID とする。
  * `hostname` は jsdom 上で `vi.spyOn` しにくいため、`window.location` を一時的に差し替える。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { STORAGE_KEYS } from '@core/constants';
 import { resolveTenantId } from '@core/utils/tenant.helpers';
 
@@ -46,6 +46,13 @@ describe('resolveTenantId（テナント ID 解決）', () => {
   beforeEach(() => {
     restoreWindowLocation();
     sessionStorage.clear();
+  });
+
+  // 各 it の直後にも復元する。復元しないと、モックした window.location が
+  // 後続のテストファイルへ漏れ（vmThreads は同一ワーカー内でグローバルを共有しうる）、
+  // history.replaceState 依存のテスト（例: login-key.initializer）を壊すため。
+  afterEach(() => {
+    restoreWindowLocation();
   });
 
   // 本実装: sessionStorage に TENANT_ID があれば hostname を見ずにその値を返す

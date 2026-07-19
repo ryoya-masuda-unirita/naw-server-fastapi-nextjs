@@ -16,20 +16,12 @@ import { MOCK_ROOMS } from './rooms.mock';
 // ─── Additional Learning ─────────────────────────────────────────────────────
 
 export interface AdditionalLearningRequest {
-  folderId: string;
+  feedbackId?: string;
+  roomId?: string;
+  content: File | Blob;
 }
 
 export interface AdditionalLearningResponse {
-  message: string;
-  data: { folderId: string };
-}
-
-export interface BulkAdditionalLearningRequest {
-  ids: string[];
-  folderId: string;
-}
-
-export interface BulkAdditionalLearningResponse {
   message: string;
   data: { folderId: string };
 }
@@ -107,6 +99,12 @@ const toMockIsoString = (value: Date | string | undefined, fallback: string): st
 const getAssistantName = (assistantId: string | undefined): string =>
   MOCK_ASSISTANTS.find((assistant) => assistant.id === assistantId)?.name ?? assistantId ?? '';
 
+const getMessageAssistantName = (assistantId: string | undefined): string | null =>
+  getAssistantName(assistantId) || null;
+
+const getRoomDefaultAssistantName = (assistantId: string | undefined): string | null =>
+  getAssistantName(assistantId) || null;
+
 const getLearningFolderName = (folderId: string | undefined): string =>
   MOCK_LEARNING_FOLDERS.find((folder) => folder.id === folderId)?.name ?? folderId ?? '';
 
@@ -154,6 +152,7 @@ const makeFeedback = (
       tenantId: TENANT_ID,
       roomId: record?.roomId ?? room.id,
       assistantId,
+      assistantName: getMessageAssistantName(assistantId),
       parentId: record?.parentId ?? '',
       rated: true,
       content: {
@@ -217,6 +216,7 @@ const syncMessageFeedbackWithContent = (feedback: MessageFeedback): MessageFeedb
       id: content.messageId,
       roomId: record?.roomId ?? feedback.message.roomId,
       assistantId: record?.assistantId ?? feedback.message.assistantId,
+      assistantName: getMessageAssistantName(record?.assistantId ?? feedback.message.assistantId),
       parentId: record?.parentId ?? feedback.message.parentId,
       rated: true,
       content: {
@@ -255,6 +255,7 @@ const makeRoomFeedback = (room: ChatRoom, index: number): RoomFeedback => {
     room: {
       ...room,
       defaultAssistantId: room.defaultAssistantId ?? assistant.id,
+      defaultAssistantName: getRoomDefaultAssistantName(room.defaultAssistantId ?? assistant.id),
       userId: room.userId ?? user.id,
       userName: room.userName ?? user.name,
     },
@@ -313,11 +314,7 @@ export const buildFeedbackMessagesResponse = (
         case 'updatedAt':
           return a.updatedAt.localeCompare(b.updatedAt) * dir;
         case 'name':
-          return (
-            getAssistantName(a.message.assistantId).localeCompare(
-              getAssistantName(b.message.assistantId),
-            ) * dir
-          );
+          return (a.message.assistantName ?? '').localeCompare(b.message.assistantName ?? '') * dir;
         case 'accuracy':
           return a.rating.localeCompare(b.rating) * dir;
         case 'add':
@@ -387,9 +384,8 @@ export const buildFeedbackRoomsResponse = (
           return a.room.name.localeCompare(b.room.name) * dir;
         case 'name':
           return (
-            getAssistantName(a.room.defaultAssistantId).localeCompare(
-              getAssistantName(b.room.defaultAssistantId),
-            ) * dir
+            (a.room.defaultAssistantName ?? '').localeCompare(b.room.defaultAssistantName ?? '') *
+            dir
           );
         case 'level':
           return (a.rating ?? '').localeCompare(b.rating ?? '') * dir;

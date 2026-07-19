@@ -1,14 +1,17 @@
 import { ResponseStatus } from '@app-types/common';
 import { FileAttachment } from './file-attachment.type';
-import { Message, ReferenceFilePaths } from './message.type';
+import { Message, MessageFeedbackRating, ReferenceFilePaths } from './message.type';
 
 /** GET /api/messages?roomId= — message metadata item */
 export interface MessageListApiItem {
   id: string;
   roomId: string;
-  assistantId: string;
+  /** アシスタントが削除されている場合は null */
+  assistantId: string | null;
   parentId: string | null;
   isRated: boolean;
+  /** GET /api/messages?roomId= — フィードバック評価（GOOD / BAD） */
+  rating?: MessageFeedbackRating | null;
   /** チャット送信時に使用した tools（編集・再生成で再利用） */
   tools?: MessageContentToolItem[] | null;
   /** チャット送信時に適用したプロンプトテンプレート本文（編集・再生成で再利用） */
@@ -162,7 +165,7 @@ function normalizeReferencePaths(item: MessageContentApiItem): ReferenceFilePath
 function toMessage(
   item: MessageContentApiItem,
   overrides: Partial<Message> & Pick<Message, 'id' | 'role' | 'question' | 'answer'>,
-  assistantId?: string,
+  assistantId?: string | null,
 ): Message {
   return {
     id: overrides.id,
@@ -176,7 +179,7 @@ function toMessage(
     referenceFilePaths: overrides.referenceFilePaths ?? normalizeReferencePaths(item),
     isRated: overrides.isRated ?? item.isRated,
     rating: overrides.rating ?? null,
-    assistantId: overrides.assistantId ?? assistantId,
+    assistantId: overrides.assistantId ?? assistantId ?? undefined,
     message: overrides.message ?? item.message ?? undefined,
   };
 }
@@ -206,7 +209,7 @@ export function mapMessageContentItemToAssistantMessage(
 /** Maps POST /messages/contents array to UI messages (user + assistant per item). */
 export function mapMessageContentsToMessages(
   items: MessageContentApiItem[],
-  assistantIdByMessageId: Map<string, string>,
+  assistantIdByMessageId: Map<string, string | null>,
 ): Message[] {
   const result: Message[] = [];
 

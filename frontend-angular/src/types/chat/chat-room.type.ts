@@ -5,6 +5,7 @@ export interface ChatRoom {
   name: string;
   isPinned: boolean;
   defaultAssistantId?: string;
+  defaultAssistantName?: string | null;
   lastMessage?: string;
   lastMessageTime?: Date | string;
   userId?: string;

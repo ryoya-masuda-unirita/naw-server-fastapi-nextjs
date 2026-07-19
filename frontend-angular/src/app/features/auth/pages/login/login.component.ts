@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { ToastService } from '@core/services/toast.service';
 import { AuthStore } from '@core/stores/auth.store';
 import { AuthApiService } from '@features/auth/services/auth-api.service';
-import { passwordFieldValidators } from '@features/auth/validations/password.validation';
+import { passwordAsciiValidator } from '@features/auth/validations/password.validation';
 import { PASSWORD_MAX_LENGTH } from '@core/constants/validation.config';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ButtonComponent, FormInputComponent } from '@shared/components';
@@ -34,7 +34,11 @@ export class LoginComponent {
 
   readonly form = this.fb.nonNullable.group({
     username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
-    password: ['', passwordFieldValidators()],
+    // ログインはテナントごとの最小文字数ポリシーに関わらず既存パスワードを受け付ける必要があるため、minLengthは課さない (NAW-1113)
+    password: [
+      '',
+      [Validators.required, Validators.maxLength(PASSWORD_MAX_LENGTH), passwordAsciiValidator()],
+    ],
   });
 
   readonly passwordMaxLength = PASSWORD_MAX_LENGTH;

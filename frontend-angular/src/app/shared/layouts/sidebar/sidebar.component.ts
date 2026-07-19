@@ -16,6 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { I18nService } from '@core/i18n/i18n.service';
 import { ToastService } from '@core/services/toast.service';
@@ -98,6 +99,7 @@ export class SidebarComponent implements OnInit {
   private readonly chatService = inject(ChatService);
   private readonly userService = inject(UserService);
   private readonly toast = inject(ToastService);
+  private readonly queryClient = inject(QueryClient);
 
   // ── Input: layout config (admin vs user) ──
   readonly config = input.required<LayoutConfig>();
@@ -238,6 +240,7 @@ export class SidebarComponent implements OnInit {
         this.currentRoute.set(event.urlAfterRedirects);
         this.checkAdminRoute(event.urlAfterRedirects);
         this.checkUseBackSidebar(event.urlAfterRedirects);
+        this.refreshAssistantsAndTemplatesOnChatEntry(event.urlAfterRedirects);
         this.uiStore.closeMobileSidebar();
       });
 
@@ -245,6 +248,16 @@ export class SidebarComponent implements OnInit {
     this.currentRoute.set(this.router.url);
     this.checkAdminRoute(this.router.url);
     this.checkUseBackSidebar(this.router.url);
+  }
+
+  // アシスタント/テンプレートはシングルトンサービスにキャッシュされ画面遷移では自動再取得されないため、ダッシュボード/新規チャット画面への遷移時に明示的に更新する
+  private refreshAssistantsAndTemplatesOnChatEntry(url: string): void {
+    const path = url.split(/[?#]/)[0].replace(/\/$/, '');
+    const cfg = this.config();
+    if (path !== cfg.dashboardRoute && path !== cfg.chatNewRoute) return;
+
+    void this.queryClient.invalidateQueries({ queryKey: ['assistants'] });
+    void this.queryClient.invalidateQueries({ queryKey: ['prompt-templates'] });
   }
 
   // ── Chat menu ──
