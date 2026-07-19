@@ -16,23 +16,25 @@ resource "aws_acm_certificate" "main" {
 }
 
 // ACMが要求するDNS検証用レコードをRoute53に自動作成する。
-// ベースドメインとワイルドカードは検証用CNAMEが同一名・同一値になる。domain_nameをキーにすると2エントリだが、
-// allow_overwrite=trueで同じレコードをUPSERT（冪等）するため、重複エラーにならない（HashiCorp公式パターン）。
+// ベースドメインとワイルドカードは検証用CNAMEが同一名・同一値になるため、resource_record_nameをキーにして
+// 1レコード1リソースに集約する（domain_nameキーで2リソースに分けると、同一レコードを2つのリソースが
+// 取り合う形になり、destroy時に片方がNotFoundで失敗しうるため）。
+// ...(ellipsis)で同一キーの値をリストにグルーピングし、先頭要素（内容は全て同じ）だけを使う。
 resource "aws_route53_record" "cert_validation" {
   for_each = {
-    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.resource_record_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
-    }
+    }...
   }
 
   zone_id = data.aws_route53_zone.main.zone_id
-  name    = each.value.name
-  type    = each.value.type
-  records = [each.value.record]
+  name    = each.value[0].name
+  type    = each.value[0].type
+  records = [each.value[0].record]
   ttl     = 60
-  // 既存の検証レコードがあっても上書きする（重複作成エラーを防ぐ）
+  // ホストゾーンに既存の同名レコードがあっても上書きする
   allow_overwrite = true
 }
 
