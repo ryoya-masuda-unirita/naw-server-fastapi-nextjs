@@ -127,6 +127,31 @@ WHERE NOT EXISTS (
     WHERE user_id = '00000000-0000-4000-8000-000000000005'
 );
 
+-- パスワード再設定「新旧パスワード同一」確認用ユーザー (Issue #166: 05_パスワード再設定 項番21用)
+-- login_id: password-reuse-user / password: ReuseTest1234! (bcrypt ハッシュ、test-tenantの最小長12文字以上)
+-- 既存シードユーザーのパスワードは全て12文字未満(test-tenantのpw_policy_min_length=12)で
+-- 「新パスワード=旧パスワード」を試すと最小長エラーが先に出てしまうため、専用ユーザーを用意する
+INSERT INTO users (id, login_id, tenant_id, name, role, is_required_password_reset)
+VALUES (
+    '00000000-0000-4000-8000-000000000006',
+    'password-reuse-user',
+    'test-tenant',
+    'パスワード再利用確認ユーザー',
+    'USER',
+    false
+)
+ON CONFLICT (login_id, tenant_id) DO NOTHING;
+
+INSERT INTO password_histories (tenant_id, user_id, password)
+SELECT
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000006',
+    '$2b$12$SRIM0lKcCwOOqwbHOYvVRe.Bn1Q1CkWVHZOAAbJh9vuY6Ah8dqh/q'
+WHERE NOT EXISTS (
+    SELECT 1 FROM password_histories
+    WHERE user_id = '00000000-0000-4000-8000-000000000006'
+);
+
 -- 動作確認用グループ (id 固定: アシスタント機能の動作確認用)
 INSERT INTO groups (id, tenant_id, name)
 VALUES (
