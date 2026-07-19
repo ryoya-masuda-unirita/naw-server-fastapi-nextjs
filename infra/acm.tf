@@ -15,7 +15,9 @@ resource "aws_acm_certificate" "main" {
   }
 }
 
-// ACMが要求するDNS検証用レコードをRoute53に自動作成する
+// ACMが要求するDNS検証用レコードをRoute53に自動作成する。
+// ベースドメインとワイルドカードは検証用CNAMEが同一名・同一値になる。domain_nameをキーにすると2エントリだが、
+// allow_overwrite=trueで同じレコードをUPSERT（冪等）するため、重複エラーにならない（HashiCorp公式パターン）。
 resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
@@ -30,6 +32,8 @@ resource "aws_route53_record" "cert_validation" {
   type    = each.value.type
   records = [each.value.record]
   ttl     = 60
+  // 既存の検証レコードがあっても上書きする（重複作成エラーを防ぐ）
+  allow_overwrite = true
 }
 
 // DNS検証が完了するまで待つ（この完了後にCloudFrontで証明書が使えるようになる）
