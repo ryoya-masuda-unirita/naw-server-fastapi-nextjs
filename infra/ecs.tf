@@ -19,7 +19,12 @@ resource "aws_launch_template" "ecs" {
     name = aws_iam_instance_profile.ecs.name
   }
 
-  vpc_security_group_ids = [aws_security_group.ecs.id]
+  // publicサブネットに配置してもpublic IPが付かないとECR/ECS APIに出られないため付与する。
+  // SG指定もこちらに移す（vpc_security_group_idsとは併用不可）。
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.ecs.id]
+  }
 
   // EC2起動時に実行するスクリプト。このEC2がどのECSクラスタに参加するかをecs.configに書き込む
   user_data = base64encode(<<-EOF

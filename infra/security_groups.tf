@@ -61,6 +61,17 @@ resource "aws_security_group" "ecs" {
   }
 }
 
+// ECSのEC2はECR/ECS API/CloudWatch LogsなどAWSサービスへの通信が必須。
+// エンドポイントの範囲が広く変わりうるため、絞らず全egressを許可する。
+resource "aws_security_group_rule" "ecs_all_out" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ecs.id
+}
+
 resource "aws_security_group_rule" "ecs_http_in_alb" {
   type      = "ingress"
   from_port = 8000
@@ -126,5 +137,57 @@ resource "aws_security_group_rule" "elasticache_redis_in_ecs" {
   security_group_id = aws_security_group.elasticache.id
   // 送信元
   source_security_group_id = aws_security_group.ecs.id
+}
+
+// bastionはRDSへの接続(5432)と、OS/セキュリティパッチ更新用のHTTPS(443)のみを許可する。
+resource "aws_security_group_rule" "bastion_postgres_out" {
+  type      = "egress"
+  from_port = 5432
+  to_port   = 5432
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.bastion.id
+  // 送信先(egressでもフィールド名はsource_security_group_id)
+  source_security_group_id = aws_security_group.rds.id
+}
+
+resource "aws_security_group_rule" "bastion_https_out" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.bastion.id
+}
+
+// ALBはbackend(ECS、8000番)への転送のみ行うため、そこだけ許可する。
+resource "aws_security_group_rule" "alb_ecs_out" {
+  type      = "egress"
+  from_port = 8000
+  to_port   = 8000
+  protocol  = "tcp"
+  // このルールが属するSG
+  security_group_id = aws_security_group.alb.id
+  // 送信先(egressでもフィールド名はsource_security_group_id)
+  source_security_group_id = aws_security_group.ecs.id
+}
+
+// RDS/ElastiCacheは検証コストに見合わないため絞らず全egressを許可する。
+resource "aws_security_group_rule" "rds_all_out" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.rds.id
+}
+
+resource "aws_security_group_rule" "elasticache_all_out" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.elasticache.id
 }
 
