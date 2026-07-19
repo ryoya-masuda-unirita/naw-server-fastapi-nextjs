@@ -59,6 +59,7 @@ rsync -a --delete \
   --exclude ".angular/" \
   --exclude "dist/" \
   --exclude "coverage/" \
+  --exclude ".gitlab-ci.yml" \
   "$SRC_DIR/" "$TARGET_DIR/"
 
 echo "== 2. モノレポ向け設定を再適用 =="

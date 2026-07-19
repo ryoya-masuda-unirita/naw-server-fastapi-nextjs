@@ -38,6 +38,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 | `.vscode/launch.json` | `localhost:4200` → `localhost:4201` | devサーバーのポートに合わせるため |
 | `README.md`（frontend-angular内） | `localhost:4200` → `localhost:4201` | 同上 |
 | `.github/workflows/deploy-dev.yml` | 全行コメントアウトし `# DISABLED` を先頭に付与 | 単独リポジトリ向けのCIで、モノレポでは使わないため |
+| `.gitlab-ci.yml` | rsyncの段階で同期対象から除外（コピーしない） | secuaigent側がGitLab CIに移行したファイルで、モノレポでは使わないため |
 
 `package.json` / `src/environments/environment.ts` / `src/environments/environment.production.ts` /
 アプリケーションのビジネスロジック本体は変更不要（そのまま使える）。
