@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from uuid import uuid4
@@ -28,7 +29,8 @@ class TestAuthServiceLogin:
             f"{REPO_PATH}.get_latest",
             new=AsyncMock(
                 return_value=MagicMock(
-                    password=test_user_with_password["hashed_password"]
+                    password=test_user_with_password["hashed_password"],
+                    expired_at=None,
                 )
             ),
         ):
@@ -117,7 +119,9 @@ class TestAuthServiceLogin:
         with patch(
             f"{REPO_PATH}.get_latest",
             new=AsyncMock(
-                return_value=MagicMock(password=hash_password("TestPassword123!"))
+                return_value=MagicMock(
+                    password=hash_password("TestPassword123!"), expired_at=None
+                )
             ),
         ):
             response = await AuthService.login(
@@ -127,6 +131,70 @@ class TestAuthServiceLogin:
         assert response.loginStatus == "REQUIRES_PASSWORD_RESET"
         assert response.reason == "INITIAL"
         assert response.token is None
+
+    async def test_login_when_password_expired(self, test_tenant):
+        """パスワード有効期限切れの場合、reason=EXPIREDでREQUIRES_PASSWORD_RESETを返すこと"""
+        session = AsyncMock()
+        user = User(
+            id=uuid4(),
+            tenant_id=test_tenant.id,
+            login_id="expireduser",
+            name="Expired User",
+            role=UserRole.USER,
+            is_required_password_reset=False,
+        )
+        mock_user_result = MagicMock()
+        mock_user_result.scalars.return_value.first.return_value = user
+        session.execute = AsyncMock(return_value=mock_user_result)
+
+        expired_at = datetime.now(timezone.utc) - timedelta(days=1)
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=hash_password("TestPassword123!"), expired_at=expired_at
+                )
+            ),
+        ):
+            response = await AuthService.login(
+                user.login_id, "TestPassword123!", test_tenant.id, session
+            )
+
+        assert response.loginStatus == "REQUIRES_PASSWORD_RESET"
+        assert response.reason == "EXPIRED"
+        assert response.token is None
+
+    async def test_login_when_expired_and_reset_required_returns_expired(
+        self, test_tenant
+    ):
+        """有効期限切れと初回ログインが両方該当する場合、EXPIREDが優先されること"""
+        session = AsyncMock()
+        user = User(
+            id=uuid4(),
+            tenant_id=test_tenant.id,
+            login_id="bothuser",
+            name="Both User",
+            role=UserRole.USER,
+            is_required_password_reset=True,
+        )
+        mock_user_result = MagicMock()
+        mock_user_result.scalars.return_value.first.return_value = user
+        session.execute = AsyncMock(return_value=mock_user_result)
+
+        expired_at = datetime.now(timezone.utc) - timedelta(days=1)
+        with patch(
+            f"{REPO_PATH}.get_latest",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    password=hash_password("TestPassword123!"), expired_at=expired_at
+                )
+            ),
+        ):
+            response = await AuthService.login(
+                user.login_id, "TestPassword123!", test_tenant.id, session
+            )
+
+        assert response.reason == "EXPIRED"
 
 
 class TestAuthServiceLoginWithLoginKey:
