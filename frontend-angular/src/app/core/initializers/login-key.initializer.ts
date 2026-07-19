@@ -1,7 +1,10 @@
 import { inject, provideAppInitializer } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import { STORAGE_KEYS } from '@core/constants';
+import { ToastService } from '@core/services/toast.service';
 import { AuthStore } from '@core/stores/auth.store';
+import { TranslateService } from '@ngx-translate/core';
 
 /**
  * URL クエリパラメータ `loginkey` を検出したら、router 初期ナビゲーションより前に
@@ -25,7 +28,14 @@ export async function runLoginKeyInitializer(): Promise<void> {
 
   // inject() は最初の await より前（同期コンテキスト内）で呼ぶ必要がある。
   const authStore = inject(AuthStore);
-  await authStore.loginWithKey(loginKey);
+  const toast = inject(ToastService);
+  const translate = inject(TranslateService);
+  const ok = await authStore.loginWithKey(loginKey);
+  if (!ok) {
+    // APP_INITIALIZER は並列実行されるため、instant() だと翻訳未ロード時にキーがそのまま返る。
+    const message = await firstValueFrom(translate.get('AUTH.LOGIN_KEY.ERROR'));
+    toast.error(message);
+  }
 
   // URL から認証パラメータを除去（履歴・ブックマークに鍵を残さない）。
   params.delete('loginkey');

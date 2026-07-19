@@ -3,6 +3,7 @@ import type { Message } from '@app-types/chat/message.type';
 import type { MessageListApiItem } from '@app-types/chat/message-api.type';
 import {
   adjustActiveVersionIndexAfterDelete,
+  applyMessageMetadataToMessages,
   buildVersionInfoByMessageId,
   buildVisibleThread,
   collectDescendantRecordIds,
@@ -52,6 +53,26 @@ const allMessages: Message[] = [
 ];
 
 describe('message-thread.helpers', () => {
+  it('applyMessageMetadataToMessages が messages 一覧の isRated / rating を反映すること', () => {
+    const record: MessageListApiItem = {
+      id: 'msg-1',
+      roomId: 'room-1',
+      assistantId: 'asst-1',
+      parentId: null,
+      isRated: true,
+      rating: 'BAD',
+    };
+    const messages = [
+      buildMessage('msg-1', 'user'),
+      buildMessage('msg-1', 'assistant', { isRated: false, rating: null }),
+    ];
+
+    const merged = applyMessageMetadataToMessages(messages, [record]);
+
+    expect(merged[0]).toMatchObject({ isRated: true, rating: 'BAD' });
+    expect(merged[1]).toMatchObject({ isRated: true, rating: 'BAD' });
+  });
+
   it('同一 parentId の兄弟 records を取得すること', () => {
     expect(getSiblingRecords(records, null).map((record) => record.id)).toEqual(['msg-1', 'msg-3']);
   });

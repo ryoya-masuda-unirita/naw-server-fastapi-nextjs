@@ -79,6 +79,54 @@ WHERE NOT EXISTS (
     WHERE user_id = '00000000-0000-4000-8000-000000000003'
 );
 
+-- 初回ログイン確認用ユーザー (Issue #163: E2Eテスト「初回PW遷移」用)
+-- login_id: first-login-user / password: firstlogin@1234 (bcrypt ハッシュ)
+INSERT INTO users (id, login_id, tenant_id, name, role, is_required_password_reset)
+VALUES (
+    '00000000-0000-4000-8000-000000000004',
+    'first-login-user',
+    'test-tenant',
+    '初回ログインユーザー',
+    'USER',
+    true
+)
+ON CONFLICT (login_id, tenant_id) DO NOTHING;
+
+INSERT INTO password_histories (tenant_id, user_id, password)
+SELECT
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000004',
+    '$2b$12$XeQyTucT5JULKxd7wjh./et9ElfEncbVmE6wB2UxcBsdMyrI35O5K'
+WHERE NOT EXISTS (
+    SELECT 1 FROM password_histories
+    WHERE user_id = '00000000-0000-4000-8000-000000000004'
+);
+
+-- パスワード期限切れ確認用ユーザー (Issue #163: E2Eテスト「期限切れPW遷移」用)
+-- login_id: expired-password-user / password: expired@1234 (bcrypt ハッシュ)
+-- password_histories.expired_at を過去日時にすることで有効期限切れ状態を再現する
+INSERT INTO users (id, login_id, tenant_id, name, role, is_required_password_reset)
+VALUES (
+    '00000000-0000-4000-8000-000000000005',
+    'expired-password-user',
+    'test-tenant',
+    'パスワード期限切れユーザー',
+    'USER',
+    false
+)
+ON CONFLICT (login_id, tenant_id) DO NOTHING;
+
+INSERT INTO password_histories (tenant_id, user_id, password, expired_at)
+SELECT
+    'test-tenant',
+    '00000000-0000-4000-8000-000000000005',
+    '$2b$12$tLZYNeuzRaPKUPkzYYtBNuTzv/F7kBlZTtw9XfQ.GlZfEhCgvaAYq',
+    now() - interval '1 day'
+WHERE NOT EXISTS (
+    SELECT 1 FROM password_histories
+    WHERE user_id = '00000000-0000-4000-8000-000000000005'
+);
+
 -- 動作確認用グループ (id 固定: アシスタント機能の動作確認用)
 INSERT INTO groups (id, tenant_id, name)
 VALUES (

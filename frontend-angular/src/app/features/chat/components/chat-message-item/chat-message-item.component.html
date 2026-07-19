@@ -55,6 +55,7 @@
       [thumbsUpActive]="thumbsUpActive()"
       [thumbsDownActive]="thumbsDownActive()"
       [isReadOnly]="isReadOnly() ?? false"
+      [assistantUnresolved]="isAssistantUnresolved()"
     />
 
     <div class="chat-user-edit" [hidden]="!isEditing() || (isReadOnly() ?? false)">
@@ -139,6 +140,7 @@
         [thumbsUpActive]="thumbsUpActive()"
         [thumbsDownActive]="thumbsDownActive()"
         [isReadOnly]="isReadOnly() ?? false"
+        [assistantUnresolved]="isAssistantUnresolved()"
       />
     }
   </article>

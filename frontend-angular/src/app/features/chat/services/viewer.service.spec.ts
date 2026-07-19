@@ -304,6 +304,17 @@ describe('ViewerService', () => {
       expect(service.markdownContent()).toBe('ルーム2の本文');
     });
 
+    it('一覧取得完了後に listLoadedRoomId が更新されること', async () => {
+      api.get.mockResolvedValue({ data: [{ id: 'lib-1', title: '会議メモ' }] });
+
+      expect(service.hasListLoadedFor('room-1')).toBe(false);
+      await service.loadList('room-1');
+
+      expect(service.listLoadedRoomId()).toBe('room-1');
+      expect(service.hasListLoadedFor('room-1')).toBe(true);
+      expect(service.hasListLoadedFor('room-2')).toBe(false);
+    });
+
     it('一覧が空の場合は選択を解除し本文をクリアすること', async () => {
       service.activeLibrary.set({ id: 'lib-1', title: '古いライブラリ' });
       service.markdownContent.set('表示中の本文');

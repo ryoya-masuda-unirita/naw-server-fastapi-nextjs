@@ -1,23 +1,23 @@
 ---
 name: naw-frontend-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent-client to React frontend/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/secuaigent-client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client to React frontend/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/secuaigent/client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
 ---
 
 # NAW Frontend Issue Batch
 
-`~/Documents/secuaigent-client`（Angular、移植元）にある未移植のフロントエンド画面・コンポーネントを検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。バックエンド版の `naw-issue-batch` のフロントエンド対になるスキル。
+`~/Documents/secuaigent/client`（Angular、移植元）にある未移植のフロントエンド画面・コンポーネントを検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。バックエンド版の `naw-issue-batch` のフロントエンド対になるスキル。
 
 **ユーザーが明示的に `/naw-frontend-issue-batch` を叩いたとき、またはこのフローの続行を明示的に指示したときのみ使うこと。** 特定のIssueに着手して実装する場合は `naw-frontend-issue-workflow` を使う。バックエンド移植のIssue起票は `naw-issue-batch` を使う。
 
 ## 前提（合意済みの仕様）
 
-- **毎サイクル、必ず `~/Documents/secuaigent-client` の `develop` を最新化してから候補検出を行う**（`naw-frontend-explore`任せにせず、メインループ側でも明示的に最新化する。詳細は「1. 移植元の最新化」参照）
-- **候補検出・粒度判断は常に、最新化した `~/Documents/secuaigent-client` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
+- **毎サイクル、必ず `~/Documents/secuaigent/client` の `develop` を最新化してから候補検出を行う**（`naw-frontend-explore`任せにせず、メインループ側でも明示的に最新化する。詳細は「1. 移植元の最新化」参照）
+- **候補検出・粒度判断は常に、最新化した `~/Documents/secuaigent/client` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
 - 対象: フロントエンド（React `frontend/`）
 - **粒度はAIの判断**: 1画面（1ルート）単位にするか、1コンポーネント単位にするかは、依存関係の強さ・共有度合いを見てそのつど判断する。判断基準に迷う場合は1画面単位をデフォルトにする
 - **依存するバックエンドAPIが `backend/` に未実装の候補は除外する**。フロントエンドだけ先行実装してもAPIが無ければ動作確認できないため、バックエンドが実装済みの画面・機能を優先する（`naw-frontend-explore`に依存APIの実装状況も確認させる）
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。`naw-frontend-explore`に以下を必ず突き合わせさせる
-  1. 最新化済みの `~/Documents/secuaigent-client` の `develop`
+  1. 最新化済みの `~/Documents/secuaigent/client` の `develop`
   2. `frontend/src/` の既存実装
   3. `backend/app/routers/` の対応API実装状況
   4. `gh issue list --state all`（特に `frontend-port` ラベル付きIssue）
@@ -45,17 +45,17 @@ Skill(skill="loop", args="/naw-frontend-issue-batch")
 
 ### 1. 移植元の最新化
 
-候補検出に入る**前に必ず**、メインループ側で以下を実行し、`~/Documents/secuaigent-client` の `develop` を最新化する。
+候補検出に入る**前に必ず**、メインループ側で以下を実行し、`~/Documents/secuaigent/client` の `develop` を最新化する。
 
 ```bash
-cd ~/Documents/secuaigent-client
+cd ~/Documents/secuaigent/client
 git fetch
 git checkout develop
 git pull
 ```
 
 - 未コミットのローカル変更等で`checkout`/`pull`が失敗する場合は、変更を破棄・上書きせず、状況をユーザーに報告して指示を仰ぐ
-- `secuaigent-client` は途中からgit管理のため、`git log` だけでは全履歴を追えない場合がある。最新化後は必ずコード自体を読んで実装状況を把握する
+- `secuaigent/client` は途中からgit管理のため、`git log` だけでは全履歴を追えない場合がある。最新化後は必ずコード自体を読んで実装状況を把握する
 - ここで最新化した状態を、以降の候補検出・粒度判断すべての基準とする
 
 ### 2. 候補検出
@@ -63,7 +63,7 @@ git pull
 この調査ステップは読み取り専用のリサーチであり、メインループのコンテキストを毎サイクル圧迫しないよう `naw-frontend-explore` エージェント（バックエンド用の `naw-explore` ではなくこちらを使う）に委譲する。
 
 - `Agent(subagent_type: naw-frontend-explore)` を呼び、以下を自己完結のプロンプトで依頼する（会話の前提を知らない前提で、必要な情報をすべてプロンプトに含めること）
-  - `~/Documents/secuaigent-client` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-frontend-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、画面・コンポーネント一覧を洗い出すこと
+  - `~/Documents/secuaigent/client` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-frontend-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、画面・コンポーネント一覧を洗い出すこと
   - `frontend/src/` の既存実装、`backend/app/routers/` の対応API実装状況、`gh issue list --state all`（`frontend-port` ラベル付きIssue）、`gh pr list --state open` と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていない画面・コンポーネントを検出すること
   - **依存するバックエンドAPIが未実装の候補は除外すること**を明示する
   - 見つかった未対応の画面・コンポーネントについて、関連するもの同士（同一ルート内で密結合、同じAPIレスポンスを共有する等）であれば1つの単位としてまとめてよいこと、そうでなければ画面単位で個別に扱うことを伝え、まとめる場合・分ける場合それぞれの判断理由も返すよう指示する

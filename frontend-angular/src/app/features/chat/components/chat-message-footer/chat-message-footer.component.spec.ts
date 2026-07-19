@@ -90,6 +90,56 @@ describe('ChatMessageFooterComponent', () => {
     });
   });
 
+  describe('アシスタント解決不可時の編集・再生成', () => {
+    function getEditButton(): HTMLButtonElement {
+      return fixture.debugElement.query(By.css('[aria-label="CHAT.MESSAGE.EDIT"]')).nativeElement;
+    }
+
+    function getRegenerateButton(): HTMLButtonElement {
+      return fixture.debugElement.query(By.css('[aria-label="再生成"]')).nativeElement;
+    }
+
+    test('assistantUnresolved=true のとき編集ボタンが disabled であること', () => {
+      fixture.componentRef.setInput('isUser', true);
+      fixture.componentRef.setInput('assistantUnresolved', true);
+      fixture.detectChanges();
+
+      expect(getEditButton().disabled).toBe(true);
+    });
+
+    test('assistantUnresolved=true のとき再生成ボタンが disabled であること', () => {
+      fixture.componentRef.setInput('isUser', false);
+      fixture.componentRef.setInput('assistantUnresolved', true);
+      fixture.detectChanges();
+
+      expect(getRegenerateButton().disabled).toBe(true);
+    });
+
+    test('assistantUnresolved=true のとき handleOpenEdit で openEdit が発火しないこと', () => {
+      fixture.componentRef.setInput('assistantUnresolved', true);
+      fixture.detectChanges();
+      const spy = vi.spyOn(component.openEdit, 'emit');
+      component.handleOpenEdit();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('assistantUnresolved=true のとき handleRegenerate で regenerate が発火しないこと', () => {
+      fixture.componentRef.setInput('assistantUnresolved', true);
+      fixture.detectChanges();
+      const spy = vi.spyOn(component.regenerate, 'emit');
+      component.handleRegenerate();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('assistantUnresolved=false のときは編集・再生成ボタンが有効であること', () => {
+      fixture.componentRef.setInput('isUser', true);
+      fixture.componentRef.setInput('assistantUnresolved', false);
+      fixture.detectChanges();
+
+      expect(getEditButton().disabled).toBe(false);
+    });
+  });
+
   describe('評価ボタンのイベント', () => {
     test('未評価時: handleThumbsUp で thumbsUp が発火すること', () => {
       const spy = vi.spyOn(component.thumbsUp, 'emit');

@@ -2,7 +2,8 @@
 @if (activeCount() === 1) {
   <button
     type="button"
-    class="chat-active-button"
+    class="chat-active-button min-w-0"
+    data-chat-active-btn
     [attr.aria-label]="'CHAT.INPUT.MANAGE_ACTIVE_FEATURES' | translate"
   >
     @if (webSearchActive()) {
@@ -77,7 +78,8 @@
     <button
       #multiPanelButton
       type="button"
-      class="chat-active-button"
+      class="chat-active-button shrink-0"
+      data-chat-active-btn
       [attr.aria-label]="'CHAT.INPUT.MANAGE_ACTIVE_FEATURES' | translate"
       (click)="toggleMultiPanel()"
     >

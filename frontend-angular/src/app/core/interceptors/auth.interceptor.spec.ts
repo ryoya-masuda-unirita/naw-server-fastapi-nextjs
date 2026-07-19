@@ -66,6 +66,10 @@ describe('authInterceptor（認証付加ヘッダー）', () => {
   afterEach(() => {
     // verify: 未処理の HTTP（expectOne/flush し忘れ・余計な送信）があれば失敗
     httpMock.verify();
+    // モックした window.location を後続のテストファイルへ漏らさない
+    // （vmThreads は同一ワーカー内でグローバルを共有しうるため、
+    //  history.replaceState 依存のテスト（例: login-key.initializer）を壊す）。
+    restoreWindowLocation();
   });
 
   // 本実装: tenantId が truthy なら setHeaders に X-Tenant-ID を入れ、常に withCredentials: true

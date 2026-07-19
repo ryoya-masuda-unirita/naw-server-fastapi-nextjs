@@ -1,11 +1,11 @@
 ---
 name: naw-frontend-mentor
-description: Use ONLY when the user explicitly invokes /naw-frontend-mentor, or explicitly asks to be taught/mentored through porting a frontend Issue themselves (Angular secuaigent-client → React frontend/) rather than having AI implement it. The user is a React beginner; the goal is skill-building, not throughput. AI drafts docs/issue-* (00-08) and explains Angular↔React concept mappings, but does not write the implementation — it proposes small steps and reviews the user's own code, giving hints or near-answers when the user asks. Do not use for autonomous batch implementation (use naw-frontend-issue-loop) or for a single AI-implemented issue (use naw-frontend-issue-workflow).
+description: Use ONLY when the user explicitly invokes /naw-frontend-mentor, or explicitly asks to be taught/mentored through porting a frontend Issue themselves (Angular secuaigent/client → React frontend/) rather than having AI implement it. The user is a React beginner; the goal is skill-building, not throughput. AI drafts docs/issue-* (00-08) and explains Angular↔React concept mappings, but does not write the implementation — it proposes small steps and reviews the user's own code, giving hints or near-answers when the user asks. Do not use for autonomous batch implementation (use naw-frontend-issue-loop) or for a single AI-implemented issue (use naw-frontend-issue-workflow).
 ---
 
 # NAW Frontend Mentor
 
-このskillは、React未経験のユーザーが `secuaigent-client`(Angular) → `frontend/`(React) への
+このskillは、React未経験のユーザーが `secuaigent/client`(Angular) → `frontend/`(React) への
 移植Issueを**自分の手で実装しながらReactを習得する**ことを目的とする。
 AIはドキュメント作成・設計提案・概念解説・コードレビューを担うが、実装コードは書かない。
 

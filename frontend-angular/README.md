@@ -45,16 +45,7 @@ export const environment = {
 
 ### 2. バックエンドサーバーを起動する
 
-モノレポルートで PostgreSQL を起動し、`backend/` で FastAPI を起動してください。
-
-```bash
-# プロジェクトルート
-docker compose up -d
-
-# FastAPI（ポート 8001）
-cd backend
-uv run uvicorn app.main:app --reload --port 8001
-```
+バックエンド（`naw-server`）を事前に起動しておいてください。詳細は `naw-server` の README を参照してください。
 
 ### 3. フロントエンドサーバーを起動する
 

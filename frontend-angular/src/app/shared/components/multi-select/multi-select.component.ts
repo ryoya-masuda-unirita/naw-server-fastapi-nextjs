@@ -114,6 +114,20 @@ export class MultiSelectComponent<T = string> implements ControlValueAccessor {
     }
   }
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (this.isOpen() && !this.isMobile()) {
+      this.updateDropdownLayout();
+    }
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    if (this.isOpen() && !this.isMobile()) {
+      this.updateDropdownLayout();
+    }
+  }
+
   toggle(): void {
     if (this.disabled()) return;
     if (this.isOpen()) {
@@ -126,18 +140,11 @@ export class MultiSelectComponent<T = string> implements ControlValueAccessor {
   open(): void {
     if (this.disabled()) return;
     this.snapshot = [...this.value()];
-    const rect = this.elementRef.nativeElement.getBoundingClientRect();
-    const { top: containerTop, bottom: containerBottom } = this.getClippingAncestorBounds();
-    const spaceBelow = containerBottom - rect.bottom - 16;
-    const spaceAbove = rect.top - containerTop - 16;
-    // Open above when there's clearly more room there (e.g. trigger near
-    // the bottom of a dialog). Falls back to "below" by default.
-    const placeAbove = !this.forceBelow() && spaceAbove > spaceBelow && spaceBelow < 240;
-    this.placeAbove.set(placeAbove);
-    const available = placeAbove ? spaceAbove : spaceBelow;
-    this.dropdownMaxHeight.set(`${Math.max(available, 160)}px`);
     this.isVisible.set(true);
-    requestAnimationFrame(() => this.isOpen.set(true));
+    requestAnimationFrame(() => {
+      this.updateDropdownLayout();
+      this.isOpen.set(true);
+    });
   }
 
   confirm(): void {
@@ -175,6 +182,7 @@ export class MultiSelectComponent<T = string> implements ControlValueAccessor {
       ? current.filter((v) => v !== option.value)
       : [...current, option.value];
     this.value.set(next);
+    this.scheduleUpdateDropdownLayout();
     // Emit only on confirm(); interim toggles are internal until confirmed.
   }
 
@@ -182,6 +190,7 @@ export class MultiSelectComponent<T = string> implements ControlValueAccessor {
     const enabled = this.options().filter((o) => !o.disabled);
     const next = this.allSelected() ? [] : enabled.map((o) => o.value);
     this.value.set(next);
+    this.scheduleUpdateDropdownLayout();
     // Emit only on confirm(); interim toggles are internal until confirmed.
   }
 
@@ -207,6 +216,26 @@ export class MultiSelectComponent<T = string> implements ControlValueAccessor {
 
   setDisabledState?(_isDisabled: boolean): void {
     // Disabled state handled by input signal
+  }
+
+  private updateDropdownLayout(): void {
+    if (this.isMobile()) return;
+
+    const rect = this.elementRef.nativeElement.getBoundingClientRect();
+    const { top: containerTop, bottom: containerBottom } = this.getClippingAncestorBounds();
+    const spaceBelow = containerBottom - rect.bottom - 16;
+    const spaceAbove = rect.top - containerTop - 16;
+    // Open above when there's clearly more room there (e.g. trigger near
+    // the bottom of a dialog). Falls back to "below" by default.
+    const placeAbove = !this.forceBelow() && spaceAbove > spaceBelow && spaceBelow < 240;
+    this.placeAbove.set(placeAbove);
+    const available = placeAbove ? spaceAbove : spaceBelow;
+    this.dropdownMaxHeight.set(`${Math.max(available, 160)}px`);
+  }
+
+  private scheduleUpdateDropdownLayout(): void {
+    if (!this.isOpen() || this.isMobile()) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => this.updateDropdownLayout()));
   }
 
   private getClippingAncestorBounds(): { top: number; bottom: number } {

@@ -126,14 +126,19 @@ function buildPartitions(
 ): ContentPartition[] {
   const assistantMap = new Map(assistants.map((assistant) => [assistant.id, assistant]));
   const groups = new Map<string, string[]>();
+  const nawMessageIds: string[] = [];
 
   for (const message of messages) {
+    // アシスタントが削除されている（assistantId が null）メッセージも本文取得対象に含める
+    if (message.assistantId == null) {
+      nawMessageIds.push(message.id);
+      continue;
+    }
     const messageIds = groups.get(message.assistantId) ?? [];
     messageIds.push(message.id);
     groups.set(message.assistantId, messageIds);
   }
 
-  const nawMessageIds: string[] = [];
   const partitions: ContentPartition[] = [];
 
   for (const [assistantId, messageIds] of groups) {

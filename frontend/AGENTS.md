@@ -4,7 +4,7 @@
 
 ## 移植元
 
-Angular 実装: `~/Documents/secuaigent-client`
+Angular 実装: `~/Documents/secuaigent/client`
 
 実装前に必ず最新状態を確認すること。
 
@@ -29,9 +29,9 @@ Angular のデザインを忠実に React へ移行すること。独自の簡�
 
 | リソース | パス |
 |---|---|
-| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/secuaigent-client/src/styles.css` |
-| 翻訳ファイル（日本語） | `~/Documents/secuaigent-client/public/i18n/ja.json` |
-| 翻訳ファイル（英語） | `~/Documents/secuaigent-client/public/i18n/en.json` |
+| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/secuaigent/client/src/styles.css` |
+| 翻訳ファイル（日本語） | `~/Documents/secuaigent/client/public/i18n/ja.json` |
+| 翻訳ファイル（英語） | `~/Documents/secuaigent/client/public/i18n/en.json` |
 | 各ページの HTML テンプレート | `*.component.html` |
 
 ### 移行手順
@@ -82,8 +82,8 @@ api-client.ts         fetch ラッパー
 
 - Angular のデザインを忠実に React へ移行する。独自の簡易実装で代替しない
 - 実装前に対象ページの Angular HTML テンプレート（`*.component.html`）を必ず読む
-- `~/Documents/secuaigent-client/src/styles.css` のカスタムカラー・カスタムクラスを確認し、React 側の `src/index.css` に必要な定義を反映する
-- `~/Documents/secuaigent-client/public/i18n/ja.json` / `en.json` を確認し、文言を i18n 経由で移植する
+- `~/Documents/secuaigent/client/src/styles.css` のカスタムカラー・カスタムクラスを確認し、React 側の `src/index.css` に必要な定義を反映する
+- `~/Documents/secuaigent/client/public/i18n/ja.json` / `en.json` を確認し、文言を i18n 経由で移植する
 - `bg-blue-600` などの汎用 Tailwind クラスで Angular のカスタムカラーを代用しない
 - Angular HTML を読まずに独自レイアウトを実装しない
 - Standalone Component は React Component へ移植

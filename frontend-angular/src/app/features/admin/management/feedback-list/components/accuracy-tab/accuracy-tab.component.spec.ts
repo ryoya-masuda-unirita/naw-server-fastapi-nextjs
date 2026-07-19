@@ -10,8 +10,8 @@ import { TranslateService } from '@ngx-translate/core';
 import type { GetMessageFeedbackViewModel, FeedbackItem } from '@app-types/admin/feedback.types';
 import { FeedbackMessageApiService } from '../../services/feedback-message-api.service';
 import { FeedbackListOptionsService } from '../../services/feedback-list-options.service';
-import { AssistantsService } from '@features/chat/services/assistants.service';
 import { AccuracyTabComponent } from './accuracy-tab.component';
+import { UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY } from '../../utils/assistant-name.util';
 
 // ─── 翻訳パイプスタブ ─────────────────────────────────────────────────────────
 
@@ -90,34 +90,9 @@ class FormSortInputStub {
   orderChange = output<string | null>();
 }
 
-@Component({
-  selector: 'app-icon-button',
-  standalone: true,
-  template: '<button (click)="buttonClick.emit()"></button>',
-})
-class IconButtonStub {
-  variant = input<string>();
-  size = input<string>();
-  ariaLabel = input<string>();
-  buttonClick = output<void>();
-}
-
 @Component({ selector: 'app-svg-icon', standalone: true, template: '' })
 class SvgIconStub {
   name = input<string>();
-}
-
-@Component({
-  selector: 'app-button',
-  standalone: true,
-  template: '<button (click)="buttonClick.emit()"><ng-content></ng-content></button>',
-})
-class ButtonStub {
-  variant = input<string>();
-  intent = input<string>();
-  size = input<string>();
-  classProps = input<string>();
-  buttonClick = output<void>();
 }
 
 @Component({ selector: 'app-context-menu', standalone: true, template: '' })
@@ -142,6 +117,7 @@ const FIXTURE_ACCURACY_RESPONSE: GetMessageFeedbackViewModel = {
         messageId: 'msg-001',
         message: {
           assistantId: 'assistant-001',
+          assistantName: 'テストアシスタント',
           content: { question: '質問テスト', answer: '回答テスト' },
         },
         rating: 'GOOD',
@@ -156,6 +132,7 @@ const FIXTURE_ACCURACY_RESPONSE: GetMessageFeedbackViewModel = {
         messageId: 'msg-002',
         message: {
           assistantId: 'assistant-001',
+          assistantName: 'テストアシスタント',
           content: { question: '質問2', answer: '回答2' },
         },
         rating: 'BAD',
@@ -190,6 +167,12 @@ const FIXTURE_ACCURACY_RESPONSE: GetMessageFeedbackViewModel = {
 const testQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+async function waitForLoadedItems(component: AccuracyTabComponent): Promise<void> {
+  await vi.waitFor(() => {
+    expect(component.items().length).toBeGreaterThan(0);
+  });
+}
+
 // ─── テスト ───────────────────────────────────────────────────────────────────
 
 describe('AccuracyTabComponent', () => {
@@ -199,18 +182,12 @@ describe('AccuracyTabComponent', () => {
     fetchAccuracyFeedback: ReturnType<typeof vi.fn>;
     learningFoldersQuery: ReturnType<typeof vi.fn>;
     isAddingLearning: ReturnType<typeof signal<boolean>>;
-    isAddingBulkLearning: ReturnType<typeof signal<boolean>>;
     addAdditionalLearning: ReturnType<typeof vi.fn>;
-    addBulkAdditionalLearning: ReturnType<typeof vi.fn>;
   };
   let mockFolderOptionsService: {
     folders: ReturnType<typeof signal<unknown[]>>;
     folderOptions: ReturnType<typeof signal<unknown[]>>;
     assistantOptions: ReturnType<typeof signal<unknown[]>>;
-    assistantNameMap: ReturnType<typeof signal<Map<string, string>>>;
-  };
-  let mockAssistantsService: {
-    assistantsQuery: { data: ReturnType<typeof signal<unknown[]>> };
   };
 
   beforeEach(async () => {
@@ -218,20 +195,13 @@ describe('AccuracyTabComponent', () => {
       fetchAccuracyFeedback: vi.fn().mockResolvedValue(FIXTURE_ACCURACY_RESPONSE),
       learningFoldersQuery: vi.fn(),
       isAddingLearning: signal(false),
-      isAddingBulkLearning: signal(false),
       addAdditionalLearning: vi.fn(),
-      addBulkAdditionalLearning: vi.fn(),
     };
 
     mockFolderOptionsService = {
       folders: signal([{ id: 'folder-001', name: 'フォルダA' }]),
       folderOptions: signal([{ value: 'folder-001', label: 'フォルダA' }]),
       assistantOptions: signal([{ value: 'assistant-001', label: 'テストアシスタント' }]),
-      assistantNameMap: signal(new Map([['assistant-001', 'テストアシスタント']])),
-    };
-
-    mockAssistantsService = {
-      assistantsQuery: { data: signal([{ id: 'assistant-001', name: 'テストアシスタント' }]) },
     };
 
     await TestBed.configureTestingModule({
@@ -240,7 +210,6 @@ describe('AccuracyTabComponent', () => {
         provideTanStackQuery(testQueryClient()),
         { provide: FeedbackMessageApiService, useValue: mockFeedbackApiService },
         { provide: FeedbackListOptionsService, useValue: mockFolderOptionsService },
-        { provide: AssistantsService, useValue: mockAssistantsService },
         { provide: MatDialog, useValue: { open: vi.fn() } },
         {
           provide: TranslateService,
@@ -263,9 +232,7 @@ describe('AccuracyTabComponent', () => {
             TableListStub,
             TableListItemStub,
             FormSortInputStub,
-            IconButtonStub,
             SvgIconStub,
-            ButtonStub,
             ContextMenuStub,
             CircularLoadingStub,
           ],
@@ -276,8 +243,10 @@ describe('AccuracyTabComponent', () => {
     fixture = TestBed.createComponent(AccuracyTabComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    await fixture.whenStable();
     await flushMicrotasks();
     fixture.detectChanges();
+    await waitForLoadedItems(component);
   });
 
   describe('初期表示', () => {
@@ -342,33 +311,6 @@ describe('AccuracyTabComponent', () => {
     });
   });
 
-  describe('選択操作', () => {
-    test('全選択チェックボックスで全行が選択されること', async () => {
-      await flushMicrotasks();
-      fixture.detectChanges();
-      component.toggleSelectAll(true);
-      expect(component.isSelected('fb-001')).toBe(true);
-      expect(component.isSelected('fb-002')).toBe(true);
-    });
-
-    test('アイテムの選択を解除できること', () => {
-      component.toggleItem('fb-001', true);
-      component.toggleItem('fb-001', false);
-      expect(component.isSelected('fb-001')).toBe(false);
-    });
-
-    test('全選択解除で選択がなくなること', () => {
-      component.toggleItem('fb-001', true);
-      component.toggleItem('fb-002', true);
-      component.onDeselectAll();
-      expect(component.hasSelection()).toBe(false);
-    });
-
-    test('初期状態では何も選択されていないこと', () => {
-      expect(component.hasSelection()).toBe(false);
-    });
-  });
-
   describe('追加学習', () => {
     const FIXTURE_ITEM: FeedbackItem = {
       id: 'fb-001',
@@ -386,11 +328,44 @@ describe('AccuracyTabComponent', () => {
       component.openFolderModal(FIXTURE_ITEM);
       expect(dialog.open).toHaveBeenCalled();
     });
+  });
 
-    test('一括追加学習モーダルを開けること', () => {
-      const dialog = TestBed.inject(MatDialog);
-      component.openBulkFolderModal();
-      expect(dialog.open).toHaveBeenCalled();
+  describe('アシスタント名表示', () => {
+    test('APIレスポンスのassistantNameを一覧に表示すること', () => {
+      expect(component.items()[0]?.assistantName).toBe('テストアシスタント');
+    });
+
+    test('assistantNameがnullの場合は不明なアシスタントを表示すること', async () => {
+      const nullAssistantResponse: GetMessageFeedbackViewModel = {
+        ...FIXTURE_ACCURACY_RESPONSE,
+        feedbacks: {
+          ...FIXTURE_ACCURACY_RESPONSE.feedbacks,
+          content: [
+            {
+              ...FIXTURE_ACCURACY_RESPONSE.feedbacks.content[0],
+              message: {
+                ...FIXTURE_ACCURACY_RESPONSE.feedbacks.content[0].message,
+                assistantName: null,
+              },
+            },
+          ],
+        },
+      };
+
+      mockFeedbackApiService.fetchAccuracyFeedback.mockResolvedValue(nullAssistantResponse);
+      TestBed.inject(QueryClient).clear();
+      fixture.destroy();
+
+      fixture = TestBed.createComponent(AccuracyTabComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await flushMicrotasks();
+      fixture.detectChanges();
+
+      await vi.waitFor(() => {
+        expect(component.items()[0]?.assistantName).toBe(UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY);
+      });
     });
   });
 

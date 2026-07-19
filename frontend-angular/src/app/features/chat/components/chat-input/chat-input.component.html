@@ -15,7 +15,7 @@
   </div>
 }
 <div
-  class="relative rounded-xl border border-border-weak bg-bg-primary p-4 flex flex-col w-full z-9999"
+  class="chat-input-textarea-wrap relative rounded-xl border border-border-weak bg-bg-primary p-4 flex flex-col w-full z-9999"
   [attr.data-drag-over]="isDragging()"
   (dragover)="onDragOver($event)"
   (dragleave)="onDragLeave($event)"
@@ -103,7 +103,7 @@
     ></textarea>
   </div>
 
-  <div class="flex items-center gap-1">
+  <div class="chat-input-bar min-w-0">
     @if (isAddMenuOpen()) {
       <div
         class="is-visible z-9998 fixed inset-0 bg-bg-overlay hidden md:hidden!"
@@ -112,7 +112,7 @@
       ></div>
     }
     <!-- + Add menu -->
-    <div class="flex items-center gap-2 shrink-0 relative">
+    <div class="chat-add-dropdown shrink-0 relative" data-chat-add-menu>
       <button
         #addMenuTrigger
         type="button"
@@ -146,6 +146,7 @@
         [class.is-open]="isAddMenuOpen()"
         [style.bottom]="addMenuStyle().bottom"
         [style.left]="addMenuStyle().left"
+        [style.max-height]="addMenuStyle().maxHeight"
       >
         <!-- Main section (PC: always show, Mobile: show when menuSection is main) -->
         @if (menuSection() === 'main') {
@@ -308,6 +309,7 @@
         [class.is-open]="isTemplateMenuOpen()"
         [style.bottom]="templateMenuStyle().bottom"
         [style.left]="templateMenuStyle().left"
+        [style.max-height]="templateMenuStyle().maxHeight"
       >
         <app-template-selector
           [templates]="templates()"
@@ -317,27 +319,29 @@
       </div>
     </div>
 
-    <!-- Active features widget -->
-    <app-active-features-widget
-      [webSearchActive]="webSearchActive()"
-      [templateActive]="templateActive()"
-      [createLibraryActive]="createLibraryActive()"
-      [activeCount]="activeCount()"
-      (clearWebSearch)="clearWebSearch()"
-      (clearTemplate)="clearTemplate()"
-      (clearCreateLibrary)="clearCreateLibrary()"
-      (clearFeature)="clearActiveFeature($event)"
-    />
+    <div class="flex flex-1 min-w-0 items-center gap-1">
+      <!-- Active features widget -->
+      <app-active-features-widget
+        [webSearchActive]="webSearchActive()"
+        [templateActive]="templateActive()"
+        [createLibraryActive]="createLibraryActive()"
+        [activeCount]="activeCount()"
+        (clearWebSearch)="clearWebSearch()"
+        (clearTemplate)="clearTemplate()"
+        (clearCreateLibrary)="clearCreateLibrary()"
+        (clearFeature)="clearActiveFeature($event)"
+      />
 
-    <!-- Model selector -->
-    <app-chat-assistant-selector
-      [assistants]="assistants()"
-      [selectedAssistant]="selectedAssistant()"
-      (assistantSelect)="onAssistantSelect($event)"
-    />
+      <!-- Model selector -->
+      <app-chat-assistant-selector
+        [assistants]="assistants()"
+        [selectedAssistant]="selectedAssistant()"
+        (assistantSelect)="onAssistantSelect($event)"
+      />
+    </div>
 
     <!-- Send button -->
-    <div class="chat-input-actions flex items-center gap-1">
+    <div class="chat-input-actions shrink-0 flex items-center gap-1">
       <button
         type="button"
         class="chat-input-send h-9 w-9 cursor-pointer bg-brand-primary text-white rounded-full flex justify-center items-center shrink-0"

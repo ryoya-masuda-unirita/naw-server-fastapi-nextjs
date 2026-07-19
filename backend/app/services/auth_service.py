@@ -49,6 +49,20 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )
 
+        # 移植元のPasswordResetService.evaluateと同じ優先順位で判定する。
+        # EXPIRED（有効期限切れ）はINITIAL（初回ログイン）より優先される。
+        if latest.expired_at is not None and latest.expired_at < datetime.now(
+            timezone.utc
+        ):
+            return AuthResponse(
+                id=user.login_id,
+                name=user.name,
+                role=user.role.value,
+                groups=[],
+                loginStatus="REQUIRES_PASSWORD_RESET",
+                reason="EXPIRED",
+            )
+
         if user.is_required_password_reset:
             return AuthResponse(
                 id=user.login_id,

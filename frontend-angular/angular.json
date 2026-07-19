@@ -4,7 +4,9 @@
   "cli": {
     "packageManager": "npm",
     "analytics": "685a9c32-2ae8-48b8-b13a-c9a64de6a2e5",
-    "schematicCollections": ["angular-eslint"]
+    "schematicCollections": [
+      "angular-eslint"
+    ]
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -25,14 +27,18 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
-            "allowedCommonJsDependencies": ["marked"],
+            "allowedCommonJsDependencies": [
+              "marked"
+            ],
             "assets": [
               {
                 "glob": "**/*",
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.css"]
+            "styles": [
+              "src/styles.css"
+            ]
           },
           "configurations": {
             "production": {
@@ -90,8 +96,10 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "host": "0.0.0.0",
-            "port": 4201,
-            "allowedHosts": [".localhost"]
+            "allowedHosts": [
+              ".localhost"
+            ],
+            "port": 4201
           },
           "configurations": {
             "production": {
@@ -117,7 +125,10 @@
         "lint": {
           "builder": "@angular-eslint/builder:lint",
           "options": {
-            "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+            "lintFilePatterns": [
+              "src/**/*.ts",
+              "src/**/*.html"
+            ]
           }
         }
       }

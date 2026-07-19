@@ -1,6 +1,6 @@
 ---
 name: naw-explore
-description: naw-server-fastapi-nextjs の移植リサーチ専用。Spring Boot(naw-server)/Angular(secuaigent-client) の参照実装と、FastAPI(backend)/React(frontend) の現状実装を突き合わせて、未移植箇所の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
+description: naw-server-fastapi-nextjs の移植リサーチ専用。Spring Boot(naw-server)/Angular(secuaigent/client) の参照実装と、FastAPI(backend)/React(frontend) の現状実装を突き合わせて、未移植箇所の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -12,10 +12,10 @@ model: sonnet
 
 ## 参照先
 
-- バックエンド移植元: `~/Documents/naw-server`（git管理、`develop`ブランチあり）
-- フロントエンド移植元: `~/Documents/secuaigent-client`（途中からgit管理、全履歴は追えない場合あり。最新コードを読んで実装を把握する）
+- バックエンド移植元: `~/Documents/secuaigent/server`（git管理、`develop`ブランチあり）
+- フロントエンド移植元: `~/Documents/secuaigent/client`（途中からgit管理、全履歴は追えない場合あり。最新コードを読んで実装を把握する）
 - 移植先バックエンド: `backend/`（FastAPI）
-- 移植先フロントエンド: `frontend/`（React、後回し方針） / `frontend-angular/`（動作確認用、secuaigent-clientをそのまま取り込んだもの）
+- 移植先フロントエンド: `frontend/`（React、後回し方針） / `frontend-angular/`（動作確認用、secuaigent/clientをそのまま取り込んだもの）
 
 現在の開発方針は「しばらくはバックエンド優先」。フロントエンド側の調査を依頼された場合を除き、基本はバックエンド（`naw-server` ⇄ `backend/`）を中心に調査する。
 

@@ -128,15 +128,18 @@ export class ChatMessageItemComponent {
       this.assistantsService.assistantsQuery.isPending(),
   );
 
-  readonly thumbsUpActive = computed(() => {
-    const message = this.message();
-    if (message.rating === 'BAD') return false;
-    return message.rating === 'GOOD' || message.isRated;
-  });
+  // アシスタントが削除済み・存在しない等で解決できない場合は「不明なアシスタント」表示になる。
+  // その回答（およびそれに紐づくメッセージ）は再送信先を特定できないため編集・再生成を禁止する
+  readonly isAssistantUnresolved = computed(
+    () => !this.assistantNamePending() && !this.assistantName(),
+  );
+
+  readonly thumbsUpActive = computed(() => this.message().rating === 'GOOD');
 
   readonly thumbsDownActive = computed(() => this.message().rating === 'BAD');
 
   openEdit(): void {
+    if (this.isAssistantUnresolved()) return;
     this.editText.set(this.message().question);
     this.isEditing.set(true);
   }
@@ -179,7 +182,7 @@ export class ChatMessageItemComponent {
 
   submitEdit(): void {
     const text = this.editText().trim();
-    if (!text || this.isSending()) return;
+    if (!text || this.isSending() || this.isAssistantUnresolved()) return;
     this.isSending.set(true);
     this.handleSend.emit(text);
     this.isEditing.set(false);
@@ -197,10 +200,12 @@ export class ChatMessageItemComponent {
   }
 
   handleRegenerate(): void {
+    if (this.isAssistantUnresolved()) return;
     this.regenerate.emit(this.message().id);
   }
 
   handleRetry(): void {
+    if (this.isAssistantUnresolved()) return;
     this.retry.emit(this.message().id);
   }
 

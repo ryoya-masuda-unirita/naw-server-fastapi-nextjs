@@ -1,9 +1,10 @@
 <div
-  class="block relative min-w-0"
+  class="dl-wrap block relative min-w-0"
   data-dl-variant="chat"
   [attr.data-open]="isAssistantOpen() ? 'true' : 'false'"
 >
   <button
+    #trigger
     type="button"
     class="dl-trigger text-sm! dl-trigger--chat hover:bg-bg-brand-weak!"
     [ngClass]="{
@@ -30,9 +31,17 @@
     </svg>
   </button>
 
-  <div class="dl-panel dl-panel--up" role="listbox" [hidden]="!isAssistantOpen()">
-    <div class="flex flex-col min-w-0">
-      <div class="flex flex-col overflow-y-auto">
+  <div
+    class="dl-panel dl-panel--up dl-panel--chat-fixed"
+    role="listbox"
+    [hidden]="!isAssistantOpen()"
+    [style.bottom]="panelStyle().bottom"
+    [style.left]="panelStyle().left"
+    [style.width]="panelStyle().width"
+    [style.max-height]="panelStyle().maxHeight"
+  >
+    <div class="flex flex-col min-w-0 min-h-0">
+      <div class="flex flex-col overflow-y-auto min-h-0">
         @for (assistant of assistants(); track assistant.id) {
           <button
             type="button"

@@ -240,4 +240,18 @@ describe('PwResetComponent', () => {
     expect(mockMutateAsync).not.toHaveBeenCalled();
     expect(component.form.controls.newPassword.hasError('passwordAscii')).toBe(true);
   });
+
+  it('テナントの最小文字数ポリシーより短い新パスワードでもAPIを呼ぶこと', async () => {
+    component.form.setValue({
+      username: 'admin',
+      oldPassword: 'OldPass123!',
+      newPassword: 'ab12',
+      confirmPassword: 'ab12',
+    });
+    component.form.updateValueAndValidity();
+
+    await component.onSubmit();
+
+    expect(mockMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ newPassword: 'ab12' }));
+  });
 });

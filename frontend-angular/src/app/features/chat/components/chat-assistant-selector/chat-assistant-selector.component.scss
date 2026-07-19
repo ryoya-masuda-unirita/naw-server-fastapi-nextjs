@@ -19,6 +19,7 @@
   &--chat {
     height: auto;
     min-height: 0;
+    max-width: 100%;
     gap: calc(var(--spacing) * 1);
     border-radius: var(--radius-pill);
     padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
@@ -136,10 +137,33 @@
       bottom: 0 !important;
     }
   }
+
+  &--chat-fixed {
+    z-index: 9999;
+    margin: 0;
+    position: fixed !important;
+    top: auto !important;
+    bottom: auto;
+    right: auto;
+    overflow-y: auto;
+
+    @media (max-width: 767px) {
+      max-height: 70vh;
+      box-shadow: var(--shadow-half-modal);
+      border: none;
+      border-radius: 16px 16px 0 0;
+      margin-top: 0;
+      padding: 16px 0;
+      width: 100vw !important;
+      left: 0 !important;
+      bottom: 0 !important;
+    }
+  }
 }
 
 .dl-wrap[data-dl-variant='chat'] .dl-panel {
-  min-width: 320px;
+  min-width: min(320px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   right: 0;
 }
 
