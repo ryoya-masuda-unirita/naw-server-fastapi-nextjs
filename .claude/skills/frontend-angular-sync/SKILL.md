@@ -30,7 +30,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 
 | ファイル | 変更内容 | 理由 |
 |---|---|---|
-| `proxy.conf.local.js` | `localhost:8080` → `localhost:8001` | バックエンドが FastAPI（8001）のため |
+| `proxy.conf.local.js` | ファイル全体を`BACKEND_PROXY_TARGET`環境変数対応版で上書き（単純なsed置換ではない） | docker-compose経由(`BACKEND_PROXY_TARGET=http://backend:8000`)でもホスト直起動でも動く必要があり、単純なsed置換だとupstream側の形式変化でこの対応ロジックごと失われるため（過去に実際発生） |
 | `proxy.conf.dev.js` | `DEV_SERVER` → `http://localhost:8001` | 同上 |
 | `angular.json` | `serve.options.port` → `4201` | `4200` は他プロジェクトと衝突する可能性があるため |
 | `src/environments/environment.development.ts` | `apiBaseUrl: '/api'`, `authBaseUrl: ''` | 外部URL直書きをやめ、プロキシ経由の相対パスにするため |
@@ -39,6 +39,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 | `README.md`（frontend-angular内） | `localhost:4200` → `localhost:4201` | 同上 |
 | `.github/workflows/deploy-dev.yml` | 全行コメントアウトし `# DISABLED` を先頭に付与 | 単独リポジトリ向けのCIで、モノレポでは使わないため |
 | `.gitlab-ci.yml` | rsyncの段階で同期対象から除外（コピーしない） | secuaigent側がGitLab CIに移行したファイルで、モノレポでは使わないため |
+| `Dockerfile.dev` | rsyncの段階で同期対象から除外（コピーしない、モノレポ側の既存ファイルを維持） | secuaigent/client単体には存在しないモノレポ専用ファイル（docker-compose用）。同期対象に含めると`rsync --delete`で消えてしまう（過去に実際発生） |
 
 `package.json` / `src/environments/environment.ts` / `src/environments/environment.production.ts` /
 アプリケーションのビジネスロジック本体は変更不要（そのまま使える）。
