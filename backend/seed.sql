@@ -1073,6 +1073,19 @@ VALUES
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- ライブラリ確認用メッセージのmessage_contents（11_チャット詳細のビューアパネル表示確認は
+-- messages.role=assistantの有無で判定するため、これがないとチャット詳細画面でビューアパネルが表示されない）
+INSERT INTO message_contents (id, tenant_id, message_id, status, question, answer)
+VALUES
+('78000000000040008000000000000001', 'test-tenant', '75000000000040008000000000000001', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000002', 'test-tenant', '75000000000040008000000000000002', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000003', 'test-tenant', '75000000000040008000000000000003', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000004', 'test-tenant', '75000000000040008000000000000004', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000005', 'test-tenant', '75000000000040008000000000000005', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000006', 'test-tenant', '75000000000040008000000000000006', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。'),
+('78000000000040008000000000000007', 'test-tenant', '75000000000040008000000000000007', 'OK', 'ライブラリ確認用の質問', 'ライブラリ確認用の回答内容です。')
+ON CONFLICT (id) DO NOTHING;
+
 -- ライブラリ確認用タグ
 INSERT INTO library_tags (id, tenant_id, name, description)
 VALUES
@@ -1385,3 +1398,69 @@ VALUES
 ('20000000000040008000000000000001', 'a1000000000040008000000000000003', 'test-tenant'),
 ('20000000000040008000000000000001', 'a1000000000040008000000000000004', 'test-tenant')
 ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;
+
+-- 11_チャット詳細用 (Issue #166)
+-- メッセージ操作(コピー・評価・削除・バージョン切替等)確認用の専用ルーム。
+-- 既存メッセージ(親)+バージョン違いの子メッセージ2件を用意し、バージョン切替確認にも使う
+INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id)
+VALUES (
+    '64000000000040008000000000000001',
+    'test-tenant',
+    'チャット詳細確認用ルーム',
+    'a1000000000040008000000000000001',
+    '00000000-0000-4000-8000-000000000002'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO messages (id, tenant_id, room_id, assistant_id)
+VALUES (
+    '65000000000040008000000000000001',
+    'test-tenant',
+    '64000000000040008000000000000001',
+    'a1000000000040008000000000000001'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO message_contents (id, tenant_id, message_id, status, question, answer)
+VALUES (
+    '66000000000040008000000000000001',
+    'test-tenant',
+    '65000000000040008000000000000001',
+    'OK',
+    'チャット詳細確認用の質問メッセージ',
+    'チャット詳細確認用の回答メッセージ'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- アシスタントが削除済み（assistant_id=NULL）のメッセージ確認用ルーム (項番77: 不明なアシスタント表示確認用)
+-- チャット詳細確認用ルームとは別のルームに分離する。同一ルーム内に置くと、新規送信時の
+-- 会話継続処理がNULLアシスタントを起点に解決できず、以降の送信テストが軒並み失敗したため
+INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id)
+VALUES (
+    '64000000000040008000000000000002',
+    'test-tenant',
+    'アシスタント削除済み確認用ルーム',
+    'a1000000000040008000000000000001',
+    '00000000-0000-4000-8000-000000000002'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO messages (id, tenant_id, room_id, assistant_id)
+VALUES (
+    '65000000000040008000000000000002',
+    'test-tenant',
+    '64000000000040008000000000000002',
+    NULL
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO message_contents (id, tenant_id, message_id, status, question, answer)
+VALUES (
+    '66000000000040008000000000000002',
+    'test-tenant',
+    '65000000000040008000000000000002',
+    'OK',
+    'アシスタント削除済み確認用の質問メッセージ',
+    'アシスタント削除済み確認用の回答メッセージ'
+)
+ON CONFLICT (id) DO NOTHING;
