@@ -152,6 +152,52 @@ WHERE NOT EXISTS (
     WHERE user_id = '00000000-0000-4000-8000-000000000006'
 );
 
+-- ユーザー管理 ページ送り確認用ユーザー (Issue #166: 13_ユーザー管理 項番12用)
+-- 一覧の1ページあたり件数(10件)を超える状態を作り、ページ送りを再現する
+INSERT INTO users (id, login_id, tenant_id, name, role, is_required_password_reset)
+VALUES
+(
+    '00000000-0000-4000-8000-000000000011',
+    'page-user01',
+    'test-tenant',
+    'ページ送り確認用ユーザー01',
+    'USER',
+    false
+),
+(
+    '00000000-0000-4000-8000-000000000012',
+    'page-user02',
+    'test-tenant',
+    'ページ送り確認用ユーザー02',
+    'USER',
+    false
+),
+(
+    '00000000-0000-4000-8000-000000000013',
+    'page-user03',
+    'test-tenant',
+    'ページ送り確認用ユーザー03',
+    'USER',
+    false
+),
+(
+    '00000000-0000-4000-8000-000000000014',
+    'page-user04',
+    'test-tenant',
+    'ページ送り確認用ユーザー04',
+    'USER',
+    false
+),
+(
+    '00000000-0000-4000-8000-000000000015',
+    'page-user05',
+    'test-tenant',
+    'ページ送り確認用ユーザー05',
+    'USER',
+    false
+)
+ON CONFLICT (login_id, tenant_id) DO NOTHING;
+
 -- チャット検索 ページ送り確認用ルーム (Issue #166: 08_チャット検索 項番8/14用)
 -- user01(test-tenant)が20件超のルームを持つ状態を作り、検索結果のページ送りを再現する
 INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id, rating)
