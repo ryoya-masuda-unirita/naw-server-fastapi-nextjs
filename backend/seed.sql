@@ -1098,3 +1098,111 @@ VALUES
 ('test-tenant', '77000000000040008000000000000001', '76000000000040008000000000000001'),
 ('test-tenant', '77000000000040008000000000000002', '76000000000040008000000000000002')
 ON CONFLICT (library_id, library_tag_id) DO NOTHING;
+
+-- ============================================================
+-- 学習データ確認用データ (Issue #166: 17_学習データ用)
+-- ============================================================
+
+-- ローカル/クラウドフォルダ作成に必要なエンドポイント（既存seedにはAZURE_OPENAI_CHATしかなく、
+-- LOCAL_SERVER(ローカル用)・VDB+AZURE_OPENAI_EMBEDDING(クラウド用、2件セットが必須)が存在しなかったため追加）
+INSERT INTO tenant_endpoints (id, tenant_id, type, endpoint_name, endpoint, api_key)
+VALUES
+(
+    'e1000000000040008000000000000001',
+    'test-tenant',
+    'LOCAL_SERVER',
+    'ローカルサーバー (学習データ確認用)',
+    'https://local-server.example.com',
+    'dummy-local-server-key'
+),
+(
+    'e1000000000040008000000000000002',
+    'test-tenant',
+    'VDB',
+    'ベクトルDB (学習データ確認用)',
+    'https://vdb.example.com',
+    'dummy-vdb-key'
+),
+(
+    'e1000000000040008000000000000003',
+    'test-tenant',
+    'AZURE_OPENAI_EMBEDDING',
+    'Azure OpenAI Embedding (学習データ確認用)',
+    'https://example-embedding.openai.azure.com',
+    'dummy-embedding-key'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 学習先フォルダ (ローカル1件・クラウド1件・0件確認用1件)
+INSERT INTO indexes (id, tenant_id, type, name, description, add, delete, get, created_at, updated_at)
+VALUES
+(
+    'f1000000000040008000000000000001',
+    'test-tenant',
+    'LOCAL',
+    '学習データ確認用ローカルフォルダ',
+    'E2E確認用のローカル接続フォルダ',
+    'svc-learn-001',
+    'svc-delete-001',
+    'svc-fetch-001',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+),
+(
+    'f1000000000040008000000000000002',
+    'test-tenant',
+    'SAAS_GLOBAL',
+    '学習データ確認用クラウドフォルダ',
+    'E2E確認用のクラウド接続フォルダ',
+    NULL,
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+),
+(
+    'f1000000000040008000000000000003',
+    'test-tenant',
+    'LOCAL',
+    '学習データ確認用0件フォルダ',
+    'E2E確認用のデータ0件フォルダ',
+    'svc-learn-003',
+    'svc-delete-003',
+    'svc-fetch-003',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- フォルダとエンドポイントの紐付け（ローカルはLOCAL_SERVER1件、クラウドはVDB+EMBEDDINGの2件）
+INSERT INTO indexes_endpoints (index_id, tenant_id, endpoint_id)
+VALUES
+('f1000000000040008000000000000001', 'test-tenant', 'e1000000000040008000000000000001'),
+('f1000000000040008000000000000002', 'test-tenant', 'e1000000000040008000000000000002'),
+('f1000000000040008000000000000002', 'test-tenant', 'e1000000000040008000000000000003'),
+('f1000000000040008000000000000003', 'test-tenant', 'e1000000000040008000000000000001')
+ON CONFLICT (index_id, endpoint_id) DO NOTHING;
+
+-- ローカルフォルダの学習データ (1ページ10件のため11件用意し、検索・ユーザーフィルター・期間フィルター・
+-- 設定フィルター・並べ替え・ページ送り・個別削除・一括削除・一括名前変更の確認を1フォルダ内で行う)
+-- ファイル01: 管理者所有・学習設定ON・本日更新     (検索/期間「今日」/設定「ON」確認用)
+-- ファイル02: 管理者所有・学習設定OFF・本日更新    (設定「OFF」確認用)
+-- ファイル03: user01所有・学習設定ON・本日更新     (ユーザーフィルター確認用)
+-- ファイル04・08・09・11: 管理者所有・学習設定ON・本日更新 (件数確保用の汎用データ)
+-- ファイル05: 管理者所有・学習設定ON・本日更新     (一括名前変更確認用)
+-- ファイル06・07: 管理者所有・学習設定ON・本日更新 (一括削除確認用)
+-- ファイル10: 管理者所有・学習設定ON・40日前更新   (期間フィルターの対象外・ページ送り2ページ目確認用)
+INSERT INTO files (id, tenant_id, name, display_name, status, user_id, index_id, created_at, updated_at)
+VALUES
+('f2000000000040008000000000000001', 'test-tenant', 'gakushu-file-01.txt', '学習データ確認用ファイル01', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000002', 'test-tenant', 'gakushu-file-02.txt', '学習データ確認用ファイル02', 1, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000003', 'test-tenant', 'gakushu-file-03.txt', '学習データ確認用ファイル03', 0, '00000000-0000-4000-8000-000000000002', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000004', 'test-tenant', 'gakushu-file-04.txt', '学習データ確認用ファイル04', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000005', 'test-tenant', 'gakushu-file-05.txt', '学習データ確認用ファイル05', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000006', 'test-tenant', 'gakushu-file-06.txt', '学習データ確認用ファイル06', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000007', 'test-tenant', 'gakushu-file-07.txt', '学習データ確認用ファイル07', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000008', 'test-tenant', 'gakushu-file-08.txt', '学習データ確認用ファイル08', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000009', 'test-tenant', 'gakushu-file-09.txt', '学習データ確認用ファイル09', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('f2000000000040008000000000000010', 'test-tenant', 'gakushu-file-10.txt', '学習データ確認用ファイル10', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP - INTERVAL '40 days', CURRENT_TIMESTAMP - INTERVAL '40 days'),
+('f2000000000040008000000000000011', 'test-tenant', 'gakushu-file-11.txt', '学習データ確認用ファイル11', 0, '00000000-0000-4000-8000-000000000001', 'f1000000000040008000000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (id) DO NOTHING;
