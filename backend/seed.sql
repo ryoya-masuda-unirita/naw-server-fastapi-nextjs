@@ -1327,3 +1327,61 @@ VALUES (
     true
 )
 ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
+
+-- 14_チーム管理用 (Issue #166)
+-- チーム一覧のページ送り(5件/ページ)・検索・並べ替え確認用に、既存の「動作確認用グループ」
+-- 1件に加えて5件追加する（うち1件は所属ユーザー/テンプレート/アシスタント0件の空状態確認用）。
+INSERT INTO groups (id, tenant_id, name)
+VALUES
+('20000000000040008000000000000011', 'test-tenant', 'チーム管理確認用チーム02'),
+('20000000000040008000000000000012', 'test-tenant', 'チーム管理確認用チーム03'),
+('20000000000040008000000000000013', 'test-tenant', 'チーム管理確認用チーム04'),
+('20000000000040008000000000000014', 'test-tenant', 'チーム管理確認用チーム05'),
+('20000000000040008000000000000015', 'test-tenant', 'チーム管理確認用チーム06(空)')
+ON CONFLICT (id) DO NOTHING;
+
+-- 「動作確認用グループ」の所属ユーザーを追加（検索・並べ替え・権限フィルター確認用）
+INSERT INTO groups_users (group_id, tenant_id, user_id, is_admin)
+VALUES
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000011', true),
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000012', false),
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000013', false)
+ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
+
+-- 「動作確認用グループ」の所属テンプレートを追加（検索・並べ替え確認用）
+INSERT INTO groups_prompt_templates (group_id, tenant_id, prompt_template_id)
+VALUES
+('20000000000040008000000000000001', 'test-tenant', '40000000000040008000000000000002'),
+('20000000000040008000000000000001', 'test-tenant', '40000000000040008000000000000011')
+ON CONFLICT (group_id, prompt_template_id, tenant_id) DO NOTHING;
+
+-- 「動作確認用グループ」の所属アシスタントを追加（接続サーバー種別フィルター確認用。
+-- a1...0009はSECURE(ローカル)、a1...0010はSAAS_RAG(クラウド指定)）
+INSERT INTO groups_assistants (group_id, assistant_id, tenant_id)
+VALUES
+('20000000000040008000000000000001', 'a1000000000040008000000000000009', 'test-tenant'),
+('20000000000040008000000000000001', 'a1000000000040008000000000000010', 'test-tenant')
+ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;
+
+-- 14_チーム管理用: 削除系テスト専用の追加所属データ（検索・並べ替えテストが依存する
+-- 既存所属データ数を壊さないよう、削除テストはこれら専用の行に対してのみ行う）
+INSERT INTO groups_users (group_id, tenant_id, user_id, is_admin)
+VALUES
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000014', false),
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000015', false),
+('20000000000040008000000000000001', 'test-tenant', 'fab779fa-c191-42b2-95db-d015c09945ad', false)
+ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
+
+INSERT INTO groups_prompt_templates (group_id, tenant_id, prompt_template_id)
+VALUES
+('20000000000040008000000000000001', 'test-tenant', '40000000000040008000000000000012'),
+('20000000000040008000000000000001', 'test-tenant', '40000000000040008000000000000013'),
+('20000000000040008000000000000001', 'test-tenant', '40000000000040008000000000000014')
+ON CONFLICT (group_id, prompt_template_id, tenant_id) DO NOTHING;
+
+INSERT INTO groups_assistants (group_id, assistant_id, tenant_id)
+VALUES
+('20000000000040008000000000000001', 'a1000000000040008000000000000002', 'test-tenant'),
+('20000000000040008000000000000001', 'a1000000000040008000000000000003', 'test-tenant'),
+('20000000000040008000000000000001', 'a1000000000040008000000000000004', 'test-tenant')
+ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;
