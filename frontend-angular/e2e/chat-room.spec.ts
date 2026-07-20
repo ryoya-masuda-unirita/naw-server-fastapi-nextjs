@@ -31,16 +31,28 @@ async function openRoomMenu(page: Page, roomName: string): Promise<void> {
   // サイドバーのチャット一覧は縦スクロールするため、ホバー前に対象行を表示領域に入れる
   await room.scrollIntoViewIfNeeded();
 
-  // group-hoverでのボタン表示は、並列実行時の負荷でCSSの:hover反映が遅れて
-  // 一度で表示されないことがあるため、表示されるまでhoverをリトライする
+  // group-hoverでのボタン表示は、並列実行時の負荷でCSSの:hover反映が遅れたり
+  // hover状態がすぐ外れたりすることがあるため、クリックの成立まで一括でリトライする
   await expect(async () => {
     await room.hover();
     await expect(menuButton).toBeVisible({ timeout: 1000 });
+    await menuButton.click({ timeout: 1000 });
   }).toPass({ timeout: 15000 });
-
-  await menuButton.click();
   // メニューは開閉アニメーションを伴うため、安定表示を待ってから操作する
   await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).waitFor({ state: 'visible' });
+}
+
+// メニュー項目のクリックも、並列実行時の負荷でアニメーション中にクリックが取りこぼされることがあるため、
+// 対象テキストが安定して見えている状態でクリックが成立するまでリトライする
+async function clickMenuItem(page: Page, text: string): Promise<void> {
+  const item = sidebarMenu(page).getByText(text, { exact: true });
+  await expect(async () => {
+    await item.click({ timeout: 2000 });
+  }).toPass({ timeout: 15000 });
+  // クリック後、メニュー（背景オーバーレイ含む）が閉じきるのを待ってから制御を返す。
+  // 閉じきる前に次のホバー操作に進むと、並列実行時の負荷でオーバーレイがポインタイベントを
+  // 奪ったままになり後続のホバーが反応しないことがあるため
+  await item.waitFor({ state: 'hidden' });
 }
 
 function sidebarMenu(page: Page) {
@@ -64,7 +76,7 @@ test.describe('チャットルーム', () => {
     authenticatedPage: page,
   }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム1');
-    await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).click();
+    await clickMenuItem(page, 'チャットの名前を変更');
 
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'チャット名を入力' }).fill('名前変更後のルーム1');
@@ -74,7 +86,7 @@ test.describe('チャットルーム', () => {
 
     // 後続テストへの影響を避けるため元の名前に戻す
     await openRoomMenu(page, '名前変更後のルーム1');
-    await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).click();
+    await clickMenuItem(page, 'チャットの名前を変更');
     await dialog.getByRole('textbox', { name: 'チャット名を入力' }).fill('チャットルーム操作確認用ルーム1');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(
@@ -86,34 +98,33 @@ test.describe('チャットルーム', () => {
     authenticatedPage: page,
   }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
-    await sidebarMenu(page).getByText('上部に固定', { exact: true }).click();
+    await clickMenuItem(page, '上部に固定');
 
     // ピン留め状態はメニューの表示切り替え（「上部に固定」→「上部に固定を解除」）で確認する
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
     await expect(sidebarMenu(page).getByText('上部に固定を解除', { exact: true })).toBeVisible();
 
     // 後続テストへの影響を避けるためピン留めを解除する
-    await sidebarMenu(page).getByText('上部に固定を解除', { exact: true }).click();
+    await clickMenuItem(page, '上部に固定を解除');
   });
 
   test('ピン留め解除すると固定が解除されること', async ({ authenticatedPage: page }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
-    await sidebarMenu(page).getByText('上部に固定', { exact: true }).click();
+    await clickMenuItem(page, '上部に固定');
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
     await expect(sidebarMenu(page).getByText('上部に固定を解除', { exact: true })).toBeVisible();
-    await sidebarMenu(page).getByText('上部に固定を解除', { exact: true }).click();
+    await clickMenuItem(page, '上部に固定を解除');
 
-    // 解除後は再びメニューに「上部に固定」が表示される（=固定が解除された状態に戻った）
+    // 解除後は再びメニューに「上部に固定」が表示される（=固定が解除された状態に戻った。既に未ピン留め状態のため後始末は不要）
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
     await expect(sidebarMenu(page).getByText('上部に固定', { exact: true })).toBeVisible();
-    await page.keyboard.press('Escape');
   });
 
   test('メニューから削除するとチャットが一覧から削除されること', async ({
     authenticatedPage: page,
   }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム2');
-    await sidebarMenu(page).getByText('チャットを削除', { exact: true }).click();
+    await clickMenuItem(page, 'チャットを削除');
 
     const dialog = page.getByRole('dialog');
     await expect(
@@ -128,7 +139,7 @@ test.describe('チャットルーム', () => {
     authenticatedPage: page,
   }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム1');
-    await sidebarMenu(page).getByText('チャットを削除', { exact: true }).click();
+    await clickMenuItem(page, 'チャットを削除');
 
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: 'キャンセル' }).click();
@@ -142,7 +153,7 @@ test.describe('チャットルーム', () => {
     await page.waitForURL(/\/chat\/.+/);
 
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム3');
-    await sidebarMenu(page).getByText('チャットを削除', { exact: true }).click();
+    await clickMenuItem(page, 'チャットを削除');
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '削除' }).click();
 
@@ -153,7 +164,7 @@ test.describe('チャットルーム', () => {
     authenticatedPage: page,
   }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム1');
-    await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).click();
+    await clickMenuItem(page, 'チャットの名前を変更');
 
     const dialog = page.getByRole('dialog');
     const nameInput = dialog.getByRole('textbox', { name: 'チャット名を入力' });
@@ -166,7 +177,7 @@ test.describe('チャットルーム', () => {
 
   test('最大長の名前で変更すると正常に保存されること', async ({ authenticatedPage: page }) => {
     await openRoomMenu(page, 'チャットルーム操作確認用ルーム1');
-    await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).click();
+    await clickMenuItem(page, 'チャットの名前を変更');
 
     // 移植元の備考「255文字で保存できる」に合わせて255文字で検証する
     const maxLengthName = 'あ'.repeat(255);
@@ -178,7 +189,7 @@ test.describe('チャットルーム', () => {
 
     // 後続テストへの影響を避けるため元の名前に戻す
     await openRoomMenu(page, maxLengthName);
-    await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).click();
+    await clickMenuItem(page, 'チャットの名前を変更');
     await dialog.getByRole('textbox', { name: 'チャット名を入力' }).fill('チャットルーム操作確認用ルーム1');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(

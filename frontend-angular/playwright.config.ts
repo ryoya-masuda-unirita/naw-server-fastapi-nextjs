@@ -8,6 +8,9 @@ export default defineConfig({
   workers: 4,
   retries: 0,
   reporter: 'html',
+  expect: {
+    timeout: 8000,
+  },
   use: {
     baseURL: 'http://test-tenant.localhost:4201',
     screenshot: 'only-on-failure',
