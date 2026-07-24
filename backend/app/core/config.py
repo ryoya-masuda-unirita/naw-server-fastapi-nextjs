@@ -139,6 +139,32 @@ class RedisSettings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6380/0", alias="REDIS_URL")
 
 
+class AwsSettings(BaseSettings):
+    """S3/SQS接続設定。
+
+    `Settings` とは別クラスにする。理由は`CorsSettings`と同様（S3/SQSを使わない
+    単体テスト等で`app.main`をインポートするだけで必須値エラーになるのを防ぐため）。
+    移植元Java版の`aws.*`（`@Value`注入）に対応する。`aws_endpoint_url`はローカル環境で
+    LocalStackに向けるためのもので、実AWS環境では未設定（本来のAWSエンドポイントを使用）にする。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    aws_region: str = Field(default="ap-northeast-1", alias="AWS_REGION")
+    aws_endpoint_url: str | None = Field(default=None, alias="AWS_ENDPOINT_URL")
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(
+        default=None, alias="AWS_SECRET_ACCESS_KEY"
+    )
+    aws_s3_bucket_name: str = Field(alias="AWS_S3_BUCKET_NAME")
+    aws_sqs_queue_url: str = Field(alias="AWS_SQS_QUEUE_URL")
+    aws_sqs_listener_enabled: bool = Field(
+        default=True, alias="AWS_SQS_LISTENER_ENABLED"
+    )
+
+
 class AzureOpenAISettings(BaseSettings):
     """Azure OpenAI API呼び出し用のアプリ共通設定。
 
@@ -184,3 +210,8 @@ def get_azure_openai_settings() -> AzureOpenAISettings:
 @lru_cache
 def get_redis_settings() -> RedisSettings:
     return RedisSettings()
+
+
+@lru_cache
+def get_aws_settings() -> AwsSettings:
+    return AwsSettings()

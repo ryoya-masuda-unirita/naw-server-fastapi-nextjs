@@ -1,8 +1,12 @@
 import shutil
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 
-from app.core.config import get_settings
+import aioboto3
+from botocore.exceptions import ClientError
+
+from app.core.config import get_aws_settings, get_settings
 
 
 class FileStorage(Protocol):
@@ -104,3 +108,111 @@ def get_file_storage() -> FileStorage:
     """`FileStorage`のDI用ファクトリ。設定された保存先ルートで`LocalFileStorage`を生成する。"""
     settings = get_settings()
     return LocalFileStorage(root=Path(settings.file_storage_root))
+
+
+class S3FileStorage:
+    """S3互換オブジェクトストレージを使ったファイルストレージ実装。
+
+    ローカル環境ではLocalStack、本番相当環境では実AWS S3を想定し、
+    `aioboto3`のクライアント生成時に渡す`endpoint_url`で向き先を切り替える。
+    `{tenant_id}/{file_id}_{filename}`をキーとして保存し、`storage_url`には
+    `s3://{bucket}/{key}`形式のURLを格納する。
+    """
+
+    def __init__(
+        self,
+        bucket_name: str,
+        region_name: str,
+        endpoint_url: str | None,
+        aws_access_key_id: str | None,
+        aws_secret_access_key: str | None,
+    ) -> None:
+        self._bucket_name = bucket_name
+        self._session = aioboto3.Session()
+        self._client_kwargs = {
+            "region_name": region_name,
+            "endpoint_url": endpoint_url,
+            "aws_access_key_id": aws_access_key_id,
+            "aws_secret_access_key": aws_secret_access_key,
+        }
+
+    async def upload(
+        self, tenant_id: str, file_id: str, filename: str, content: bytes
+    ) -> str:
+        """ファイルをS3に保存し、`storage_url`を返す。
+
+        Args:
+            tenant_id: テナントID。
+            file_id: ファイルID。
+            filename: 元のファイル名。
+            content: ファイルの内容（バイト列）。
+
+        Returns:
+            保存先を表す`s3://{bucket}/{key}`形式のURL。
+        """
+        # LocalFileStorageと同様、クライアントが任意に指定できるファイル名から
+        # パス構造を除去し、ベース名のみをキーに使用する（パストラバーサル対策）。
+        safe_filename = Path(filename).name
+        key = f"{tenant_id}/{file_id}_{safe_filename}"
+        async with self._session.client("s3", **self._client_kwargs) as client:
+            await client.put_object(Bucket=self._bucket_name, Key=key, Body=content)
+        return f"s3://{self._bucket_name}/{key}"
+
+    async def download(self, storage_url: str) -> bytes:
+        """`storage_url`からファイルの内容を読み出す。
+
+        Args:
+            storage_url: `upload`が返した`s3://{bucket}/{key}`形式のURL。
+
+        Returns:
+            ファイルの内容（バイト列）。
+
+        Raises:
+            FileNotFoundError: 保存先のオブジェクトが存在しない場合。
+        """
+        bucket, key = self._storage_url_to_bucket_and_key(storage_url)
+        async with self._session.client("s3", **self._client_kwargs) as client:
+            try:
+                response = await client.get_object(Bucket=bucket, Key=key)
+            except ClientError as exc:
+                if exc.response.get("Error", {}).get("Code") in (
+                    "NoSuchKey",
+                    "404",
+                ):
+                    raise FileNotFoundError(storage_url) from exc
+                raise
+            async with response["Body"] as body:
+                return await body.read()
+
+    async def delete(self, storage_url: str) -> None:
+        """`storage_url`が指すオブジェクトを削除する。存在しない場合も何もしない扱いになる。
+
+        Args:
+            storage_url: `upload`が返した`s3://{bucket}/{key}`形式のURL。
+        """
+        bucket, key = self._storage_url_to_bucket_and_key(storage_url)
+        async with self._session.client("s3", **self._client_kwargs) as client:
+            await client.delete_object(Bucket=bucket, Key=key)
+
+    @staticmethod
+    def _storage_url_to_bucket_and_key(storage_url: str) -> tuple[str, str]:
+        if not storage_url.startswith("s3://"):
+            raise ValueError(f"未対応のstorage_urlです: {storage_url}")
+        parsed = urlparse(storage_url)
+        return parsed.netloc, parsed.path.lstrip("/")
+
+
+def get_user_import_file_storage() -> FileStorage:
+    """ユーザーインポート専用の`FileStorage`のDI用ファクトリ。
+
+    ユーザーインポートはS3/SQSを使った非同期構成に移行済みのため、他機能（学習データ
+    ファイル・インデックス）とは別に、常に`S3FileStorage`を返す専用のファクトリとする。
+    """
+    aws_settings = get_aws_settings()
+    return S3FileStorage(
+        bucket_name=aws_settings.aws_s3_bucket_name,
+        region_name=aws_settings.aws_region,
+        endpoint_url=aws_settings.aws_endpoint_url,
+        aws_access_key_id=aws_settings.aws_access_key_id,
+        aws_secret_access_key=aws_settings.aws_secret_access_key,
+    )
