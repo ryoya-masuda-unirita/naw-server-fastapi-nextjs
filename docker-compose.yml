@@ -31,6 +31,23 @@ services:
       timeout: 5s
       retries: 20
 
+  localstack:
+    image: localstack/localstack:3
+    container_name: naw-fastapi-localstack
+    environment:
+      SERVICES: s3,sqs
+      DEFAULT_REGION: ap-northeast-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - naw_fastapi_localstack_data:/var/lib/localstack
+      - ./docker-compose/localstack-init:/etc/localstack/init/ready.d
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   backend:
     build:
       context: ./backend
@@ -39,6 +56,12 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://root:root@postgres:5432/postgres
       REDIS_URL: redis://redis:6379/0
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: ap-northeast-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_S3_BUCKET_NAME: secuaigent-user-import-jobs-dev-local
+      AWS_SQS_QUEUE_URL: http://localstack:4566/000000000000/secuaigent-user-import-jobs-queue-dev-local
     ports:
       - "8001:8000"
     volumes:
@@ -48,6 +71,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
 
   frontend-angular:
@@ -68,5 +93,6 @@ services:
 volumes:
   naw_fastapi_pgdata:
   naw_fastapi_redisdata:
+  naw_fastapi_localstack_data:
   naw_fastapi_backend_venv:
   naw_fastapi_frontend_angular_node_modules:
