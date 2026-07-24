@@ -158,8 +158,14 @@ class AwsSettings(BaseSettings):
     aws_secret_access_key: str | None = Field(
         default=None, alias="AWS_SECRET_ACCESS_KEY"
     )
-    aws_s3_bucket_name: str = Field(alias="AWS_S3_BUCKET_NAME")
-    aws_sqs_queue_url: str = Field(alias="AWS_SQS_QUEUE_URL")
+    # 未設定でも`AwsSettings()`自体の生成（＝app起動）は失敗させない。
+    # `app.main`の`lifespan`はSQS/S3を使わない設定（`aws_sqs_listener_enabled=false`）
+    # でも無条件に`AwsSettings()`を生成するため、ここを必須フィールドにすると
+    # S3/SQSを使わない環境でもapp起動自体が落ちてしまう。空文字のまま実際に
+    # 使用しようとした場合は、呼び出し先（キュー送受信・S3アップロード）側で
+    # 明示的にエラーにする。
+    aws_s3_bucket_name: str = Field(default="", alias="AWS_S3_BUCKET_NAME")
+    aws_sqs_queue_url: str = Field(default="", alias="AWS_SQS_QUEUE_URL")
     aws_sqs_listener_enabled: bool = Field(
         default=True, alias="AWS_SQS_LISTENER_ENABLED"
     )

@@ -45,8 +45,16 @@ class UserImportListener:
 
         Args:
             session_maker: メッセージ処理ごとに新しいDBセッションを作るためのファクトリ。
+
+        Raises:
+            RuntimeError: `AWS_SQS_QUEUE_URL`が未設定の場合。
         """
         aws_settings = get_aws_settings()
+        if not aws_settings.aws_sqs_queue_url:
+            raise RuntimeError(
+                "AWS_SQS_QUEUE_URLが設定されていません。"
+                "リスナーを有効にするにはSQSキューURLの設定が必要です。"
+            )
         session = aioboto3.Session()
         async with session.client(
             "sqs",
@@ -151,8 +159,17 @@ class UserImportListener:
 
         decode_errors: list[str] = []
         text = UserImportService._decode_csv(content, decode_errors)
-        rows = list(csv.DictReader(io.StringIO(text))) if not decode_errors else []
+        if decode_errors:
+            # アップロード時点で検証済みのはずだが、万一デコードに失敗した場合は
+            # 0件成功のCOMPLETEDとして握り潰さず、FAILEDとして扱う。
+            job.status = UserImportJobStatus.FAILED
+            job.error_details = "\n".join(decode_errors)
+            job.completed_at = datetime.now(timezone.utc)
+            session.add(job)
+            await session.commit()
+            return
 
+        rows = list(csv.DictReader(io.StringIO(text)))
         row_errors = await UserImportListener._process_rows(rows, tenant, session)
 
         job.status = UserImportJobStatus.COMPLETED

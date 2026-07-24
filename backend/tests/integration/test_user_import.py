@@ -342,6 +342,43 @@ class TestUserImport:
         assert detail.status_code == 200
         assert "必須カラム 'role' が存在しません" in detail.json()["errorDetails"]
 
+    async def test_import_users_deletes_uploaded_file_when_queue_send_fails(
+        self, client, admin_headers
+    ):
+        """SQS送信が失敗した場合、アップロード済みファイルがS3上に孤立しないよう削除されること"""
+        fake_storage = _FakeUserImportStorage()
+        csv_content = (
+            "login_id,name,password,role\nqueue-fail,Queue Fail,Pass123!,USER\n"
+        )
+
+        with (
+            patch(
+                "app.services.user_import_service.get_user_import_file_storage",
+                return_value=fake_storage,
+            ),
+            patch(
+                "app.services.user_import_queue_service.UserImportQueueService"
+                ".send_import_message",
+                new=AsyncMock(side_effect=RuntimeError("SQS is unreachable")),
+            ),
+        ):
+            async with client as c:
+                response = await c.post(
+                    "/api/admin/users/import",
+                    headers=admin_headers,
+                    files=_csv_file(csv_content),
+                )
+                body = response.json()
+                detail = await c.get(
+                    f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
+                )
+
+        assert response.status_code == 200
+        assert body["status"] == "FAILED"
+        assert "SQS is unreachable" in detail.json()["errorDetails"]
+        # アップロードされたファイルがどこからも参照されないままS3上に残らないこと
+        assert fake_storage._objects == {}
+
     async def test_general_user_cannot_import_users(self, client, user_headers):
         """一般ユーザーはユーザー一括インポートAPIを利用できないこと"""
         csv_content = "login_id,name,password,role\nblocked,Blocked,Pass123!,USER\n"

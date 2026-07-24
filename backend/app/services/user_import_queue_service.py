@@ -22,8 +22,16 @@ class UserImportQueueService:
             import_job_id: インポートジョブID。
             tenant_id: テナントID。
             storage_url: アップロード済みCSVの保存先URL。
+
+        Raises:
+            RuntimeError: `AWS_SQS_QUEUE_URL`が未設定の場合。
         """
         aws_settings = get_aws_settings()
+        if not aws_settings.aws_sqs_queue_url:
+            raise RuntimeError(
+                "AWS_SQS_QUEUE_URLが設定されていません。"
+                "ユーザーインポート機能を使うにはSQSキューURLの設定が必要です。"
+            )
         message_body = json.dumps(
             {
                 "importJobId": import_job_id,

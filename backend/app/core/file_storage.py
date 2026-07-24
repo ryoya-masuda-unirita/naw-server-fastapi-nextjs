@@ -207,8 +207,16 @@ def get_user_import_file_storage() -> FileStorage:
 
     ユーザーインポートはS3/SQSを使った非同期構成に移行済みのため、他機能（学習データ
     ファイル・インデックス）とは別に、常に`S3FileStorage`を返す専用のファクトリとする。
+
+    Raises:
+        RuntimeError: `AWS_S3_BUCKET_NAME`が未設定の場合。
     """
     aws_settings = get_aws_settings()
+    if not aws_settings.aws_s3_bucket_name:
+        raise RuntimeError(
+            "AWS_S3_BUCKET_NAMEが設定されていません。"
+            "ユーザーインポート機能を使うにはS3バケット名の設定が必要です。"
+        )
     return S3FileStorage(
         bucket_name=aws_settings.aws_s3_bucket_name,
         region_name=aws_settings.aws_region,

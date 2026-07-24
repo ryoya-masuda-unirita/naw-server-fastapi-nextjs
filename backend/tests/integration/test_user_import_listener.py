@@ -160,6 +160,26 @@ class TestUserImportListener:
         assert listener_job.status == UserImportJobStatus.FAILED
         fake_storage.delete.assert_not_awaited()
 
+    async def test_process_import_message_fails_job_on_undecodable_content(
+        self, session, listener_job
+    ):
+        """CSVの文字コードがデコードできない場合、0件成功で握り潰さずFAILEDにすること"""
+        fake_storage = AsyncMock()
+        # UTF-8/Shift-JISのいずれでもデコードできないバイト列
+        fake_storage.download.return_value = b"\xff\xfe\x00\x81"
+
+        with patch(
+            "app.services.user_import_listener.get_user_import_file_storage",
+            return_value=fake_storage,
+        ):
+            await UserImportListener.process_import_message(
+                _message_body(listener_job), session
+            )
+
+        await session.refresh(listener_job)
+        assert listener_job.status == UserImportJobStatus.FAILED
+        assert "文字コード" in listener_job.error_details
+
     async def test_process_import_message_records_row_error_and_continues(
         self, session, listener_tenant, listener_job
     ):

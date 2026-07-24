@@ -65,14 +65,19 @@ class UserImportService:
                 storage_url = await storage.upload(
                     tenant_id, job.id, file.filename or "users.csv", content
                 )
+                try:
+                    await UserImportQueueService.send_import_message(
+                        job.id, tenant_id, storage_url
+                    )
+                except Exception:
+                    # アップロード済みファイルがどこからも参照されないまま
+                    # S3上に残り続けないよう、キュー送信失敗時は削除しておく。
+                    await storage.delete(storage_url)
+                    raise
                 job.storage_url = storage_url
                 job.queued_at = datetime.now(timezone.utc)
                 session.add(job)
                 await session.flush()
-
-                await UserImportQueueService.send_import_message(
-                    job.id, tenant_id, storage_url
-                )
         except Exception as exc:
             job.status = UserImportJobStatus.FAILED
             job.error_details = f"致命的なエラー: {exc}"
