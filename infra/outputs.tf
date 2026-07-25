@@ -22,3 +22,13 @@ output "ecr_repository_url" {
 output "bastion_public_ip" {
   value = aws_instance.bastion.public_ip
 }
+
+// ユーザーインポート用S3バケット名（動作確認時に使う）
+output "user_import_bucket_name" {
+  value = aws_s3_bucket.user_import.bucket
+}
+
+// ユーザーインポート用SQSキューURL（動作確認時に使う）
+output "user_import_queue_url" {
+  value = aws_sqs_queue.user_import.url
+}
