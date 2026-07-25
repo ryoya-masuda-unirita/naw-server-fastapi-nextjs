@@ -1,23 +1,17 @@
 import csv
 import io
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
-from app.models.group import Group, GroupUser
-from app.models.tenant import Tenant
-from app.models.user import User, UserRole
+from app.core.file_storage import get_user_import_file_storage
+from app.models.user import UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
-from app.repositories.group_user_repository import GroupUserRepository
-from app.repositories.password_history_repository import PasswordHistoryRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_import_job_repository import UserImportJobRepository
-from app.repositories.user_repository import UserRepository
 from app.schemas.user_import import UserImportJobResponse, UserImportResponse
+from app.services.user_import_queue_service import UserImportQueueService
 
 
 class UserImportService:
@@ -31,10 +25,12 @@ class UserImportService:
     async def import_users(
         file: UploadFile, tenant_id: str, session: AsyncSession
     ) -> UserImportResponse:
-        """CSVファイルをアップロードし、ユーザーを同期的に一括登録・更新する。
+        """CSVファイルを検証・アップロードし、ユーザー登録をSQS経由で非同期に行わせる。
 
-        S3/SQSを使う非同期構成の移植元とは異なり、アップロードされたCSVを
-        メモリ上でパースし、その場でインポート処理まで完了させる縮小版。
+        バリデーション（CSV形式・必須カラム・行内容）のみをこの場で行い、通過した
+        場合はファイルをストレージ（S3）にアップロードしてSQSに送信、即座に受付
+        済みのレスポンスを返す。実際の行ごとの登録処理は`UserImportListener`が
+        キュー受信時に行う。
 
         Args:
             file: アップロードされたCSVファイル。
@@ -46,36 +42,47 @@ class UserImportService:
         """
         job = UserImportJob(
             tenant_id=tenant_id,
-            status=UserImportJobStatus.PROCESSING,
+            status=UserImportJobStatus.PENDING,
             file_name=file.filename or "",
         )
         session.add(job)
         await session.flush()
 
         errors: list[str] = []
-        rows: list[dict[str, str]] = []
         try:
             tenant = await TenantRepository.find_by_id(tenant_id, session)
             if not tenant:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant not found"
                 )
-            rows = await UserImportService._read_and_validate(file, errors)
+            content = await UserImportService._read_and_validate(file, errors)
             if errors:
                 job.status = UserImportJobStatus.FAILED
                 job.error_details = "\n".join(errors)
+                job.completed_at = datetime.now(timezone.utc)
             else:
-                row_errors = await UserImportService._process_rows(
-                    rows, tenant, session
+                storage = get_user_import_file_storage()
+                storage_url = await storage.upload(
+                    tenant_id, job.id, file.filename or "users.csv", content
                 )
-                job.status = UserImportJobStatus.COMPLETED
-                if row_errors:
-                    job.error_details = "\n".join(row_errors)
+                try:
+                    await UserImportQueueService.send_import_message(
+                        job.id, tenant_id, storage_url
+                    )
+                except Exception:
+                    # アップロード済みファイルがどこからも参照されないまま
+                    # S3上に残り続けないよう、キュー送信失敗時は削除しておく。
+                    await storage.delete(storage_url)
+                    raise
+                job.storage_url = storage_url
+                job.queued_at = datetime.now(timezone.utc)
+                session.add(job)
+                await session.flush()
         except Exception as exc:
             job.status = UserImportJobStatus.FAILED
             job.error_details = f"致命的なエラー: {exc}"
+            job.completed_at = datetime.now(timezone.utc)
 
-        job.completed_at = datetime.now(timezone.utc)
         session.add(job)
         await session.commit()
         await session.refresh(job)
@@ -109,67 +116,68 @@ class UserImportService:
         return UserImportJobResponse.from_job(job)
 
     @staticmethod
-    async def _read_and_validate(
-        file: UploadFile, errors: list[str]
-    ) -> list[dict[str, str]]:
+    async def _read_and_validate(file: UploadFile, errors: list[str]) -> bytes:
         """アップロードされたファイルを読み込み、CSV形式・必須カラム・行内容を検証する。
+
+        検証を通過したファイルの生のバイト列をそのまま返す（ストレージへの
+        アップロード・キュー受信側での再パースに使うため、行データには変換しない）。
 
         Args:
             file: アップロードされたCSVファイル。
             errors: 検証エラーを追記するリスト。
 
         Returns:
-            検証済みの行データ一覧。検証エラーがある場合は空リスト。
+            検証済みのファイル内容（バイト列）。検証エラーがある場合は空バイト列。
         """
         file_name = file.filename or ""
         if not file_name:
             errors.append("ファイル名が指定されていません")
-            return []
+            return b""
         if not file_name.lower().endswith(".csv"):
             errors.append("CSVファイルのみを受け付けます")
-            return []
+            return b""
         if any(char in file_name for char in ("\n", "\r", "\t")):
             errors.append("ファイル名に使用できない文字が含まれています")
-            return []
+            return b""
 
         content = await file.read()
         if not content:
             errors.append("ファイルが空です")
-            return []
+            return b""
 
         text = UserImportService._decode_csv(content, errors)
         if errors:
-            return []
+            return b""
 
         try:
             reader = csv.DictReader(io.StringIO(text))
             if not reader.fieldnames:
                 errors.append("CSVファイルにヘッダー行が存在しません")
-                return []
+                return b""
             missing_columns = UserImportService.REQUIRED_COLUMNS - set(
                 reader.fieldnames
             )
             for column in sorted(missing_columns):
                 errors.append(f"必須カラム '{column}' が存在しません")
             if errors:
-                return []
+                return b""
             rows = list(reader)
         except csv.Error as exc:
             errors.append(f"CSVファイルの読み込みに失敗しました: {exc}")
-            return []
+            return b""
 
         if not rows:
             errors.append("データ行が存在しません")
-            return []
+            return b""
         if len(rows) > UserImportService.MAX_ROWS:
             errors.append(
                 f"データ行数が上限（{UserImportService.MAX_ROWS}行）を超えています。"
                 f"{UserImportService.MAX_ROWS}行以下にしてください。"
             )
-            return []
+            return b""
 
         UserImportService._validate_rows(rows, errors)
-        return rows
+        return b"" if errors else content
 
     @staticmethod
     def _decode_csv(content: bytes, errors: list[str]) -> str:
@@ -254,136 +262,6 @@ class UserImportService:
                         errors.append(
                             f"行{index}: groupIdsに空のグループIDが含まれています"
                         )
-
-    @staticmethod
-    async def _process_rows(
-        rows: list[dict[str, str]], tenant: Tenant, session: AsyncSession
-    ) -> list[str]:
-        """検証済みの行データを1行ずつユーザー登録・更新処理にかける。
-
-        グループ・既存ユーザーは行数分のクエリを避けるため、先にまとめて取得する。
-
-        Args:
-            rows: 検証済みの行データ一覧。
-            tenant: 対象テナント。
-            session: 非同期DBセッション。
-
-        Returns:
-            行単位の処理エラー一覧。
-        """
-        all_group_ids = {
-            group_id.strip()
-            for row in rows
-            for group_id in UserImportService._value(row, "groupIds").split(",")
-            if group_id.strip()
-        }
-        group_map: dict[str, Group] = {}
-        if all_group_ids:
-            result = await session.execute(
-                select(Group).where(
-                    Group.tenant_id == tenant.id, Group.id.in_(all_group_ids)
-                )
-            )
-            group_map = {group.id: group for group in result.scalars().all()}
-
-        all_login_ids = {UserImportService._value(row, "login_id") for row in rows}
-        user_map = await UserRepository.find_by_login_ids(
-            all_login_ids, tenant.id, session
-        )
-
-        errors: list[str] = []
-        for index, row in enumerate(rows, start=2):
-            await UserImportService._process_row(
-                row, tenant, index, group_map, user_map, errors, session
-            )
-        return errors
-
-    @staticmethod
-    async def _process_row(
-        row: dict[str, str],
-        tenant: Tenant,
-        row_number: int,
-        group_map: dict[str, Group],
-        user_map: dict[str, User],
-        errors: list[str],
-        session: AsyncSession,
-    ) -> None:
-        """1行分のユーザー登録・更新・グループ所属の付け替えを行う。
-
-        行内の処理はSAVEPOINTで囲み、この行だけの失敗が他の行の処理結果や
-        既にコミット待ちの変更を巻き込まないようにする。
-
-        Args:
-            row: 対象行のCSVデータ。
-            tenant: 対象テナント。
-            row_number: エラーメッセージに含める行番号（ヘッダー行を1とした通し番号）。
-            group_map: グループIDをキーとした事前取得済みのグループ。
-            user_map: ログインIDをキーとした事前取得済みの既存ユーザー。
-            errors: 行単位の処理エラーを追記するリスト。
-            session: 非同期DBセッション。
-        """
-        login_id = UserImportService._value(row, "login_id")
-        name = UserImportService._value(row, "name")
-        password = UserImportService._value(row, "password")
-        role = UserRole(UserImportService._value(row, "role").upper())
-        create_login_key = UserImportService._value(row, "createLoginKey").lower()
-
-        try:
-            async with session.begin_nested():
-                user = user_map.get(login_id)
-                if user:
-                    user.name = name
-                    user.role = role
-                    if create_login_key == "true":
-                        user.login_key = uuid.uuid4().hex
-                    elif create_login_key == "false":
-                        user.login_key = None
-                else:
-                    login_key = uuid.uuid4().hex if create_login_key == "true" else None
-                    user = User(
-                        login_id=login_id,
-                        tenant_id=tenant.id,
-                        name=name,
-                        role=role,
-                        login_key=login_key,
-                        is_required_password_reset=True,
-                    )
-                    session.add(user)
-                    await session.flush()
-                    user_map[login_id] = user
-                    expired_at = datetime.now(timezone.utc) + timedelta(
-                        days=tenant.pw_validity_period_days
-                    )
-                    await PasswordHistoryRepository.save(
-                        user.id,
-                        tenant.id,
-                        hash_password(password),
-                        session,
-                        expired_at=expired_at,
-                    )
-                session.add(user)
-                await session.flush()
-
-                await session.execute(
-                    delete(GroupUser).where(
-                        GroupUser.tenant_id == tenant.id, GroupUser.user_id == user.id
-                    )
-                )
-                group_ids = UserImportService._value(row, "groupIds")
-                if group_ids:
-                    for group_id in group_ids.split(","):
-                        group_id = group_id.strip()
-                        if not group_id:
-                            continue
-                        if group_id not in group_map:
-                            errors.append(
-                                f"行{row_number}: グループID '{group_id}' は存在しません"
-                            )
-                            continue
-                        GroupUserRepository.add(group_id, tenant.id, user.id, session)
-                await session.flush()
-        except Exception as exc:
-            errors.append(f"行{row_number}: ユーザーの登録に失敗しました: {exc}")
 
     @staticmethod
     def _value(row: dict[str, str], column: str) -> str:

@@ -19,6 +19,7 @@ dependencies = [
     "azure-search-documents>=11.5.1",
     "openai>=1.54.0",
     "redis>=5.2.0",
+    "aioboto3>=15.5.0",
 ]
 
 [dependency-groups]
@@ -76,6 +77,13 @@ module = [
     "app.repositories.*",
     "app.services.user_service",
     "app.services.user_import_service",
+    "app.services.user_import_listener",
     "app.core.credit_quota",
 ]
 ignore_errors = true
+
+# aioboto3/botocoreはpy.typedマーカー・型スタブを提供していないため、
+# import自体をmypyのチェック対象から除外する。
+[[tool.mypy.overrides]]
+module = ["aioboto3.*", "botocore.*"]
+ignore_missing_imports = true

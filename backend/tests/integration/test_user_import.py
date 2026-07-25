@@ -1,3 +1,5 @@
+import json
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -11,6 +13,7 @@ from app.models.password_history import PasswordHistory
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
+from app.services.user_import_listener import UserImportListener
 
 
 @pytest.fixture
@@ -104,6 +107,63 @@ def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
+class _FakeUserImportStorage:
+    """S3実装の代わりに、アップロード内容をインメモリ辞書に保持するフェイク。"""
+
+    def __init__(self) -> None:
+        self._objects: dict[str, bytes] = {}
+
+    async def upload(
+        self, tenant_id: str, file_id: str, filename: str, content: bytes
+    ) -> str:
+        storage_url = f"s3://test-bucket/{tenant_id}/{file_id}_{filename}"
+        self._objects[storage_url] = content
+        return storage_url
+
+    async def download(self, storage_url: str) -> bytes:
+        return self._objects[storage_url]
+
+    async def delete(self, storage_url: str) -> None:
+        self._objects.pop(storage_url, None)
+
+
+@pytest.fixture
+def mock_user_import_infra():
+    """S3アップロード・SQS送信をモック化し、送信したメッセージ本文を記録する。"""
+    fake_storage = _FakeUserImportStorage()
+    sent_messages: list[str] = []
+
+    async def _fake_send_import_message(
+        import_job_id: str, tenant_id: str, storage_url: str
+    ) -> None:
+        sent_messages.append(
+            json.dumps(
+                {
+                    "importJobId": import_job_id,
+                    "tenantId": tenant_id,
+                    "storageUrl": storage_url,
+                }
+            )
+        )
+
+    with (
+        patch(
+            "app.services.user_import_service.get_user_import_file_storage",
+            return_value=fake_storage,
+        ),
+        patch(
+            "app.services.user_import_queue_service.UserImportQueueService"
+            ".send_import_message",
+            new=AsyncMock(side_effect=_fake_send_import_message),
+        ),
+        patch(
+            "app.services.user_import_listener.get_user_import_file_storage",
+            return_value=fake_storage,
+        ),
+    ):
+        yield sent_messages
+
+
 def _csv_file(content: str, filename: str = "users.csv"):
     return {"file": (filename, content.encode(), "text/csv")}
 
@@ -111,9 +171,9 @@ def _csv_file(content: str, filename: str = "users.csv"):
 @pytest.mark.asyncio
 class TestUserImport:
     async def test_import_users_creates_user_and_job(
-        self, client, admin_headers, session
+        self, client, admin_headers, session, mock_user_import_infra
     ):
-        """CSVインポートで新規ユーザーとCOMPLETEDのジョブが作成されること"""
+        """CSVインポートの受付がPENDINGになり、キュー受信処理後にユーザーとCOMPLETEDのジョブが作成されること"""
         csv_content = "login_id,name,password,role,createLoginKey\nnew-import,New Import,Pass123!,USER,true\n"
 
         async with client as c:
@@ -123,12 +183,17 @@ class TestUserImport:
                 files=_csv_file(csv_content),
             )
             body = response.json()
+
+            assert response.status_code == 200
+            assert body["status"] == "PENDING"
+
+            await UserImportListener.process_import_message(
+                mock_user_import_infra[-1], session
+            )
+
             detail = await c.get(
                 f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
             )
-
-        assert response.status_code == 200
-        assert body["status"] == "COMPLETED"
 
         created = (
             (await session.execute(select(User).where(User.login_id == "new-import")))
@@ -150,7 +215,7 @@ class TestUserImport:
         assert detail.json()["fileName"] == "users.csv"
 
     async def test_import_users_updates_existing_user_without_password_change(
-        self, client, admin_headers, session, import_tenant
+        self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
         """既存ユーザーの更新時は名前・ロールのみ更新されパスワードは変更されないこと"""
         user = User(
@@ -181,8 +246,13 @@ class TestUserImport:
                 headers=admin_headers,
                 files=_csv_file(csv_content),
             )
+            assert response.status_code == 200
+            assert response.json()["status"] == "PENDING"
 
-        assert response.status_code == 200
+            await UserImportListener.process_import_message(
+                mock_user_import_infra[-1], session
+            )
+
         await session.refresh(user)
         assert user.name == "After"
         assert user.role == UserRole.ADMIN
@@ -195,7 +265,7 @@ class TestUserImport:
         assert password_history_count == 1
 
     async def test_import_users_replaces_group_memberships(
-        self, client, admin_headers, session, import_tenant
+        self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
         """CSVのgroupIdsで既存のグループ所属がCSV指定の内容に置き換わること"""
         old_group = Group(tenant_id=import_tenant.id, name="Old Group")
@@ -229,8 +299,13 @@ class TestUserImport:
                 headers=admin_headers,
                 files=_csv_file(csv_content),
             )
+            assert response.status_code == 200
+            assert response.json()["status"] == "PENDING"
 
-        assert response.status_code == 200
+            await UserImportListener.process_import_message(
+                mock_user_import_infra[-1], session
+            )
+
         group_ids = (
             (
                 await session.execute(
@@ -243,9 +318,9 @@ class TestUserImport:
         assert group_ids == [new_group.id]
 
     async def test_import_users_returns_failed_job_for_invalid_csv(
-        self, client, admin_headers
+        self, client, admin_headers, mock_user_import_infra
     ):
-        """必須カラムが欠けたCSVの場合、ジョブがFAILEDになりエラー内容が記録されること"""
+        """必須カラムが欠けたCSVの場合、アップロード前検証の時点でジョブがFAILEDになりエラー内容が記録されること"""
         csv_content = "login_id,name,password\nmissing-role,Missing Role,Pass123!\n"
 
         async with client as c:
@@ -261,9 +336,48 @@ class TestUserImport:
 
         assert response.status_code == 200
         assert body["status"] == "FAILED"
+        # バリデーションエラーで弾かれた場合、キューへの送信は行われないこと
+        assert mock_user_import_infra == []
 
         assert detail.status_code == 200
         assert "必須カラム 'role' が存在しません" in detail.json()["errorDetails"]
+
+    async def test_import_users_deletes_uploaded_file_when_queue_send_fails(
+        self, client, admin_headers
+    ):
+        """SQS送信が失敗した場合、アップロード済みファイルがS3上に孤立しないよう削除されること"""
+        fake_storage = _FakeUserImportStorage()
+        csv_content = (
+            "login_id,name,password,role\nqueue-fail,Queue Fail,Pass123!,USER\n"
+        )
+
+        with (
+            patch(
+                "app.services.user_import_service.get_user_import_file_storage",
+                return_value=fake_storage,
+            ),
+            patch(
+                "app.services.user_import_queue_service.UserImportQueueService"
+                ".send_import_message",
+                new=AsyncMock(side_effect=RuntimeError("SQS is unreachable")),
+            ),
+        ):
+            async with client as c:
+                response = await c.post(
+                    "/api/admin/users/import",
+                    headers=admin_headers,
+                    files=_csv_file(csv_content),
+                )
+                body = response.json()
+                detail = await c.get(
+                    f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
+                )
+
+        assert response.status_code == 200
+        assert body["status"] == "FAILED"
+        assert "SQS is unreachable" in detail.json()["errorDetails"]
+        # アップロードされたファイルがどこからも参照されないままS3上に残らないこと
+        assert fake_storage._objects == {}
 
     async def test_general_user_cannot_import_users(self, client, user_headers):
         """一般ユーザーはユーザー一括インポートAPIを利用できないこと"""
@@ -279,7 +393,7 @@ class TestUserImport:
         assert response.status_code == 403
 
     async def test_import_users_preserves_login_key_when_column_omitted(
-        self, client, admin_headers, session, import_tenant
+        self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
         """createLoginKey列がないCSVで既存ユーザーを更新してもlogin_keyが維持されること"""
         user = User(
@@ -303,14 +417,19 @@ class TestUserImport:
                 headers=admin_headers,
                 files=_csv_file(csv_content),
             )
+            assert response.status_code == 200
+            assert response.json()["status"] == "PENDING"
 
-        assert response.status_code == 200
+            await UserImportListener.process_import_message(
+                mock_user_import_infra[-1], session
+            )
+
         await session.refresh(user)
         assert user.name == "After"
         assert user.login_key == "existing-login-key"
 
     async def test_import_users_records_row_error_for_duplicate_group_id_and_continues(
-        self, client, admin_headers, session, import_tenant
+        self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
         """行内でグループIDが重複していても他の行の処理は継続されること"""
         group = Group(tenant_id=import_tenant.id, name="Dup Group")
@@ -329,12 +448,19 @@ class TestUserImport:
                 files=_csv_file(csv_content),
             )
             body = response.json()
+            assert response.status_code == 200
+            assert body["status"] == "PENDING"
+
+            await UserImportListener.process_import_message(
+                mock_user_import_infra[-1], session
+            )
+
             detail = await c.get(
                 f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
             )
 
-        assert response.status_code == 200
-        assert body["status"] == "COMPLETED"
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "COMPLETED"
         assert "行3" in detail.json()["errorDetails"]
 
         ok_user = (
