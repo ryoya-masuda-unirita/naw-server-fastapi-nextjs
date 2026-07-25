@@ -19,7 +19,7 @@
 ```
 #189 issue-189 OIDC認証用IAMロールとtfstateリモートバックエンドを追加
     - GitHub Actions用OIDCプロバイダ・IAMロール・ポリシーを追加(develop限定)
-    - tfstate用S3バケット・DynamoDBロックテーブルを追加
+    - tfstate用S3バケットを追加(use_lockfileによるS3ネイティブロック。dynamodb_tableは非推奨のため不使用)
     - main.tfにリモートバックエンド設定を追加
 ```
 
