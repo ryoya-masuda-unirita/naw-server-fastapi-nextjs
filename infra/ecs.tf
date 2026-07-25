@@ -111,8 +111,13 @@ resource "aws_ecs_task_definition" "backend" {
   // EC2モードで実行するため、bridgeモードを指定
   network_mode             = "bridge"
   requires_compatibilities = ["EC2"]
-  // ECSタスク実行ロールを指定
+
+  // execution_role_arn: ECSエージェント(コンテナ起動の仕組み自体)が使うロール。ECR pull・CloudWatch Logs書き込みに使う。
+  // task_role_arn: コンテナ内で動くアプリコード(backend)が使うロール。AWS SDK経由でのSQS/S3操作等に使う。
+  // 用途が異なるため別々のロールとして指定でき、それぞれ1つずつアタッチできる(2つ同時に持てる)。
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
+  // アプリコード(backend)がSQS/S3を操作するためのロール
+  task_role_arn = aws_iam_role.backend_task.arn
 
   container_definitions = jsonencode([
     {
@@ -148,6 +153,10 @@ resource "aws_ecs_task_definition" "backend" {
           name  = "CORS_ALLOWED_ORIGIN_REGEX"
           value = "https://([a-z0-9-]+\\.)?${replace(var.domain_name, ".", "\\.")}"
         },
+        // backendがユーザーインポート用CSVを置くS3バケット名(app.core.file_storage.S3FileStorageが参照)
+        { name = "AWS_S3_BUCKET_NAME", value = aws_s3_bucket.user_import.bucket },
+        // backendがジョブ登録・受信に使うSQSキューのURL(user_import_queue_service/listenerが参照)
+        { name = "AWS_SQS_QUEUE_URL", value = aws_sqs_queue.user_import.url },
       ]
 
       logConfiguration = {
