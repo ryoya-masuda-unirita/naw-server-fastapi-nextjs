@@ -1,0 +1,47 @@
+name: Deploy Frontend Angular
+
+on:
+  workflow_call:
+
+# id-token: write でOIDCトークンの発行を許可する(AWSへのOIDC認証に必須)
+# contents: read はコード取得のみに権限を絞るため明示
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-angular
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend-angular/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+
+      # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync dist/example/browser s3://${{ vars.FRONTEND_BUCKET_NAME }}/ --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths '/*'

@@ -173,6 +173,13 @@ resource "aws_ecs_task_definition" "backend" {
     Name    = "${var.project_name}-backend-task"
     Project = var.project_name
   }
+
+  // deploy-backend.ymlがpushのたびにAWS CLIで新しいイメージタグのリビジョンを登録する。
+  // ignore_changesが無いと、次回terraform applyでこのリソースが元のイメージタグ(latest固定)に
+  // 巻き戻り、CIが進めたデプロイを意図せず打ち消してしまうため、container_definitionsの変更を無視する。
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
 }
 
 // タスク定義を実際に起動し続け、ALBターゲットグループに紐付けるサービス
@@ -200,4 +207,11 @@ resource "aws_ecs_service" "backend" {
 
   // ALBリスナーが先に作られていないと登録に失敗するため明示的に依存を指定
   depends_on = [aws_lb_listener.http]
+
+  // deploy-backend.ymlがCIで新しいタスク定義リビジョンにupdate-serviceする。
+  // ignore_changesが無いと、次回terraform applyでtask_definitionがTerraform管理のリビジョンに
+  // 巻き戻り、CIが進めたデプロイを意図せず打ち消してしまうため、この属性の変更を無視する。
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }

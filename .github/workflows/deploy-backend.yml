@@ -1,0 +1,106 @@
+name: Deploy Backend
+
+on:
+  workflow_call:
+
+# id-token: write でOIDCトークンの発行を許可する(AWSへのOIDC認証に必須)
+# contents: read はコード取得のみに権限を絞るため明示
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: naw-fastapi-issue160-backend
+  ECS_CLUSTER: naw-fastapi-issue160-cluster
+  ECS_SERVICE: naw-fastapi-issue160-backend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとbackend/配下のファイルにアクセスできない)
+      - uses: actions/checkout@v4
+
+      # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のawsコマンド/dockerのECR操作はこの認証情報を使う
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # `docker push`できるように、ECRへの一時的なログイントークンを取得する
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # GitHub Actionsのランナーはx86_64だが、ECS(t4g)はARM64で動くため、
+      # 異なるCPUアーキテクチャ向けのイメージをビルドできるようQEMU(エミュレータ)とBuildxを準備する
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ARM64向けにDockerイメージをビルドし、そのままECRにpushする(--pushでbuildとpushを1コマンドにまとめている)。
+      # タグはcommit SHA(バージョン管理用)とlatest(常に最新を指す用)の2本を付ける
+      - name: Build Docker image
+        env:
+          # ログインしたECRのリポジトリを環境変数に設定
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --push \
+            -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
+            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
+            .
+
+      # 今ECSに登録されている現行のタスク定義をJSONで取得し、コンテナイメージだけを新しいタグに書き換えた
+      # 「新しいタスク定義の中身」を作る。ecs register-task-definitionが受け付けないメタ情報(リビジョン番号等)は
+      # jqで削除する(付けたままだとAPIエラーになる)
+      - name: Render new task definition
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${ECS_SERVICE} \
+            --query 'taskDefinition' > task-definition.json
+
+          jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
+            '.containerDefinitions[0].image = $IMAGE
+             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            task-definition.json > task-def-clean.json
+
+      # 上で作った内容を、ECS上に新しい「リビジョン」として登録する(まだサービスはこれを使っていない状態)。
+      # 登録後に払い出されるARN(リビジョン番号込みの識別子)を、次のステップで使うために保存しておく
+      - name: Register new task definition
+        id: register-task-def
+        run: |
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://task-def-clean.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task_def_arn=${NEW_TASK_DEF_ARN}" >> $GITHUB_OUTPUT
+
+      # ECSサービスに「さっき登録した新しいリビジョンを使って再デプロイして」と指示する。
+      # --force-new-deploymentを付けないと、ECSは:latestタグの中身が変わったことを自動検知してくれないため必須
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${ECS_CLUSTER} \
+            --service ${ECS_SERVICE} \
+            --task-definition ${{ steps.register-task-def.outputs.task_def_arn }} \
+            --force-new-deployment
+
+      # 新しいタスクが起動しヘルスチェックを通過して安定するまで、このジョブを待たせる。
+      # ここで失敗する場合、新しいイメージが正常に起動できていない(設定ミス等)ことを示す
+      - name: Wait for service stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${ECS_CLUSTER} \
+            --services ${ECS_SERVICE}
