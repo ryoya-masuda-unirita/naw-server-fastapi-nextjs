@@ -1,8 +1,13 @@
 name: Deploy
 
+# 初回セットアップ(route53/インフラ全体apply・GitHub Secrets/Variables登録)が完了するまで、
+# developへのpushで誤って自動実行されないようトリガーを無効化している。
+# セットアップ完了後、以下のコメントアウトを解除すること。
+# on:
+#   push:
+#     branches: [develop]
 on:
-  push:
-    branches: [develop]
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
