@@ -1,0 +1,63 @@
+name: Deploy Infra
+
+on:
+  workflow_call:
+
+# id-token: write でOIDCトークンの発行を許可する(AWSへのOIDC認証に必須)
+# contents: read はコード取得のみに権限を絞るため明示
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のterraformコマンドはこの認証情報を使う
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+        
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      # backendのS3設定(main.tf)を元に、リモートstateへ接続する
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Format Check
+        run: terraform fmt -check -diff
+      
+      - name: Terraform Validate
+        run: terraform validate
+      
+      - name: Terraform Plan
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_secret_key: ${{ secrets.SECRET_KEY }}
+          TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
+          TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
+          TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
+          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+        run: terraform plan -out=tfplan
+      
+      - name: Terraform Apply
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_secret_key: ${{ secrets.SECRET_KEY }}
+          TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
+          TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
+          TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
+          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+        run: terraform apply -auto-approve tfplan

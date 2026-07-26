@@ -1,0 +1,67 @@
+name: Deploy
+
+# 初回セットアップ(route53/インフラ全体apply・GitHub Secrets/Variables登録)が完了するまで、
+# developへのpushで誤って自動実行されないようトリガーを無効化している。
+# セットアップ完了後、以下のコメントアウトを解除すること。
+# on:
+#   push:
+#     branches: [develop]
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # このpushでどのディレクトリが変更されたかを判定し、後続ジョブのif条件に使う出力を出す
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - "infra/**"
+              - "!infra/route53/**"
+            backend:
+              - "backend/**"
+            frontend:
+              - "frontend-angular/**"
+
+  # infra/**が変更されていれば deploy-infra.yml を呼び出す(secrets: inherit で
+  # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    uses: ./.github/workflows/deploy-infra.yml
+    secrets: inherit
+
+  # backend/**が変更されていれば実行。infraジョブの完了を待つ(needs)。
+  # infraジョブがスキップされた(infra/**が変更されていない)場合はresultが"skipped"になるので、
+  # successかskippedのどちらかであればOKとする。infraが失敗した場合(failure)は実行しない。
+  backend:
+    needs: [changes, infra]
+    if: |
+      always() &&
+      needs.changes.outputs.backend == 'true' &&
+      (needs.infra.result == 'success' || needs.infra.result == 'skipped')
+    uses: ./.github/workflows/deploy-backend.yml
+    secrets: inherit
+
+  # frontend-angular/**が変更されていれば実行。frontendが使うS3バケット/CloudFrontが
+  # 同じPRのinfra変更で作り直される可能性があるため、backendと同様にinfraジョブの完了を待つ
+  frontend:
+    needs: [changes, infra]
+    if: |
+      always() &&
+      needs.changes.outputs.frontend == 'true' &&
+      (needs.infra.result == 'success' || needs.infra.result == 'skipped')
+    uses: ./.github/workflows/deploy-frontend-angular.yml
+    secrets: inherit
