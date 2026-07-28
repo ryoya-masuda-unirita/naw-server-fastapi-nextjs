@@ -571,6 +571,8 @@
   "AUTH": {
     "LOGIN": {
       "TITLE": "ログイン",
+      "TENANT_ID_LABEL": "テナントID",
+      "TENANT_ID_PLACEHOLDER": "テナントID",
       "USER_ID_LABEL": "ユーザーID",
       "USER_ID_PLACEHOLDER": "ユーザーID",
       "USER_ID_SUPPORT": "ユーザーIDが分からない場合は、管理者にお問い合わせください。",

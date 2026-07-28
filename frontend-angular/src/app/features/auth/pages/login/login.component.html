@@ -20,6 +20,16 @@
           </header>
 
           <app-form-input
+            formControlName="tenantId"
+            [label]="'AUTH.LOGIN.TENANT_ID_LABEL' | translate"
+            [supportText]="''"
+            [placeholder]="'AUTH.LOGIN.TENANT_ID_PLACEHOLDER' | translate"
+            [error]="tenantIdError()"
+            type="text"
+            autocomplete="organization"
+          />
+
+          <app-form-input
             formControlName="username"
             [label]="'AUTH.LOGIN.USER_ID_LABEL' | translate"
             [supportText]="''"
