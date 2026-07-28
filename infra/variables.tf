@@ -30,11 +30,6 @@ variable "key_pair_name" {
   description = "bastionへのSSH接続に使うキーペア名"
 }
 
-variable "domain_name" {
-  type        = string
-  description = "ムームードメインで取得したドメイン名"
-}
-
 variable "secret_key" {
   type        = string
   sensitive   = true

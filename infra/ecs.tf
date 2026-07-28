@@ -148,11 +148,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "SECRET_KEY", value = var.secret_key },
         { name = "COOKIE_SECURE", value = "true" },
         { name = "COOKIE_SAME_SITE", value = "lax" },
-        { name = "CORS_ALLOWED_ORIGINS", value = "" },
-        {
-          name  = "CORS_ALLOWED_ORIGIN_REGEX"
-          value = "https://([a-z0-9-]+\\.)?${replace(var.domain_name, ".", "\\.")}"
-        },
+        // 独自ドメインを廃止したため、CloudFrontのデフォルトドメイン1つを固定オリジンとして許可する
+        { name = "CORS_ALLOWED_ORIGINS", value = "https://${aws_cloudfront_distribution.main.domain_name}" },
+        { name = "CORS_ALLOWED_ORIGIN_REGEX", value = "" },
         // backendがユーザーインポート用CSVを置くS3バケット名(app.core.file_storage.S3FileStorageが参照)
         { name = "AWS_S3_BUCKET_NAME", value = aws_s3_bucket.user_import.bucket },
         // backendがジョブ登録・受信に使うSQSキューのURL(user_import_queue_service/listenerが参照)

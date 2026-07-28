@@ -2,7 +2,6 @@
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   default_root_object = "index.html"
-  aliases             = [var.domain_name, "*.${var.domain_name}"]
   // PriceClass_100は北米・欧州のエッジのみ使用（最も安価。日本のエッジは使わないがコスト優先）
   price_class = "PriceClass_100"
 
@@ -99,44 +98,14 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
+  // 独自ドメインを廃止したため、CloudFrontのデフォルトドメイン（*.cloudfront.net）・
+  // デフォルト証明書で配信する（ACM証明書は不要）。
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.main.certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    cloudfront_default_certificate = true
   }
 
   tags = {
     Name    = "${var.project_name}-cf"
     Project = var.project_name
-  }
-}
-
-// Aレコードは「ドメイン名→IPアドレス」の対応を定義するDNSレコード。
-// ただしCloudFrontのIPは動的に変わり固定IPを書けないため、AWS独自のalias（エイリアス）を使う。
-// aliasはIPの代わりにAWSリソース（ここではCloudFront）を直接指定でき、ルートドメインにも使えて追加料金もない。
-// これでドメイン本体へのアクセスがCloudFrontに向く。
-resource "aws_route53_record" "root" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = var.domain_name
-  type    = "A"
-
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
-  }
-}
-
-// 上と同じくalias付きAレコード。ワイルドカード(*.ドメイン)なので、
-// tenantごとのサブドメイン（例: tenant1.secuaigent-ryoyamasuda.tech）へのアクセスもすべてCloudFrontに向く。
-resource "aws_route53_record" "wildcard" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = "*.${var.domain_name}"
-  type    = "A"
-
-  alias {
-    name                   = aws_cloudfront_distribution.main.domain_name
-    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
-    evaluate_target_health = false
   }
 }
