@@ -3,6 +3,21 @@ output "cloudfront_domain_name" {
   value = aws_cloudfront_distribution.main.domain_name
 }
 
+// CloudFrontの配信ID（GitHub ActionsのCLOUDFRONT_DISTRIBUTION_ID変数・キャッシュ無効化コマンドに使う）
+output "cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.main.id
+}
+
+// フロントエンド配信用S3バケット名（GitHub ActionsのFRONTEND_BUCKET_NAME変数に使う）
+output "frontend_bucket_name" {
+  value = aws_s3_bucket.frontend.bucket
+}
+
+// GitHub ActionsがAssumeRoleするIAMロールのARN（GitHub ActionsのAWS_ROLE_ARNシークレットに使う）
+output "github_actions_role_arn" {
+  value = aws_iam_role.github_actions.arn
+}
+
 // ALBのDNS名（直接疎通確認する場合に使う）
 output "alb_dns_name" {
   value = aws_lb.main.dns_name

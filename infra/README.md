@@ -27,28 +27,46 @@ tfstate用S3バケット（`tfstate_backend.tf`の`aws_s3_bucket.tfstate`）自�
 
 以前は上記に加えて`infra/route53/`でのホストゾーン作成・ムームードメイン側のネームサーバー登録も初回セットアップに含まれていたが、Issue #195でカスタムドメイン運用自体を廃止したため、現在は不要（詳細は次のセクション参照）。CloudFrontはデフォルトドメイン（`*.cloudfront.net`）でそのまま使える。
 
-### GitHub Actionsからの自動デプロイ（CI/CD）を有効化する場合
+### GitHub Actionsからの自動デプロイ（CI/CD）の初回セットアップ
 
-`.github/workflows/deploy.yml`は、誤って未セットアップの環境に自動applyしないよう、デフォルトでは`workflow_dispatch`（手動実行）のみに制限されている（ファイル冒頭のコメント参照）。上記の初回セットアップ完了後、以下を行うと`develop`へのpushで自動デプロイされるようになる。
+`.github/workflows/deploy.yml`は、誤って未セットアップの環境に自動applyしないよう、デフォルトでは`workflow_dispatch`（手動実行）のみに制限されている（ファイル冒頭のコメント参照）。以下の手順で有効化すると、`develop`へのpushで自動デプロイされるようになる。
 
-1. 上記手順で`terraform apply`済みであること
-2. GitHub の Settings → Secrets and variables → Actions で以下を登録する
+#### 1. 前提: 上記の初回セットアップ手順で`terraform apply`済みであること
 
-   | 種別 | 名前 | 値の取得元 |
-   |---|---|---|
-   | Secret | `AWS_ROLE_ARN` | apply後、`aws_iam_role.github_actions`のARN（`aws iam get-role --role-name <project_name>-github-actions-role --query Role.Arn`） |
-   | Secret | `DB_PASSWORD` | `terraform.tfvars`と同じ値 |
-   | Secret | `SECRET_KEY` | 同上 |
-   | Secret | `ALLOWED_SSH_CIDRS` | 同上 |
-   | Secret | `ALLOWED_ADMIN_CIDRS` | 同上 |
-   | Secret | `PROJECT_PAT` | GitHub Projects連携用（`project-status-sync.yml`が使用。デプロイとは別用途） |
-   | Variable | `KEY_PAIR_NAME` | 同上 |
-   | Variable | `FRONTEND_BUCKET_NAME` | apply後のS3バケット名（`aws_s3_bucket.frontend`） |
-   | Variable | `CLOUDFRONT_DISTRIBUTION_ID` | apply後のCloudFront配信ID |
+#### 2. GitHub Secrets / Variables を登録する
 
-   > `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になり、`deploy-infra.yml`からも参照を削除済み。登録不要。
+デプロイに使うSecrets/Variablesのうち、`AWS_ROLE_ARN`・`FRONTEND_BUCKET_NAME`・`CLOUDFRONT_DISTRIBUTION_ID`は`terraform output`で取得できる。それ以外（`DB_PASSWORD`等）は`terraform.tfvars`と同じ値を使う。`gh` CLI（[GitHub CLI](https://cli.github.com/)、要ログイン済み）で以下のように一括登録できる。
 
-3. `.github/workflows/deploy.yml`の`on:`をコメントアウトされた`push: branches: [develop]`に戻す（`workflow_dispatch: {}`のみの現状から変更する）
+```bash
+cd infra
+
+# terraform outputから取得できるもの
+gh secret set AWS_ROLE_ARN --body "$(terraform output -raw github_actions_role_arn)"
+gh variable set FRONTEND_BUCKET_NAME --body "$(terraform output -raw frontend_bucket_name)"
+gh variable set CLOUDFRONT_DISTRIBUTION_ID --body "$(terraform output -raw cloudfront_distribution_id)"
+
+# terraform.tfvarsと同じ値を使うもの（<...>は実際の値に置き換える。CIDRはカンマ区切り文字列でOK）
+gh secret set DB_PASSWORD --body "<terraform.tfvarsのdb_password>"
+gh secret set SECRET_KEY --body "<terraform.tfvarsのsecret_key>"
+gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrs>"
+gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrs>"
+gh variable set KEY_PAIR_NAME --body "<terraform.tfvarsのkey_pair_name>"
+
+# GitHub Projects連携用(project-status-sync.ymlが使用。デプロイとは別用途。未登録なら要発行)
+gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access Token>"
+```
+
+登録済みか確認する場合は `gh secret list` / `gh variable list` を使う。
+
+> `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になり、`deploy-infra.yml`からも参照を削除済み。登録不要。
+
+#### 3. `deploy.yml`の自動トリガーを有効化する
+
+`.github/workflows/deploy.yml`の`on:`をコメントアウトされた`push: branches: [develop]`に戻す（`workflow_dispatch: {}`のみの現状から変更する）。
+
+#### 4. 動作確認
+
+`develop`に適当な変更をpushし、Actionsタブで`Deploy`ワークフローが自動起動して各ジョブ（`changes`→`infra`/`backend`/`frontend`）が成功することを確認する。もしくは`gh workflow run deploy.yml`で手動起動して確認してもよい。
 
 ## なぜRoute53だけ別ディレクトリ（別state）にしているか
 
