@@ -51,6 +51,7 @@ test.beforeEach(async ({}, testInfo) => {
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -286,7 +287,9 @@ test.describe('チャット詳細', () => {
     const dialog = page.getByRole('dialog');
     await dialog.getByPlaceholder('チャット名を入力').fill('チャット詳細確認用ルーム-変更後');
     await dialog.getByRole('button', { name: '保存' }).click();
-    await expect(page.getByText('チャット詳細確認用ルーム-変更後', { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText('チャット詳細確認用ルーム-変更後', { exact: true }).first(),
+    ).toBeVisible();
 
     // 後続テストへの影響を避けるため元の名前に戻す
     await page.getByLabel('チャットの名前を変更', { exact: false }).click();
@@ -311,12 +314,11 @@ test.describe('チャット詳細', () => {
     await expect(page.getByText('満足度評価', { exact: true })).toBeVisible();
   });
 
-  test('画像を添付して送信すると添付が正しく表示されること', async ({ authenticatedPage: page }) => {
+  test('画像を添付して送信すると添付が正しく表示されること', async ({
+    authenticatedPage: page,
+  }) => {
     await page.goto('/dashboard');
-    await page.setInputFiles(
-      '#chat-file-upload',
-      path.join(__dirname, 'fixtures/test-image.png'),
-    );
+    await page.setInputFiles('#chat-file-upload', path.join(__dirname, 'fixtures/test-image.png'));
     await expect(page.locator('app-file-image-chip')).toBeVisible();
     const message = 'チャット詳細確認用の添付確認メッセージ01';
     await page.getByPlaceholder('@でアシスタントを指定できます').fill(message);
@@ -457,7 +459,9 @@ test.describe('チャット詳細', () => {
     await page.locator('header').getByLabel('その他', { exact: true }).click({ force: true });
     await page.getByRole('menuitem', { name: 'チャットの名前を変更' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByPlaceholder('チャット名を入力').fill('チャット詳細確認用ルーム-モバイル変更後');
+    await dialog
+      .getByPlaceholder('チャット名を入力')
+      .fill('チャット詳細確認用ルーム-モバイル変更後');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(
       page.getByText('チャット詳細確認用ルーム-モバイル変更後', { exact: true }).first(),
@@ -472,7 +476,9 @@ test.describe('チャット詳細', () => {
   });
 
   // 上記と同じ理由でskipする
-  test.skip('モバイルヘッダーから共有ダイアログを開けること', async ({ authenticatedPage: page }) => {
+  test.skip('モバイルヘッダーから共有ダイアログを開けること', async ({
+    authenticatedPage: page,
+  }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto(`/chat/${DETAIL_ROOM_ID}`);
     await page.locator('header').getByLabel('その他', { exact: true }).click({ force: true });
@@ -493,7 +499,9 @@ test.describe('チャット詳細', () => {
   }) => {
     await page.goto(`/chat/viewer/${LIBRARY_ROOM_ID}`);
     await page.getByLabel('その他', { exact: true }).click();
-    await expect(page.getByRole('menuitem', { name: 'ビューワーを新しいタブで開く' })).not.toBeVisible();
+    await expect(
+      page.getByRole('menuitem', { name: 'ビューワーを新しいタブで開く' }),
+    ).not.toBeVisible();
   });
 
   test('ライブラリが紐づいていないチャットルームのビューアは本文が空であること', async ({

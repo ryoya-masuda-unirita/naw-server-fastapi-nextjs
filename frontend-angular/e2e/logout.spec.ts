@@ -10,7 +10,9 @@ test.describe('ログアウト', () => {
     await page.getByText('ログアウト', { exact: true }).click();
     await expect(page.getByText('ログアウトします')).toBeVisible();
     await expect(
-      page.getByText('ログアウトすると、現在のセッションが終了します。再度ログインが必要になります。'),
+      page.getByText(
+        'ログアウトすると、現在のセッションが終了します。再度ログインが必要になります。',
+      ),
     ).toBeVisible();
   });
 
@@ -53,6 +55,7 @@ test.describe('ログアウト', () => {
     await page.getByRole('button', { name: 'ログアウト' }).last().click();
     await page.waitForURL('/auth/login');
 
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('user01');
     await page.getByPlaceholder('パスワード').fill('user01@1234');
     await page.getByRole('button', { name: 'ログイン' }).click();
@@ -73,6 +76,7 @@ test.describe('ログアウト', () => {
 
   test('管理者ユーザーもログアウトできること', async ({ page }) => {
     await page.goto('/auth/login');
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('admin');
     await page.getByPlaceholder('パスワード').fill('admin@1234');
     await page.getByRole('button', { name: 'ログイン' }).click();

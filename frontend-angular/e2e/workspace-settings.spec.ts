@@ -13,6 +13,7 @@ import { test, expect, Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -88,7 +89,9 @@ test.describe('ワークスペース設定', () => {
     await page.getByRole('button', { name: 'APIを追加' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'APIの表示名を入力' }).fill('E2E追加確認用API');
-    await dialog.getByRole('textbox', { name: '接続先のURLを入力' }).fill('http://e2e-test.example');
+    await dialog
+      .getByRole('textbox', { name: '接続先のURLを入力' })
+      .fill('http://e2e-test.example');
     await dialog.getByRole('button', { name: '生成' }).click();
     await dialog.getByRole('button', { name: '作成' }).click();
 
@@ -125,7 +128,9 @@ test.describe('ワークスペース設定', () => {
     await page.getByText('APIを削除', { exact: true }).click();
 
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('このAPIを削除してもよろしいですか？この操作は取り消せません。')).toBeVisible();
+    await expect(
+      dialog.getByText('このAPIを削除してもよろしいですか？この操作は取り消せません。'),
+    ).toBeVisible();
     await dialog.getByRole('button', { name: '削除' }).click();
 
     await expect(page.getByText('E2E編集確認用API', { exact: true })).not.toBeVisible();
@@ -149,7 +154,9 @@ test.describe('ワークスペース設定', () => {
     await page.getByRole('button', { name: 'APIを追加' }).click();
     let dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'APIの表示名を入力' }).fill('E2E連携確認用API');
-    await dialog.getByRole('textbox', { name: '接続先のURLを入力' }).fill('http://e2e-link-test.example');
+    await dialog
+      .getByRole('textbox', { name: '接続先のURLを入力' })
+      .fill('http://e2e-link-test.example');
     await dialog.getByRole('button', { name: '生成' }).click();
     await dialog.getByRole('button', { name: '作成' }).click();
     await expect(page.getByText('APIを追加しました')).toBeVisible();
@@ -212,7 +219,9 @@ test.describe('ワークスペース設定', () => {
     await dialog.getByRole('textbox', { name: 'APIの表示名を入力' }).fill('E2E不正URL確認用API');
     // backend/app/services/tenant_endpoint_service.py の _assert_valid_url により
     // http(s)://で始まらないURLは400エラーになる
-    await dialog.getByRole('textbox', { name: '接続先のURLを入力' }).fill('invalid-url-without-protocol');
+    await dialog
+      .getByRole('textbox', { name: '接続先のURLを入力' })
+      .fill('invalid-url-without-protocol');
     await dialog.getByRole('button', { name: '生成' }).click();
     await dialog.getByRole('button', { name: '作成' }).click();
 

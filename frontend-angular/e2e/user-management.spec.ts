@@ -19,6 +19,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -41,7 +42,9 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E作成確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E作成確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('e2e-create-user');
     await dialog.getByRole('button', { name: '作成' }).click();
 
@@ -70,7 +73,9 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E重複ID確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E重複ID確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('user01');
     await dialog.getByRole('button', { name: '作成' }).click();
 
@@ -86,7 +91,9 @@ test.describe('ユーザー管理', () => {
     await page.getByText('ユーザーの設定を編集', { exact: true }).click();
 
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E編集確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E編集確認用ユーザー');
     await dialog.getByRole('button', { name: '保存' }).click();
 
     await expect(page.getByText('E2E編集確認用ユーザー', { exact: true })).toBeVisible();
@@ -210,7 +217,9 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E最小長ID確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E最小長ID確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('z');
     await dialog.getByRole('button', { name: '作成' }).click();
 
@@ -225,13 +234,17 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E一般権限確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E一般権限確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('e2e-role-user');
     await dialog.getByText('一般', { exact: true }).click();
     await dialog.getByRole('button', { name: '作成' }).click();
     await dialog.getByRole('button', { name: '閉じる' }).click();
 
-    const row = page.locator('app-table-list-item').filter({ hasText: 'E2E一般権限確認用ユーザー' });
+    const row = page
+      .locator('app-table-list-item')
+      .filter({ hasText: 'E2E一般権限確認用ユーザー' });
     await expect(row.getByText('一般', { exact: true })).toBeVisible();
   });
 
@@ -241,13 +254,17 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2E管理者権限確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2E管理者権限確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('e2e-role-admin');
     await dialog.getByText('管理者', { exact: true }).click();
     await dialog.getByRole('button', { name: '作成' }).click();
     await dialog.getByRole('button', { name: '閉じる' }).click();
 
-    const row = page.locator('app-table-list-item').filter({ hasText: 'E2E管理者権限確認用ユーザー' });
+    const row = page
+      .locator('app-table-list-item')
+      .filter({ hasText: 'E2E管理者権限確認用ユーザー' });
     await expect(row.getByText('管理者', { exact: true })).toBeVisible();
   });
 
@@ -286,7 +303,9 @@ test.describe('ユーザー管理', () => {
 
     await page.getByRole('button', { name: 'ユーザーを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('textbox', { name: 'ユーザー表示名を入力' }).fill('E2Eログインキー確認用ユーザー');
+    await dialog
+      .getByRole('textbox', { name: 'ユーザー表示名を入力' })
+      .fill('E2Eログインキー確認用ユーザー');
     await dialog.getByRole('textbox', { name: 'ユーザーIDを入力' }).fill('e2e-loginkey-user');
     await dialog.getByRole('button', { name: '生成' }).click();
     const loginKeyInput = dialog.locator('input[type="text"]').nth(2);
@@ -298,7 +317,9 @@ test.describe('ユーザー管理', () => {
     await dialog.getByRole('button', { name: '閉じる' }).click();
 
     // 項番2（ログインキーマスク表示）: ログインキーを設定したユーザーが一覧で******と表示されることを確認する
-    const row = page.locator('app-table-list-item').filter({ hasText: 'E2Eログインキー確認用ユーザー' });
+    const row = page
+      .locator('app-table-list-item')
+      .filter({ hasText: 'E2Eログインキー確認用ユーザー' });
     await expect(row.getByText('******', { exact: true })).toBeVisible();
 
     await row.getByRole('button').click();
@@ -310,7 +331,9 @@ test.describe('ユーザー管理', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/users');
 
-    const row = page.locator('app-table-list-item').filter({ hasText: 'E2Eログインキー確認用ユーザー' });
+    const row = page
+      .locator('app-table-list-item')
+      .filter({ hasText: 'E2Eログインキー確認用ユーザー' });
     await row.getByRole('button').click();
     await page.getByText('ユーザーの設定を編集', { exact: true }).click();
 

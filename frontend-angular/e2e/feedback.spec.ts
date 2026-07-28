@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -28,9 +29,7 @@ function rowLocator(page: Page) {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('フィードバック管理', () => {
-  test('管理コンソール→「フィードバック管理」を開くと3タブが表示されること', async ({
-    page,
-  }) => {
+  test('管理コンソール→「フィードバック管理」を開くと3タブが表示されること', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/feedback');
 
@@ -107,9 +106,7 @@ test.describe('フィードバック管理', () => {
     await expect(page.getByText('精度確認用質問02', { exact: false })).not.toBeVisible();
   });
 
-  test('精度：並べ替えで「更新日時順」を選択すると更新日時順に表示されること', async ({
-    page,
-  }) => {
+  test('精度：並べ替えで「更新日時順」を選択すると更新日時順に表示されること', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/feedback');
 
@@ -192,9 +189,7 @@ test.describe('フィードバック管理', () => {
     await expect(rowLocator(page).first()).toBeVisible();
   });
 
-  test('精度：フィルター行の件数表示を確認すると件数が正しく表示されること', async ({
-    page,
-  }) => {
+  test('精度：フィルター行の件数表示を確認すると件数が正しく表示されること', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/feedback');
 
@@ -339,9 +334,7 @@ test.describe('フィードバック管理', () => {
     await expect(rowLocator(page).first()).toBeVisible();
   });
 
-  test('満足度：並べ替えで「満足度順」を選択すると満足度順に表示されること', async ({
-    page,
-  }) => {
+  test('満足度：並べ替えで「満足度順」を選択すると満足度順に表示されること', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/feedback');
     await page.getByRole('button', { name: 'チャット満足度' }).click();

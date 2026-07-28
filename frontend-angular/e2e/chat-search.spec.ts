@@ -71,7 +71,9 @@ test.describe('チャット検索', () => {
 
     await dialog.getByRole('button', { name: 'COMMON.CLEAR' }).click();
     await expect(searchInput).toHaveValue('');
-    await expect(dialog.getByText('フィードバック確認用ルーム1', { exact: true })).not.toBeVisible();
+    await expect(
+      dialog.getByText('フィードバック確認用ルーム1', { exact: true }),
+    ).not.toBeVisible();
   });
 
   test('検索欄に文字を入力すると入力完了後に検索が実行されること（デバウンス）', async ({
@@ -145,7 +147,9 @@ test.describe('チャット検索', () => {
     await expect(
       dialog.getByText('フィードバックメッセージ確認用ルーム', { exact: true }),
     ).toBeVisible();
-    await expect(dialog.getByText('フィードバック確認用ルーム1', { exact: true })).not.toBeVisible();
+    await expect(
+      dialog.getByText('フィードバック確認用ルーム1', { exact: true }),
+    ).not.toBeVisible();
   });
 
   test('検索後にページ送りし結果からルーム遷移する一連の操作が正常に完了すること', async ({

@@ -18,6 +18,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -71,7 +72,9 @@ test.describe('レイアウト', () => {
     const dataUtilization = sidebar.getByText('データ活用', { exact: true });
     const sectionHeader = dataUtilization.locator('xpath=ancestor::div[1]');
     // サブメニューの開閉状態は兄弟要素のstyle="height: ..."で管理されている
-    const subMenuContainer = dataUtilization.locator('xpath=ancestor::div[2]').locator(':scope > div');
+    const subMenuContainer = dataUtilization
+      .locator('xpath=ancestor::div[2]')
+      .locator(':scope > div');
 
     const getHeight = async () => {
       const style = await subMenuContainer.getAttribute('style');

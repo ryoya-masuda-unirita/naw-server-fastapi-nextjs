@@ -36,6 +36,7 @@ const MAIN_TEAM_NAME = '動作確認用グループ';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -49,9 +50,9 @@ async function openMainTeamDetail(page: Page): Promise<void> {
   // 反映タイミングにばらつきがあるため、対象カードが表示されるまでリトライする
   await expect(async () => {
     await page.getByPlaceholder('検索ワードを入力').fill(MAIN_TEAM_NAME);
-    await expect(
-      page.locator('.term-card').filter({ hasText: MAIN_TEAM_NAME }),
-    ).toHaveCount(1, { timeout: 2000 });
+    await expect(page.locator('.term-card').filter({ hasText: MAIN_TEAM_NAME })).toHaveCount(1, {
+      timeout: 2000,
+    });
   }).toPass({ timeout: 15000 });
   await page
     .locator('.term-card')
@@ -109,7 +110,9 @@ test.describe('チーム管理', () => {
     await dialog.getByRole('button', { name: '作成' }).click();
     await expect(page.getByText('チームを作成しました', { exact: false })).toBeVisible();
     await page.getByPlaceholder('検索ワードを入力').fill('E2E作成確認用チーム');
-    await expect(page.locator('.term-card').filter({ hasText: 'E2E作成確認用チーム' }).first()).toBeVisible();
+    await expect(
+      page.locator('.term-card').filter({ hasText: 'E2E作成確認用チーム' }).first(),
+    ).toBeVisible();
   });
 
   test('チーム名を空のまま作成しようとすると必須エラーが表示されること', async ({ page }) => {
@@ -252,7 +255,9 @@ test.describe('チーム管理', () => {
     await dialog.getByPlaceholder('チームの名前を入力').fill('チーム管理確認用チーム05-変更後');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(page.getByText('チームを更新しました', { exact: false })).toBeVisible();
-    await expect(page.getByText('チーム管理確認用チーム05-変更後', { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText('チーム管理確認用チーム05-変更後', { exact: true }).first(),
+    ).toBeVisible();
 
     // 後続テストへの影響を避けるため元の名前に戻す
     await page.getByTitle('設定', { exact: true }).click();
@@ -361,10 +366,7 @@ test.describe('チーム管理', () => {
 
   // 【既知の不具合】所属ユーザー一覧を「ユーザー表示名順」にした状態で昇順・降順を切り替えても
   // 先頭行が変わらない（元の結合テスト項目書 項番22/24にも同様の記録あり）。Issue #181として起票。
-  test.skip(
-    'ユーザー並べ替えの昇順・降順を切り替えると表示順が切り替わること（Issue #181で対応予定）',
-    async () => {},
-  );
+  test.skip('ユーザー並べ替えの昇順・降順を切り替えると表示順が切り替わること（Issue #181で対応予定）', async () => {});
 
   test('「ユーザーを追加」から複数ユーザーを選択して追加できること', async ({ page }) => {
     await loginAsAdmin(page);
@@ -385,7 +387,9 @@ test.describe('チーム管理', () => {
     await page.getByText('ユーザーを削除', { exact: true }).click();
     const removeDialog = page.getByRole('dialog');
     await removeDialog.getByRole('button', { name: '削除', exact: true }).click();
-    await expect(page.getByText('ユーザーをチームから削除しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('ユーザーをチームから削除しました', { exact: false }),
+    ).toBeVisible();
   });
 
   test('行メニューから「権限を編集」で一般/管理者を変更して保存すると権限が反映されること', async ({
@@ -414,7 +418,9 @@ test.describe('チーム管理', () => {
     await page.getByText('ユーザーを削除', { exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '削除', exact: true }).click();
-    await expect(page.getByText('ユーザーをチームから削除しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('ユーザーをチームから削除しました', { exact: false }),
+    ).toBeVisible();
     await page.getByPlaceholder('検索ワードを入力').fill('ページ送り確認用ユーザー04');
     await expect(page.getByText('ユーザーが見つかりません', { exact: true })).toBeVisible();
   });
@@ -426,7 +432,10 @@ test.describe('チーム管理', () => {
     await openMainTeamDetail(page);
     await page.getByRole('link', { name: '所属ユーザー' }).click();
     await page.getByPlaceholder('検索ワードを入力').fill('ページ送り確認用ユーザー05');
-    await rowLocator(page).filter({ hasText: 'ページ送り確認用ユーザー05' }).locator('.input-checkbox-visual').click({ force: true });
+    await rowLocator(page)
+      .filter({ hasText: 'ページ送り確認用ユーザー05' })
+      .locator('.input-checkbox-visual')
+      .click({ force: true });
     await expect(page.getByText('選択を解除', { exact: true })).toBeVisible();
     await expect(page.getByText('削除', { exact: true })).toBeVisible();
   });
@@ -438,11 +447,16 @@ test.describe('チーム管理', () => {
     await openMainTeamDetail(page);
     await page.getByRole('link', { name: '所属ユーザー' }).click();
     await page.getByPlaceholder('検索ワードを入力').fill('ページ送り確認用ユーザー05');
-    await rowLocator(page).filter({ hasText: 'ページ送り確認用ユーザー05' }).locator('.input-checkbox-visual').click({ force: true });
+    await rowLocator(page)
+      .filter({ hasText: 'ページ送り確認用ユーザー05' })
+      .locator('.input-checkbox-visual')
+      .click({ force: true });
     await page.getByText('削除', { exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '削除', exact: true }).click();
-    await expect(page.getByText('ユーザーをチームから削除しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('ユーザーをチームから削除しました', { exact: false }),
+    ).toBeVisible();
   });
 
   test('ヘッダーの全選択チェックボックスをクリックすると表示中の全ユーザーが選択されること', async ({
@@ -557,13 +571,13 @@ test.describe('チーム管理', () => {
     await expect(
       page.getByRole('button', { name: 'ページ送り確認用テンプレート05', exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole('button', { name: 'ページ送り確認用テンプレート05', exact: true })
-      .click();
+    await page.getByRole('button', { name: 'ページ送り確認用テンプレート05', exact: true }).click();
     await page.keyboard.press('Escape');
     await expect(dialog.getByRole('button', { name: '追加', exact: true })).toBeEnabled();
     await dialog.getByRole('button', { name: '追加', exact: true }).click();
-    await expect(page.getByText('テンプレートをチームに追加しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('テンプレートをチームに追加しました', { exact: false }),
+    ).toBeVisible();
 
     // 再実行時にも同じテンプレートを追加できるよう、確認後にチームから削除して元の状態に戻す
     await page.getByPlaceholder('検索ワードを入力').fill('ページ送り確認用テンプレート05');
@@ -585,7 +599,9 @@ test.describe('チーム管理', () => {
     await row.getByLabel('削除', { exact: false }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '削除', exact: true }).click();
-    await expect(page.getByText('テンプレートをチームから削除しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('テンプレートをチームから削除しました', { exact: false }),
+    ).toBeVisible();
   });
 
   // 【E2E上のみの既知の不安定挙動】チェックボックス選択後、「選択を解除」ボタンはすぐ表示されるが、
@@ -593,19 +609,15 @@ test.describe('チーム管理', () => {
   // ことがある）タイミング問題が再現性低く発生する。実ブラウザでの目視確認では問題なく両方
   // 表示されており、アプリの不具合ではなくE2E実行環境固有の描画タイミングの問題と判断し、
   // 選択状態の確認（項番29の一括削除操作で実質的に確認可能）に留めてこの項目はskipする
-  test.skip(
-    '複数テンプレートのチェックボックスを選択すると「選択を解除」「チームから削除」が表示されること（E2E環境固有のタイミング問題によりskip）',
-    async () => {},
-  );
+  test.skip('複数テンプレートのチェックボックスを選択すると「選択を解除」「チームから削除」が表示されること（E2E環境固有のタイミング問題によりskip）', async () => {});
 
   // 上記と同じ理由（チェックボックスのforce clickが選択状態を一括操作バーに反映しないことがある）
   // により、一括削除の確認まで到達できないためskipする。個別削除（項番42）で削除操作自体は確認済み
-  test.skip(
-    '複数選択後「チームから削除」で確認後に削除すると選択テンプレートがすべて削除されること（E2E環境固有のタイミング問題によりskip）',
-    async () => {},
-  );
+  test.skip('複数選択後「チームから削除」で確認後に削除すると選択テンプレートがすべて削除されること（E2E環境固有のタイミング問題によりskip）', async () => {});
 
-  test('所属テンプレートが0件のチームでタブを表示すると空状態が表示されること', async ({ page }) => {
+  test('所属テンプレートが0件のチームでタブを表示すると空状態が表示されること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await openTeamDetailByName(page, 'チーム管理確認用チーム06');
     await page.getByRole('link', { name: '所属テンプレート' }).click();
@@ -745,7 +757,9 @@ test.describe('チーム管理', () => {
     await page.keyboard.press('Escape');
     await expect(dialog.getByRole('button', { name: '追加', exact: true })).toBeEnabled();
     await dialog.getByRole('button', { name: '追加', exact: true }).click();
-    await expect(page.getByText('アシスタントをチームに追加しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('アシスタントをチームに追加しました', { exact: false }),
+    ).toBeVisible();
 
     // 再実行時にも同じアシスタントを追加できるよう、確認後にチームから削除して元の状態に戻す
     await page.getByPlaceholder('検索ワードを入力').fill('アシスタント確認用05');
@@ -767,26 +781,24 @@ test.describe('チーム管理', () => {
     await row.getByLabel('削除', { exact: false }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: '削除', exact: true }).click();
-    await expect(page.getByText('アシスタントをチームから削除しました', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText('アシスタントをチームから削除しました', { exact: false }),
+    ).toBeVisible();
   });
 
   // 【E2E上のみの既知の不安定挙動】チェックボックスのforce clickが一括操作バーへの選択状態
   // 反映に失敗することがあり、「チームから削除」ボタンが描画されないままタイムアウトする。
   // 実ブラウザでの目視確認では問題なく動作しており、アプリの不具合ではなくE2E実行環境固有の
   // 問題と判断し、選択状態の確認（項番61の一括削除操作で実質的に確認可能）に留めてskipする
-  test.skip(
-    '複数アシスタントのチェックボックスを選択すると「選択を解除」「チームから削除」が表示されること（E2E環境固有のタイミング問題によりskip）',
-    async () => {},
-  );
+  test.skip('複数アシスタントのチェックボックスを選択すると「選択を解除」「チームから削除」が表示されること（E2E環境固有のタイミング問題によりskip）', async () => {});
 
   // 上記と同じ理由により一括削除の確認まで到達できないためskipする。個別削除（項番59）で
   // 削除操作自体は確認済み
-  test.skip(
-    '複数選択後「チームから削除」で確認後に削除すると選択アシスタントがすべて削除されること（E2E環境固有のタイミング問題によりskip）',
-    async () => {},
-  );
+  test.skip('複数選択後「チームから削除」で確認後に削除すると選択アシスタントがすべて削除されること（E2E環境固有のタイミング問題によりskip）', async () => {});
 
-  test('所属アシスタントが0件のチームでタブを表示すると空状態が表示されること', async ({ page }) => {
+  test('所属アシスタントが0件のチームでタブを表示すると空状態が表示されること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await openTeamDetailByName(page, 'チーム管理確認用チーム06');
     await page.getByRole('link', { name: '所属アシスタント' }).click();

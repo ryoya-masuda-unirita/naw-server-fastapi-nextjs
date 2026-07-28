@@ -39,7 +39,9 @@ async function openRoomMenu(page: Page, roomName: string): Promise<void> {
     await menuButton.click({ timeout: 1000 });
   }).toPass({ timeout: 15000 });
   // メニューは開閉アニメーションを伴うため、安定表示を待ってから操作する
-  await sidebarMenu(page).getByText('チャットの名前を変更', { exact: true }).waitFor({ state: 'visible' });
+  await sidebarMenu(page)
+    .getByText('チャットの名前を変更', { exact: true })
+    .waitFor({ state: 'visible' });
 }
 
 // メニュー項目のクリックも、並列実行時の負荷でアニメーション中にクリックが取りこぼされることがあるため、
@@ -87,7 +89,9 @@ test.describe('チャットルーム', () => {
     // 後続テストへの影響を避けるため元の名前に戻す
     await openRoomMenu(page, '名前変更後のルーム1');
     await clickMenuItem(page, 'チャットの名前を変更');
-    await dialog.getByRole('textbox', { name: 'チャット名を入力' }).fill('チャットルーム操作確認用ルーム1');
+    await dialog
+      .getByRole('textbox', { name: 'チャット名を入力' })
+      .fill('チャットルーム操作確認用ルーム1');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(
       page.getByText('チャットルーム操作確認用ルーム1', { exact: true }).first(),
@@ -190,7 +194,9 @@ test.describe('チャットルーム', () => {
     // 後続テストへの影響を避けるため元の名前に戻す
     await openRoomMenu(page, maxLengthName);
     await clickMenuItem(page, 'チャットの名前を変更');
-    await dialog.getByRole('textbox', { name: 'チャット名を入力' }).fill('チャットルーム操作確認用ルーム1');
+    await dialog
+      .getByRole('textbox', { name: 'チャット名を入力' })
+      .fill('チャットルーム操作確認用ルーム1');
     await dialog.getByRole('button', { name: '保存' }).click();
     await expect(
       page.getByText('チャットルーム操作確認用ルーム1', { exact: true }).first(),
@@ -202,7 +208,9 @@ test.describe('チャットルーム', () => {
   }) => {
     await page.getByText('チャットルーム操作確認用ルーム1', { exact: true }).click();
     await page.waitForURL(/\/chat\/.+/);
-    await expect(page.getByRole('heading', { name: 'チャットルーム操作確認用ルーム1' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'チャットルーム操作確認用ルーム1' }),
+    ).toBeVisible();
   });
 
   test('サイドバーからルーム2を選択すると正しいルームが表示されること', async ({
