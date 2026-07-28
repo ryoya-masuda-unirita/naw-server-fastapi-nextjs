@@ -49,7 +49,6 @@ jobs:
           TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
-          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
         run: terraform plan -out=tfplan
       
       - name: Terraform Apply
@@ -59,5 +58,4 @@ jobs:
           TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
-          TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
         run: terraform apply -auto-approve tfplan

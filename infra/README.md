@@ -46,7 +46,7 @@ tfstate用S3バケット（`tfstate_backend.tf`の`aws_s3_bucket.tfstate`）自�
    | Variable | `FRONTEND_BUCKET_NAME` | apply後のS3バケット名（`aws_s3_bucket.frontend`） |
    | Variable | `CLOUDFRONT_DISTRIBUTION_ID` | apply後のCloudFront配信ID |
 
-   > `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になった。ただし`deploy-infra.yml`に`TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}`の参照が修正漏れとして残っている（未登録でも空文字列として渡り、Terraformが未使用変数の警告を出すのみでエラーにはならない）。
+   > `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になり、`deploy-infra.yml`からも参照を削除済み。登録不要。
 
 3. `.github/workflows/deploy.yml`の`on:`をコメントアウトされた`push: branches: [develop]`に戻す（`workflow_dispatch: {}`のみの現状から変更する）
 
