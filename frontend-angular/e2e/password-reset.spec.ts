@@ -165,6 +165,7 @@ test.describe('パスワード再設定 正常系・異常系', () => {
     page,
   }) => {
     await page.goto('/auth/login');
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('first-login-user');
     await page.getByPlaceholder('パスワード').fill('firstlogin@1234');
     await page.getByRole('button', { name: 'ログイン' }).click();
@@ -182,6 +183,7 @@ test.describe('パスワード再設定 正常系・異常系', () => {
 
   test.skip('更新後、新パスワードで再ログインできること', async ({ page }) => {
     await page.goto('/auth/login');
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('first-login-user');
     await page.getByPlaceholder('パスワード').fill('NewPassw12!A');
     await page.getByRole('button', { name: 'ログイン' }).click();

@@ -21,6 +21,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -313,6 +314,7 @@ test.describe('テンプレート', () => {
     // チャット画面のテンプレート選択API(GET /api/prompt-templates)は「所属グループに紐づくテンプレートのみ」
     // 返す仕様のため、動作確認用グループに所属していないadminではなくuser01でログインする
     await page.goto('/auth/login');
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('user01');
     await page.getByPlaceholder('パスワード').fill('user01@1234');
     await page.getByRole('button', { name: 'ログイン' }).click();

@@ -18,6 +18,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();
@@ -36,6 +37,7 @@ async function openRowMenu(row: import('@playwright/test').Locator, page: Page):
 
 async function loginAsUser01(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('user01');
   await page.getByPlaceholder('パスワード').fill('user01@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();

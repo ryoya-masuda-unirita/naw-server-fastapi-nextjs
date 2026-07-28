@@ -295,6 +295,7 @@ test.describe('チャット送信', () => {
 
   test('管理者でチャット送信できること', async ({ page }) => {
     await page.goto('/auth/login');
+    await page.getByPlaceholder('テナントID').fill('test-tenant');
     await page.getByPlaceholder('ユーザーID').fill('admin');
     await page.getByPlaceholder('パスワード').fill('admin@1234');
     await page.getByRole('button', { name: 'ログイン' }).click();

@@ -36,6 +36,7 @@ const MAIN_TEAM_NAME = '動作確認用グループ';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();

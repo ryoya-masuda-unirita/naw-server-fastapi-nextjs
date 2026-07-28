@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/auth/login');
+  await page.getByPlaceholder('テナントID').fill('test-tenant');
   await page.getByPlaceholder('ユーザーID').fill('admin');
   await page.getByPlaceholder('パスワード').fill('admin@1234');
   await page.getByRole('button', { name: 'ログイン' }).click();

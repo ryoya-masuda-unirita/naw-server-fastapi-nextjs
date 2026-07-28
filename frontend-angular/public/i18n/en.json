@@ -380,6 +380,8 @@
   "AUTH": {
     "LOGIN": {
       "TITLE": "Login",
+      "TENANT_ID_LABEL": "Tenant ID",
+      "TENANT_ID_PLACEHOLDER": "Tenant ID",
       "USER_ID_LABEL": "User ID",
       "USER_ID_PLACEHOLDER": "User ID",
       "USER_ID_SUPPORT": "If you don't know your user ID, contact your administrator.",

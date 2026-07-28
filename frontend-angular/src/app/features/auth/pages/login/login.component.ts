@@ -33,6 +33,7 @@ export class LoginComponent {
   private readonly translate = inject(TranslateService);
 
   readonly form = this.fb.nonNullable.group({
+    tenantId: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
     username: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(50)]],
     // ログインはテナントごとの最小文字数ポリシーに関わらず既存パスワードを受け付ける必要があるため、minLengthは課さない (NAW-1113)
     password: [
@@ -56,6 +57,11 @@ export class LoginComponent {
     this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.loginError.set(''));
   }
 
+  readonly tenantIdError = computed(() => {
+    this.formEvents();
+    return this.getError('tenantId');
+  });
+
   readonly usernameError = computed(() => {
     this.formEvents();
     if (this.loginError()) return this.loginError();
@@ -67,7 +73,7 @@ export class LoginComponent {
     return this.getError('password');
   });
 
-  private getError(field: 'username' | 'password'): string {
+  private getError(field: 'tenantId' | 'username' | 'password'): string {
     return resolveControlError(this.form.controls[field], this.translate);
   }
 
@@ -76,9 +82,13 @@ export class LoginComponent {
     if (!this.isFormValid()) return;
 
     this.loginError.set('');
-    const { username, password } = this.form.value;
+    const { tenantId, username, password } = this.form.value;
     try {
-      const status = await this.authStore.login({ username: username!, password: password! });
+      const status = await this.authStore.login({
+        tenantId: tenantId!,
+        username: username!,
+        password: password!,
+      });
       if (status === 'SUCCESS') {
         this.toastService.success(this.translate.instant('AUTH.LOGIN.SUCCESS'));
       }

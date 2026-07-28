@@ -2,11 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { STORAGE_KEYS } from '@core/constants';
 import { AuthStore } from '@core/stores/auth.store';
 import { getUserFromStorage } from '@core/utils/auth.helpers';
-import {
-  isValidUserListTenantId,
-  repairUserListTenantIdInStorage,
-  resolveUserListTenantId,
-} from '../utils/user-list-tenant.helpers';
+import { resolveTenantId } from '@core/utils/tenant.helpers';
 
 /** Auth context restored for admin user list API calls (survives full page reload). */
 export interface UserListAuthContext {
@@ -15,10 +11,7 @@ export interface UserListAuthContext {
   userRole: string | null;
 }
 
-/**
- * Ensures session-backed auth (user + tenant) is ready before user-list HTTP calls.
- * Repairs invalid `tenantId` in sessionStorage (e.g. literal `"undefined"`) from subdomain.
- */
+/** Ensures session-backed auth (user + tenant) is ready before user-list HTTP calls. */
 @Injectable({ providedIn: 'root' })
 export class UserListAuthService {
   private readonly authStore = inject(AuthStore);
@@ -38,15 +31,6 @@ export class UserListAuthService {
     if (!user) return;
 
     sessionStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    this.repairTenantIdInStorage();
-  }
-
-  /**
-   * Fixes `tenantId` when missing or the string `"undefined"` / `"null"`.
-   * Falls back to subdomain (e.g. `test-tenant.localhost` → `test-tenant`).
-   */
-  repairTenantIdInStorage(): string {
-    return repairUserListTenantIdInStorage();
   }
 
   readContext(): UserListAuthContext | null {
@@ -54,9 +38,8 @@ export class UserListAuthService {
     const user = getUserFromStorage();
     if (!user?.id) return null;
 
-    const tenantId = resolveUserListTenantId();
     return {
-      tenantId,
+      tenantId: resolveTenantId(),
       userId: user.id,
       userRole: user.role ?? null,
     };
@@ -64,10 +47,10 @@ export class UserListAuthService {
 
   /** Headers matching a normal authenticated admin request (tenant + session cookie). */
   getRequestHeaders(): Record<string, string> {
-    const tenantId = this.repairTenantIdInStorage() || resolveUserListTenantId();
+    const tenantId = resolveTenantId();
     const headers: Record<string, string> = {};
-    if (isValidUserListTenantId(tenantId)) {
-      headers['X-Tenant-ID'] = tenantId.trim();
+    if (tenantId) {
+      headers['X-Tenant-ID'] = tenantId;
     }
     return headers;
   }
@@ -79,7 +62,6 @@ export class UserListAuthService {
   private async prepare(): Promise<boolean> {
     await this.authStore.ensureInitialized();
     this.syncSessionFromAuthStore();
-    this.repairTenantIdInStorage();
     return this.isAuthenticated();
   }
 }
