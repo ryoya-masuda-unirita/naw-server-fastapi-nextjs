@@ -10,6 +10,46 @@ infra/
 └── （このディレクトリ） # ホストゾーン以外の全リソース（VPC/ECS/RDS/ALB/CloudFront/S3など）
 ```
 
+## 初回セットアップ手順（`terraform destroy`で全リソースを消した後の再構築時も同様）
+
+tfstate用S3バケット（`tfstate_backend.tf`の`aws_s3_bucket.tfstate`）自身がこの`infra/`構成で管理されているため、「stateを保存する場所」を「stateで管理する」という鶏卵問題がある。過去に一度`terraform destroy`でインフラを丸ごと壊すと、このtfstateバケットも一緒に消え、`main.tf`の`backend "s3"`が参照するバケットが存在しない状態に戻る。その場合、以下の手順で最初からやり直す。
+
+1. **`main.tf`の`backend "s3" { ... }`ブロックを一時的にコメントアウトする**（バケットがまだ存在しないため、S3バックエンドでは`terraform init`できない）
+2. `terraform init` を実行する（ローカルバックエンドで初期化される）
+3. `terraform apply` を実行する（`terraform.tfvars`に必要な変数が揃っていること。tfstateバケットを含む全リソースがローカルstateで作成される）
+4. **コメントアウトした`backend "s3"`ブロックを元に戻す**
+5. `terraform init -migrate-state` を実行する（「Yes」と答えると、ローカルのstateがS3バケットへ移行される）
+6. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
+
+移行前後で`main.tf`にはこの手順の要約コメントが常に残っているので、迷ったらそちらも参照する。
+
+### Route53（もう不要）
+
+以前は上記に加えて`infra/route53/`でのホストゾーン作成・ムームードメイン側のネームサーバー登録も初回セットアップに含まれていたが、Issue #195でカスタムドメイン運用自体を廃止したため、現在は不要（詳細は次のセクション参照）。CloudFrontはデフォルトドメイン（`*.cloudfront.net`）でそのまま使える。
+
+### GitHub Actionsからの自動デプロイ（CI/CD）を有効化する場合
+
+`.github/workflows/deploy.yml`は、誤って未セットアップの環境に自動applyしないよう、デフォルトでは`workflow_dispatch`（手動実行）のみに制限されている（ファイル冒頭のコメント参照）。上記の初回セットアップ完了後、以下を行うと`develop`へのpushで自動デプロイされるようになる。
+
+1. 上記手順で`terraform apply`済みであること
+2. GitHub の Settings → Secrets and variables → Actions で以下を登録する
+
+   | 種別 | 名前 | 値の取得元 |
+   |---|---|---|
+   | Secret | `AWS_ROLE_ARN` | apply後、`aws_iam_role.github_actions`のARN（`aws iam get-role --role-name <project_name>-github-actions-role --query Role.Arn`） |
+   | Secret | `DB_PASSWORD` | `terraform.tfvars`と同じ値 |
+   | Secret | `SECRET_KEY` | 同上 |
+   | Secret | `ALLOWED_SSH_CIDRS` | 同上 |
+   | Secret | `ALLOWED_ADMIN_CIDRS` | 同上 |
+   | Secret | `PROJECT_PAT` | GitHub Projects連携用（`project-status-sync.yml`が使用。デプロイとは別用途） |
+   | Variable | `KEY_PAIR_NAME` | 同上 |
+   | Variable | `FRONTEND_BUCKET_NAME` | apply後のS3バケット名（`aws_s3_bucket.frontend`） |
+   | Variable | `CLOUDFRONT_DISTRIBUTION_ID` | apply後のCloudFront配信ID |
+
+   > `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になった。ただし`deploy-infra.yml`に`TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}`の参照が修正漏れとして残っている（未登録でも空文字列として渡り、Terraformが未使用変数の警告を出すのみでエラーにはならない）。
+
+3. `.github/workflows/deploy.yml`の`on:`をコメントアウトされた`push: branches: [develop]`に戻す（`workflow_dispatch: {}`のみの現状から変更する）
+
 ## なぜRoute53だけ別ディレクトリ（別state）にしているか
 
 **（Issue #195以降、メインの`infra/`構成からは独自ドメインを一切参照しなくなり、以下は`infra/route53/`にのみ関係する過去の経緯）**
