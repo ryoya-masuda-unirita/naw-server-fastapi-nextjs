@@ -55,9 +55,7 @@ test.describe('アシスタント', () => {
     await page.goto('/admin/assistants');
 
     await page.getByRole('button', { name: 'カテゴリ管理' }).click();
-    await expect(
-      page.getByText('アシスタント確認用カテゴリ01', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('アシスタント確認用カテゴリ01', { exact: true }).last()).toBeVisible();
 
     await page.getByRole('button', { name: 'アシスタント一覧' }).click();
     await expect(page.getByText('アシスタント確認用01', { exact: true }).last()).toBeVisible();
@@ -366,9 +364,7 @@ test.describe('アシスタント', () => {
 
     await page.getByRole('button', { name: 'カテゴリ管理' }).click();
 
-    await expect(
-      page.getByText('アシスタント確認用カテゴリ01', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('アシスタント確認用カテゴリ01', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('更新日時', { exact: true })).toBeVisible();
   });
 
@@ -570,7 +566,9 @@ test.describe('アシスタント', () => {
     await expect(page.getByText('アシスタント確認用02', { exact: true })).not.toBeVisible();
   });
 
-  test('フィルター適用後に並べ替えを変更すると結果が正しく並べ替えられること', async ({ page }) => {
+  test('フィルター適用後に並べ替えを変更すると結果が正しく並べ替えられること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/assistants');
 
@@ -606,7 +604,9 @@ test.describe('アシスタント', () => {
     await expect(page.getByText(maxLengthName, { exact: true }).last()).toBeVisible();
   });
 
-  test('カテゴリ名に16文字（最大長）を入力して作成すると正常に作成されること', async ({ page }) => {
+  test('カテゴリ名に16文字（最大長）を入力して作成すると正常に作成されること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/assistants');
     await page.getByRole('button', { name: 'カテゴリ管理' }).click();
@@ -621,7 +621,9 @@ test.describe('アシスタント', () => {
     await expect(page.getByText(maxLengthName, { exact: true }).last()).toBeVisible();
   });
 
-  test('該当データなしのフィルター条件を指定すると0件または空状態となること', async ({ page }) => {
+  test('該当データなしのフィルター条件を指定すると0件または空状態となること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/assistants');
 

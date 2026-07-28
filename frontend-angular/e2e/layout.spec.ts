@@ -72,9 +72,7 @@ test.describe('レイアウト', () => {
     const dataUtilization = sidebar.getByText('データ活用', { exact: true });
     const sectionHeader = dataUtilization.locator('xpath=ancestor::div[1]');
     // サブメニューの開閉状態は兄弟要素のstyle="height: ..."で管理されている
-    const subMenuContainer = dataUtilization
-      .locator('xpath=ancestor::div[2]')
-      .locator(':scope > div');
+    const subMenuContainer = dataUtilization.locator('xpath=ancestor::div[2]').locator(':scope > div');
 
     const getHeight = async () => {
       const style = await subMenuContainer.getAttribute('style');

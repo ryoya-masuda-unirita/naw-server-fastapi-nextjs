@@ -10,9 +10,7 @@ test.describe('ログアウト', () => {
     await page.getByText('ログアウト', { exact: true }).click();
     await expect(page.getByText('ログアウトします')).toBeVisible();
     await expect(
-      page.getByText(
-        'ログアウトすると、現在のセッションが終了します。再度ログインが必要になります。',
-      ),
+      page.getByText('ログアウトすると、現在のセッションが終了します。再度ログインが必要になります。'),
     ).toBeVisible();
   });
 

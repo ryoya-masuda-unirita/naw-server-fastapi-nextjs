@@ -110,10 +110,11 @@ test.describe('認証後の画面遷移', () => {
   // 表示されてしまう（/dashboardにリダイレクトされない）。
   // 本Issue(#163)はE2E基盤構築が目的のためアプリ側の修正は行わず、事象の記録として
   // テストをskipする。修正は別Issueで対応する。
-  test.skip('ログイン後に/auth/loginへ直接アクセスするとダッシュボードにリダイレクトされること', async ({
-    authenticatedPage,
-  }) => {
-    await authenticatedPage.goto('/auth/login');
-    await authenticatedPage.waitForURL('/dashboard');
-  });
+  test.skip(
+    'ログイン後に/auth/loginへ直接アクセスするとダッシュボードにリダイレクトされること',
+    async ({ authenticatedPage }) => {
+      await authenticatedPage.goto('/auth/login');
+      await authenticatedPage.waitForURL('/dashboard');
+    },
+  );
 });

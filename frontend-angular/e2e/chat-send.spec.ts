@@ -55,9 +55,7 @@ test.describe('チャット送信', () => {
   }) => {
     await page.goto('/dashboard');
     await expect(page.getByPlaceholder('@でアシスタントを指定できます')).toBeVisible();
-    await expect(
-      page.getByText('回答は必ずしも正しいとは限りません', { exact: false }),
-    ).toBeVisible();
+    await expect(page.getByText('回答は必ずしも正しいとは限りません', { exact: false })).toBeVisible();
   });
 
   test('メッセージ未入力では送信ボタンが無効で何も送信されないこと', async ({
@@ -73,7 +71,9 @@ test.describe('チャット送信', () => {
     await expect(page.locator('.chat-input-send')).toBeDisabled();
   });
 
-  test('1文字のメッセージを送信でき、ルームへ遷移すること', async ({ authenticatedPage: page }) => {
+  test('1文字のメッセージを送信でき、ルームへ遷移すること', async ({
+    authenticatedPage: page,
+  }) => {
     await page.goto('/dashboard');
     await sendAndWaitForReply(page, 'あ');
   });
@@ -95,7 +95,10 @@ test.describe('チャット送信', () => {
     authenticatedPage: page,
   }) => {
     await page.goto('/dashboard');
-    await page.setInputFiles('#chat-file-upload', path.join(__dirname, 'fixtures/test-image.png'));
+    await page.setInputFiles(
+      '#chat-file-upload',
+      path.join(__dirname, 'fixtures/test-image.png'),
+    );
     await expect(page.locator('app-file-image-chip')).toBeVisible();
     await sendAndWaitForReply(page, '画像添付確認用の質問メッセージです。');
   });
@@ -193,9 +196,7 @@ test.describe('チャット送信', () => {
       .locator('app-chat-assistant-mention-panel')
       .getByText('アシスタント確認用01', { exact: true })
       .click();
-    await page
-      .getByPlaceholder('@でアシスタントを指定できます')
-      .fill('メンション指定確認用の質問メッセージです。');
+    await page.getByPlaceholder('@でアシスタントを指定できます').fill('メンション指定確認用の質問メッセージです。');
     await page.locator('.chat-input-send').click();
     await page.waitForURL(/\/chat\/.+/, { timeout: 15_000 });
     await expect(userMessage(page, 'メンション指定確認用の質問メッセージです。')).toBeVisible();
@@ -249,7 +250,10 @@ test.describe('チャット送信', () => {
   // 【既知の不具合】タグ(カテゴリ)の一部を入力しても絞り込まれない。
   // select.component.tsのfilteredOptionsがラベル(名前)のみでフィルタしており、
   // カテゴリ・タグを見ていないため。Issue #180として起票。
-  test.skip('新規チャットダイアログでアシスタントタグの一部を入力すると絞り込まれること（Issue #180で対応予定）', async () => {});
+  test.skip(
+    '新規チャットダイアログでアシスタントタグの一部を入力すると絞り込まれること（Issue #180で対応予定）',
+    async () => {},
+  );
 
   test('新規チャットダイアログでキャンセルをクリックするとダイアログが閉じること', async ({
     authenticatedPage: page,
@@ -272,7 +276,10 @@ test.describe('チャット送信', () => {
     authenticatedPage: page,
   }) => {
     await page.goto('/dashboard');
-    await page.setInputFiles('#chat-file-upload', path.join(__dirname, 'fixtures/test-image.png'));
+    await page.setInputFiles(
+      '#chat-file-upload',
+      path.join(__dirname, 'fixtures/test-image.png'),
+    );
     await page.getByLabel('ファイルを添付', { exact: false }).click();
     await page.getByText('web検索', { exact: true }).click();
     await page.getByText('ライブラリ作成', { exact: true }).click();

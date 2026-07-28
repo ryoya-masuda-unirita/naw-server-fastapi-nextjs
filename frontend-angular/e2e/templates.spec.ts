@@ -49,9 +49,7 @@ test.describe('テンプレート', () => {
 
     await page.getByRole('button', { name: 'テンプレートを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog
-      .getByRole('textbox', { name: 'テンプレートの名前を入力' })
-      .fill('E2E作成確認用テンプレート');
+    await dialog.getByRole('textbox', { name: 'テンプレートの名前を入力' }).fill('E2E作成確認用テンプレート');
     await dialog
       .getByRole('textbox', { name: 'システムプロンプトを入力' })
       .fill('E2E確認用のシステムプロンプトです。');
@@ -60,7 +58,9 @@ test.describe('テンプレート', () => {
     await expect(page.getByText('E2E作成確認用テンプレート', { exact: true })).toBeVisible();
   });
 
-  test('テンプレート名を空のまま作成を試行すると作成ボタンが無効化されること', async ({ page }) => {
+  test('テンプレート名を空のまま作成を試行すると作成ボタンが無効化されること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
@@ -78,16 +78,12 @@ test.describe('テンプレート', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
-    const row = page
-      .locator('app-table-list-item')
-      .filter({ hasText: 'E2E作成確認用テンプレート' });
+    const row = page.locator('app-table-list-item').filter({ hasText: 'E2E作成確認用テンプレート' });
     await row.getByRole('button').click();
     await page.getByText('テンプレートの設定を編集', { exact: true }).click();
 
     const dialog = page.getByRole('dialog');
-    await dialog
-      .getByRole('textbox', { name: 'テンプレートの名前を入力' })
-      .fill('E2E編集確認用テンプレート');
+    await dialog.getByRole('textbox', { name: 'テンプレートの名前を入力' }).fill('E2E編集確認用テンプレート');
     await dialog.getByRole('button', { name: '保存' }).click();
 
     await expect(page.getByText('E2E編集確認用テンプレート', { exact: true })).toBeVisible();
@@ -98,9 +94,7 @@ test.describe('テンプレート', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
-    const row = page
-      .locator('app-table-list-item')
-      .filter({ hasText: 'E2E編集確認用テンプレート' });
+    const row = page.locator('app-table-list-item').filter({ hasText: 'E2E編集確認用テンプレート' });
     await row.getByRole('button').click();
     await page.getByText('テンプレートを削除', { exact: true }).click();
 
@@ -122,7 +116,9 @@ test.describe('テンプレート', () => {
     await expect(page.getByText('未紐付けテンプレート', { exact: true })).not.toBeVisible();
   });
 
-  test('存在しないテンプレート名で検索すると該当テンプレートが0件となること', async ({ page }) => {
+  test('存在しないテンプレート名で検索すると該当テンプレートが0件となること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
@@ -183,9 +179,7 @@ test.describe('テンプレート', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
-    const firstItem = page
-      .locator('app-table-list-item:not(.table-list-row--header) p.table-list-title')
-      .first();
+    const firstItem = page.locator('app-table-list-item:not(.table-list-row--header) p.table-list-title').first();
     const beforeSort = (await firstItem.textContent())?.trim();
 
     await page.locator('#template-list-sort').click();
@@ -213,9 +207,7 @@ test.describe('テンプレート', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/templates');
 
-    const firstItem = page
-      .locator('app-table-list-item:not(.table-list-row--header) p.table-list-title')
-      .first();
+    const firstItem = page.locator('app-table-list-item:not(.table-list-row--header) p.table-list-title').first();
     const ascFirst = (await firstItem.textContent())?.trim();
 
     await page.locator('#template-list-sort').click();
@@ -300,9 +292,7 @@ test.describe('テンプレート', () => {
 
     await page.getByRole('button', { name: 'テンプレートを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog
-      .getByRole('textbox', { name: 'テンプレートの名前を入力' })
-      .fill('E2Eチーム紐付確認用テンプレート');
+    await dialog.getByRole('textbox', { name: 'テンプレートの名前を入力' }).fill('E2Eチーム紐付確認用テンプレート');
     await dialog
       .getByRole('textbox', { name: 'システムプロンプトを入力' })
       .fill('チーム紐付確認用のシステムプロンプトです。');
@@ -348,9 +338,7 @@ test.describe('テンプレート', () => {
     const longPrompt = 'あ'.repeat(4000);
     await page.getByRole('button', { name: 'テンプレートを新規作成' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog
-      .getByRole('textbox', { name: 'テンプレートの名前を入力' })
-      .fill('E2Eプロンプト最大長確認用');
+    await dialog.getByRole('textbox', { name: 'テンプレートの名前を入力' }).fill('E2Eプロンプト最大長確認用');
     await dialog.getByRole('textbox', { name: 'システムプロンプトを入力' }).fill(longPrompt);
     await dialog.getByRole('button', { name: '作成' }).click();
 

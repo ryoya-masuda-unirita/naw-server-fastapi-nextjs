@@ -129,9 +129,7 @@ test.describe('チャット履歴', () => {
     await page.locator('#chat-history-sort').click();
     await page.getByRole('button', { name: '更新者名順' }).click();
 
-    await expect(
-      page.locator('app-table-list-item:not(.table-list-row--header)').first(),
-    ).toBeVisible();
+    await expect(page.locator('app-table-list-item:not(.table-list-row--header)').first()).toBeVisible();
   });
 
   test('並べ替えで「チャット名順」を選択するとエラーなく並べ替えられること', async ({ page }) => {
@@ -143,9 +141,7 @@ test.describe('チャット履歴', () => {
     await page.locator('#chat-history-sort').click();
     await page.getByRole('button', { name: 'チャット名順' }).click();
 
-    await expect(
-      page.locator('app-table-list-item:not(.table-list-row--header)').first(),
-    ).toBeVisible();
+    await expect(page.locator('app-table-list-item:not(.table-list-row--header)').first()).toBeVisible();
   });
 
   test('並べ替えの昇順・降順を切り替えると表示順が切り替わること', async ({ page }) => {
@@ -244,7 +240,9 @@ test.describe('チャット履歴', () => {
     await expect(page.getByText('フィードバック確認用ルーム1', { exact: true })).toBeVisible();
   });
 
-  test('フィルター適用後に並べ替えを変更すると結果が正しく並べ替えられること', async ({ page }) => {
+  test('フィルター適用後に並べ替えを変更すると結果が正しく並べ替えられること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/chat-history');
 
@@ -257,7 +255,9 @@ test.describe('チャット履歴', () => {
     await expect(page.getByText('チャット履歴が見つかりません。')).not.toBeVisible();
   });
 
-  test('検索後に並べ替え項目を変更すると検索結果が正しく並べ替えられること', async ({ page }) => {
+  test('検索後に並べ替え項目を変更すると検索結果が正しく並べ替えられること', async ({
+    page,
+  }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/chat-history');
 
@@ -287,9 +287,7 @@ test.describe('チャット履歴', () => {
     await page.goto('/admin/chat-history');
 
     await page.getByPlaceholder('検索ワードを入力').fill('フィードバックメッセージ確認用ルーム');
-    await expect(
-      page.getByText('フィードバックメッセージ確認用ルーム', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('フィードバックメッセージ確認用ルーム', { exact: true })).toBeVisible();
     await expect(page.getByText('フィードバック確認用ルーム1', { exact: true })).not.toBeVisible();
   });
 });

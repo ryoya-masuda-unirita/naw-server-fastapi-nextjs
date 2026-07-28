@@ -96,9 +96,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料01');
-    await page.waitForResponse(
-      (res) => res.url().includes('/api/libraries?') && res.url().includes('title='),
-    );
+    await page.waitForResponse((res) => res.url().includes('/api/libraries?') && res.url().includes('title='));
     await expect(page.getByText('ライブラリ確認用資料01', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('ライブラリ確認用資料02', { exact: true })).not.toBeVisible();
   });
@@ -112,9 +110,7 @@ test.describe('ライブラリ', () => {
     await page.getByText('全てのユーザー', { exact: true }).click();
     await page.getByRole('option', { name: '自分のみ' }).click();
 
-    await expect(
-      page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('ライブラリ確認用資料01', { exact: true })).not.toBeVisible();
   });
 
@@ -127,9 +123,7 @@ test.describe('ライブラリ', () => {
 
     await page.getByText('全てのタグ', { exact: true }).click();
     await page.getByRole('option', { name: 'ライブラリ確認用タグA' }).click();
-    await page.waitForResponse(
-      (res) => res.url().includes('/api/libraries?') && res.url().includes('tagIds='),
-    );
+    await page.waitForResponse((res) => res.url().includes('/api/libraries?') && res.url().includes('tagIds='));
 
     await expect(page.getByText('ライブラリ確認用資料01', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('ライブラリ確認用資料02', { exact: true })).not.toBeVisible();
@@ -143,9 +137,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料');
-    await page.waitForResponse(
-      (res) => res.url().includes('/api/libraries?') && res.url().includes('title='),
-    );
+    await page.waitForResponse((res) => res.url().includes('/api/libraries?') && res.url().includes('title='));
     await page.locator('#library-sort').click();
     await page.getByRole('button', { name: /名前順|タイトル順|コンテンツ名順/ }).click();
 
@@ -179,9 +171,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料01');
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'ライブラリ確認用資料01' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'ライブラリ確認用資料01' });
     await row.locator('button').last().click();
 
     await page.waitForURL(/\/library\/.+/);
@@ -192,9 +182,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料01');
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'ライブラリ確認用資料01' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'ライブラリ確認用資料01' });
     await row.locator('button').last().click();
     await page.waitForURL(/\/library\/.+/);
 
@@ -207,9 +195,7 @@ test.describe('ライブラリ', () => {
     await loginAsUser01(page);
     await page.goto('/library');
 
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'ライブラリ確認用資料03' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'ライブラリ確認用資料03' });
     await openRowMenu(row, page);
     await page.getByText('コンテンツの設定を編集', { exact: true }).click();
 
@@ -220,9 +206,7 @@ test.describe('ライブラリ', () => {
     await expect(page.getByText('E2E編集確認用資料', { exact: true }).last()).toBeVisible();
 
     // 後続テストへの影響を避けるため元の名前に戻す
-    const editedRow = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'E2E編集確認用資料' });
+    const editedRow = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'E2E編集確認用資料' });
     await openRowMenu(editedRow, page);
     await page.getByText('コンテンツの設定を編集', { exact: true }).click();
     await dialog.locator('input[type="text"]').first().fill('ライブラリ確認用資料03');
@@ -238,9 +222,7 @@ test.describe('ライブラリ', () => {
     await loginAsUser01(page);
     await page.goto('/library');
 
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'ライブラリ確認用資料01' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'ライブラリ確認用資料01' });
     await openRowMenu(row, page);
     await page.getByText('共有リンクをコピー', { exact: true }).click();
 
@@ -255,12 +237,8 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料06');
-    await page.waitForResponse(
-      (res) => res.url().includes('/api/libraries?') && res.url().includes('title='),
-    );
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'ライブラリ確認用資料06' });
+    await page.waitForResponse((res) => res.url().includes('/api/libraries?') && res.url().includes('title='));
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'ライブラリ確認用資料06' });
     await openRowMenu(row, page);
     await page.getByRole('button', { name: 'ライブラリから削除', exact: true }).click();
 
@@ -293,9 +271,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library?tab=tags');
 
     await page.getByRole('button', { name: 'コンテンツ一覧' }).click();
-    await expect(
-      page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last()).toBeVisible();
   });
 
   test('管理者で「タグ管理」タブを選択するとタグ管理画面が表示されること', async ({ page }) => {
@@ -312,15 +288,11 @@ test.describe('ライブラリ', () => {
     await loginAsAdmin(page);
     await page.goto('/library');
 
-    await expect(
-      page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last()).toBeVisible();
     await page.getByRole('button', { name: 'タグ管理' }).click();
     await expect(page.getByText('ライブラリ確認用タグA', { exact: true }).last()).toBeVisible();
     await page.getByRole('button', { name: 'コンテンツ一覧' }).click();
-    await expect(
-      page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last()).toBeVisible();
   });
 
   test('管理者でタグ管理タブを開き新規タグを追加するとタグが一覧に追加されること', async ({
@@ -341,9 +313,7 @@ test.describe('ライブラリ', () => {
     await loginAsAdmin(page);
     await page.goto('/library?tab=tags');
 
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'E2E作成確認用タグ' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'E2E作成確認用タグ' });
     await row.getByRole('button').first().click();
     await page.getByText('タグの設定を編集', { exact: true }).click();
 
@@ -358,9 +328,7 @@ test.describe('ライブラリ', () => {
     await loginAsAdmin(page);
     await page.goto('/library?tab=tags');
 
-    const row = page
-      .locator('.table-list-row--data:visible, .border-b.border-border-light:visible')
-      .filter({ hasText: 'E2E編集確認用タグ' });
+    const row = page.locator('.table-list-row--data:visible, .border-b.border-border-light:visible').filter({ hasText: 'E2E編集確認用タグ' });
     await row.getByRole('button').first().click();
     await page.getByText('タグを削除', { exact: true }).click();
 
@@ -370,7 +338,9 @@ test.describe('ライブラリ', () => {
     await expect(page.getByText('E2E編集確認用タグ', { exact: true })).not.toBeVisible();
   });
 
-  test('一般ユーザーはタグ管理タブが表示されずタグ管理画面に遷移できないこと', async ({ page }) => {
+  test('一般ユーザーはタグ管理タブが表示されずタグ管理画面に遷移できないこと', async ({
+    page,
+  }) => {
     await loginAsUser01(page);
     await page.goto('/library');
 
@@ -422,9 +392,7 @@ test.describe('ライブラリ', () => {
     await page.goto('/library');
 
     await page.getByPlaceholder('検索ワードを入力').fill('ライブラリ確認用資料（管理者所有）');
-    await expect(
-      page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last(),
-    ).toBeVisible();
+    await expect(page.getByText('ライブラリ確認用資料（管理者所有）', { exact: true }).last()).toBeVisible();
     await expect(page.getByText('ライブラリ確認用資料02', { exact: true })).not.toBeVisible();
   });
 
@@ -442,8 +410,6 @@ test.describe('ライブラリ', () => {
     // バックエンドは重複エラー(400)を返すが、フロントエンドのエラートーストが
     // 未翻訳のi18nキーのまま表示される既知の不具合があるため、その挙動を検証する。
     // 詳細: https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/174
-    await expect(
-      page.getByText('ADMIN.LIBRARY.TAGS.CREATE_FAILED', { exact: false }),
-    ).toBeVisible();
+    await expect(page.getByText('ADMIN.LIBRARY.TAGS.CREATE_FAILED', { exact: false })).toBeVisible();
   });
 });

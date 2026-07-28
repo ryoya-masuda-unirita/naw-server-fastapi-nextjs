@@ -124,9 +124,7 @@ test.describe('学習データ', () => {
     await loginAsAdmin(page);
     await openLocalFolderDetail(page);
 
-    await expect(
-      page.getByText('ローカル接続する学習データについて', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('ローカル接続する学習データについて', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '一括同期' })).toBeVisible();
   });
 
@@ -136,9 +134,7 @@ test.describe('学習データ', () => {
     await loginAsAdmin(page);
     await openCloudFolderDetail(page);
 
-    await expect(
-      page.getByText('ローカル接続する学習データについて', { exact: true }),
-    ).not.toBeVisible();
+    await expect(page.getByText('ローカル接続する学習データについて', { exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: '一括同期' })).not.toBeVisible();
   });
 
@@ -146,19 +142,19 @@ test.describe('学習データ', () => {
   // クエリパラメータとして送信しており、バックエンドが期待するmultipart/form-dataのフィールドと
   // 一致せず常にHTTP 422になる既知の不具合があるためスキップ。
   // 詳細: https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/176
-  test.skip('「学習データを追加」からデータを追加すると詳細一覧に追加されること', async ({
-    page,
-  }) => {
+  test.skip('「学習データを追加」からデータを追加すると詳細一覧に追加されること', async ({ page }) => {
     await loginAsAdmin(page);
     await openCloudFolderDetail(page);
 
     await page.getByRole('button', { name: '学習データを追加' }).first().click();
     const dialog = page.getByRole('dialog');
-    await dialog.locator('#file-upload').setInputFiles({
-      name: 'e2e-add-file.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('E2E確認用の学習データファイルです。'),
-    });
+    await dialog
+      .locator('#file-upload')
+      .setInputFiles({
+        name: 'e2e-add-file.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('E2E確認用の学習データファイルです。'),
+      });
 
     await dialog.locator('input[formcontrolname="displayName"]').fill('E2E追加確認用データ');
     await dialog.getByRole('button', { name: '完了' }).click();
@@ -192,9 +188,7 @@ test.describe('学習データ', () => {
     await page.getByRole('menuitem', { name: '学習データの設定を編集', exact: true }).click();
     await dialog.getByPlaceholder('学習データの表示名を入力').fill('学習データ確認用ファイル04');
     await dialog.getByRole('button', { name: '保存' }).click();
-    await expect(
-      page.getByText('学習データ確認用ファイル04', { exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByText('学習データ確認用ファイル04', { exact: true }).first()).toBeVisible();
   });
 
   test('詳細画面の検索欄で学習データ名を検索すると該当データのみ表示されること', async ({
@@ -441,14 +435,10 @@ test.describe('学習データ', () => {
       buffer: Buffer.from('E2E確認用のクラウド学習データファイルです。'),
     });
 
-    await dialog
-      .locator('input[formcontrolname="displayName"]')
-      .fill('E2Eクラウド追加確認用データ');
+    await dialog.locator('input[formcontrolname="displayName"]').fill('E2Eクラウド追加確認用データ');
     await dialog.getByRole('button', { name: '完了' }).click();
 
-    await expect(
-      page.getByText('E2Eクラウド追加確認用データ', { exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByText('E2Eクラウド追加確認用データ', { exact: true }).first()).toBeVisible();
   });
 
   // ダウンロードには`files.storage_url`が実在するストレージ実体を指している必要があるが、
@@ -472,9 +462,7 @@ test.describe('学習データ', () => {
   });
 
   // Issue #176（学習データ追加のパラメータ不一致バグ）によりスキップ
-  test.skip('フォルダ作成後に詳細画面でデータを追加すると正常に追加されること', async ({
-    page,
-  }) => {
+  test.skip('フォルダ作成後に詳細画面でデータを追加すると正常に追加されること', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/training-data');
 
@@ -488,19 +476,17 @@ test.describe('学習データ', () => {
     await expect(page.getByRole('heading', { name: 'E2E作成確認用フォルダ' })).toBeVisible();
 
     await page.getByRole('button', { name: '学習データを追加' }).first().click();
-    await dialog.locator('#file-upload').setInputFiles({
-      name: 'e2e-new-folder-file.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('E2E新規フォルダ確認用の学習データファイルです。'),
-    });
     await dialog
-      .locator('input[formcontrolname="displayName"]')
-      .fill('E2E新規フォルダ確認用データ');
+      .locator('#file-upload')
+      .setInputFiles({
+        name: 'e2e-new-folder-file.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('E2E新規フォルダ確認用の学習データファイルです。'),
+      });
+    await dialog.locator('input[formcontrolname="displayName"]').fill('E2E新規フォルダ確認用データ');
     await dialog.getByRole('button', { name: '完了' }).click();
 
-    await expect(
-      page.getByText('E2E新規フォルダ確認用データ', { exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByText('E2E新規フォルダ確認用データ', { exact: true }).first()).toBeVisible();
   });
 
   test('詳細画面で検索とユーザーフィルターを同時適用すると両条件を満たすデータのみ表示されること', async ({
