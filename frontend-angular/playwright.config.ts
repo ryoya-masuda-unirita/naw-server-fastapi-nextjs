@@ -12,7 +12,7 @@ export default defineConfig({
     timeout: 8000,
   },
   use: {
-    baseURL: 'http://test-tenant.localhost:4201',
+    baseURL: 'http://localhost:4201',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },
