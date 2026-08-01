@@ -14,6 +14,8 @@ env:
   ECR_REPOSITORY: naw-fastapi-issue160-backend
   ECS_CLUSTER: naw-fastapi-issue160-cluster
   ECS_SERVICE: naw-fastapi-issue160-backend
+  ECS_MIGRATE_TASK_FAMILY: naw-fastapi-issue160-backend-migrate
+  ECS_CAPACITY_PROVIDER: naw-fastapi-issue160-cp
 
 jobs:
   deploy:
@@ -59,6 +61,60 @@ jobs:
             -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
             -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
             .
+
+      # backend同様、DBマイグレーション専用タスク定義(backend_migrate)も今回pushしたイメージタグに更新する
+      - name: Render migration task definition
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${ECS_MIGRATE_TASK_FAMILY} \
+            --query 'taskDefinition' > migrate-task-definition.json
+
+          jq --arg IMAGE "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
+            '.containerDefinitions[0].image = $IMAGE
+             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            migrate-task-definition.json > migrate-task-def-clean.json
+
+      - name: Register migration task definition
+        id: register-migrate-task-def
+        run: |
+          NEW_MIGRATE_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://migrate-task-def-clean.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task_def_arn=${NEW_MIGRATE_TASK_DEF_ARN}" >> $GITHUB_OUTPUT
+
+      # 新しいアプリコードが依存するスキーマ変更を先に反映するため、backendサービスの更新より前に実行する。
+      # backend_migrateタスク定義にはportMappingsが無いため、backendサービスと同じ単一EC2上でもポート競合しない
+      - name: Run DB migration task
+        id: run-migration
+        run: |
+          MIGRATION_TASK_ARN=$(aws ecs run-task \
+            --cluster ${ECS_CLUSTER} \
+            --task-definition ${{ steps.register-migrate-task-def.outputs.task_def_arn }} \
+            --capacity-provider-strategy capacityProvider=${ECS_CAPACITY_PROVIDER},weight=1 \
+            --count 1 \
+            --query 'tasks[0].taskArn' --output text)
+          echo "task_arn=${MIGRATION_TASK_ARN}" >> $GITHUB_OUTPUT
+
+      - name: Wait for migration task to stop
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster ${ECS_CLUSTER} \
+            --tasks ${{ steps.run-migration.outputs.task_arn }}
+
+      # マイグレーションが失敗している場合、ここでジョブを止めて後続のbackendサービス更新に進ませない
+      - name: Check migration exit code
+        run: |
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${ECS_CLUSTER} \
+            --tasks ${{ steps.run-migration.outputs.task_arn }} \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "${EXIT_CODE}" != "0" ]; then
+            echo "DB migration failed (exit code: ${EXIT_CODE})"
+            exit 1
+          fi
 
       # 今ECSに登録されている現行のタスク定義をJSONで取得し、コンテナイメージだけを新しいタグに書き換えた
       # 「新しいタスク定義の中身」を作る。ecs register-task-definitionが受け付けないメタ情報(リビジョン番号等)は
