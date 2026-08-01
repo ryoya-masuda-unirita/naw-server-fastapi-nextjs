@@ -198,6 +198,19 @@ VALUES
 )
 ON CONFLICT (login_id, tenant_id) DO NOTHING;
 
+-- アシスタント (id 固定: 動作確認用)
+-- 以降のroomsがdefault_assistant_idで参照するため、rooms系のINSERTより前に置く必要がある
+INSERT INTO assistants (id, tenant_id, type, name, description, include_history)
+VALUES (
+    '10000000000040008000000000000001',
+    'test-tenant',
+    'SAAS_CHAT',
+    '汎用アシスタント',
+    '一般的な質問に回答するアシスタント',
+    true
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- チャット検索 ページ送り確認用ルーム (Issue #166: 08_チャット検索 項番8/14用)
 -- user01(test-tenant)が20件超のルームを持つ状態を作り、検索結果のページ送りを再現する
 INSERT INTO rooms (id, tenant_id, name, default_assistant_id, user_id, rating)
@@ -480,18 +493,6 @@ VALUES (
     false
 )
 ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
-
--- アシスタント (id 固定: 動作確認用)
-INSERT INTO assistants (id, tenant_id, type, name, description, include_history)
-VALUES (
-    '10000000000040008000000000000001',
-    'test-tenant',
-    'SAAS_CHAT',
-    '汎用アシスタント',
-    '一般的な質問に回答するアシスタント',
-    true
-)
-ON CONFLICT (id) DO NOTHING;
 
 -- 動作確認用グループにアシスタントを紐付け
 INSERT INTO groups_assistants (group_id, assistant_id, tenant_id)
