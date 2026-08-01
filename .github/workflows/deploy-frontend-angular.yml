@@ -28,7 +28,11 @@ jobs:
           cache-dependency-path: frontend-angular/package-lock.json
 
       - run: npm ci
-      - run: npm run build
+      # --configuration未指定だとAngularのデフォルト(production)が使われ、environment.production.ts
+      # (本家secuaigent/clientの実際の本番APIドメインがそのまま入っている)でビルドされてしまう。
+      # このプロジェクトはCloudFrontが/api・/authをbackendへプロキシする構成のため、
+      # 相対パスを使うdev configuration(environment.development.ts)でビルドする必要がある
+      - run: npm run build -- --configuration dev
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る
       - name: Configure AWS credentials
