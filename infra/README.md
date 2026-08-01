@@ -171,6 +171,8 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
   bash infra/scripts/seed_via_bastion.sh --skip-migrate
 ```
 
+**実際のAIエンドポイント接続情報を使いたい場合**: `infra/scripts/.env.example`を`infra/scripts/.env`としてコピーし（`.gitignore`対象、コミットしないこと）、`AZURE_OPENAI_API_KEY`・`AZURE_OPENAI_ENDPOINT`に実際の値を設定してから実行する。seed投入後、`AZURE_OPENAI_CHAT`/`AZURE_OPENAI_EMBEDDING`エンドポイントの`api_key`・`endpoint`が実際の値で上書きされる（`seed.sql`自体はダミー値のまま変更しない）。
+
 ### 4. 動作確認
 
 `terraform output cloudfront_domain_name`で確認したCloudFrontのデフォルトドメイン（`https://<distribution-id>.cloudfront.net/`）にアクセスする。テナントIDはURL（サブドメイン）からではなく、ログイン画面で入力する（Issue #193）。

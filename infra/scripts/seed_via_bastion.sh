@@ -12,6 +12,13 @@
 # オプション:
 #   --skip-migrate  seed投入前の `alembic upgrade head` をスキップする
 #                    （CI/CDで既にマイグレーション済みの場合など）
+#
+# 実際のAIエンドポイント接続情報を使いたい場合:
+#   このスクリプトと同じディレクトリに `.env`（.gitignore対象）を置き、AZURE_OPENAI_API_KEY / AZURE_OPENAI_ENDPOINT
+#   を設定すると、seed.sql投入後（ダミー値で投入された後）に、AZURE_OPENAI_CHAT/AZURE_OPENAI_EMBEDDINGエンドポイントの
+#   api_key・endpointを実際の値で上書きする。seed.sql自体は変更しない（ローカル開発でのdocker-compose経由の
+#   投入等、既存の使われ方に影響を与えないため）。.envを置かない場合・各変数が未設定の場合はダミー値のまま。
+#   雛形は .env.example を参照。
 
 set -euo pipefail
 
@@ -19,6 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${INFRA_DIR}")"
 BACKEND_DIR="${REPO_ROOT}/backend"
+
+if [ -f "${SCRIPT_DIR}/.env" ]; then
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/.env"
+fi
 
 LOCAL_PORT=5433
 SSH_USER="ec2-user"
@@ -94,5 +106,23 @@ fi
 
 echo "==> シードデータを投入しています..."
 PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres < "${BACKEND_DIR}/seed.sql"
+
+if [ -n "${AZURE_OPENAI_API_KEY:-}" ]; then
+  echo "==> AZURE_OPENAI_API_KEYが設定されているため、AIエンドポイントのapi_keyを実際の値で上書きします..."
+  PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres \
+    -v api_key="${AZURE_OPENAI_API_KEY}" \
+    -c "UPDATE tenant_endpoints SET api_key = :'api_key' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
+else
+  echo "==> AZURE_OPENAI_API_KEYが未設定のため、api_keyはダミー値のままにします"
+fi
+
+if [ -n "${AZURE_OPENAI_ENDPOINT:-}" ]; then
+  echo "==> AZURE_OPENAI_ENDPOINTが設定されているため、AIエンドポイントのendpointを実際の値で上書きします..."
+  PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres \
+    -v endpoint="${AZURE_OPENAI_ENDPOINT}" \
+    -c "UPDATE tenant_endpoints SET endpoint = :'endpoint' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
+else
+  echo "==> AZURE_OPENAI_ENDPOINTが未設定のため、endpointはダミー値のままにします"
+fi
 
 echo "==> 完了しました"
