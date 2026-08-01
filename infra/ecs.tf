@@ -213,3 +213,66 @@ resource "aws_ecs_service" "backend" {
     ignore_changes = [task_definition]
   }
 }
+
+resource "aws_cloudwatch_log_group" "backend_migrate" {
+  name              = "/ecs/${var.project_name}-backend-migrate"
+  retention_in_days = 7
+
+  tags = {
+    Name    = "${var.project_name}-backend-migrate-logs"
+    Project = var.project_name
+  }
+}
+
+// DBマイグレーション(alembic upgrade head)専用のタスク定義。deploy-backend.ymlがECSの一時タスク
+// (aws ecs run-task)として都度実行する。backendサービスと同じイメージ・DB接続情報を使うが、
+// portMappingsを持たない点が異なる。backendはhostPort=8000固定のため、同一タスク定義のまま
+// one-off実行すると、単一EC2インスタンス上でポート競合しスケジューリングに失敗するため分離している。
+resource "aws_ecs_task_definition" "backend_migrate" {
+  family                   = "${var.project_name}-backend-migrate"
+  network_mode             = "bridge"
+  requires_compatibilities = ["EC2"]
+
+  execution_role_arn = aws_iam_role.ecs_task_execution.arn
+  task_role_arn      = aws_iam_role.backend_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "backend-migrate"
+      image = "${aws_ecr_repository.backend.repository_url}:latest"
+      // backendサービス(memory=128)と単一EC2インスタンス上に同居しても圧迫しないよう小さく抑える
+      memory    = 96
+      essential = true
+
+      // backendイメージの既定CMD(uvicorn起動)を上書きし、マイグレーションだけ実行して終了させる
+      command = ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgresql+asyncpg://${aws_db_instance.main.username}:${var.db_password}@${aws_db_instance.main.address}:5432/${aws_db_instance.main.db_name}"
+        },
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.backend_migrate.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "backend-migrate"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Name    = "${var.project_name}-backend-migrate-task"
+    Project = var.project_name
+  }
+
+  // deploy-backend.ymlがpushのたびに新しいイメージタグでこのタスク定義も更新登録するため、
+  // backend同様にcontainer_definitionsの変更を無視する(terraform applyでの巻き戻り防止)。
+  lifecycle {
+    ignore_changes = [container_definitions]
+  }
+}

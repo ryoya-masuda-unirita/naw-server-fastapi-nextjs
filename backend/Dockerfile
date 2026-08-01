@@ -12,6 +12,10 @@ RUN uv sync --no-dev --frozen
 
 COPY app/ ./app/
 
+# alembic.ini / alembic/ はマイグレーション実行（CI/CDの one-off task）に必要なため含める
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
+
 EXPOSE 8000
 
 # --no-sync がないと uv run が起動時に依存を再解決し、--no-dev で除外したはずの

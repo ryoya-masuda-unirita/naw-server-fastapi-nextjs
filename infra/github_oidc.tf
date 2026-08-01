@@ -77,7 +77,10 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecs:DescribeTaskDefinition",
           "ecs:RegisterTaskDefinition",
           "ecs:UpdateService",
-          "ecs:DescribeServices"
+          "ecs:DescribeServices",
+          // backend_migrateタスク(DBマイグレーション)をone-off実行し、完了を待つために必要
+          "ecs:RunTask",
+          "ecs:DescribeTasks"
         ]
         Resource = "*"
       },
