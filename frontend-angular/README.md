@@ -125,3 +125,4 @@ Angular CLI にはデフォルトでE2Eテストフレームワークが含ま�
 Angular CLI の使い方（詳細なコマンドリファレンスを含む）については、[Angular CLI 概要とコマンドリファレンス](https://angular.dev/tools/cli) を参照してください。
 
 <!-- Issue #197: CI/CDのfrontendデプロイジョブ実機確認用のダミー変更 -->
+<!-- Issue #197: --configuration dev修正の再デプロイ確認用ダミー変更 -->
