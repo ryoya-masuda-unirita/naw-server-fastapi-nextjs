@@ -1382,8 +1382,7 @@ ON CONFLICT (group_id, assistant_id, tenant_id) DO NOTHING;
 INSERT INTO groups_users (group_id, tenant_id, user_id, is_admin)
 VALUES
 ('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000014', false),
-('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000015', false),
-('20000000000040008000000000000001', 'test-tenant', 'fab779fa-c191-42b2-95db-d015c09945ad', false)
+('20000000000040008000000000000001', 'test-tenant', '00000000-0000-4000-8000-000000000015', false)
 ON CONFLICT (group_id, user_id, tenant_id) DO NOTHING;
 
 INSERT INTO groups_prompt_templates (group_id, tenant_id, prompt_template_id)
