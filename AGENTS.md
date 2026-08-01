@@ -37,6 +37,22 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 - `~/Documents/secuaigent/server` は最初から git 管理されており、`develop` ブランチがある
 - `~/Documents/secuaigent/client` は途中から git 管理のため、履歴だけでは追いきれない箇所がある。必要に応じて最新コードも直接読むこと
 
+### テナント識別方式（サブドメイン廃止・移植/調査時の前提条件）
+
+**このプロジェクトはテナント識別にサブドメイン（`window.location.hostname` 等）を使わない。** Issue #193（frontend-angular）・#195（infra）で、サブドメインを前提とした実装を意図的に廃止した。
+
+| 対象 | 廃止内容 | 現在の方式 |
+|---|---|---|
+| frontend-angular（Issue #193） | `resolveTenantId()` の hostname パース、`user-list-tenant.helpers.ts` の `extractTenantIdFromHostname()` | ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信 |
+| infra（Issue #195） | Route53ホストゾーン、ACM証明書（ワイルドカードSAN）、CloudFrontエイリアス、ワイルドカードCORS正規表現 | CloudFrontデフォルトドメイン（`*.cloudfront.net`）配信、固定オリジンのCORS |
+
+**参照リポジトリ（`secuaigent/client` / `naw-server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリの `frontend-angular` 側は #193 で撤去済み）。
+
+- **未移植判定からの除外（最重要）**: Issue 一括起票系 skill（`naw-issue-batch` / `naw-frontend-issue-batch`）で参照リポジトリとの差分を検出する際、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計は「未移植の欠落」として検出・Issue化しない。意図的に廃止したものであり、差分として存在すること自体が正しい状態
+- 逆に、参照リポジトリの調査・読解自体（挙動理解、無関係な機能のリサーチ等）では通常どおりサブドメイン前提のコードも含めてそのまま読む。除外するのは「未移植候補としての検出」の場面に限る
+- 実際に移植作業でサブドメイン依存のロジックに行き当たった場合は、そのまま持ち込まず実装前に一言確認する
+- `frontend-angular-sync` skill（`.codex/skills/frontend-angular-sync/SKILL.md`）は `secuaigent/client` を丸ごとコピーするため、同期のたびにこの差分（`tenant.helpers.ts` 等）が巻き戻るリスクがある。同期後は必ず skill 内の該当チェック項目を確認すること
+
 ## モノレポ構成
 
 ```text

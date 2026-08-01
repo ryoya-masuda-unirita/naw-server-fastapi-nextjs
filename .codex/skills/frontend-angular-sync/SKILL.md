@@ -44,6 +44,17 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 `package.json` / `src/environments/environment.ts` / `src/environments/environment.production.ts` /
 アプリケーションのビジネスロジック本体は変更不要（そのまま使える）。
 
+### サブドメイン廃止（Issue #193）に伴う再適用 — 必ず確認すること
+
+`secuaigent/client` は現役でサブドメイン（hostname）ベースのテナント識別を持つが、`frontend-angular/` 側は Issue #193 で意図的に廃止済み。**丸ごと同期すると以下が巻き戻る**ため、同期のたびに必ず確認・再適用する。
+
+| ファイル | 同期直後の状態 | あるべき状態 |
+|---|---|---|
+| `src/app/core/utils/tenant.helpers.ts` | `resolveTenantId()` に `window.location.hostname` パースのフォールバックが復活する | フォールバックを削除し、`sessionStorage.getItem(STORAGE_KEYS.TENANT_ID) ?? ''` のみにする |
+| `src/app/features/admin/management/user-list/utils/user-list-tenant.helpers.ts`（+ `.spec.ts`） | `secuaigent/client` にのみ存在するため、同期でファイルごと復活する | ファイルを削除する（`tenant.helpers.ts` 側の実装に一本化済みのため） |
+
+同期後の `git diff -- frontend-angular` 確認時に、上記2点が意図せず巻き戻っていないかを必ずチェックする。
+
 ## 実行手順
 
 ```bash

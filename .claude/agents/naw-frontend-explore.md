@@ -19,6 +19,10 @@ model: sonnet
 - `frontend/.claude/CLAUDE.md`: React移植の技術スタック・Angular→React対応表・デザイン移行方針が定義されている。調査前に必ず読むこと
 - `frontend-angular/`: `secuaigent/client` をそのまま取り込んだもの（動作確認用）。移植先ではないので候補検出の対象にしない
 
+## 既知の意図的差分（未移植として検出しない）
+
+このリポジトリは Issue #193 で**サブドメイン（hostname）によるテナント識別を意図的に廃止済み**（`frontend-angular/` 側の `tenant.helpers.ts` 等）。参照リポジトリ（`secuaigent/client`）側はサブドメインを廃止していないため、サブドメイン（hostname）ベースのテナント識別に関する差分は、**「未移植の欠落」として検出・報告しない**。意図的な廃止であり、差分として存在すること自体が正しい状態。
+
 ## 調査時の手順
 
 1. 依頼された対象領域について、`~/Documents/secuaigent/client` の最新状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）
