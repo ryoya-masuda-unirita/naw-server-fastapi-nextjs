@@ -152,20 +152,23 @@ aws s3 sync dist/secuaigent-client/browser/ s3://<frontend_bucket名>/ --delete 
 aws cloudfront create-invalidation --distribution-id <cloudfront配信ID> --paths "/*" --profile naw-fastapi-issue158
 ```
 
-### 3. bastion経由でRDSマイグレーション＋シード投入
+### 3. bastion経由でシード投入
+
+DBマイグレーション（`alembic upgrade head`）自体はIssue #197以降、`deploy-backend.yml`のCI/CDで自動実行される（backendのデプロイのたびに、backendサービス更新の前に自動で適用される）。
+
+シードデータ（`seed.sql`）投入は非冪等（再実行で重複・エラーの恐れ）なため引き続きCI/CDには含めず、環境構築時（destroy後の再構築時含む）にスクリプトで手動実行する。
 
 ```bash
-# ターミナル1: SSHトンネル（張ったまま維持する）
-ssh -i ~/.ssh/<キーペア名>.pem \
-  -L 5433:<rds_endpoint>:5432 \
-  ec2-user@<bastion_public_ip>
+PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
+  bash infra/scripts/seed_via_bastion.sh
+```
 
-# ターミナル2: マイグレーション
-cd backend
-DATABASE_URL="postgresql+asyncpg://root:<db_password>@localhost:5433/postgres" uv run alembic upgrade head
+- `terraform output`から`rds_endpoint`・`bastion_public_ip`を自動取得し、SSHトンネルの確立→マイグレーション適用→`seed.sql`投入→トンネルの後始末まで1コマンドで行う
+- CI/CDで既にマイグレーション済みの場合は、`--skip-migrate`を付けてseed投入のみ行うこともできる
 
-# シードデータ
-PGPASSWORD=<db_password> psql -h localhost -p 5433 -U root -d postgres < backend/seed.sql
+```bash
+PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
+  bash infra/scripts/seed_via_bastion.sh --skip-migrate
 ```
 
 ### 4. 動作確認
