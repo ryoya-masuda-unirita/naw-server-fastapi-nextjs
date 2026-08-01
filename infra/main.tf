@@ -21,8 +21,11 @@ terraform {
   }
 }
 
+// profileをハードコードせず、標準のクレデンシャルチェーンに任せる。
+// ローカルでは`AWS_PROFILE=naw-fastapi-issue158`を環境変数で指定して使う想定。
+// CI(GitHub Actions)はOIDCで発行された一時クレデンシャルを環境変数(AWS_ACCESS_KEY_ID等)で渡すため、
+// ここでprofileを固定するとCI側に存在しないプロファイル名でエラーになる。
 provider "aws" {
-  region  = var.region
-  profile = "naw-fastapi-issue158"
+  region = var.region
 }
 
