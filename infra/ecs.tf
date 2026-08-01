@@ -252,6 +252,9 @@ resource "aws_ecs_task_definition" "backend_migrate" {
           name  = "DATABASE_URL"
           value = "postgresql+asyncpg://${aws_db_instance.main.username}:${var.db_password}@${aws_db_instance.main.address}:5432/${aws_db_instance.main.db_name}"
         },
+        // alembic env.pyがapp.core.config.get_settings()経由でSettings()を構築するため、
+        // database_urlと同様に必須(デフォルト無し)のsecret_keyも渡す必要がある
+        { name = "SECRET_KEY", value = var.secret_key },
       ]
 
       logConfiguration = {
