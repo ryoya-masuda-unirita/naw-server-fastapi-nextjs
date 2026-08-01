@@ -109,18 +109,20 @@ PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d post
 
 if [ -n "${AZURE_OPENAI_API_KEY:-}" ]; then
   echo "==> AZURE_OPENAI_API_KEYが設定されているため、AIエンドポイントのapi_keyを実際の値で上書きします..."
+  # psqlの-v/:'var'展開がbastion側の環境で機能しなかったため、bash側でSQLリテラル用に
+  # シングルクォートをエスケープ(''に置換)してから直接埋め込む
+  ESCAPED_API_KEY="${AZURE_OPENAI_API_KEY//\'/\'\'}"
   PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres \
-    -v api_key="${AZURE_OPENAI_API_KEY}" \
-    -c "UPDATE tenant_endpoints SET api_key = :'api_key' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
+    -c "UPDATE tenant_endpoints SET api_key = '${ESCAPED_API_KEY}' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
 else
   echo "==> AZURE_OPENAI_API_KEYが未設定のため、api_keyはダミー値のままにします"
 fi
 
 if [ -n "${AZURE_OPENAI_ENDPOINT:-}" ]; then
   echo "==> AZURE_OPENAI_ENDPOINTが設定されているため、AIエンドポイントのendpointを実際の値で上書きします..."
+  ESCAPED_ENDPOINT="${AZURE_OPENAI_ENDPOINT//\'/\'\'}"
   PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres \
-    -v endpoint="${AZURE_OPENAI_ENDPOINT}" \
-    -c "UPDATE tenant_endpoints SET endpoint = :'endpoint' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
+    -c "UPDATE tenant_endpoints SET endpoint = '${ESCAPED_ENDPOINT}' WHERE type IN ('AZURE_OPENAI_CHAT', 'AZURE_OPENAI_EMBEDDING')"
 else
   echo "==> AZURE_OPENAI_ENDPOINTが未設定のため、endpointはダミー値のままにします"
 fi
