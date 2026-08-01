@@ -45,11 +45,14 @@ gh secret set AWS_ROLE_ARN --body "$(terraform output -raw github_actions_role_a
 gh variable set FRONTEND_BUCKET_NAME --body "$(terraform output -raw frontend_bucket_name)"
 gh variable set CLOUDFRONT_DISTRIBUTION_ID --body "$(terraform output -raw cloudfront_distribution_id)"
 
-# terraform.tfvarsと同じ値を使うもの（<...>は実際の値に置き換える。CIDRはカンマ区切り文字列でOK）
+# terraform.tfvarsと同じ値を使うもの（<...>は実際の値に置き換える）
 gh secret set DB_PASSWORD --body "<terraform.tfvarsのdb_password>"
 gh secret set SECRET_KEY --body "<terraform.tfvarsのsecret_key>"
-gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrs>"
-gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrs>"
+# ALLOWED_SSH_CIDRS/ALLOWED_ADMIN_CIDRSはlist(string)型のvariableのため、TF_VAR_経由で渡す値は
+# カンマ区切り文字列ではなくHCL/JSON配列表記にすること（例: ["1.2.3.4/32","5.6.7.8/32"]）。
+# カンマ区切り文字列を渡すと"Invalid number literal"等のパースエラーでterraform planが失敗する。
+gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
+gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh variable set KEY_PAIR_NAME --body "<terraform.tfvarsのkey_pair_name>"
 
 # GitHub Projects連携用(project-status-sync.ymlが使用。デプロイとは別用途。未登録なら要発行)
