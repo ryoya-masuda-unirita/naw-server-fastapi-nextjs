@@ -2,6 +2,10 @@
 resource "aws_s3_bucket" "tfstate" {
   bucket = "${var.project_name}-tfstate"
 
+  // バージョニング有効のバケットは、objectを削除してもバージョンが残り「空に見えない」状態になり、
+  // force_destroyが無いとterraform destroyがBucketNotEmptyで失敗する。frontend用バケットと同様に設定する。
+  force_destroy = true
+
   tags = {
     Name    = "${var.project_name}-tfstate"
     Project = var.project_name
