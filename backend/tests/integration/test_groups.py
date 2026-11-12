@@ -614,6 +614,155 @@ def _token_usage(tenant_id: str, user_id, input_credits: int = 0) -> TokenUsage:
     )
 
 
+async def _add_members(
+    session,
+    tenant_id: str,
+    group_id: str,
+    names: list[str],
+    updated_at: datetime | None = None,
+) -> None:
+    """指定した表示名のユーザーを作成してグループに所属させる。"""
+    for i, name in enumerate(names):
+        user = User(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            login_id=f"sort-member-{i}",
+            name=name,
+            role=UserRole.USER,
+            is_required_password_reset=False,
+        )
+        session.add(user)
+        await session.flush()
+        member = GroupUser(
+            group_id=group_id, tenant_id=tenant_id, user_id=user.id, is_admin=False
+        )
+        if updated_at is not None:
+            member.updated_at = updated_at
+        session.add(member)
+    await session.commit()
+
+
+async def _get_member_ids(c, group_id: str, headers: dict, sort: str) -> list[str]:
+    """フロントエンドと同じクエリで所属ユーザー一覧を取得し、userIdの並びを返す。"""
+    response = await c.get(
+        f"/api/admin/groups/{group_id}/users",
+        headers=headers,
+        params={"sort": sort, "includeUsage": "true", "searchText": ""},
+    )
+    assert response.status_code == 200
+    return [u["userId"] for u in response.json()["content"]]
+
+
+@pytest.mark.asyncio
+class TestGroupUsersSort:
+    """GET /api/admin/groups/{groupId}/users の並べ替え（Issue #181）"""
+
+    async def test_sort_by_name_switches_first_row_by_direction(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """ユーザー表示名順の昇順・降順で先頭行が入れ替わり、並びが完全に反転すること"""
+        await _add_members(session, tenant.id, group.id, ["carol", "Bob", "alice"])
+
+        async with client as c:
+            asc_res = await c.get(
+                f"/api/admin/groups/{group.id}/users",
+                headers=admin_headers,
+                params={"sort": "name,asc", "includeUsage": "true"},
+            )
+            desc_res = await c.get(
+                f"/api/admin/groups/{group.id}/users",
+                headers=admin_headers,
+                params={"sort": "name,desc", "includeUsage": "true"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_names = [u["name"] for u in asc_res.json()["content"]]
+        desc_names = [u["name"] for u in desc_res.json()["content"]]
+        # 移植元同様に大文字小文字を区別しない（区別すると "Bob" が先頭になる）
+        assert asc_names == ["alice", "Bob", "carol"]
+        assert desc_names == ["carol", "Bob", "alice"]
+
+    async def test_sort_by_name_reverses_rows_with_same_name(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """同じ表示名のユーザーがいても昇順と降順で並びが完全に反転すること"""
+        await _add_members(session, tenant.id, group.id, ["Same", "Same", "Same"])
+
+        async with client as c:
+            asc_ids = await _get_member_ids(c, group.id, admin_headers, "name,asc")
+            desc_ids = await _get_member_ids(c, group.id, admin_headers, "name,desc")
+
+        assert len(asc_ids) == 3
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_sort_by_updated_at_reverses_rows_with_same_timestamp(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """追加日時が同値の所属ユーザーでも昇順と降順で並びが完全に反転すること"""
+        await _add_members(
+            session,
+            tenant.id,
+            group.id,
+            ["m1", "m2", "m3", "m4"],
+            updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        async with client as c:
+            asc_ids = await _get_member_ids(c, group.id, admin_headers, "updatedAt,asc")
+            desc_ids = await _get_member_ids(
+                c, group.id, admin_headers, "updatedAt,desc"
+            )
+
+        assert len(asc_ids) == 4
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_sort_by_role_reverses_rows(
+        self, client, admin_headers, session, tenant, group_with_admin_member
+    ):
+        """権限順の昇順は一般が先頭、降順はチーム管理者が先頭になり並びが反転すること"""
+        await _add_members(
+            session, tenant.id, group_with_admin_member.id, ["u1", "u2", "u3"]
+        )
+
+        async with client as c:
+            asc_res = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+                params={"sort": "role,asc"},
+            )
+            desc_res = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+                params={"sort": "role,desc"},
+            )
+
+        asc_content = asc_res.json()["content"]
+        desc_content = desc_res.json()["content"]
+        assert asc_content[-1]["groupAdmin"] is True
+        assert desc_content[0]["groupAdmin"] is True
+        assert [u["userId"] for u in desc_content] == list(
+            reversed([u["userId"] for u in asc_content])
+        )
+
+    async def test_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """ソート方向を大文字(DESC)で指定しても降順になること"""
+        await _add_members(session, tenant.id, group.id, ["alpha", "zulu"])
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/users",
+                headers=admin_headers,
+                params={"sort": "name,DESC"},
+            )
+
+        assert response.status_code == 200
+        names = [u["name"] for u in response.json()["content"]]
+        assert names == ["zulu", "alpha"]
+
+
 @pytest.mark.asyncio
 class TestGroupUsersWithUsage:
     """GET /api/admin/groups/{groupId}/users?includeUsage=true (NAW-1172)"""
