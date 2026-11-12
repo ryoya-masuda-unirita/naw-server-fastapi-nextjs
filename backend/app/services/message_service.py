@@ -98,21 +98,32 @@ _LIBRARY_PROMPT_TYPE = "LIBRARY"
 _LIBRARY_TITLE_MAX_LENGTH = 255
 
 
-def _sse(event: str, data: dict) -> bytes:
-    """SSE(Server-Sent Events)形式の1イベントを組み立てる。
+def _sse(event_type: str, payload: dict) -> bytes:
+    """移植元と同じ形式のSSE(Server-Sent Events)イベント1件を組み立てる。
 
-    `llm_chat_service.py`の同名関数と実装が重複するが、「serviceが別serviceを呼ばない」
-    規約により`LlmChatService`側の実装をインポートできないため、小さな純粋関数として
-    このファイル内に複製する。
+    移植元`MessageService.streamAndPersist`は`response/sse`配下のイベント
+    （先頭フィールドが`type`のレコード）をJSON化し、`SseEmitter.event().data(json)`で
+    イベント名の行を付けずに送る。frontend-angularもJSON内の`type`で種別を判定し、
+    `type`のないイベントは無視するため、この形式に合わせる（issue-183）。
+
+    `llm_chat_service.py`の`_sse`（LLM Chat API用、従来形式）とは別に、本APIの
+    形式としてこのファイル内に定義する（「serviceが別serviceを呼ばない」規約のため）。
 
     Args:
-        event: イベント名。
-        data: イベントデータ(JSONへ変換される)。
+        event_type: イベント種別（`text_delta`・`message_content`等）。
+        payload: 種別以外のイベントデータ(JSONへ変換される)。
 
     Returns:
         SSE形式にエンコードされたバイト列。
     """
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+    # payloadに`type`キーが含まれていても種別が上書きされないよう、`type`を後に置く。
+    data = {**payload, "type": event_type}
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+# メッセージ内容の永続化に失敗した場合にerrorイベントで返す文言
+# （移植元`sendSseError`で例外メッセージがない場合の既定文言と同じ）。
+_PERSIST_ERROR_MESSAGE = "エラーが発生しました。"
 
 
 def _apply_additional_prompt(
@@ -927,7 +938,7 @@ class MessageService:
             （`GeneratorExit`は`BaseException`のサブクラスであり`except Exception`では
             捕捉できない）場合でも、Azureで既に消費したトークンの記録・応答の永続化が
             必ず行われるようにする。ただし`GeneratorExit`処理中は`yield`できないため、
-            `complete`イベントの送出はストリームが正常に完了/エラー終了した場合のみ行う。
+            `message_content`イベントの送出はストリームが正常に完了/エラー終了した場合のみ行う。
 
             `create_library=true`の場合は、`text_delta`の代わりに`LibraryStreamRouter`
             経由でタイトル/本文/補足コメントの3区分に振り分けて配信する。補足コメント
@@ -1025,9 +1036,9 @@ class MessageService:
                 except ValueError:
                     # 再生成対象がストリーミング中に削除される等の稀な競合。
                     # ここで例外を伝播させるとfinally節の途中で処理が打ち切られ、
-                    # トークン使用量の永続化やcompleteイベント送出が行われないまま
-                    # ジェネレータが異常終了してしまうため、ログのみ残してcomplete
-                    # イベントの送出をスキップする。
+                    # トークン使用量の永続化やmessage_contentイベント送出が行われない
+                    # ままジェネレータが異常終了してしまうため、ログのみ残して
+                    # message_contentイベントの代わりにerrorイベントを送る（後段）。
                     logger.exception("メッセージ内容の永続化に失敗しました")
                     content_response = None
 
@@ -1061,7 +1072,17 @@ class MessageService:
                     # attachmentFilesの`data`がbytesの場合、素の.model_dump()では
                     # json.dumpsがシリアライズできないため、mode="json"でBase64
                     # 文字列へ変換してから渡す。
-                    yield _sse("complete", content_response.model_dump(mode="json"))
+                    # 移植元`SseCreateMessageContentResponseEvent`と同じく、メッセージ
+                    # 内容を`data`に入れた`message_content`イベントとして送る。
+                    yield _sse(
+                        "message_content",
+                        {"data": content_response.model_dump(mode="json")},
+                    )
+                elif stream_finished:
+                    # 永続化に失敗した場合も、移植元(`streamAndPersist`の外側のcatchで
+                    # `sendSseError`)と同じくerrorイベントで失敗を通知してから終える。
+                    # 内部の例外内容はログにのみ残し、固定文言で通知する。
+                    yield _sse("error", {"message": _PERSIST_ERROR_MESSAGE})
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -1243,7 +1264,7 @@ class MessageService:
                 場合はNone。
 
         Returns:
-            永続化した内容を表す`complete`イベント用のレスポンス。
+            永続化した内容を表す`message_content`イベント用のレスポンス。
 
         Raises:
             ValueError: `existing_content_id`指定時、対象がストリーミング中に
@@ -1290,7 +1311,7 @@ class MessageService:
             saved_files: list[MessageFile] = []
             if attachment_files:
                 # ここで例外を握り潰さず伝播させると、呼び出し元(event_streamの
-                # finally節)でトークン使用量の永続化・completeイベント送出まで
+                # finally節)でトークン使用量の永続化・message_contentイベント送出まで
                 # 巻き込んで失敗してしまう(既にAzureへの課金が発生済みのトークンの
                 # 記録が失われる)。添付ファイルの保存失敗は本体の回答永続化とは
                 # 独立した問題として扱い、ログに残したうえで後続処理を継続する。

@@ -366,6 +366,28 @@ def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
         yield
 
 
+def _sse_events(body: str) -> list[dict[str, Any]]:
+    """SSE本文を、`type`を持つイベントの一覧へ変換する。
+
+    frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
+    JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
+    サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
+
+    Args:
+        body: SSEレスポンスの本文。
+
+    Returns:
+        `type`を持つイベント(JSON)の一覧。
+    """
+    events: list[dict[str, Any]] = []
+    for line in body.splitlines():
+        if line.startswith("data:"):
+            event = json.loads(line[len("data:") :].strip())
+            if "type" in event:
+                events.append(event)
+    return events
+
+
 def _last_visible_message_id(
     records: list[dict[str, Any]], contents: list[dict[str, Any]]
 ) -> str | None:
@@ -671,7 +693,7 @@ class TestMessageRouter:
             message_chat_endpoint,
             engine,
         ):
-            """正常系: SSEでtext_delta・message_stop・completeイベントを配信すること"""
+            """正常系: SSEでtext_delta・message_stop・message_contentイベントを配信すること"""
 
             async def _stream_chunks(*args, **kwargs):
                 yield ChatStreamChunk(text_delta="こんにちは")
@@ -711,10 +733,13 @@ class TestMessageRouter:
                     )
 
             assert response.status_code == 200
-            body = response.text
-            assert "event: text_delta" in body
-            assert "event: message_stop" in body
-            assert "event: complete" in body
+            events = _sse_events(response.text)
+            assert [event["type"] for event in events] == [
+                "text_delta",
+                "message_stop",
+                "message_content",
+            ]
+            assert events[-1]["data"]["messageId"] == owned_message.id
             # クライアントと同じmultipart形式の送信で、質問・回答が保存されること(Issue #182)
             assert [
                 (content["question"], content["answer"])
@@ -792,11 +817,11 @@ class TestMessageRouter:
                     )
 
             assert response.status_code == 200
-            body = response.text
-            assert "event: complete" in body
-            assert '"question": "質問です"' in body
-            assert '"answer": "新しい回答"' in body
-            assert f'"id": "{owned_message_content.id}"' in body
+            final_event = _sse_events(response.text)[-1]
+            assert final_event["type"] == "message_content"
+            assert final_event["data"]["question"] == "質問です"
+            assert final_event["data"]["answer"] == "新しい回答"
+            assert final_event["data"]["id"] == owned_message_content.id
 
         async def test_regenerate_returns_404_when_message_content_not_found(
             self, client, owner_headers
@@ -847,7 +872,7 @@ class TestMessageRouter:
 
             assert response.status_code == 422
 
-        async def test_persists_attachment_files_and_returns_them_in_complete_event(
+        async def test_persists_attachment_files_and_returns_them_in_message_content_event(
             self,
             client,
             owner_headers,
@@ -855,7 +880,7 @@ class TestMessageRouter:
             message_chat_endpoint,
             engine,
         ):
-            """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されcompleteイベントに反映されること"""
+            """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されmessage_contentイベントに反映されること"""
 
             async def _stream_chunks(*args, **kwargs):
                 yield ChatStreamChunk(text_delta="こんにちは")
@@ -895,9 +920,11 @@ class TestMessageRouter:
                     )
 
             assert response.status_code == 200
-            body = response.text
-            assert "event: complete" in body
-            assert "photo.png" in body
+            final_event = _sse_events(response.text)[-1]
+            assert final_event["type"] == "message_content"
+            assert [f["name"] for f in final_event["data"]["attachmentFiles"]] == [
+                "photo.png"
+            ]
 
             saved_files = [
                 f
@@ -1101,6 +1128,85 @@ class TestMessageRouter:
             message_c = await session.get(Message, create_c.json()["id"])
             assert message_c is not None
             assert message_c.parent_id == message_b_id
+
+        async def test_edit_and_resend_streams_message_content_with_edited_question(
+            self,
+            client,
+            owner_headers,
+            owned_room,
+            owned_message,
+            owned_message_content,
+            message_assistant,
+            message_chat_endpoint,
+            engine,
+        ):
+            """編集・再送信で、編集後の質問文を持つmessage_contentが届き、編集前後が同じ親のバージョンになること(Issue #183)"""
+            with _patched_llm(engine, "編集後の回答"):
+                async with client as c:
+                    # 編集対象: 既存メッセージAに続けて送ったメッセージB（親がA）
+                    create_original = await c.post(
+                        "/api/messages",
+                        json={
+                            "roomId": owned_room.id,
+                            "assistantId": message_assistant.id,
+                            "parentMessageId": owned_message.id,
+                            "messageText": "編集前の質問",
+                        },
+                        headers=owner_headers,
+                    )
+                    original_message_id = create_original.json()["id"]
+                    # frontend-angularのeditMessageと同じく、編集前(B)と同じ親(A)で新しい
+                    # メッセージB'を作成し、編集後の質問文で送信する
+                    create_edited = await c.post(
+                        "/api/messages",
+                        json={
+                            "roomId": owned_room.id,
+                            "assistantId": message_assistant.id,
+                            "parentMessageId": owned_message.id,
+                            "messageText": "編集後の質問",
+                        },
+                        headers=owner_headers,
+                    )
+                    edited_message_id = create_edited.json()["id"]
+                    resend = await c.post(
+                        "/api/messages/content",
+                        files=_content_form(
+                            {
+                                "assistantId": message_assistant.id,
+                                "messageId": edited_message_id,
+                                "userInput": "編集後の質問",
+                            }
+                        ),
+                        headers=owner_headers,
+                    )
+                    list_response = await c.get(
+                        "/api/messages",
+                        params={"roomId": owned_room.id},
+                        headers=owner_headers,
+                    )
+
+            assert create_original.status_code == 200
+            assert create_edited.status_code == 200
+            assert resend.status_code == 200
+            events = _sse_events(resend.text)
+            assert [event["type"] for event in events] == [
+                "text_delta",
+                "message_stop",
+                "message_content",
+            ]
+            edited_content = events[-1]["data"]
+            assert edited_content["messageId"] == edited_message_id
+            assert edited_content["question"] == "編集後の質問"
+            assert edited_content["answer"] == "編集後の回答"
+            assert edited_content["status"] == "OK"
+
+            parent_by_id = {
+                record["id"]: record["parentId"]
+                for record in list_response.json()["messages"]
+            }
+            # 編集前(B)と編集後(B')が同じ親(A)を持つ兄弟＝バージョン分岐になること
+            assert parent_by_id[original_message_id] == owned_message.id
+            assert parent_by_id[edited_message_id] == owned_message.id
 
     class TestDeleteMessage:
         async def test_delete_message_removes_message(
