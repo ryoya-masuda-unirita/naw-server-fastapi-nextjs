@@ -56,6 +56,10 @@ cd ../server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設�
 docker compose up -d --build
 ```
 
+## 社内（オンプレ）側をまとめて起動する
+
+server-local・Waha! エミュレーター・ベクトルDB・ファイルサーバーの代わりを、`onprem/` の compose でまとめて起動できる（#301。ポートはルートの compose と衝突しない）。起動・停止とクラウド側（ルートの compose の backend）とのつなぎ方は [onprem/README.md](./onprem/README.md)。
+
 ## ローカル疎通確認（frontend + backend）
 
 React（`frontend/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
