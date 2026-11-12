@@ -1,4 +1,5 @@
 import uuid
+from typing import cast
 
 import sqlalchemy as sa
 from sqlalchemy import event
@@ -52,10 +53,14 @@ def _tag_id_in_binds(stmt: sa.Executable) -> list[BindParameter]:
     自動生成されるバインド名に依存せず、比較対象の列で特定する。ORM属性経由の列は
     アノテーション付きのコピーになり同一オブジェクトではないため、compare() で比較する。
     """
-    target_column = LibraryTagMapping.__table__.c.library_tag_id
+    # `__table__`はSQLModelの型定義に現れずmypyでエラーになるため、マッパー経由で列を取る。
+    target_column = sa.inspect(LibraryTagMapping).columns["library_tag_id"]
+    # 実行時は句要素(ClauseElement)だが、`Executable`の型定義は走査対象として
+    # 宣言されていないため、`visitors.iterate`が受け取る型として明示する。
+    traversible = cast(visitors.ExternallyTraversible, stmt)
     return [
         element.right
-        for element in visitors.iterate(stmt)
+        for element in visitors.iterate(traversible)
         if isinstance(element, BinaryExpression)
         and element.operator is operators.in_op
         and element.left.compare(target_column)
