@@ -29,5 +29,9 @@ asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 testpaths = ["tests"]
 
+[tool.coverage.run]
+# SQLAlchemy の非同期処理は greenlet 上で動くため、指定しないと計測から漏れる
+concurrency = ["greenlet", "thread"]
+
 [tool.ruff]
 line-length = 88
