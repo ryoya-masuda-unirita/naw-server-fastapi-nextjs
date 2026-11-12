@@ -7,12 +7,32 @@ from app.schemas.sse import DATA_PREFIX, EVENT_DELIMITER
 
 
 class TerminalType(StrEnum):
+    """ストリームの終端イベントの種類。
+
+    Waha! が書く `data:` の JSON の `type` が `completed` なら正常終了、
+    `error` なら異常終了として扱う。
+    """
+
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
 
 
 @dataclass(frozen=True)
 class ReadResult:
+    """ストリームファイルを 1 回読み進めた結果。
+
+    Attributes
+    ----------
+    chunks : list[str]
+        読み取れた完結済みのイベントブロック（末尾の空行区切りを含む）。
+    new_offset : int
+        次回読み始めるバイト位置。
+    terminal_reached : bool
+        終端イベントを読んだかどうか。
+    terminal_type : TerminalType | None
+        読んだ終端イベントの種類。終端に達していなければ None。
+    """
+
     chunks: list[str] = field(default_factory=list)
     new_offset: int = 0
     terminal_reached: bool = False
@@ -28,12 +48,34 @@ class StreamFileTailReader:
     """
 
     def __init__(self, initial_offset: int = 0) -> None:
+        """読み始める位置を指定してリーダーを作る。
+
+        Parameters
+        ----------
+        initial_offset : int
+            読み始めるバイト位置。
+        """
         self.offset = initial_offset
         self._buffer = ""
         # マルチバイト文字の途中で読み切った場合に備え、デコード途中のバイトを持ち越す
         self._pending_bytes = b""
 
     def read_new(self, path: Path) -> ReadResult:
+        """前回の位置以降に追記された内容を読み、完結したイベントを取り出す。
+
+        ファイルがまだない・増えていない場合は何も読まずに現在位置を返す。
+        書き込み途中の行や不完全なマルチバイト文字は次回の読み込みに持ち越す。
+
+        Parameters
+        ----------
+        path : Path
+            ストリームファイルのパス。
+
+        Returns
+        -------
+        ReadResult
+            取り出したイベントと、次回読み始める位置・終端の判定結果。
+        """
         if not path.exists():
             return ReadResult(new_offset=self.offset)
         file_length = path.stat().st_size
@@ -48,6 +90,22 @@ class StreamFileTailReader:
         return self._extract_complete_events()
 
     def _decode(self, data: bytes) -> str:
+        """読み込んだバイト列を UTF-8 として文字列にする。
+
+        読み取り位置がマルチバイト文字の途中になることがあるため、末尾の不完全な
+        文字だけは次回に持ち越して前に連結する。それ以外の壊れたバイトは、
+        読み込みを止めないよう置換文字にする。
+
+        Parameters
+        ----------
+        data : bytes
+            今回読み込んだバイト列。
+
+        Returns
+        -------
+        str
+            デコードした文字列（持ち越した末尾のバイトは含まない）。
+        """
         raw = self._pending_bytes + data
         try:
             text = raw.decode("utf-8")
@@ -62,6 +120,17 @@ class StreamFileTailReader:
             return raw.decode("utf-8", errors="replace")
 
     def _extract_complete_events(self) -> ReadResult:
+        """バッファから完結したイベントを取り出し、残りをバッファに戻す。
+
+        空行区切りの SSE 形式に加え、Waha! が書く `data:` 行だけの 1 行形式も
+        1 イベントとして扱う。改行で終わっていない最後の行は書き込み途中の
+        可能性があるため取り出さない。
+
+        Returns
+        -------
+        ReadResult
+            取り出したイベントと、現在位置・終端の判定結果。
+        """
         chunks: list[str] = []
         terminal_type: TerminalType | None = None
 
@@ -94,6 +163,21 @@ class StreamFileTailReader:
 
 
 def _detect_terminal_type(event_block: str) -> TerminalType | None:
+    """イベントブロックが終端イベントかを判定する。
+
+    最初に見つかった JSON オブジェクトの `data:` 行の `type` だけで判定する。
+    書き込み途中や JSON でないペイロードは判定に使わず読み飛ばす。
+
+    Parameters
+    ----------
+    event_block : str
+        1 イベント分のテキスト。
+
+    Returns
+    -------
+    TerminalType | None
+        終端イベントならその種類。終端でなければ None。
+    """
     for line in event_block.split("\n"):
         if not line.startswith(DATA_PREFIX):
             continue
@@ -117,7 +201,18 @@ def _detect_terminal_type(event_block: str) -> TerminalType | None:
 
 
 def extract_data_payload(event_block: str) -> str | None:
-    """イベントブロックの最初の `data:` 行のペイロードを取り出す。"""
+    """イベントブロックの最初の `data:` 行のペイロードを取り出す。
+
+    Parameters
+    ----------
+    event_block : str
+        1 イベント分のテキスト。
+
+    Returns
+    -------
+    str | None
+        `data:` を除いて前後の空白を取ったペイロード。`data:` 行がなければ None。
+    """
     for line in event_block.split("\n"):
         if line.startswith(DATA_PREFIX):
             return line[len(DATA_PREFIX) :].strip()

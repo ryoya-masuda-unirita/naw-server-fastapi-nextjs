@@ -8,6 +8,12 @@ from app.core.jsonutil import column_to_string_list, string_list_to_column, utcn
 
 
 class MessageContentStatus(StrEnum):
+    """メッセージ内容の生成結果の状態（移植元 MessageContent.Status）。
+
+    DB には名前の文字列（`OK` / `ERROR`）で保存する。Waha! での生成に失敗した場合も
+    レコードを `ERROR` で残し、後から結果を参照できるようにしている。
+    """
+
     OK = "OK"
     ERROR = "ERROR"
 
@@ -39,14 +45,36 @@ class MessageContent(SQLModel, table=True):
 
     @property
     def reference_file_paths(self) -> list[str] | None:
+        """回答の参照元ファイルパスを一覧で返す。
+
+        DB にはセパレータで連結した文字列で保存しているため、移植元
+        StringListConverter と同じ規則で分割して返す。
+
+        Returns
+        -------
+        list[str] | None
+            参照元ファイルパスの一覧。保存値が空のときは None（移植元と同じく null）。
+        """
         return column_to_string_list(self.file_paths)
 
     def set_reference_file_paths(self, paths: list[str] | None) -> None:
+        """回答の参照元ファイルパスを DB 保存用の文字列にして設定する。
+
+        移植元 setReferenceFilePaths と同じく、空や None なら空文字列を保存する。
+
+        Parameters
+        ----------
+        paths : list[str] | None
+            参照元ファイルパスの一覧。
+        """
         # 移植元 setReferenceFilePaths と同じく、空なら空文字列を保存する
         self.file_paths = string_list_to_column(paths)
 
     def touch(self) -> None:
-        """@PreUpdate 相当。"""
+        """更新日時を現在時刻（UTC）にする。
+
+        移植元の @PreUpdate による自動更新の代わりに、更新処理から明示的に呼ぶ。
+        """
         self.updated_at = utcnow()
 
 

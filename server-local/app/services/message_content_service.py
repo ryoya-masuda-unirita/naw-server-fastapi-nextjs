@@ -25,6 +25,21 @@ UNKNOWN_FILENAME = ""
 
 
 def validate_target(command: CreateMessageContentCommand) -> None:
+    """生成要求に対象（メッセージ ID かメッセージ内容 ID）が指定されているかを検証する。
+
+    新規質問・質問の再生成ではメッセージ ID、回答の再生成ではメッセージ内容 ID を
+    指定する。どちらもなければ保存先が決まらないため 400 にする。
+
+    Parameters
+    ----------
+    command : CreateMessageContentCommand
+        メッセージ内容の生成要求。
+
+    Raises
+    ------
+    BadRequestError
+        メッセージ ID とメッセージ内容 ID のどちらも指定されていない場合。
+    """
     # 新規質問・質問再生成: messageId のみ / 回答再生成: messageContentId のみ
     if command.message_id is None and command.message_content_id is None:
         raise BadRequestError("対象データが指定されていません")
@@ -33,6 +48,26 @@ def validate_target(command: CreateMessageContentCommand) -> None:
 async def save_attachment_files(
     session: AsyncSession, message_content_id: str, files: list[UploadedFile]
 ) -> list[MessageContentFile]:
+    """質問の添付ファイルをメッセージ内容に紐づけてセッションに追加する。
+
+    ID は既存と重ならないものを採番する。ファイル名・Content-Type が不明な場合は、
+    列が NOT NULL のため空文字列・`application/octet-stream` で保存する。
+    コミットは呼び出し側で行う。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    message_content_id : str
+        紐づけるメッセージ内容 ID。
+    files : list[UploadedFile]
+        アップロードされた添付ファイル。
+
+    Returns
+    -------
+    list[MessageContentFile]
+        追加した添付ファイルのエンティティ（渡した順）。
+    """
     saved: list[MessageContentFile] = []
     for file in files:
         file_id = await create_unique_id(
@@ -55,7 +90,35 @@ async def save_attachment_files(
 async def post_message_content(
     session: AsyncSession, waha: WahaClient, command: CreateMessageContentCommand
 ) -> dict[str, Any]:
-    """移植元 MessageContentService.postMessageContent（content/sync）。"""
+    """移植元 MessageContentService.postMessageContent（content/sync）。
+
+    Waha! のセッションで回答を同期的に生成し、結果をメッセージ内容として保存する。
+    メッセージ内容 ID の指定があれば既存のレコードを上書きし（回答の再生成）、
+    なければ新しく登録して添付ファイルも保存する。移植元どおり、Waha! 側の失敗は
+    例外にせず、エラー内容を回答にして `ERROR` 状態で保存して返す。Waha! の
+    セッションは成否に関わらず終了する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    command : CreateMessageContentCommand
+        メッセージ内容の生成要求。
+
+    Returns
+    -------
+    dict[str, Any]
+        保存したメッセージ内容のレスポンス（添付ファイルを含む）。
+
+    Raises
+    ------
+    BadRequestError
+        生成の対象が指定されていない場合。
+    EntityNotFoundError
+        指定したメッセージ内容 ID のレコードがない場合。
+    """
     validate_target(command)
     message_id = command.message_id
     existing: MessageContent | None = None
@@ -125,6 +188,22 @@ async def post_message_content(
 async def get_message_contents_by_message_ids(
     session: AsyncSession, message_ids: list[str]
 ) -> list[dict[str, Any]]:
+    """複数のメッセージ ID に対応するメッセージ内容を、添付ファイル付きで取得する。
+
+    添付ファイルは N+1 にならないよう一括で取得して組み合わせる。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    message_ids : list[str]
+        メッセージ ID の一覧。
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        メッセージ内容のレスポンスの一覧。対応するレコードがない ID は含まない。
+    """
     contents = await message_content_repository.find_by_message_ids(
         session, message_ids
     )
@@ -135,5 +214,16 @@ async def get_message_contents_by_message_ids(
 
 
 async def delete_message_content(session: AsyncSession, message_id: str) -> None:
+    """メッセージ ID に対応するメッセージ内容と添付ファイルを削除してコミットする。
+
+    対応するレコードがなくてもエラーにしない。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    message_id : str
+        メッセージ ID。
+    """
     await message_content_repository.delete_by_message_id(session, message_id)
     await session.commit()

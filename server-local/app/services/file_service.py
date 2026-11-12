@@ -38,22 +38,77 @@ DATE_PARAM_FORMAT = "%Y-%m-%d"
 
 
 def _strip_bom(text: str) -> str:
+    """先頭の BOM（U+FEFF）を 1 つだけ取り除く。
+
+    Waha! が返す TSV は BOM 付きのことがあり、残っていると先頭行の 1 列目
+    （ファイル ID やパス）に混ざるため除く。
+
+    Parameters
+    ----------
+    text : str
+        Waha! から受け取った TSV の本文。
+
+    Returns
+    -------
+    str
+        BOM を除いた文字列。BOM がなければそのまま。
+    """
     return text[1:] if text.startswith(BOM) else text
 
 
 def _strip_quotes(value: str) -> str:
-    """移植元の `replaceAll("^\\"|\\"$", "")`（先頭・末尾の引用符を 1 つずつ除去）。"""
+    """移植元の `replaceAll("^\\"|\\"$", "")`（先頭・末尾の引用符を 1 つずつ除去）。
+
+    Parameters
+    ----------
+    value : str
+        TSV の 1 フィールド。
+
+    Returns
+    -------
+    str
+        先頭・末尾の `"` をそれぞれ 1 つまで除いた文字列。
+    """
     value = value.removeprefix('"')
     value = value.removesuffix('"')
     return value
 
 
 def _split_fields(line: str) -> list[str]:
+    """TSV の 1 行をタブで分割し、各フィールドの前後の引用符を外す。
+
+    分割は移植元 `String.split` と同じ規則（末尾の空要素を捨てる）で行う。
+
+    Parameters
+    ----------
+    line : str
+        TSV の 1 行。
+
+    Returns
+    -------
+    list[str]
+        フィールドの一覧。
+    """
     return [_strip_quotes(f) for f in java_split(line, FIELD_SEPARATOR)]
 
 
 def _split_path(full_path: str) -> tuple[str | None, str | None]:
-    """java.nio.file.Path の getFileName() / getParent() 相当（`/` 区切り）。"""
+    """java.nio.file.Path の getFileName() / getParent() 相当（`/` 区切り）。
+
+    Waha! の同期結果に含まれるパスから、ファイル名と参照元（親ディレクトリ）を
+    移植元と同じ結果で取り出すために使う。
+
+    Parameters
+    ----------
+    full_path : str
+        `/` 区切りに正規化したパス。
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        ファイル名と親ディレクトリ。ルートだけのパスはファイル名が None、
+        親がないパスは親が None。
+    """
     is_absolute = full_path.startswith("/")
     names = [n for n in full_path.split("/") if n]
     if not names:
@@ -71,6 +126,21 @@ def parse_date_param(value: str | None) -> datetime | None:
 
     移植元は SimpleDateFormat（JVM のタイムゾーン）で解釈していたため、
     コンテナの TZ に合わせる。DB は UTC の naive 値で比較する。
+
+    Parameters
+    ----------
+    value : str | None
+        `yyyy-MM-dd` 形式の日付文字列。
+
+    Returns
+    -------
+    datetime | None
+        ローカル時刻の 0 時を UTC に直した naive な日時。未指定なら None。
+
+    Raises
+    ------
+    BadRequestError
+        日付の形式が正しくない場合（移植元は 500 だが、入力不備のため 400 にする）。
     """
     if value is None:
         return None
@@ -84,6 +154,22 @@ def parse_date_param(value: str | None) -> datetime | None:
 
 
 async def _with_parts(session: AsyncSession, files: list[File]) -> list[dict[str, Any]]:
+    """ファイルをパート（Waha! 側の分割断片）付きのレスポンス形式に変換する。
+
+    パートはファイルごとに問い合わせず一括で取得する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    files : list[File]
+        変換するファイル。
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        パート ID を含むファイルのレスポンス（渡した順）。
+    """
     parts = await file_repository.find_parts_by_file_ids(session, [f.id for f in files])
     return [file_to_dict(f, parts[f.id]) for f in files]
 
@@ -91,6 +177,32 @@ async def _with_parts(session: AsyncSession, files: list[File]) -> list[dict[str
 async def search_files(
     session: AsyncSession, cond: FileSearchCondition, page: int, size: int
 ) -> dict[str, Any]:
+    """条件に合う学習ファイルを 1 ページ分検索し、ページ情報付きで返す。
+
+    page・size は移植元 PageRequest.of と同じく検証し、違反は
+    IllegalArgumentException 相当の 400 にする。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    cond : FileSearchCondition
+        検索条件。
+    page : int
+        ページ番号（0 始まり）。
+    size : int
+        1 ページの件数。
+
+    Returns
+    -------
+    dict[str, Any]
+        移植元の Page と同じ形のレスポンス。
+
+    Raises
+    ------
+    BadRequestError
+        page が負、または size が 1 未満の場合。
+    """
     # PageRequest.of と同じ検証（IllegalArgumentException → 400）
     if page < 0:
         raise BadRequestError("Page index must not be less than zero")
@@ -101,6 +213,26 @@ async def search_files(
 
 
 def _parse_create_result(tsv_content: str | None) -> tuple[str, list[str]]:
+    """学習ジョブの結果 TSV から、登録されたファイル ID とパート ID を取り出す。
+
+    各行は「ファイル ID<TAB>パート ID」で、ファイル ID はすべての行で同じため
+    最後の行の値を使う（移植元と同じ）。
+
+    Parameters
+    ----------
+    tsv_content : str | None
+        Waha! の出力スロットから取得した TSV。
+
+    Returns
+    -------
+    tuple[str, list[str]]
+        ファイル ID とパート ID の一覧（出現順）。
+
+    Raises
+    ------
+    RuntimeError
+        結果がない・空・列が足りない場合（ファイルの追加に失敗したとみなす）。
+    """
     if tsv_content is None:
         raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
     lines = java_split(_strip_bom(tsv_content), LINE_SEPARATOR)
@@ -129,6 +261,32 @@ async def _run_waha_create_job(
 
     学習ジョブは数分かかることがある。SQLite は書き込みが 1 本しかできないため、
     DB の書き込み（トランザクション）を始める前に呼ぶこと（#251）。
+    Waha! のセッションは成否に関わらず終了する。
+
+    Parameters
+    ----------
+    waha : WahaClient
+        Waha! の API クライアント。
+    service_name : str | None
+        学習（ファイル作成）に使う Waha! のサービス名。
+    upload : UploadedFile | None
+        学習させるファイル。
+    split_length : str | None
+        Waha! に渡す分割の長さ。
+    reference : str | None
+        Waha! に渡す参照元。
+
+    Returns
+    -------
+    tuple[str, list[str]]
+        Waha! に登録されたファイル ID とパート ID の一覧。
+
+    Raises
+    ------
+    BadRequestError
+        ファイルが添付されていない場合（Waha! のセッションを作る前に確認する）。
+    RuntimeError
+        学習ジョブの結果を読み取れない場合。
     """
     # 移植元は未添付だと NullPointerException（500）になるが、入力不備なので 400 で返す。
     # Waha! のセッションを無駄に作らないよう、開始前に確認する
@@ -167,6 +325,48 @@ async def _save(
     feedback_id: str | None,
     room_id: str | None,
 ) -> dict[str, Any]:
+    """学習ファイルとそのパートを DB に登録・更新してコミットする。
+
+    同じテナントに同じ ID のファイルがあれば上書きし、なければ新規作成する。
+    パート ID は重複を除いて上書き保存する。Waha! の処理はこの前に済ませておく
+    （#251）。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    file_id : str
+        Waha! に登録されたファイル ID。
+    file_name : str | None
+        ファイル名。None なら空文字列で保存する。
+    display_name : str | None
+        表示名。
+    reference : str | None
+        参照元。
+    user_id : str | None
+        登録者のユーザー ID。新規作成時だけ使う（移植元で updatable=false）。
+    index_id : str
+        インデックス ID。
+    part_ids : list[str]
+        Waha! に登録されたパート ID の一覧。
+    tenant_id : str
+        テナント ID。
+    feedback_id : str | None
+        追加学習の元になったフィードバック ID。
+    room_id : str | None
+        追加学習の元になったルーム ID。
+
+    Returns
+    -------
+    dict[str, Any]
+        保存したファイルのレスポンス（パート ID を含む）。
+
+    Raises
+    ------
+    BadRequestError
+        新規作成なのにユーザー ID が指定されていない場合（移植元は NOT NULL
+        制約で 500 になるが、入力不備のため 400 にする）。
+    """
     file = await file_repository.find_by_id_and_tenant_id(session, file_id, tenant_id)
     if file is None:
         # user_id は移植元で updatable=false のため、新規作成時にだけ設定する。
@@ -204,7 +404,22 @@ async def _save(
 async def _upsert_part(
     session: AsyncSession, *, part_id: str, tenant_id: str, file_id: str
 ) -> None:
-    """移植元は JPA の merge（cascade）で保存するため、同じ ID のパートは上書きになる。"""
+    """ファイルのパートを登録し、同じ ID があれば上書きする。
+
+    移植元は JPA の merge（cascade）で保存するため、同じ ID のパートは上書きになる。
+    コミットは呼び出し側で行う。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    part_id : str
+        パート ID。
+    tenant_id : str
+        テナント ID。
+    file_id : str
+        パートが属するファイル ID。
+    """
     existing = await session.get(FilePart, part_id)
     if existing is None:
         session.add(FilePart(id=part_id, tenant_id=tenant_id, file_id=file_id))
@@ -217,7 +432,30 @@ async def _upsert_part(
 async def _find_part_ids(
     session: AsyncSession, file_id: str, index_id: str
 ) -> list[str]:
-    """対象ファイルのパート ID を読み、Waha! を呼ぶ前に DB 接続を手放す。"""
+    """対象ファイルのパート ID を読み、Waha! を呼ぶ前に DB 接続を手放す。
+
+    Waha! を待つ間（数分）接続を持ち続けないよう読み取りを終え、同じ ID で
+    再登録するときに既存扱いされないようセッションからも外す。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    file_id : str
+        ファイル ID。
+    index_id : str
+        インデックス ID。別インデックスのファイルは対象外にする。
+
+    Returns
+    -------
+    list[str]
+        ファイルのパート ID の一覧。
+
+    Raises
+    ------
+    EntityNotFoundError
+        インデックス内に対象ファイルがない場合。
+    """
     file = await file_repository.find_by_id_and_index_id(session, file_id, index_id)
     if file is None:
         raise EntityNotFoundError("ファイルが存在しません。")
@@ -234,7 +472,20 @@ async def _find_part_ids(
 async def _run_waha_delete_job(
     waha: WahaClient, *, service_name: str | None, part_ids: list[str]
 ) -> None:
-    """Waha! の削除ジョブを実行する。DB の書き込みを始める前に呼ぶこと（#251）。"""
+    """Waha! の削除ジョブを実行する。DB の書き込みを始める前に呼ぶこと（#251）。
+
+    削除するパート ID を改行区切りのファイルにしてアップロードし、削除用の
+    サービスを実行する。Waha! のセッションは成否に関わらず終了する。
+
+    Parameters
+    ----------
+    waha : WahaClient
+        Waha! の API クライアント。
+    service_name : str | None
+        削除に使う Waha! のサービス名。
+    part_ids : list[str]
+        Waha! から削除するパート ID の一覧。
+    """
     ids_text = "".join(f"{part_id}\n" for part_id in part_ids)
     session_id = await waha.start_session()
     try:
@@ -261,6 +512,15 @@ async def _delete_from_db(
     読み込んでから Waha! の処理を待つ間に、別のリクエストが同じファイルを削除して
     いることがある。ORM のオブジェクト経由だと 0 件で StaleDataError（500）になる
     ため、ID 条件の DELETE / UPDATE で更新する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    file_id : str
+        ファイル ID。
+    physical_delete : bool
+        True ならファイルとパートを削除し、False なら状態を DELETED にする。
     """
     if physical_delete:
         await session.execute(delete(FilePart).where(col(FilePart.file_id) == file_id))
@@ -287,6 +547,47 @@ async def create_file(
     split_length: str | None,
     tenant_id: str,
 ) -> dict[str, Any]:
+    """ファイルを Waha! で学習させ、学習ファイルとして登録する。
+
+    Waha! の学習ジョブを先に済ませてから DB に保存する（#251）。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    creation_service_name : str | None
+        学習に使う Waha! のサービス名。
+    name : str | None
+        ファイル名。
+    display_name : str | None
+        表示名。
+    reference : str | None
+        参照元。
+    user_id : str | None
+        登録者のユーザー ID。
+    index_id : str
+        インデックス ID。
+    upload : UploadedFile | None
+        学習させるファイル。
+    split_length : str | None
+        Waha! に渡す分割の長さ。
+    tenant_id : str
+        テナント ID。
+
+    Returns
+    -------
+    dict[str, Any]
+        登録したファイルのレスポンス（パート ID を含む）。
+
+    Raises
+    ------
+    BadRequestError
+        ファイルやユーザー ID が指定されていない場合。
+    RuntimeError
+        学習ジョブの結果を読み取れない場合。
+    """
     file_id, part_ids = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
@@ -325,6 +626,58 @@ async def update_file(
     split_length: str | None,
     tenant_id: str,
 ) -> dict[str, Any]:
+    """学習ファイルを更新する。ファイルの差し替えがあれば Waha! で学習し直す。
+
+    ファイルが添付されていなければ、表示名・参照元のうち指定されたものだけを
+    更新する（移植元 getReferenceById と同じくインデックス・テナントは見ない）。
+    差し替える場合は、Waha! の旧データ削除と再学習を先に済ませ、DB の削除・保存は
+    最後に 1 回のトランザクションで行う。SQLite で書き込みを長時間止めないための
+    順序で（#251）、Waha! が途中で失敗した場合は DB を変更しない。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    creation_service_name : str | None
+        学習に使う Waha! のサービス名。
+    deletion_service_name : str | None
+        旧データの削除に使う Waha! のサービス名。
+    file_id : str
+        更新するファイル ID。
+    name : str | None
+        ファイル名。
+    display_name : str | None
+        表示名。
+    reference : str | None
+        参照元。
+    user_id : str | None
+        登録者のユーザー ID。
+    index_id : str
+        インデックス ID。
+    upload : UploadedFile | None
+        差し替えるファイル。None や空なら差し替えない。
+    split_length : str | None
+        Waha! に渡す分割の長さ。
+    tenant_id : str
+        テナント ID。
+
+    Returns
+    -------
+    dict[str, Any]
+        更新後のファイルのレスポンス（パート ID を含む）。差し替えた場合は
+        Waha! が新しく採番したファイル ID になる。
+
+    Raises
+    ------
+    EntityNotFoundError
+        更新するファイルがない場合。
+    BadRequestError
+        差し替え時に新規登録となり、ユーザー ID が指定されていない場合。
+    RuntimeError
+        学習ジョブの結果を読み取れない場合。
+    """
     if upload is None or upload.is_empty():
         # 移植元は getReferenceById で取得するため、インデックス・テナントは見ない
         file = await file_repository.find_by_id(session, file_id)
@@ -379,6 +732,31 @@ async def delete_file(
     index_id: str,
     physical_delete: bool,
 ) -> None:
+    """学習ファイルを Waha! と DB から削除する。
+
+    移植元は Waha! のセッション終了の失敗でもロールバックするため、DB は
+    Waha! の処理をすべて終えてから更新する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    deletion_service_name : str | None
+        削除に使う Waha! のサービス名。
+    file_id : str
+        削除するファイル ID。
+    index_id : str
+        インデックス ID。
+    physical_delete : bool
+        True なら DB から削除し、False なら状態を DELETED にする（論理削除）。
+
+    Raises
+    ------
+    EntityNotFoundError
+        インデックス内に対象ファイルがない場合。
+    """
     part_ids = await _find_part_ids(session, file_id, index_id)
     # 移植元は end_session の失敗でもロールバックするため、DB は Waha! の処理を
     # すべて終えてから更新する
@@ -392,6 +770,27 @@ async def delete_file(
 def _build_synced_file(
     fields: list[str], tenant_id: str, user_id: str | None, index_id: str
 ) -> File:
+    """Waha! の同期結果の 1 行から、新しく登録するファイルのエンティティを作る。
+
+    パスのファイル名を名前・表示名、親ディレクトリを参照元にする。取り出せない
+    場合は移植元と同じく `ファイル` + ファイル ID の先頭 8 文字で補う。
+
+    Parameters
+    ----------
+    fields : list[str]
+        同期結果の 1 行のフィールド（パス・パート ID・ファイル ID の順）。
+    tenant_id : str
+        テナント ID。
+    user_id : str | None
+        登録者のユーザー ID。
+    index_id : str
+        インデックス ID。
+
+    Returns
+    -------
+    File
+        未保存のファイルのエンティティ。
+    """
     file_id = fields[2]
     normalized_path = fields[0].replace('"', "").replace("\\", "/")
     file_name, parent = _split_path(normalized_path)
@@ -420,6 +819,32 @@ async def sync_files(
     tenant_id: str,
     user_id: str | None,
 ) -> None:
+    """Waha! に登録済みのファイルのうち、DB にないものを学習ファイルとして取り込む。
+
+    移植元はページングのループ構造を持つが 1 回で抜けるため、1 ページ分
+    （100 件）だけ取得する。既に DB にあるファイルは変更しない。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    sync_service_name : str | None
+        同期に使う Waha! のサービス名。
+    index_id : str
+        インデックス ID。
+    tenant_id : str
+        テナント ID。
+    user_id : str | None
+        取り込むファイルの登録者のユーザー ID。
+
+    Raises
+    ------
+    BadRequestError
+        新しく取り込むファイルがあるのにユーザー ID が指定されていない場合
+        （移植元は NOT NULL 制約で 500 になるが、入力不備のため 400 にする）。
+    """
     files: dict[str, File] = {}
     parts: dict[str, list[str]] = {}
 
@@ -470,6 +895,40 @@ async def additional_learning(
     tenant_id: str,
     content: UploadedFile | None,
 ) -> None:
+    """フィードバックまたはルームの会話を Waha! で追加学習させ、学習ファイルとして登録する。
+
+    フィードバック ID なら特定の質問と回答の組、ルーム ID ならルーム内の全メッセージを
+    学習する。どちらか一方だけを指定する必要がある。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DB セッション。
+    waha : WahaClient
+        Waha! の API クライアント。
+    creation_service_name : str | None
+        学習に使う Waha! のサービス名。
+    index_id : str
+        インデックス ID。
+    feedback_id : str | None
+        学習するフィードバックの ID。
+    room_id : str | None
+        学習するルームの ID。
+    user_id : str | None
+        登録者のユーザー ID。
+    tenant_id : str
+        テナント ID。
+    content : UploadedFile | None
+        学習させる内容（Markdown）。
+
+    Raises
+    ------
+    BadRequestError
+        フィードバック ID とルーム ID が両方とも未指定・両方とも指定されている場合や、
+        内容・ユーザー ID が指定されていない場合。
+    RuntimeError
+        学習ジョブの結果を読み取れない場合。
+    """
     # feedbackId: 特定の質問回答のペアを学習する / roomId: ルーム内の全メッセージを学習する
     not_specified = feedback_id is None and room_id is None
     confused = feedback_id is not None and room_id is not None
@@ -504,5 +963,11 @@ async def additional_learning(
 
 
 def download_file() -> None:
-    """移植元は未実装（Waha! からの取り出しが TODO）で常に RuntimeException を投げる。"""
+    """移植元は未実装（Waha! からの取り出しが TODO）で常に RuntimeException を投げる。
+
+    Raises
+    ------
+    RuntimeError
+        常に送出する（ファイルをダウンロードできない）。
+    """
     raise RuntimeError(DOWNLOAD_FAILED_MESSAGE)

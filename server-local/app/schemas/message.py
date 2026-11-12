@@ -10,12 +10,19 @@ from app.models import MessageContent, MessageContentFile
 
 
 class HistoryMessageContentType(StrEnum):
+    """会話履歴のメッセージの発言者の種類（移植元 HistoryMessageContentType）。"""
+
     SYSTEM = "SYSTEM"
     ASSISTANT = "ASSISTANT"
     USER = "USER"
 
 
 class HistoryMessageContent(BaseModel):
+    """textData の ``historyMessages`` の 1 件（移植元 HistoryMessageContentDTO）。
+
+    Waha! の ``history`` スロットに送る会話履歴として使う。
+    """
+
     model_config = ConfigDict(extra="ignore")
 
     # 移植元（Jackson の record）は省略を null として受け付ける
@@ -65,6 +72,21 @@ class UploadedFile:
 
     @classmethod
     async def from_upload(cls, upload: UploadFile) -> "UploadedFile":
+        """受け取ったファイルの中身を読み込み、ファイル名・Content-Type と一緒に持つ。
+
+        リクエストの処理が終わると一時ファイルが閉じられるため、サービスに渡す前に
+        中身をメモリに読み込んでおく。
+
+        Parameters
+        ----------
+        upload : UploadFile
+            multipart で受け取ったファイル。
+
+        Returns
+        -------
+        UploadedFile
+            読み込んだファイル。
+        """
         return cls(
             filename=upload.filename,
             content_type=upload.content_type,
@@ -72,6 +94,13 @@ class UploadedFile:
         )
 
     def is_empty(self) -> bool:
+        """中身が 0 バイトかを返す（移植元 MultipartFile.isEmpty 相当）。
+
+        Returns
+        -------
+        bool
+            中身が空なら True。
+        """
         return len(self.data) == 0
 
 
@@ -111,6 +140,25 @@ class CreateMessageContentCommand:
         attachment_files: list[UploadedFile],
         history_attachment_files: list[FileSummary],
     ) -> "CreateMessageContentCommand":
+        """textData の内容と添付ファイルから、サービスに渡すコマンドを作る。
+
+        省略された一覧は空のリストに、``createLibrary`` の省略は False にそろえ、
+        サービス側で None を気にしなくてよいようにする。
+
+        Parameters
+        ----------
+        request : CreateMessageContentRequest
+            textData の内容。
+        attachment_files : list[UploadedFile]
+            Waha! に送る添付ファイル。
+        history_attachment_files : list[FileSummary]
+            履歴の添付ファイル（名前とサイズだけ）。
+
+        Returns
+        -------
+        CreateMessageContentCommand
+            作成したコマンド。
+        """
         return cls(
             assistant_id=request.assistantId,
             message_id=request.messageId,
@@ -127,7 +175,16 @@ class CreateMessageContentCommand:
         )
 
     def question_text(self) -> str:
-        """Waha! に送る質問文（追加プロンプトを先頭に連結する）。"""
+        """Waha! に送る質問文を作る。
+
+        アシスタントの追加プロンプトがあれば、ユーザーの入力の先頭に連結する
+        （区切りは入れない。移植元どおり）。
+
+        Returns
+        -------
+        str
+            質問文。入力も追加プロンプトもなければ空文字。
+        """
         user_input = self.user_input or ""
         if self.additional_prompt:
             return self.additional_prompt + user_input
@@ -135,19 +192,48 @@ class CreateMessageContentCommand:
 
 
 class GetMessageContentsRequest(BaseModel):
+    """``POST /api/messages/contents`` の JSON ボディ（取得するメッセージ ID の一覧）。"""
+
     model_config = ConfigDict(extra="ignore")
 
     messageIds: list[str] | None = None
 
 
 def _attachment_dict(file: MessageContentFile) -> dict[str, Any]:
+    """添付ファイルを応答の形にする（中身は Jackson の byte[] と同じく Base64）。
+
+    Parameters
+    ----------
+    file : MessageContentFile
+        メッセージ内容の添付ファイル。
+
+    Returns
+    -------
+    dict[str, Any]
+        ``name``・``type``・``data`` を持つ添付ファイル。
+    """
     return {"name": file.name, "type": file.type, "data": encode_bytes(file.data)}
 
 
 def create_message_content_response(
     content: MessageContent, attachment_files: list[MessageContentFile]
 ) -> dict[str, Any]:
-    """移植元 CreateMessageContentResponseDTO（`isRated` は常に false）。"""
+    """メッセージ内容を、回答作成の応答の形にする。
+
+    移植元 CreateMessageContentResponseDTO（`isRated` は常に false）。
+
+    Parameters
+    ----------
+    content : MessageContent
+        メッセージ内容。
+    attachment_files : list[MessageContentFile]
+        メッセージ内容の添付ファイル。
+
+    Returns
+    -------
+    dict[str, Any]
+        回答作成の応答。
+    """
     return {
         "id": content.id,
         "messageId": content.message_id,
@@ -164,7 +250,22 @@ def create_message_content_response(
 def get_message_contents_response(
     content: MessageContent, attachment_files: list[MessageContentFile]
 ) -> dict[str, Any]:
-    """移植元 GetMessageContentsResponseDTO（`isRated` は含まない）。"""
+    """メッセージ内容を、一覧取得の応答の 1 件の形にする。
+
+    移植元 GetMessageContentsResponseDTO（`isRated` は含まない）。
+
+    Parameters
+    ----------
+    content : MessageContent
+        メッセージ内容。
+    attachment_files : list[MessageContentFile]
+        メッセージ内容の添付ファイル。
+
+    Returns
+    -------
+    dict[str, Any]
+        一覧取得の応答の 1 件。
+    """
     return {
         "id": content.id,
         "messageId": content.message_id,
@@ -178,6 +279,8 @@ def get_message_contents_response(
 
 
 class Reference(BaseModel):
+    """Waha! の outputfile の ``references`` の 1 件（回答の根拠にした文書の断片）。"""
+
     model_config = ConfigDict(extra="ignore")
 
     role: str | None = None
@@ -194,6 +297,13 @@ class RetrievalAnswer(BaseModel):
     references: list[Reference] | None = None
 
     def context_text(self) -> str | None:
+        """回答の根拠にした断片の本文を改行でつなぎ、メッセージ内容の context にする。
+
+        Returns
+        -------
+        str | None
+            断片の本文を改行で連結した文字列。断片がなければ None。
+        """
         if not self.references:
             return None
         return "\n".join(r.content or "" for r in self.references)
