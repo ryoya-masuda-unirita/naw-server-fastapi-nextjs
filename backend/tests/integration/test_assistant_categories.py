@@ -337,6 +337,11 @@ class TestGetAssistantCategory:
             )
 
         assert response.status_code == 404
+        # 他テナントに存在することを区別できないよう、存在しない場合と同じ文言になる
+        assert (
+            response.json()["message"]
+            == f"AssistantCategory not found with id:{other_tenant_category.id}"
+        )
 
     async def test_get_as_non_admin_returns_403(self, client, member_headers, category):
         """テナント管理者以外は単体取得できないこと"""
@@ -420,6 +425,10 @@ class TestUpdateAssistantCategory:
             )
 
         assert response.status_code == 404
+        assert (
+            response.json()["message"]
+            == f"AssistantCategory not found with id: {other_tenant_category.id}"
+        )
 
     async def test_update_with_description_256_chars_returns_400(
         self, client, admin_headers, category
