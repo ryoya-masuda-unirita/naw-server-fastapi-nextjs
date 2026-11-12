@@ -151,7 +151,13 @@ class FileRepository:
         total = (await session.execute(count_stmt)).scalar() or 0
 
         sort_col = _ORDER_BY_COLUMNS.get(sort_col_name, File.updated_at)
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 移植元（Spring `Direction.fromString`）同様、方向は大文字小文字を区別しない。
+        # `status`・`userId`は値の重複が多く、同順位の並びが不定だとOFFSET/LIMITの
+        # ページ間で行が重複・欠落するため、`id`を第2キーにして順序を確定させる。
+        stmt = stmt.order_by(
+            sort_col.desc() if sort_dir.lower() == "desc" else sort_col.asc(),
+            File.id.asc(),
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         files = (await session.execute(stmt)).scalars().all()

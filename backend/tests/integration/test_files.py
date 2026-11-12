@@ -607,7 +607,8 @@ class TestFilesRouter:
                 )
                 desc_response = await ac.get(
                     f"/api/admin/indexes/{files_index.id}/files",
-                    params={"sort": "status,desc"},
+                    # 移植元同様、方向の大文字指定も受け付けること
+                    params={"sort": "status,DESC"},
                     headers=files_admin_headers,
                 )
 
