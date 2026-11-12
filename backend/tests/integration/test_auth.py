@@ -207,6 +207,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "Field required"
 
     async def test_post_auth_password_reset_rejects_password_violating_policy(
         self, client, test_tenant, test_user_with_password

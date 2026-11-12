@@ -128,10 +128,11 @@ class TestRequestValidationErrorHandler:
     async def test_returns_only_first_validation_error(self, client):
         """複数の項目がエラーでも連結せず最初の1件のメッセージだけを返すこと"""
         async with client as c:
-            response = await c.post("/named", json={"name": "   ", "count": "x"})
+            # name（必須なし）と count（整数でない）の2件がエラーになる入力
+            response = await c.post("/named", json={"count": "x"})
 
         assert response.status_code == 400
-        assert response.json()["message"] == "名前は必須です"
+        assert response.json()["message"] == "Field required"
 
     async def test_value_error_message_has_no_prefix(self, client):
         """独自チェックの日本語メッセージが接頭辞なしで返ること"""

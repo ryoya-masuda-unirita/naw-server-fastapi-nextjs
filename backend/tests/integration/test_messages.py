@@ -871,6 +871,9 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 400
+            assert response.json()["message"] == (
+                "messageId または messageContentId のいずれかを指定してください"
+            )
 
         async def test_persists_attachment_files_and_returns_them_in_message_content_event(
             self,
@@ -1032,6 +1035,7 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 400
+            assert response.json()["message"] == "Field required"
 
         async def test_returns_400_when_history_attachment_count_mismatches(
             self, client, owner_headers, owned_message

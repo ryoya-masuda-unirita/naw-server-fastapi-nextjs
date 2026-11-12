@@ -589,6 +589,9 @@ class TestAdminRoomHistories:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == (
+            "Input should be greater than or equal to 0"
+        )
 
     async def test_get_rooms_returns_400_when_size_is_out_of_range(
         self, client, room_owner_headers
@@ -600,6 +603,9 @@ class TestAdminRoomHistories:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == (
+            "Input should be less than or equal to 100"
+        )
 
     async def test_get_rooms_returns_403_when_tenant_header_mismatches_token(
         self, client, rooms_tenant, room_owner_user
