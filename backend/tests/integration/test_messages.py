@@ -1,4 +1,5 @@
 import base64
+import inspect
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
@@ -12,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
-from app.core.llm_client import ChatStreamChunk
+from app.core.llm_client import AzureLlmChatClient, ChatMessage, ChatStreamChunk
 from app.core.security import create_access_token
 from app.main import app
 from app.models.ai_model import AIModel, AIModelEndpointType
@@ -1037,30 +1038,116 @@ class TestMessageRouter:
             assert response.status_code == 400
             assert response.json()["message"] == "Field required"
 
-        async def test_returns_400_when_history_attachment_count_mismatches(
+        async def test_accepts_history_attachment_count_mismatch(
+            self, client, owner_headers, owned_message, message_chat_endpoint, engine
+        ):
+            """historyAttachmentFilesを送らず履歴のattachmentsCountだけを送っても、移植元と同じく受け付けて質問・回答が保存されること(Issue #245)"""
+            with _patched_llm(engine, "回答"):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        # 移植元クライアントと同じく、attachmentsCountは送るが
+                        # historyAttachmentFilesは送らない
+                        files=_content_form(
+                            {
+                                "messageId": owned_message.id,
+                                "userInput": "こんにちは",
+                                "historyMessages": [
+                                    {
+                                        "type": "USER",
+                                        "content": "過去",
+                                        "attachmentsCount": 1,
+                                    }
+                                ],
+                            }
+                        ),
+                        headers=owner_headers,
+                    )
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [owned_message.id]},
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            assert _sse_events(response.text)[-1]["type"] == "message_content"
+            assert [
+                (content["question"], content["answer"])
+                for content in contents_response.json()
+            ] == [("こんにちは", "回答")]
+
+        async def test_returns_400_when_user_input_is_missing(
             self, client, owner_headers, owned_message
         ):
-            """historyAttachmentFilesの件数が履歴のattachmentsCount合計と一致しない場合は400になること"""
+            """userInputの項目がない場合は400になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    files=_content_form(
-                        {
-                            "messageId": owned_message.id,
-                            "userInput": "こんにちは",
-                            "historyMessages": [
-                                {
-                                    "type": "USER",
-                                    "content": "過去",
-                                    "attachmentsCount": 1,
-                                }
-                            ],
-                        }
-                    ),
+                    files=_content_form({"messageId": owned_message.id}),
                     headers=owner_headers,
                 )
 
             assert response.status_code == 400
+
+        async def test_sends_empty_user_input_with_image_and_saves_it(
+            self, client, owner_headers, owned_message, message_chat_endpoint, engine
+        ):
+            """userInputが空文字でも画像添付と一緒にLLMへ送られ、空文字の質問と回答が保存されること(Issue #245)"""
+            sent_messages: list[list[ChatMessage]] = []
+            stream_chat_signature = inspect.signature(AzureLlmChatClient.stream_chat)
+
+            async def _stream_chunks(
+                *args: Any, **kwargs: Any
+            ) -> AsyncIterator[ChatStreamChunk]:
+                bound = stream_chat_signature.bind(*args, **kwargs)
+                sent_messages.append(bound.arguments["messages"])
+                yield ChatStreamChunk(text_delta="画像の説明")
+                yield ChatStreamChunk(input_tokens=10, output_tokens=5)
+
+            test_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+            with (
+                patch(
+                    "app.services.message_service.AzureLlmChatClient.stream_chat",
+                    side_effect=_stream_chunks,
+                ),
+                patch(
+                    "app.services.message_service.get_session_maker",
+                    return_value=test_session_maker,
+                ),
+            ):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        files=_content_form(
+                            {"messageId": owned_message.id, "userInput": ""},
+                            attachment_files=[
+                                ("photo.png", b"image-data", "image/png")
+                            ],
+                        ),
+                        headers=owner_headers,
+                    )
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [owned_message.id]},
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            assert _sse_events(response.text)[-1]["type"] == "message_content"
+            last_turn = sent_messages[0][-1]
+            assert last_turn.role == "user"
+            encoded_image = base64.b64encode(b"image-data").decode("ascii")
+            assert last_turn.content == [
+                {"type": "text", "text": ""},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{encoded_image}"},
+                },
+            ]
+            assert [
+                (content["question"], content["answer"])
+                for content in contents_response.json()
+            ] == [("", "画像の説明")]
 
         async def test_next_message_chains_to_previous_after_reloading_room(
             self,
