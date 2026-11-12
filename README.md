@@ -6,6 +6,70 @@
 
 `Codex` 用のプロジェクト運用ルールはルートの [AGENTS.md](./AGENTS.md) を参照してください。
 
+## アシスタントの種類ごとの通信経路
+
+アシスタントには、クラウドで処理する普通のアシスタント（`SAAS_CHAT`・`SAAS_RAG`）と、顧客の社内で処理する SECURE アシスタントがある。SECURE アシスタントは、質問や社内文書を社外に出さないためのもので、**質問はクラウドの server を通らず、ブラウザから社内の server-local に直接送られる**。クラウドの server は、送り先（server-local の URL と API キー）をブラウザに教えるだけで、server-local に通信しない。
+
+以下は移植元（`secuaigent` モノレポ）のコードから書き起こした経路。
+
+### SECURE アシスタント
+
+```mermaid
+sequenceDiagram
+    participant B as ブラウザ
+    box クラウド（AWS）
+        participant S as server（backend）
+    end
+    box 顧客の社内
+        participant L as server-local
+        participant W as Waha!
+        participant A as アダプタ
+    end
+    participant M as LLM
+
+    B->>S: ① ログイン
+    S-->>B: ② server-local の宛先（URL・API キー）とトークン
+    B->>L: ③ 質問を送る（クラウドは通らない）
+    L->>W: ④ 質問を渡してワークフローを実行
+    W->>A: ⑤ 検索・回答作成
+    A->>M: ⑥ 回答を作らせる
+    M-->>A: 回答
+    A-->>W: 回答
+    W-->>L: 回答
+    L-->>B: ⑩ 回答を少しずつ表示（SSE）
+```
+
+- ②: クラウドの server は、テナントに登録された `LOCAL_SERVER` エンドポイントの URL と API キーを返す（移植元 `server` の `GetMessagesViewModel.java`）。SECURE アシスタントの質問を server に送ると 400 になる（`MessageService.java`）
+- ③: ブラウザは受け取った URL に `api/messages/content` を付けて、server-local に直接送る（移植元 `client` の `message-content-endpoint.resolver.ts`・`messages.service.ts` の `prepareSecureStreamContext`）
+- ④: server-local は、Waha! の HTTP API（`WahaServer/servicerun/api`）で入力を渡し、ワークフローを実行して結果を受け取る（`server-local/app/clients/waha_client.py`）
+- ⑥: アダプタは LLM を直接呼ぶ。設定によっては、LLM の代わりにクラウドの server（`/auth/login-key` でログインし `/api/llm/chat`）を呼ぶ（移植元 `generative-ai-adapter` の `SecuAiGentAuthClient.java`・`SecuAiGentTransport.java`）
+- このほか、ライブラリを作るときだけ server-local からクラウドの server を呼ぶ（`NawApiClient`）。クラウドから server-local へ向かう通信はない
+
+### 普通のアシスタント（SAAS_CHAT・SAAS_RAG）
+
+```mermaid
+sequenceDiagram
+    participant B as ブラウザ
+    box クラウド（AWS）
+        participant S as server（backend）
+    end
+    participant M as Azure OpenAI
+
+    B->>S: ① 質問を送る
+    S->>M: ② 回答を作らせる（SAAS_RAG は先に Azure AI Search で検索）
+    M-->>S: 回答
+    S-->>B: ④ 回答を表示（SSE）
+```
+
+### 部品ごとの担当
+
+| 部品 | 置き場所 | 担当 | このリポジトリ |
+|---|---|---|---|
+| server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `backend/` |
+| server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `server-local/` |
+| Waha! | 顧客の社内 | ユニリタの ETL 製品。LLM に渡すまでのワークフロー（エージェント）を Waha! の中で組み立てて実行する。ワークフローは Waha! 側の設定で、どちらのリポジトリにもない | 対象外（製品） |
+| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | 未移植（`generative-ai-adapter/` の移植は要件定義中） |
+
 ## ローカル疎通確認（frontend + backend）
 
 React（`frontend/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
