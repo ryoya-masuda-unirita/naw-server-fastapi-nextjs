@@ -392,6 +392,107 @@ class TestGetUsersSearchAndSort:
         names = [u["name"] for u in response.json()["content"]]
         assert names.index("Alpha") < names.index("Zulu")
 
+    async def test_sort_direction_reverses_rows_with_same_sort_key(
+        self, client, admin_headers, session, tenant, admin_user
+    ):
+        """更新日時が同値のユーザーでも昇順と降順で並びが完全に反転すること"""
+        same_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        admin_user.updated_at = same_time
+        session.add(admin_user)
+        for i in range(4):
+            session.add(
+                User(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    login_id=f"same-time-{i}",
+                    name=f"SameTime{i}",
+                    role=UserRole.USER,
+                    is_required_password_reset=False,
+                    updated_at=same_time,
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            asc_res = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"sort": "updatedAt,asc"},
+            )
+            desc_res = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"sort": "updatedAt,desc"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_ids = [u["id"] for u in asc_res.json()["content"]]
+        desc_ids = [u["id"] for u in desc_res.json()["content"]]
+        assert len(asc_ids) == 5
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_sort_by_role_switches_first_row_by_direction(
+        self, client, admin_headers, session, tenant, admin_user
+    ):
+        """権限順の昇順は管理者が先頭、降順は一般ユーザーが先頭になり並びが反転すること"""
+        for i in range(3):
+            session.add(
+                User(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    login_id=f"role-sort-{i}",
+                    name=f"RoleSort{i}",
+                    role=UserRole.USER,
+                    is_required_password_reset=False,
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            asc_res = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"sort": "role,asc"}
+            )
+            desc_res = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"sort": "role,desc"}
+            )
+
+        asc_content = asc_res.json()["content"]
+        desc_content = desc_res.json()["content"]
+        assert asc_content[0]["role"] == "ADMIN"
+        assert desc_content[-1]["role"] == "ADMIN"
+        assert [u["id"] for u in desc_content] == list(
+            reversed([u["id"] for u in asc_content])
+        )
+
+    async def test_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant
+    ):
+        """ソート方向を大文字(DESC)で指定しても降順になること"""
+        session.add_all(
+            [
+                User(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    login_id=f"case-{name.lower()}",
+                    name=name,
+                    role=UserRole.USER,
+                    is_required_password_reset=False,
+                )
+                for name in ["Alpha", "Zulu"]
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"sort": "name,DESC"}
+            )
+
+        assert response.status_code == 200
+        names = [u["name"] for u in response.json()["content"]]
+        assert names.index("Zulu") < names.index("Alpha")
+
     async def test_sort_with_disallowed_column_falls_back(self, client, admin_headers):
         """許可リスト外のsort値を指定してもエラーにならず既定列にフォールバックすること"""
         async with client as c:
