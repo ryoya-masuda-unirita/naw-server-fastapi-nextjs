@@ -12,7 +12,7 @@ def sse_event(event_type: str, payload: dict[str, object]) -> bytes:
 
     移植元は`response/sse`配下のイベント（先頭フィールドが`type`のレコード）を
     JSON化し、`SseEmitter.event().data(json)`でイベント名の行を付けずに送る。
-    受け手（frontend-angular・local-server）はJSON内の`type`で種別を判定するため、
+    受け手（secuaigent/client・local-server）はJSON内の`type`で種別を判定するため、
     この形式に合わせる（issue-183・issue-224）。
 
     Args:

@@ -143,15 +143,19 @@ aws ecs update-service --cluster <cluster名> --service <service名> \
   --task-definition <上記で払い出されたARN> --force-new-deployment
 ```
 
-### 2. frontend-angularをビルドしてS3へ
+### 2. frontend（React）をビルドしてS3へ
+
+通常は`develop`へのpush時に`deploy-frontend.yml`のCI/CDで自動実行される。手動で配信する場合は以下。
 
 ```bash
-cd frontend-angular
+cd frontend
 npm ci
-npm run build -- --configuration dev
-# 出力先: dist/secuaigent-client/browser/
+npm run build
+# 出力先: dist/
+# frontend/.env.production で VITE_API_URL を空にしているため、APIは配信元(CloudFront)と同じオリジンの
+# 相対パス(/api/*・/auth/*)で呼ばれ、CloudFrontがbackend(ALB)へ転送する
 
-aws s3 sync dist/secuaigent-client/browser/ s3://<frontend_bucket名>/ --delete --profile naw-fastapi-issue158
+aws s3 sync dist/ s3://<frontend_bucket名>/ --delete --profile naw-fastapi-issue158
 aws cloudfront create-invalidation --distribution-id <cloudfront配信ID> --paths "/*" --profile naw-fastapi-issue158
 ```
 

@@ -1,4 +1,0 @@
-{
-  "vitest.enable": true,
-  "vitest.rootConfig": "vitest.config.ts"
-}

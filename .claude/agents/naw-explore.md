@@ -15,13 +15,13 @@ model: sonnet
 - バックエンド移植元: `~/Documents/unirita-develop-pj/secuaigent-ref/server`（移植元モノレポ `secuaigent` の `server/`。`origin/develop` に detached した参照専用 worktree。最初から git 管理で全履歴を追える）
 - フロントエンド移植元: `~/Documents/unirita-develop-pj/secuaigent-ref/client`（同モノレポの `client/`。2026-07-13 にモノレポへ取り込まれ、それ以前の履歴は追えない場合あり。最新コードを読んで実装を把握する）
 - 移植先バックエンド: `backend/`（FastAPI）
-- 移植先フロントエンド: `frontend/`（React、後回し方針） / `frontend-angular/`（動作確認用、secuaigent/clientをそのまま取り込んだもの）
+- 移植先フロントエンド: `frontend/`（React）。`secuaigent/client` のコピーだった `frontend-angular/` は #213 で削除済み
 
 このエージェントはバックエンド（`server/` ⇄ `backend/`）の調査を担当する。フロントエンドの調査は `naw-frontend-explore` が担当する。参照専用 worktree は読むだけにし、`git checkout` / `git pull` やファイルの変更はしない。
 
 ## 既知の意図的差分（未移植として検出しない）
 
-このリポジトリは Issue #193（frontend-angular）・#195（infra）で**サブドメイン（hostname）によるテナント識別を意図的に廃止済み**。参照リポジトリ（`secuaigent/server` / `secuaigent/client`）側はサブドメインを廃止していないため、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計に関する差分は、**「未移植の欠落」として検出・報告しない**。意図的な廃止であり、差分として存在すること自体が正しい状態。
+このリポジトリは Issue #193（当時の Angular 版フロント。#213 で削除）・#195（infra）で**サブドメイン（hostname）によるテナント識別を意図的に廃止済み**。参照リポジトリ（`secuaigent/server` / `secuaigent/client`）側はサブドメインを廃止していないため、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計に関する差分は、**「未移植の欠落」として検出・報告しない**。意図的な廃止であり、差分として存在すること自体が正しい状態。
 
 ## 調査時の手順
 

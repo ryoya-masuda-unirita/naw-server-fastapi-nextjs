@@ -18,7 +18,7 @@ class PasswordResetRequest(BaseModel):
     """パスワードリセットリクエスト"""
 
     # 移植元は @JsonAlias("username") で username キーも受け付ける。
-    # frontend-angular は username で送信するため、両方を許容する。
+    # 移植元クライアント(secuaigent/client) は username で送信するため、両方を許容する。
     loginId: str = Field(
         validation_alias=AliasChoices("loginId", "username"),
         description="ログインID (username も許容)",

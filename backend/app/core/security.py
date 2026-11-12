@@ -149,7 +149,7 @@ def set_session_cookie(response: Response, session_id: str) -> None:
     """セッションIDをHttpOnly Cookieとしてレスポンスに設定する。
 
     移植元（Spring Boot + Spring Session + Redis）がセッションCookie認証を
-    採用しており、frontend-angular側もCookie送信（withCredentials）前提で
+    採用しており、クライアントもCookie送信（withCredentials）前提で
     作られているため、ブラウザ経由の認証を成立させるにはCookie発行が必要になる。
 
     Args:

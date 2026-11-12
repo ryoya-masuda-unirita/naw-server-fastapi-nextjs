@@ -23,8 +23,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。
 
-`frontend-angular/` は `secuaigent/client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
-`secuaigent/client` / `frontend-angular` が明示された同期依頼、または「frontendを最新にして」など文脈上 `secuaigent/client` → `frontend-angular` 同期と判断できる依頼では、`.codex/skills/frontend-angular-sync/SKILL.md` を先に読むこと。`frontend/`（React）と `frontend-angular/` のどちらを指すか判断に迷う場合のみ、作業前にユーザーへ確認すること。
+`frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`frontend/`）の移植済み画面で行う。
 
 ### 現在の開発方針
 
@@ -33,7 +32,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 - `backend/` と `frontend/` の Issue は、どちらも通常どおり起票・対応してよい。`frontend/` の不具合を見つけた場合も起票・修正の対象にする
 - 新しく移植対象に加わった `generative-ai-adapter/`・`server-local/`・その他のモジュールは、着手（Issue 起票を含む）前に優先順位をユーザーに確認する
 - 新しいチケットに着手する際は、Issue の内容から対象モジュール（`backend/` / `frontend/` / その他）を判断する。判断に迷う場合だけユーザーに確認する
-- バックエンドの動作確認（ブラウザ操作）には、React 移植が完了するまでは `frontend-angular/`（`http://localhost:4201`）を使う
+- バックエンドの動作確認は、自動テスト（`uv run pytest`）、または React（`frontend/`、`http://localhost:5173`）の移植済み画面で行う。未移植の画面が必要な確認は自動テストで代替する
 - frontend 移植 Issue を起票・着手・自動処理する場合は、`frontend-port` ラベルを使って backend Issue と区別すること
 
 ### 参照リポジトリの注意点
@@ -46,33 +45,30 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 
 ### テナント識別方式（サブドメイン廃止・移植/調査時の前提条件）
 
-**このプロジェクトはテナント識別にサブドメイン（`window.location.hostname` 等）を使わない。** Issue #193（frontend-angular）・#195（infra）で、サブドメインを前提とした実装を意図的に廃止した。
+**このプロジェクトはテナント識別にサブドメイン（`window.location.hostname` 等）を使わない。** Issue #193（当時の Angular 版フロント。#213 で削除）・#195（infra）で、サブドメインを前提とした実装を意図的に廃止した。
 
 | 対象 | 廃止内容 | 現在の方式 |
 |---|---|---|
-| frontend-angular（Issue #193） | `resolveTenantId()` の hostname パース、`user-list-tenant.helpers.ts` の `extractTenantIdFromHostname()` | ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信 |
+| frontend（React） | hostname パースは持たない（#193 で Angular 版から撤去した `resolveTenantId()` の hostname パース・`extractTenantIdFromHostname()` 相当は移植しない） | **方針**: ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信（#193 で Angular 版に入れた方式。React にも同じ方式が必要）。**現状（#213 時点）**: ログイン画面にテナントID入力欄がない。`X-Tenant-ID` は `sessionStorage` の `TENANT_ID` があるときだけ送り、`TENANT_ID` はログイン後に `GET /api/auth` のレスポンスの `tenant_id` から保存する作りになっている。しかし backend は `POST /auth/login`・`GET /api/auth` とも `X-Tenant-ID` 必須で、`GET /api/auth` のレスポンス（`AuthResponse`）に `tenant_id` もないため、この流れは成り立たず React からはログインできない。テナントID入力欄の移植と、入力したテナントIDを `sessionStorage` に保存してログイン・セッション取得の両方で送る修正が必要（未対応） |
 | infra（Issue #195） | Route53ホストゾーン、ACM証明書（ワイルドカードSAN）、CloudFrontエイリアス、ワイルドカードCORS正規表現 | CloudFrontデフォルトドメイン（`*.cloudfront.net`）配信、固定オリジンのCORS |
 
-**参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリの `frontend-angular` 側は #193 で撤去済み）。
+**参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリでは #193 で当時の Angular 版から撤去し、Angular 版自体も #213 で削除した。React 側にも持ち込まない）。
 
 - **未移植判定からの除外（最重要）**: Issue 一括起票系 skill（`naw-issue-batch` / `naw-frontend-issue-batch`）で参照リポジトリとの差分を検出する際、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計は「未移植の欠落」として検出・Issue化しない。意図的に廃止したものであり、差分として存在すること自体が正しい状態
 - 逆に、参照リポジトリの調査・読解自体（挙動理解、無関係な機能のリサーチ等）では通常どおりサブドメイン前提のコードも含めてそのまま読む。除外するのは「未移植候補としての検出」の場面に限る
 - 実際に移植作業でサブドメイン依存のロジックに行き当たった場合は、そのまま持ち込まず実装前に一言確認する
-- `frontend-angular-sync` skill（`.codex/skills/frontend-angular-sync/SKILL.md`）は `secuaigent/client` を丸ごとコピーするため、同期のたびにこの差分（`tenant.helpers.ts` 等）が巻き戻るリスクがある。同期後は必ず skill 内の該当チェック項目を確認すること
 
 ## モノレポ構成
 
 ```text
 naw-server-fastapi-nextjs/
 ├── frontend/          # React 実装（移植先）
-├── frontend-angular/  # Angular 実装（secuaigent/client を取り込んだもの。バックエンド動作確認用）
 ├── backend/           # FastAPI 実装
 └── infra/             # Terraform（存在する場合）
 ```
 
 - 全体方針はこの `AGENTS.md`
 - フロントエンド固有ルールは `frontend/AGENTS.md`
-- Angular（動作確認用）固有ルールは `frontend-angular/AGENTS.md`
 - バックエンド固有ルールは `backend/AGENTS.md`
 
 ## Skills / Commands
@@ -170,17 +166,6 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 - テスト結果・動作確認結果の整理
 
 Codex では、**PR 作成依頼は `gh pr create` で終わりではなく、必ず同じ作業フローの中でコードレビュー実行と `code-review.md` 作成まで完了させること**。Codex は自分で差分レビューを実行し、結果をドキュメントへ反映すること。
-
-### 9. secuaigent/client → frontend-angular 同期
-
-以下の依頼に着手するときは、作業前に必ず `.codex/skills/frontend-angular-sync/SKILL.md` を読むこと。
-
-- `secuaigent/client` の最新実装を `frontend-angular/` に反映したいとき
-- `frontend-angular/` を最新にしたいとき
-- `secuaigent/client` から `frontend-angular/` にソースをコピーしたいとき
-- 「frontendを最新にして」「frontend-angularを最新にして」「secuaigent/clientから持ってきて」等、文言が曖昧でも文脈上 `secuaigent/client` → `frontend-angular` 同期の意図だと判断できるとき
-
-`secuaigent/client` または `frontend-angular` が明示されていれば確認不要。`frontend/`（React 移植）と `frontend-angular/` のどちらを指すか判断に迷う場合のみ、ユーザーに確認すること。
 
 ## 実行方針
 

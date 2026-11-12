@@ -58,7 +58,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_settings.cors_allowed_origins,
     allow_origin_regex=cors_settings.cors_allowed_origin_regex,
-    # Cookie等の資格情報を伴うリクエスト（frontend/frontend-angular とも
+    # Cookie等の資格情報を伴うリクエスト（frontend（React）は
     # credentials: 'include' / withCredentials: true を使用）を許可するため True にする。
     allow_credentials=True,
     # 移植元（Spring Boot）の CorsConfiguration も addAllowedMethod("*") /

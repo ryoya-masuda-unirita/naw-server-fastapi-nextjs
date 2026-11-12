@@ -6,29 +6,25 @@
 
 `Codex` 用のプロジェクト運用ルールはルートの [AGENTS.md](./AGENTS.md) を参照してください。
 
-## frontend-angular の同期
+## ローカル疎通確認（frontend + backend）
 
-`frontend-angular/` は `secuaigent-client`（Angular）をこのモノレポに丸ごと取り込んだもの。
-コピーすると `secuaigent-client` の最新状態に上書きされるため、手動でcpせず、AI（Claude Code / Codex）に
-「secuaigent-clientからfrontend-angularを最新にして」のように依頼すること。モノレポ向けの設定差分の再適用まで
-自動で行われる。
+React（`frontend/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
+backend の動作確認は、自動テスト（`cd backend && uv run pytest`）、または React の移植済み画面で行う。
 
-## ローカル疎通確認（frontend-angular + backend）
-
-`frontend-angular`（Angular）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
+> `secuaigent/client` のコピーだった `frontend-angular/` は Issue #213 で削除した。
 
 ### 前提
 
 
-| 項目      | 値                                                    |
-| ------- | ---------------------------------------------------- |
-| フロントエンド | `http://test-tenant.localhost:4201/`                 |
-| バックエンド  | `http://localhost:8001`（`proxy.conf.local.js` 経由で転送） |
-| テナント ID | `test-tenant`（URL のサブドメインから自動解決）                     |
-| ログイン    | `admin` / `admin@1234`（`backend/seed.sql` のシードユーザー）  |
+| 項目      | 値                                                                  |
+| ------- | ------------------------------------------------------------------ |
+| フロントエンド | `http://localhost:5173/`（Vite 開発サーバー）                                  |
+| バックエンド  | `http://localhost:8001`（フロントは `VITE_API_URL` の URL を直接呼ぶ）                 |
+| テナント ID | `test-tenant`（`backend/seed.sql` のシードテナント）                              |
+| ログイン    | `admin` / `admin@1234`（`backend/seed.sql` のシードユーザー）                     |
 
 
-> `http://localhost:4201/` ではテナント ID が解決できないため、疎通確認は **サブドメイン形式の URL** を使う。
+> **現状の制約**: backend の `POST /auth/login`・`GET /api/auth` は `X-Tenant-ID` ヘッダ必須だが、React のログイン画面にはまだテナントID入力欄がない（ログイン後に `GET /api/auth` のレスポンスからテナントIDを得る作りだが、そのリクエスト自体が `X-Tenant-ID` 必須で、レスポンスに `tenant_id` もないため成り立たない）。入力欄を移植するまでは、React の画面からはログインできない。それまでは下の「バックエンド単体」の手順や自動テストで確認する。
 
 
 
@@ -47,21 +43,9 @@ alembic upgrade head
 # 3. シードデータ投入
 docker exec -i naw-fastapi-postgres psql -U root -d postgres < seed.sql
 
-# 4. frontend-angular の依存関係
-cd ../frontend-angular
+# 4. frontend の依存関係
+cd ../frontend
 npm install
-```
-
-`frontend-angular/src/environments/environment.local.ts` が無い場合は作成する（`.gitignore` 対象のため手元で用意が必要）。
-
-```typescript
-export const environment = {
-  production: false,
-  apiBaseUrl: '/api',
-  authBaseUrl: '',
-  enableMock: false,
-  minPasswordLength: 5,
-};
 ```
 
 
@@ -77,9 +61,10 @@ uv run uvicorn app.main:app --reload --port 8001
 ```
 
 ```bash
-# ターミナル2: フロントエンド（ポート 4201）
-cd frontend-angular
-npm startc
+# ターミナル2: フロントエンド（ポート 5173）
+# git 管理の frontend/.env は VITE_API_URL=http://localhost:8000 のため、環境変数で 8001 に上書きする
+cd frontend
+VITE_API_URL=http://localhost:8001 npm run dev
 ```
 
 
@@ -101,26 +86,15 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 
 #### 2. ブラウザでフロントエンド経由
 
-1. `http://test-tenant.localhost:4201/` を開く
-2. ログイン画面が表示されることを確認
-3. `admin` / `admin@1234` でログイン
-4. `/dashboard` に遷移すれば疎通成功
-
-ログイン後、ブラウザの開発者ツール（Network タブ）で以下が **200** になることを確認する。
-
-- `GET /api/auth`
-- `GET /api/users/profile`
-
-リロードしてもログイン画面に戻らなければ、認証 Cookie の往復も問題ない。
+1. `http://localhost:5173/` を開く
+2. ログイン画面（`/auth/login`）が表示されることを確認
+3. ログイン以降の確認は、ログイン画面のテナントID入力欄の移植後に行う（上記「現状の制約」を参照）
 
 #### トラブルシュート
 
 
 | 症状       | 確認すること                                                                     |
 | -------- | -------------------------------------------------------------------------- |
-| ログインできない | バックエンドが **8001** で起動しているか、`seed.sql` が投入済みか                                |
-| テナントエラー  | URL が `test-tenant.localhost:4201` になっているか                                 |
-| 接続拒否     | `docker compose up -d` で DB が起動しているか、`alembic upgrade head` 済みか            |
-| 401 が続く  | `backend/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:4201` が含まれているか |
-
-
+| 接続拒否     | バックエンドが **8001** で起動しているか、`VITE_API_URL=http://localhost:8001` を付けて起動したか   |
+| CORS エラー | `backend/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
+| DB エラー   | `docker compose up -d` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |

@@ -44,12 +44,12 @@ class TestCorsAllowedOrigins:
     def test_parses_comma_separated_origins(self):
         """カンマ区切りの環境変数を複数要素のリストにパースできること"""
         settings = _build_cors_settings(
-            CORS_ALLOWED_ORIGINS="http://localhost:5173,http://localhost:4201"
+            CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
         )
 
         assert settings.cors_allowed_origins == [
             "http://localhost:5173",
-            "http://localhost:4201",
+            "http://127.0.0.1:5173",
         ]
 
     def test_returns_empty_list_when_unset(self):
@@ -61,12 +61,12 @@ class TestCorsAllowedOrigins:
     def test_trims_whitespace_around_each_origin(self):
         """各オリジンの前後空白を除去すること"""
         settings = _build_cors_settings(
-            CORS_ALLOWED_ORIGINS=" http://localhost:5173 , http://localhost:4201 "
+            CORS_ALLOWED_ORIGINS=" http://localhost:5173 , http://127.0.0.1:5173 "
         )
 
         assert settings.cors_allowed_origins == [
             "http://localhost:5173",
-            "http://localhost:4201",
+            "http://127.0.0.1:5173",
         ]
 
 

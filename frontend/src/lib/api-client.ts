@@ -1,4 +1,19 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+// 本番ビルド（.env.production）では空文字になり、配信元と同じオリジンの相対パスで呼ぶ
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+
+type QueryParams = Record<string, string | number | boolean>;
+
+// ベースURLが空（相対パス）でも URL を組み立てられるよう、配信元オリジンを基準にする。
+// ベースURLが絶対URLのときは第2引数は無視されるため、ローカル開発の挙動は変わらない。
+function buildUrl(path: string, params?: QueryParams): string {
+  const url = new URL(`${API_BASE_URL}${path}`, window.location.origin);
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      url.searchParams.append(k, String(v));
+    });
+  }
+  return url.toString();
+}
 
 // テナントはサブドメインから判定せず、ログイン画面で入力された値をセッションに保存して使う（#193・#229）
 const TENANT_ID_STORAGE_KEY = 'TENANT_ID';
@@ -32,18 +47,12 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 type RequestOptions = RequestInit & {
-  params?: Record<string, string | number | boolean>;
+  params?: QueryParams;
 };
 
 export const apiClient = {
   async get<T>(path: string, options?: RequestOptions): Promise<T> {
-    const url = new URL(`${API_BASE_URL}${path}`);
-    if (options?.params) {
-      Object.entries(options.params).forEach(([k, v]) => {
-        url.searchParams.append(k, String(v));
-      });
-    }
-    const res = await fetch(url.toString(), {
+    const res = await fetch(buildUrl(path, options?.params), {
       ...options,
       method: 'GET',
       headers: getHeaders(options?.headers),
@@ -57,7 +66,7 @@ export const apiClient = {
     body?: unknown,
     options?: RequestOptions
   ): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const res = await fetch(buildUrl(path), {
       ...options,
       method: 'POST',
       headers: getHeaders(options?.headers),

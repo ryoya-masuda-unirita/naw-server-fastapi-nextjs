@@ -119,7 +119,7 @@ def _file(file_id: str, reference: str | None) -> File:
 def _sse_events(body: str) -> list[dict]:
     """SSE本文を、`type`を持つイベントの一覧へ変換する。
 
-    frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
+    secuaigent/clientの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
     JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
     サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 

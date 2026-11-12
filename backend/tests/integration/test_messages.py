@@ -311,7 +311,7 @@ def _content_form(
 ) -> list[tuple[str, tuple[str, str | bytes, str]]]:
     """メッセージ送信APIへ送るmultipartパートを組み立てる。
 
-    frontend-angularの`buildMessageContentFormData`と同じく、`textData`を
+    移植元クライアント(secuaigent/client)の`buildMessageContentFormData`と同じく、`textData`を
     `application/json`のBlob（ファイル名`blob`）として送る。
 
     Args:
@@ -369,7 +369,7 @@ def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
 def _sse_events(body: str) -> list[dict[str, Any]]:
     """SSE本文を、`type`を持つイベントの一覧へ変換する。
 
-    frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
+    secuaigent/clientの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
     JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
     サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 
@@ -391,9 +391,9 @@ def _sse_events(body: str) -> list[dict[str, Any]]:
 def _last_visible_message_id(
     records: list[dict[str, Any]], contents: list[dict[str, Any]]
 ) -> str | None:
-    """読み直した会話から、frontend-angularが次の送信の親にするメッセージIDを求める。
+    """読み直した会話から、移植元クライアント(secuaigent/client)が次の送信の親にするメッセージIDを求める。
 
-    frontend-angularの`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
+    移植元クライアント(secuaigent/client)の`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
     メッセージから各階層の最後の兄弟を辿り、本文があるメッセージのうち最後のものを返す。
 
     Args:
@@ -1155,7 +1155,7 @@ class TestMessageRouter:
                         headers=owner_headers,
                     )
                     original_message_id = create_original.json()["id"]
-                    # frontend-angularのeditMessageと同じく、編集前(B)と同じ親(A)で新しい
+                    # secuaigent/clientのeditMessageと同じく、編集前(B)と同じ親(A)で新しい
                     # メッセージB'を作成し、編集後の質問文で送信する
                     create_edited = await c.post(
                         "/api/messages",

@@ -17,11 +17,10 @@ model: sonnet
 - フロントエンド移植先: `frontend/`（Vite + React 19 + React Router v7 + TypeScript）
 - バックエンドAPI（React側が呼び出す先）: `backend/`（FastAPI。エンドポイント仕様の確認に使う）
 - `frontend/.claude/CLAUDE.md`: React移植の技術スタック・Angular→React対応表・デザイン移行方針が定義されている。調査前に必ず読むこと
-- `frontend-angular/`: `secuaigent/client` をそのまま取り込んだもの（動作確認用）。移植先ではないので候補検出の対象にしない
 
 ## 既知の意図的差分（未移植として検出しない）
 
-このリポジトリは Issue #193 で**サブドメイン（hostname）によるテナント識別を意図的に廃止済み**（`frontend-angular/` 側の `tenant.helpers.ts` 等）。参照リポジトリ（`secuaigent/client`）側はサブドメインを廃止していないため、サブドメイン（hostname）ベースのテナント識別に関する差分は、**「未移植の欠落」として検出・報告しない**。意図的な廃止であり、差分として存在すること自体が正しい状態。
+このリポジトリは Issue #193 で**サブドメイン（hostname）によるテナント識別を意図的に廃止済み**（当時の Angular 版フロントの `tenant.helpers.ts` 等。Angular 版は #213 で削除）。参照リポジトリ（`secuaigent/client`）側はサブドメインを廃止していないため、サブドメイン（hostname）ベースのテナント識別に関する差分は、**「未移植の欠落」として検出・報告しない**。意図的な廃止であり、差分として存在すること自体が正しい状態。
 
 ## 調査時の手順
 
