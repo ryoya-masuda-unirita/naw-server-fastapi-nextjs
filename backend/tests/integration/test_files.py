@@ -273,10 +273,10 @@ class TestFilesRouter:
             assert body["displayName"] == "クエリ表示名"
             assert body["reference"] == "ref"
 
-        async def test_upload_without_name_returns_422(
+        async def test_upload_without_name_returns_400(
             self, client, files_index, files_admin_headers, override_file_storage
         ):
-            """nameがボディ・クエリのどちらにも無い場合は422になること"""
+            """nameがボディ・クエリのどちらにも無い場合は400になること"""
             async with client as ac:
                 response = await ac.post(
                     f"/api/admin/indexes/{files_index.id}/files",
@@ -284,8 +284,34 @@ class TestFilesRouter:
                     headers=files_admin_headers,
                 )
 
-            assert response.status_code == 422
-            assert response.json()["detail"][0]["loc"] == ["body", "name"]
+            assert response.status_code == 400
+
+        async def test_upload_with_empty_name_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """nameが空文字の場合は400になること"""
+            files, data = _upload_payload(name="")
+            async with client as ac:
+                response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 400
+
+        async def test_upload_without_name_and_auth_returns_401(
+            self, client, files_index, override_file_storage
+        ):
+            """未認証ならnameが無くても入力エラーより先に401になること"""
+            async with client as ac:
+                response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files={"file": ("q.txt", b"query", "text/plain")},
+                )
+
+            assert response.status_code == 401
 
         async def test_form_value_takes_precedence_over_query(
             self, client, files_index, files_admin_headers, override_file_storage
