@@ -902,3 +902,106 @@ class TestStreamChatWithAttachmentFiles:
         sent_messages = mock_stream_chat.call_args.args[3]
         assert isinstance(sent_messages[-1].content, list)
         assert sent_messages[-1].content[1]["type"] == "image_url"
+
+
+class TestStreamChatPersistFailure:
+    """LlmChatService.stream_chat の保存処理が失敗した場合のテスト（Issue #254）"""
+
+    @pytest.fixture
+    def stream_mocks(self):
+        """ストリーミング開始前のDB検証・LLM呼び出し・保存処理をモックする。"""
+        prefix = "app.services.llm_chat_service"
+        with (
+            patch(
+                f"{prefix}.AIModelRepository.find_by_name_and_endpoint_types",
+                new_callable=AsyncMock,
+                return_value=_ai_model(),
+            ),
+            patch(
+                f"{prefix}.TenantEndpointRepository.find_by_tenant_id_and_type",
+                new_callable=AsyncMock,
+                return_value=[_tenant_endpoint()],
+            ),
+            patch(f"{prefix}.enforce_within_quota", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.MessageRepository.find_by_tenant_id_and_id",
+                new_callable=AsyncMock,
+                return_value=MagicMock(id="msg-1", room_id="room-1"),
+            ),
+            patch(f"{prefix}.require_owned_room", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.SystemPromptTemplateRepository.find_by_type",
+                new_callable=AsyncMock,
+                return_value=MagicMock(content="ライブラリ生成用システムプロンプト"),
+            ),
+            patch(f"{prefix}.AzureLlmChatClient.stream_chat") as mock_stream_chat,
+            patch.object(
+                LlmChatService, "_persist_library", new_callable=AsyncMock
+            ) as mock_persist_library,
+            patch.object(
+                LlmChatService, "_persist_token_usage", new_callable=AsyncMock
+            ) as mock_persist_usage,
+        ):
+            yield {
+                "stream_chat": mock_stream_chat,
+                "persist_library": mock_persist_library,
+                "persist_usage": mock_persist_usage,
+            }
+
+    async def test_closes_stream_normally_when_persist_token_usage_fails(
+        self, stream_mocks, test_user
+    ):
+        """トークン使用量の保存で例外が起きても、送信済みのイベントのあとストリームを正常に閉じること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        stream_mocks["stream_chat"].return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="こんにちは"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        stream_mocks["persist_usage"].side_effect = RuntimeError("db error")
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(), session=None
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        # 移植元はmessage_stopを送ってストリームを閉じた後に保存するため、
+        # 保存の失敗をerrorイベントとして通知しないこと
+        assert _sse_events(body) == [
+            {"type": "text_delta", "text": "こんにちは"},
+            {"type": "message_stop", "inputTokens": 10, "outputTokens": 5},
+        ]
+        stream_mocks["persist_usage"].assert_awaited_once()
+
+    async def test_persists_token_usage_even_when_persist_library_fails(
+        self, stream_mocks, test_user
+    ):
+        """ライブラリの保存で例外が起きても、トークン使用量を保存しストリームを正常に閉じること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        stream_mocks["stream_chat"].return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\nタイトルA\n"),
+                ChatStreamChunk(text_delta="<<<CONTENT>>>\n本文B\n"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        stream_mocks["persist_library"].side_effect = RuntimeError("db error")
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(messageId="msg-1", createLibrary=True),
+            session=None,
+        )
+        events = _sse_events(b"".join(await _consume(response)).decode())
+
+        assert events[-1] == {
+            "type": "message_stop",
+            "inputTokens": 10,
+            "outputTokens": 5,
+        }
+        stream_mocks["persist_library"].assert_awaited_once()
+        stream_mocks["persist_usage"].assert_awaited_once()
