@@ -1,10 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.models.prompt_template import NAME_MAX_LENGTH
 
 
 class PromptTemplateCreateRequest(BaseModel):
-    name: str
+    """作成・更新で共用するリクエスト。
+
+    移植元は検証がなく、DBカラム長（32文字）を超える名前は保存時に500になる。
+    保存前に422で返すため、テンプレート名にDBカラムと同じ上限を設定する（Issue #171）。
+    """
+
+    name: str = Field(max_length=NAME_MAX_LENGTH)
     description: str | None = None
     systemPrompt: str
     groups: set[str] | None = None

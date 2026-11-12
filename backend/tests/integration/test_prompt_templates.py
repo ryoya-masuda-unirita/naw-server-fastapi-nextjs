@@ -3,11 +3,16 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 
 from app.core.security import create_access_token
 from app.main import app
 from app.models.group import Group, GroupUser
-from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
+from app.models.prompt_template import (
+    NAME_MAX_LENGTH,
+    GroupPromptTemplate,
+    PromptTemplate,
+)
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
@@ -788,6 +793,108 @@ class TestUpdatePromptTemplate:
             )
 
         assert response.status_code == 403
+
+
+def _template_body(name: str) -> dict[str, str | None]:
+    return {"name": name, "description": None, "systemPrompt": "prompt"}
+
+
+@pytest.mark.asyncio
+class TestPromptTemplateNameMaxLength:
+    """テンプレート名の上限（DBカラムと同じ32文字）の検証（Issue #171）"""
+
+    async def test_create_accepts_name_at_max_length(self, client, admin_headers):
+        """上限ちょうどの名前でテンプレートを作成できること"""
+        name = "a" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_create_rejects_name_over_max_length(
+        self, client, admin_headers, session, tenant
+    ):
+        """上限を超える名前は保存前に422で拒否され、テンプレートが作成されないこと"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body("a" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "name"]
+        count = (
+            await session.execute(
+                select(func.count())
+                .select_from(PromptTemplate)
+                .where(PromptTemplate.tenant_id == tenant.id)
+            )
+        ).scalar()
+        assert count == 0
+
+    async def test_create_counts_multibyte_characters_as_one(
+        self, client, admin_headers
+    ):
+        """日本語などのマルチバイト文字も1文字として数え、上限ちょうどなら作成できること"""
+        name = "あ" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_create_rejects_multibyte_name_over_max_length(
+        self, client, admin_headers
+    ):
+        """マルチバイト文字でも上限を超えると422で拒否されること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body("あ" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_update_accepts_name_at_max_length(
+        self, client, admin_headers, template
+    ):
+        """上限ちょうどの名前でテンプレートを更新できること"""
+        name = "a" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/prompt-templates/{template.id}",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_update_rejects_name_over_max_length(
+        self, client, admin_headers, session, template
+    ):
+        """上限を超える名前での更新は422で拒否され、既存の名前が変わらないこと"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/prompt-templates/{template.id}",
+                json=_template_body("a" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+        await session.refresh(template)
+        assert template.name == "Template A"
 
 
 @pytest.mark.asyncio
