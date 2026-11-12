@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,10 +40,21 @@ class LibraryTagService:
             該当するライブラリタグ。
 
         Raises:
-            HTTPException: 存在しない場合404を返す。
+            HTTPException: 存在しない場合、またはUUIDとして解釈できない場合404を返す。
         """
+        # IDは保存形式（ハイフンなし32桁の小文字hex）で保存しているが、移植元は
+        # UUID標準形式（ハイフン付き）で受け付ける。一覧のタグ絞り込み（#173）と同じく
+        # UUIDとして解釈して保存形式に揃え、どちらの形式でも同じタグに当たるようにする。
+        try:
+            normalized_id = uuid.UUID(tag_id).hex
+        except ValueError:
+            # ライブラリAPIのパス変数と同じく、不正な形式は存在しないIDと同様に扱う。
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Library tag not found",
+            ) from None
         tag = await LibraryTagRepository.find_by_id_and_tenant_id(
-            tag_id, tenant_id, session
+            normalized_id, tenant_id, session
         )
         if not tag:
             raise HTTPException(
@@ -154,8 +167,10 @@ class LibraryTagService:
         tag = await LibraryTagService._get_tag_or_404(tag_id, tenant_id, session)
 
         if req.name is not None and req.name.strip():
+            # パスの値はハイフン付きの場合があり保存値と一致しないため、
+            # 取得したタグの（保存形式の）IDで自分自身を除外する。
             if await LibraryTagRepository.exists_by_tenant_id_and_name(
-                tenant_id, req.name, session, exclude_id=tag_id
+                tenant_id, req.name, session, exclude_id=tag.id
             ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
