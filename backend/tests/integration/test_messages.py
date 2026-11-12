@@ -692,7 +692,7 @@ class TestMessageRouter:
             message_chat_endpoint,
             engine,
         ):
-            """正常系: SSEでtext_delta・message_stop・completeイベントを配信すること"""
+            """正常系: SSEでtext_delta・message_stop・message_contentイベントを配信すること"""
 
             async def _stream_chunks(*args, **kwargs):
                 yield ChatStreamChunk(text_delta="こんにちは")
@@ -871,7 +871,7 @@ class TestMessageRouter:
 
             assert response.status_code == 422
 
-        async def test_persists_attachment_files_and_returns_them_in_complete_event(
+        async def test_persists_attachment_files_and_returns_them_in_message_content_event(
             self,
             client,
             owner_headers,
@@ -879,7 +879,7 @@ class TestMessageRouter:
             message_chat_endpoint,
             engine,
         ):
-            """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されcompleteイベントに反映されること"""
+            """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されmessage_contentイベントに反映されること"""
 
             async def _stream_chunks(*args, **kwargs):
                 yield ChatStreamChunk(text_delta="こんにちは")

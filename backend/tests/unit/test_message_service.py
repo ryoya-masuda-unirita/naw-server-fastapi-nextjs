@@ -428,7 +428,7 @@ class TestStreamMessageContent:
         mock_get_session_maker,
         test_user,
     ):
-        """text_delta・message_stop・completeイベントを順に送出し、内容を永続化すること"""
+        """text_delta・message_stop・message_contentイベントを順に送出し、内容を永続化すること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus
 
@@ -2600,7 +2600,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_persists_attachment_files_and_reflects_them_in_complete_event(
+    async def test_persists_attachment_files_and_reflects_them_in_message_content_event(
         self,
         mock_find_message,
         mock_require_owned_room,
@@ -2615,7 +2615,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         mock_get_session_maker,
         test_user,
     ):
-        """attachmentFilesを含むリクエストの場合、MessageFileを保存しcompleteイベントに反映すること"""
+        """attachmentFilesを含むリクエストの場合、MessageFileを保存しmessage_contentイベントに反映すること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus, MessageFile
 
@@ -2777,7 +2777,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_persists_token_usage_and_emits_complete_even_when_attachment_save_fails(
+    async def test_persists_token_usage_and_emits_message_content_even_when_attachment_save_fails(
         self,
         mock_find_message,
         mock_require_owned_room,
@@ -2792,7 +2792,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         mock_get_session_maker,
         test_user,
     ):
-        """添付ファイルの永続化が失敗しても、トークン使用量の永続化とcompleteイベント送出は行われること"""
+        """添付ファイルの永続化が失敗しても、トークン使用量の永続化とmessage_contentイベント送出は行われること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus
 
