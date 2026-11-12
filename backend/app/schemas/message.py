@@ -1,16 +1,13 @@
 from datetime import datetime
 
 import base64
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import File, Form, UploadFile
-from fastapi.exceptions import RequestValidationError
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    TypeAdapter,
-    ValidationError,
     field_serializer,
     field_validator,
     model_validator,
@@ -18,6 +15,7 @@ from pydantic import (
 
 from app.models.message import MessageContentStatus, MessageRating
 from app.schemas.attachment import AttachmentFile
+from app.schemas.multipart_form import parse_text_data_form
 from app.schemas.response_format import ResponseFormatRequest
 
 
@@ -234,61 +232,6 @@ class MessageContentCreateRequest(BaseModel):
         return self
 
 
-# アップロードされたファイルにContent-Typeが付いていない場合の既定値。
-_DEFAULT_ATTACHMENT_CONTENT_TYPE = "application/octet-stream"
-
-
-# `textData`をJSONオブジェクトとして解釈する。不正なJSON・不正なUTF-8・オブジェクト
-# 以外は、いずれもValidationErrorとして検出される。
-_TEXT_DATA_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
-
-
-def _to_request_validation_error(error: ValidationError) -> RequestValidationError:
-    """`textData`の検証エラーを、ボディの入力エラー(422)へ変換する。
-
-    依存関数内で発生したValidationErrorはFastAPIが422へ変換しないため明示的に
-    変換する。locは`("body", "textData", ...)`に揃え、`input`は含めない
-    （モデル単位のエラーでは添付ファイルを含むリクエスト全体が入り、応答が
-    肥大化するため）。
-
-    Args:
-        error: `textData`の解釈・検証で発生したエラー。
-
-    Returns:
-        FastAPIが422として返す入力エラー。
-    """
-    return RequestValidationError(
-        [
-            {
-                "type": detail["type"],
-                "loc": ("body", "textData", *detail["loc"]),
-                "msg": detail["msg"],
-            }
-            for detail in error.errors(include_url=False)
-        ]
-    )
-
-
-async def _to_attachment_payload(upload: UploadFile) -> dict[str, object]:
-    """アップロードファイルを`AttachmentFile`の入力形式へ変換する。
-
-    `AttachmentFile.data`は`Base64Bytes`型で、検証時にBase64をデコードして生の
-    バイト列を保持する。そのため生のバイト列をBase64エンコードして渡す。
-
-    Args:
-        upload: multipartで受け取ったファイル。
-
-    Returns:
-        `AttachmentFile`として検証できる辞書。
-    """
-    data = await upload.read()
-    return {
-        "name": upload.filename or "",
-        "type": upload.content_type or _DEFAULT_ATTACHMENT_CONTENT_TYPE,
-        "data": base64.b64encode(data),
-    }
-
-
 async def parse_message_content_create_form(
     textData: Annotated[UploadFile | str, Form()],
     attachmentFiles: Annotated[list[UploadFile] | None, File()] = None,
@@ -298,9 +241,7 @@ async def parse_message_content_create_form(
 
     移植元`MessageController.createMessageContent`は`@RequestPart("textData")`で
     リクエスト本体(JSON)を、`attachmentFiles`・`historyAttachmentFiles`で添付
-    ファイルを受け取る。クライアント(frontend-angular)は`textData`を
-    `application/json`のBlobとして送るためファイルパート(`UploadFile`)として届くが、
-    通常のフォーム値として送られた場合も受け付ける。
+    ファイルを受け取る。
 
     Args:
         textData: リクエスト本体(JSON)。
@@ -314,24 +255,14 @@ async def parse_message_content_create_form(
         RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
             場合、または項目の検証に失敗した場合（いずれも422）。
     """
-    raw_text_data = (
-        textData.encode("utf-8") if isinstance(textData, str) else await textData.read()
+    return await parse_text_data_form(
+        MessageContentCreateRequest,
+        textData,
+        {
+            "attachmentFiles": attachmentFiles,
+            "historyAttachmentFiles": historyAttachmentFiles,
+        },
     )
-    try:
-        text_payload = _TEXT_DATA_ADAPTER.validate_json(raw_text_data)
-        payload = {
-            **text_payload,
-            "attachmentFiles": [
-                await _to_attachment_payload(upload) for upload in attachmentFiles or []
-            ],
-            "historyAttachmentFiles": [
-                await _to_attachment_payload(upload)
-                for upload in historyAttachmentFiles or []
-            ],
-        }
-        return MessageContentCreateRequest.model_validate(payload)
-    except ValidationError as e:
-        raise _to_request_validation_error(e) from e
 
 
 class MessageFeedbackCreateRequest(BaseModel):
