@@ -8,9 +8,13 @@ from sqlalchemy.orm import InstrumentedAttribute
 from app.core.search import escape_like_pattern
 from app.models.file import File, FileStatus
 
+# 移植元は`Pageable`でエンティティの項目名をそのまま並べ替えキーにするため、`userId`は
+# ユーザー名ではなく`user_id`列、`status`は序数（ENABLE→DISABLE→DELETED）で並べ替える。
 _ORDER_BY_COLUMNS: dict[str, InstrumentedAttribute] = {
     "displayName": File.display_name,
     "updatedAt": File.updated_at,
+    "userId": File.user_id,
+    "status": File.status,
 }
 
 
@@ -120,7 +124,8 @@ class FileRepository:
             status: 絞り込み対象のステータス。Noneなら絞り込まない。
             updated_at_from: 更新日時の範囲開始（この値以上）。
             updated_at_to: 更新日時の範囲終了（この値以下）。
-            sort_col_name: ソート対象列名（"displayName"または"updatedAt"）。
+            sort_col_name: ソート対象列名（"displayName"・"updatedAt"・"userId"・"status"）。
+                未知の列名は"updatedAt"として扱う。
             sort_dir: ソート方向（"asc"または"desc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
