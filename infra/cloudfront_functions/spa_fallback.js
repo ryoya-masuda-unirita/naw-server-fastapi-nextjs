@@ -5,6 +5,8 @@
 // それだとbackend(ALB)のAPIが返す403/404までHTML(200)に置き換わるため、S3ビヘイビアだけに効くこの関数にした。
 // 拡張子のあるパス(JS・CSS・翻訳JSONなど)は書き換えず、存在しなければS3のエラーをそのまま返す
 // (HTMLをJSとして読み込むのを防ぐ)。
+// 画面パスのパラメータはUUID・hexのID(移植元Angularのルート定義どおり)で「.」を含まない前提。
+// 「.」を含む画面パスを追加する場合はこの判定を見直すこと。
 function handler(event) {
   var request = event.request;
   var lastSegment = request.uri.substring(request.uri.lastIndexOf('/') + 1);
