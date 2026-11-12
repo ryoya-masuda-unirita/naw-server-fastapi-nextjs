@@ -14,6 +14,7 @@
 | `client/`（Angular 21） | `frontend/`（React、Vite + React Router） |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター） | `generative-ai-adapter/`（Python、新設予定） |
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
+| （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
 `frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`frontend/`）の移植済み画面で行う。
@@ -114,6 +115,7 @@ naw-server-fastapi-nextjs/
 ├── frontend/          # React（Vite + React Router、client/ の移植先）
 ├── backend/           # FastAPI（server/ の移植先）
 ├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
+├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
 

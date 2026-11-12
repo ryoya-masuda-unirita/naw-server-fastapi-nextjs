@@ -19,6 +19,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 | `client/`（Angular 21） | React（Vite + React Router）: `frontend/` |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター） | `generative-ai-adapter/`（Python、新設予定） |
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
+| （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。
@@ -64,6 +65,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 naw-server-fastapi-nextjs/
 ├── frontend/          # React 実装（移植先）
 ├── backend/           # FastAPI 実装
+├── waha-emulator/     # Waha! の servicerun API のエミュレーター（FastAPI。独立した uv プロジェクト）
 └── infra/             # Terraform（存在する場合）
 ```
 
