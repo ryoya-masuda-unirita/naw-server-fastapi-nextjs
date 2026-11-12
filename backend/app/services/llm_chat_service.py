@@ -3,9 +3,10 @@
 移植元(Spring Boot)の`LlmChatService`に対応する。添付ファイル(`attachmentFiles`)は
 issue-97で、tools（web_search/mcp）はissue-98で、ライブラリ生成（createLibrary）は
 issue-99で、response_formatはissue-100で対応済み（`docs/issue-100/01_要件定義.md`参照）。
+リクエスト形式（multipart・発話ごとの添付ファイル紐付け）とSSE形式はissue-224で
+移植元に揃えた（`docs/issue-224/01_要件定義.md`参照）。
 """
 
-import json
 import logging
 from collections.abc import AsyncIterator
 from uuid import UUID
@@ -26,6 +27,7 @@ from app.core.library_stream_router import (
 from app.core.llm_client import AzureLlmChatClient, BedrockLlmChatClient, ChatMessage
 from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
+from app.core.sse import sse_event
 from app.core.token_usage_credit import (
     input_credits,
     output_credits,
@@ -44,7 +46,7 @@ from app.repositories.system_prompt_template_repository import (
 )
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.attachment import AttachmentFile
-from app.schemas.llm import LlmChatRequest
+from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.schemas.message import ToolConfig as SchemaToolConfig
 from app.schemas.response_format import ResponseFormatRequest
 
@@ -68,19 +70,6 @@ _CHAT_TENANT_ENDPOINT_TYPES: dict[AIModelEndpointType, EndpointType] = {
     AIModelEndpointType.AZURE_OPENAI_CHAT: EndpointType.AZURE_OPENAI_CHAT,
     AIModelEndpointType.BEDROCK_CHAT: EndpointType.BEDROCK_CHAT,
 }
-
-
-def _sse(event: str, data: dict) -> bytes:
-    """SSE(Server-Sent Events)形式の1イベントを組み立てる。
-
-    Args:
-        event: イベント名。
-        data: イベントデータ(JSONへ変換される)。
-
-    Returns:
-        SSE形式にエンコードされたバイト列。
-    """
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
 
 
 def _build_llm_response_format(
@@ -176,7 +165,8 @@ class LlmChatService:
             HTTPException: クレジット上限超過時は429、指定deployNameのチャット用
                 AIモデル（Azure OpenAI/Bedrock）が存在しない・テナントにそのモデル種別に
                 対応するチャット用エンドポイントが存在しない・
-                createLibrary=trueなのにmessageId未指定の場合は400、指定messageIdが
+                createLibrary=trueなのにmessageId未指定・発話の`attachments`に
+                アップロードされていないファイル名がある場合は400、指定messageIdが
                 テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
         """
         if req.createLibrary and not req.messageId:
@@ -243,7 +233,7 @@ class LlmChatService:
                 )
             )
         chat_messages = LlmChatService._apply_attachment_files(
-            chat_messages, req.attachmentFiles
+            chat_messages, req.messages, req.attachmentFiles
         )
 
         if req.createLibrary:
@@ -325,9 +315,9 @@ class LlmChatService:
                                     if kind == "comment"
                                     else f"library_{kind}_delta"
                                 )
-                                yield _sse(event, {"text": text})
+                                yield sse_event(event, {"text": text})
                         else:
-                            yield _sse("text_delta", {"text": chunk.text_delta})
+                            yield sse_event("text_delta", {"text": chunk.text_delta})
                     if chunk.input_tokens is not None:
                         input_tokens = chunk.input_tokens
                     if chunk.output_tokens is not None:
@@ -340,7 +330,7 @@ class LlmChatService:
                             if kind == "comment"
                             else f"library_{kind}_delta"
                         )
-                        yield _sse(event, {"text": text})
+                        yield sse_event(event, {"text": text})
                     # 永続化(`_persist_library`)自体は`finally`で行う。ここで確定させて
                     # おくことで、直後の`yield`中にクライアントが切断してGeneratorExitが
                     # 送出された場合でも、`finally`到達時点でタイトル・本文が確定済みなら
@@ -351,11 +341,11 @@ class LlmChatService:
                     library_content = router.final_content()
                     comment = router.final_comment()
                     if not comment:
-                        yield _sse(
+                        yield sse_event(
                             "text_delta", {"text": f"「{library_title}」を作成しました"}
                         )
 
-                yield _sse(
+                yield sse_event(
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
                 )
@@ -367,7 +357,7 @@ class LlmChatService:
                 # （`library_title`/`library_content`はflush後にのみ設定されるため、
                 # 生成完了前の例外では自動的に永続化がスキップされる）。
                 logger.exception("LLMチャット呼び出し中にエラーが発生しました")
-                yield _sse("error", {"message": str(e)})
+                yield sse_event("error", {"message": str(e)})
             finally:
                 if library_title is not None and library_content is not None:
                     await LlmChatService._persist_library(
@@ -449,37 +439,58 @@ class LlmChatService:
 
     @staticmethod
     def _apply_attachment_files(
-        messages: list[ChatMessage], files: list[AttachmentFile]
+        messages: list[ChatMessage],
+        turns: list[LlmChatTurn],
+        files: list[AttachmentFile],
     ) -> list[ChatMessage]:
-        """末尾から見て最後の"user"ロール発話に添付ファイルを付与する。
+        """各"user"ロール発話に、`attachments`のファイル名で指定された添付ファイルを付与する。
 
-        移植元Java版はターンごとにファイル名で紐付けるが、本ポートでは複雑さ低減のため
-        `attachmentFiles`は常に最後のユーザー発話に一括で適用する
-        （`docs/issue-97/01_要件定義.md`参照）。
+        移植元Java版`indexAttachmentFiles`/`buildUserMessage`に対応する。アップロード
+        されたファイルをファイル名で引けるようにし（空のファイルは除外する。同名ファイルは
+        `LlmChatRequest`の検証で拒否済み）、元の発話の`role`が"user"（前後の空白・
+        大文字小文字を区別しない）のものだけに付与する。
+        ライブラリ生成でsystemからuserへ降格した発話には付与しない（移植元はsystem発話を
+        添付なしのuser発話へ変換するため）。
 
         Args:
-            messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
-            files: 添付ファイル一覧。
+            messages: `turns`から1対1で作った会話履歴（追加プロンプト・ライブラリ用指示・
+                system発話の降格を適用済み。contentはすべてstr）。
+            turns: リクエストの会話履歴（添付ファイル名・元のroleの参照に使う）。
+            files: アップロードされた添付ファイル一覧。
 
         Returns:
-            添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない
-            場合はそのまま返す。
+            添付ファイル付与後の会話履歴。
+
+        Raises:
+            HTTPException: 発話の`attachments`に、アップロードされていないファイル名が
+                ある場合は400を返す。
         """
-        if not files:
-            return messages
-        for index in range(len(messages) - 1, -1, -1):
-            if messages[index].role.lower() == "user":
-                updated = list(messages)
-                content = messages[index].content
-                # additionalPrompt適用直後はcontentが常にstrであることを前提とする
-                # (このメソッドは_apply_additional_promptの直後にのみ呼ばれる)。
-                assert isinstance(content, str)
-                updated[index] = ChatMessage(
-                    role=messages[index].role,
-                    content=build_user_content(content, files),
+        files_by_name = {file.name: file for file in files if file.data}
+
+        updated: list[ChatMessage] = []
+        for message, turn in zip(messages, turns, strict=True):
+            # 移植元`buildSpringAiMessages`と同じく、前後の空白を除いてroleを判定する。
+            if turn.role.strip().lower() != "user" or not turn.attachments:
+                updated.append(message)
+                continue
+            missing = [name for name in turn.attachments if name not in files_by_name]
+            if missing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"messages 内の添付ファイル名に一致するファイルがありません: {missing[0]}",
                 )
-                return updated
-        return messages
+            # 添付ファイル付与前のcontentは常にstrである（マルチモーダル化するのは本メソッドのみ）。
+            assert isinstance(message.content, str)
+            updated.append(
+                ChatMessage(
+                    role=message.role,
+                    content=build_user_content(
+                        message.content,
+                        [files_by_name[name] for name in turn.attachments],
+                    ),
+                )
+            )
+        return updated
 
     @staticmethod
     def _downgrade_system_turns_to_user(

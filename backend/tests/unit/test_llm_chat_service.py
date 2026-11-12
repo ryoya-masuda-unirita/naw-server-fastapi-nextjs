@@ -1,4 +1,6 @@
+import json
 from decimal import Decimal
+from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -67,6 +69,19 @@ class _AsyncChunkIterator:
 
 async def _consume(streaming_response) -> list[bytes]:
     return [chunk async for chunk in streaming_response.body_iterator]
+
+
+def _sse_events(body: str) -> list[dict[str, Any]]:
+    """SSE本文の`data:`行をJSONとして読み、イベントの一覧へ変換する。
+
+    移植元と同じく、イベント名の行(`event:`)は送られないことも併せて検証する。
+    """
+    assert "event:" not in body
+    return [
+        json.loads(line[len("data:") :].strip())
+        for line in body.splitlines()
+        if line.startswith("data:")
+    ]
 
 
 class TestStreamChat:
@@ -232,12 +247,11 @@ class TestStreamChat:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: text_delta" in body
-        assert '"text": "こんに"' in body
-        assert '"text": "ちは"' in body
-        assert "event: message_stop" in body
-        assert '"inputTokens": 10' in body
-        assert '"outputTokens": 5' in body
+        assert _sse_events(body) == [
+            {"type": "text_delta", "text": "こんに"},
+            {"type": "text_delta", "text": "ちは"},
+            {"type": "message_stop", "inputTokens": 10, "outputTokens": 5},
+        ]
         mock_new_session.add.assert_called_once()
         mock_new_session.commit.assert_awaited_once()
 
@@ -283,8 +297,7 @@ class TestStreamChat:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: error" in body
-        assert "azure error" in body
+        assert _sse_events(body) == [{"type": "error", "message": "azure error"}]
 
     async def test_raises_400_when_create_library_without_message_id(self, test_user):
         """createLibrary=trueかつmessageId未指定の場合400になること"""
@@ -671,14 +684,20 @@ class TestStreamChatCreateLibrary:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: library_title_delta" in body
-        assert '"text": "タイトルA' in body
-        assert "event: library_content_delta" in body
-        assert '"text": "本文B' in body
+        events = _sse_events(body)
+        title = "".join(e["text"] for e in events if e["type"] == "library_title_delta")
+        content = "".join(
+            e["text"] for e in events if e["type"] == "library_content_delta"
+        )
+        assert "タイトルA" in title
+        assert "本文B" in content
         # コメント区間が省略された場合、デフォルトの案内文がtext_deltaで配信されること
-        assert "event: text_delta" in body
-        assert "「タイトルA" in body
-        assert "を作成しました" in body
+        assert {"type": "text_delta", "text": "「タイトルA」を作成しました"} in events
+        assert events[-1] == {
+            "type": "message_stop",
+            "inputTokens": 10,
+            "outputTokens": 5,
+        }
 
         mock_save_library.assert_awaited_once()
         saved_library = mock_save_library.await_args.args[0]
@@ -726,33 +745,105 @@ class TestApplyAdditionalPrompt:
 class TestApplyAttachmentFiles:
     """LlmChatService._apply_attachment_files のテスト"""
 
-    def _file(self, name: str = "photo.png") -> AttachmentFile:
-        return AttachmentFile(name=name, type="image/png", data=b"data")
+    def _file(self, name: str = "photo.png", data: bytes = b"data") -> AttachmentFile:
+        return AttachmentFile(name=name, type="image/png", data=data)
 
-    def test_returns_as_is_when_no_files(self):
-        """添付ファイルがない場合そのまま返すこと"""
-        messages = [ChatMessage(role="user", content="こんにちは")]
-        assert LlmChatService._apply_attachment_files(messages, []) == messages
+    def _apply(
+        self, turns: list[LlmChatTurn], files: list[AttachmentFile]
+    ) -> list[ChatMessage]:
+        messages = [ChatMessage(role=t.role, content=t.content) for t in turns]
+        return LlmChatService._apply_attachment_files(messages, turns, files)
 
-    def test_converts_last_user_turn_content_to_multimodal_list(self):
-        """末尾のuser発話のcontentがマルチモーダル形式に変換されること"""
-        messages = [
-            ChatMessage(role="system", content="system prompt"),
-            ChatMessage(role="user", content="質問1"),
+    def test_returns_as_is_when_no_attachments(self):
+        """発話にattachmentsがない場合、ファイルがあってもそのまま返すこと"""
+        turns = [LlmChatTurn(role="user", content="こんにちは")]
+        result = self._apply(turns, [self._file()])
+
+        assert result == [ChatMessage(role="user", content="こんにちは")]
+
+    def test_attaches_files_to_each_user_turn_by_name(self):
+        """各user発話に、attachmentsのファイル名と一致するファイルだけを付与すること"""
+        turns = [
+            LlmChatTurn(role="system", content="system prompt"),
+            LlmChatTurn(role="user", content="質問1", attachments=["a.png"]),
+            LlmChatTurn(role="assistant", content="回答1"),
+            LlmChatTurn(role="User", content="質問2", attachments=["b.png", "c.png"]),
         ]
-        result = LlmChatService._apply_attachment_files(messages, [self._file()])
+        result = self._apply(
+            turns, [self._file("a.png"), self._file("b.png"), self._file("c.png")]
+        )
 
-        assert result[0] == messages[0]
+        assert result[0] == ChatMessage(role="system", content="system prompt")
         assert isinstance(result[1].content, list)
         assert result[1].content[0] == {"type": "text", "text": "質問1"}
-        assert result[1].content[1]["type"] == "image_url"
+        assert len(result[1].content) == 2
+        assert result[2] == ChatMessage(role="assistant", content="回答1")
+        assert isinstance(result[3].content, list)
+        assert result[3].content[0] == {"type": "text", "text": "質問2"}
+        assert [part["type"] for part in result[3].content[1:]] == [
+            "image_url",
+            "image_url",
+        ]
 
-    def test_returns_as_is_when_no_user_turn_exists(self):
-        """user発話が存在しない場合は何もしないこと"""
-        messages = [ChatMessage(role="assistant", content="回答のみ")]
-        assert (
-            LlmChatService._apply_attachment_files(messages, [self._file()]) == messages
+    def test_trims_role_when_judging_user_turn(self):
+        """前後に空白があるroleでもuser発話として添付すること"""
+        turns = [LlmChatTurn(role=" user ", content="質問", attachments=["a.png"])]
+        result = self._apply(turns, [self._file("a.png")])
+
+        assert isinstance(result[0].content, list)
+        assert result[0].content[1]["type"] == "image_url"
+
+    def test_ignores_attachments_on_non_user_turns(self):
+        """system/assistant発話のattachmentsは無視し、エラーにもしないこと"""
+        turns = [
+            LlmChatTurn(role="system", content="指示", attachments=["missing.png"]),
+            LlmChatTurn(role="assistant", content="回答", attachments=["a.png"]),
+        ]
+        result = self._apply(turns, [self._file("a.png")])
+
+        assert result == [
+            ChatMessage(role="system", content="指示"),
+            ChatMessage(role="assistant", content="回答"),
+        ]
+
+    def test_raises_400_when_attachment_name_not_found(self):
+        """attachmentsにアップロードされていないファイル名がある場合400になること"""
+        turns = [LlmChatTurn(role="user", content="質問", attachments=["x.png"])]
+
+        with pytest.raises(HTTPException) as exc_info:
+            self._apply(turns, [self._file("a.png")])
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == (
+            "messages 内の添付ファイル名に一致するファイルがありません: x.png"
         )
+
+    def test_skips_empty_files_when_indexing(self):
+        """空のファイルは突き合わせの対象にせず、指定されると400になること"""
+        turns = [LlmChatTurn(role="user", content="質問", attachments=["empty.png"])]
+
+        with pytest.raises(HTTPException) as exc_info:
+            self._apply(turns, [self._file("empty.png", data=b"")])
+
+        assert exc_info.value.status_code == 400
+
+    def test_does_not_attach_to_system_turn_downgraded_to_user(self):
+        """ライブラリ生成でuserへ降格したsystem発話には添付しないこと"""
+        turns = [
+            LlmChatTurn(role="system", content="指示", attachments=["a.png"]),
+            LlmChatTurn(role="user", content="質問"),
+        ]
+        downgraded = LlmChatService._downgrade_system_turns_to_user(
+            [ChatMessage(role=t.role, content=t.content) for t in turns]
+        )
+        result = LlmChatService._apply_attachment_files(
+            downgraded, turns, [self._file("a.png")]
+        )
+
+        assert result == [
+            ChatMessage(role="user", content="指示"),
+            ChatMessage(role="user", content="質問"),
+        ]
 
 
 class TestStreamChatWithAttachmentFiles:
@@ -778,7 +869,7 @@ class TestStreamChatWithAttachmentFiles:
         mock_get_session_maker,
         test_user,
     ):
-        """attachmentFilesを含むリクエストの場合、最後のuser発話がマルチモーダル形式で渡されること"""
+        """発話のattachmentsで指定した添付ファイルが、そのuser発話にマルチモーダル形式で渡されること"""
         from app.core.llm_client import ChatStreamChunk
 
         mock_find_model.return_value = _ai_model()
@@ -794,9 +885,14 @@ class TestStreamChatWithAttachmentFiles:
         mock_get_session_maker.return_value = mock_session_maker
 
         req = _request(
+            messages=[
+                LlmChatTurn(
+                    role="user", content="この画像は？", attachments=["photo.png"]
+                )
+            ],
             attachmentFiles=[
                 AttachmentFile(name="photo.png", type="image/png", data=b"data")
-            ]
+            ],
         )
         response = await LlmChatService.stream_chat(
             "tenant-1", test_user, req, session=None

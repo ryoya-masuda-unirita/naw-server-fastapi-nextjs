@@ -24,6 +24,7 @@ from app.core.room_access import (
     require_owned_room,
     require_viewable_room,
 )
+from app.core.sse import sse_event
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
     input_credits,
@@ -96,29 +97,6 @@ _LIBRARY_PROMPT_TYPE = "LIBRARY"
 
 # タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
 _LIBRARY_TITLE_MAX_LENGTH = 255
-
-
-def _sse(event_type: str, payload: dict) -> bytes:
-    """移植元と同じ形式のSSE(Server-Sent Events)イベント1件を組み立てる。
-
-    移植元`MessageService.streamAndPersist`は`response/sse`配下のイベント
-    （先頭フィールドが`type`のレコード）をJSON化し、`SseEmitter.event().data(json)`で
-    イベント名の行を付けずに送る。frontend-angularもJSON内の`type`で種別を判定し、
-    `type`のないイベントは無視するため、この形式に合わせる（issue-183）。
-
-    `llm_chat_service.py`の`_sse`（LLM Chat API用、従来形式）とは別に、本APIの
-    形式としてこのファイル内に定義する（「serviceが別serviceを呼ばない」規約のため）。
-
-    Args:
-        event_type: イベント種別（`text_delta`・`message_content`等）。
-        payload: 種別以外のイベントデータ(JSONへ変換される)。
-
-    Returns:
-        SSE形式にエンコードされたバイト列。
-    """
-    # payloadに`type`キーが含まれていても種別が上書きされないよう、`type`を後に置く。
-    data = {**payload, "type": event_type}
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
 
 
 # メッセージ内容の永続化に失敗した場合にerrorイベントで返す文言
@@ -974,12 +952,14 @@ class MessageService:
                             for kind, text in router.feed(chunk.text_delta):
                                 if kind == "comment":
                                     answer_text += text
-                                    yield _sse("text_delta", {"text": text})
+                                    yield sse_event("text_delta", {"text": text})
                                 else:
-                                    yield _sse(f"library_{kind}_delta", {"text": text})
+                                    yield sse_event(
+                                        f"library_{kind}_delta", {"text": text}
+                                    )
                         else:
                             answer_text += chunk.text_delta
-                            yield _sse("text_delta", {"text": chunk.text_delta})
+                            yield sse_event("text_delta", {"text": chunk.text_delta})
                     if chunk.input_tokens is not None:
                         input_tokens = chunk.input_tokens
                     if chunk.output_tokens is not None:
@@ -989,18 +969,18 @@ class MessageService:
                     for kind, text in router.flush():
                         if kind == "comment":
                             answer_text += text
-                            yield _sse("text_delta", {"text": text})
+                            yield sse_event("text_delta", {"text": text})
                         else:
-                            yield _sse(f"library_{kind}_delta", {"text": text})
+                            yield sse_event(f"library_{kind}_delta", {"text": text})
                     library_title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
                         :_LIBRARY_TITLE_MAX_LENGTH
                     ]
                     library_content = router.final_content()
                     if not answer_text.strip():
                         answer_text = f"「{library_title}」を作成しました"
-                        yield _sse("text_delta", {"text": answer_text})
+                        yield sse_event("text_delta", {"text": answer_text})
 
-                yield _sse(
+                yield sse_event(
                     "message_stop",
                     {"inputTokens": input_tokens, "outputTokens": output_tokens},
                 )
@@ -1013,7 +993,7 @@ class MessageService:
                 # 例外メッセージが回答内容としてクライアントへ露出・永続化されないようにする。
                 logger.exception("メッセージ送信中にエラーが発生しました")
                 content_status = MessageContentStatus.ERROR
-                yield _sse("error", {"message": str(e)})
+                yield sse_event("error", {"message": str(e)})
                 stream_finished = True
             finally:
                 # ValueError発生時にNoneを代入するため、事前に`| None`を明示しておく
@@ -1074,7 +1054,7 @@ class MessageService:
                     # 文字列へ変換してから渡す。
                     # 移植元`SseCreateMessageContentResponseEvent`と同じく、メッセージ
                     # 内容を`data`に入れた`message_content`イベントとして送る。
-                    yield _sse(
+                    yield sse_event(
                         "message_content",
                         {"data": content_response.model_dump(mode="json")},
                     )
@@ -1082,7 +1062,7 @@ class MessageService:
                     # 永続化に失敗した場合も、移植元(`streamAndPersist`の外側のcatchで
                     # `sendSseError`)と同じくerrorイベントで失敗を通知してから終える。
                     # 内部の例外内容はログにのみ残し、固定文言で通知する。
-                    yield _sse("error", {"message": _PERSIST_ERROR_MESSAGE})
+                    yield sse_event("error", {"message": _PERSIST_ERROR_MESSAGE})
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
