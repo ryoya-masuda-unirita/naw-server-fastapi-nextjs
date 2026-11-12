@@ -9,7 +9,23 @@ from app.core.llm_client import (
     ChatMessage,
     ToolConfig,
     _build_responses_tool,
+    cap_max_tokens,
 )
+
+
+class TestCapMaxTokens:
+    def test_caps_to_model_max_tokens(self):
+        """指定値がモデルの上限を超える場合、モデルの上限に切り詰めること"""
+        assert cap_max_tokens(10000, 4096) == 4096
+
+    def test_keeps_requested_when_within_limit(self):
+        """指定値がモデルの上限以下の場合、指定値のままであること"""
+        assert cap_max_tokens(100, 4096) == 100
+        assert cap_max_tokens(4096, 4096) == 4096
+
+    def test_returns_none_when_not_requested(self):
+        """指定がない場合はNoneを返すこと"""
+        assert cap_max_tokens(None, 4096) is None
 
 
 def _chat_delta_chunk(content: str | None) -> MagicMock:
@@ -668,8 +684,8 @@ class TestBedrockLlmChatClient:
         _, kwargs = mock_client.messages.stream.call_args
         assert "system" not in kwargs
 
-    async def test_falls_back_max_tokens_when_none(self):
-        """max_tokens未指定時にフォールバック値が使われること"""
+    async def test_passes_max_tokens_to_messages_stream(self):
+        """渡したmax_tokensがそのままMessages APIへ渡されること"""
         mock_client = _mock_bedrock_client([])
 
         with patch(
@@ -681,26 +697,22 @@ class TestBedrockLlmChatClient:
                 "anthropic.claude-sonnet-5",
                 [ChatMessage(role="user", content="こんにちは")],
                 0.4,
-                None,
-                max_tokens_fallback=8192,
+                8192,
             ):
                 pass
 
         _, kwargs = mock_client.messages.stream.call_args
         assert kwargs["max_tokens"] == 8192
 
-    async def test_raises_value_error_when_max_tokens_and_fallback_both_none(self):
-        """max_tokens・max_tokens_fallbackどちらも未指定の場合ValueErrorが送出されること"""
-        with pytest.raises(ValueError):
-            async for _ in BedrockLlmChatClient.stream_chat(
-                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
-                "dummy-api-key",
-                "anthropic.claude-sonnet-5",
-                [ChatMessage(role="user", content="こんにちは")],
-                0.4,
-                None,
-            ):
-                pass
+    def test_validate_request_raises_when_tools_specified(self):
+        """toolsを指定するとvalidate_requestがValueErrorを送出すること"""
+        with pytest.raises(ValueError, match="web_search/mcp"):
+            BedrockLlmChatClient.validate_request([ToolConfig(name="web_search")])
+
+    def test_validate_request_accepts_no_tools(self):
+        """toolsが未指定・空の場合はvalidate_requestが例外を送出しないこと"""
+        BedrockLlmChatClient.validate_request(None)
+        BedrockLlmChatClient.validate_request([])
 
     async def test_raises_value_error_when_tools_specified(self):
         """toolsを指定した場合ValueErrorが送出されること"""

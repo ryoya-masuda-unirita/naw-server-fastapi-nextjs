@@ -94,6 +94,27 @@ def _build_responses_tool(tool: ToolConfig) -> dict:
     raise ValueError(f"未対応のツール名: {tool.name}")
 
 
+def cap_max_tokens(requested: int | None, model_max_tokens: int) -> int | None:
+    """リクエストで指定された出力トークン数の上限を、AIモデルの上限で切り詰める。
+
+    移植元Java版`OpenAiLlmChatAdapter.buildParams`の`Math.min(reqMax, cap)`に対応する。
+    移植元は未指定時にAIモデルの上限を使うが、`ai_models.max_tokens`にはコンテキスト長
+    相当の値が入りうり、Azure OpenAIへ出力上限として送ると上限超過で拒否されるおそれが
+    あるため、未指定時はNoneのまま返す（上限が必須のBedrockは呼び出し側でAIモデルの
+    上限を補う。`docs/issue-249/02_基本設計.md`参照）。
+
+    Args:
+        requested: リクエストで指定された出力トークン数の上限。
+        model_max_tokens: AIモデルの上限(`ai_models.max_tokens`)。
+
+    Returns:
+        切り詰めた上限。`requested`が未指定の場合はNone。
+    """
+    if requested is None:
+        return None
+    return min(requested, model_max_tokens)
+
+
 @dataclass(frozen=True)
 class ChatStreamChunk:
     """チャットストリーミングの1チャンク。
@@ -336,15 +357,35 @@ class BedrockLlmChatClient:
     """
 
     @staticmethod
+    def validate_request(tools: list[ToolConfig] | None) -> None:
+        """Bedrock経由で呼び出せないパラメータが指定されていないかを検証する。
+
+        ストリーミング開始後に失敗するとSSEの`error`としてしか返せないため、呼び出し元
+        （サービス）がストリーミング開始前にこのメソッドで検証し、400として拒否できる
+        ようにする。
+
+        Args:
+            tools: 有効化するツール。
+
+        Raises:
+            ValueError: `tools`が指定された場合（Bedrock Mantleはサーバーサイドの
+                組み込みツール（web_search/mcp）に対応していないため）。
+        """
+        if tools:
+            raise ValueError(
+                "Bedrock Mantle経由のClaude呼び出しはweb_search/mcp組み込みツールに"
+                "対応していません"
+            )
+
+    @staticmethod
     async def stream_chat(
         endpoint: str,
         api_key: str,
         model_id: str,
         messages: list[ChatMessage],
         temperature: float,
-        max_tokens: int | None,
+        max_tokens: int,
         tools: list[ToolConfig] | None = None,
-        max_tokens_fallback: int | None = None,
     ) -> AsyncIterator[ChatStreamChunk]:
         """Bedrock経由でClaudeモデルへ会話履歴を送信し、応答をストリーミングで受け取る。
 
@@ -355,34 +396,19 @@ class BedrockLlmChatClient:
             model_id: 呼び出すモデルID（例: `anthropic.claude-haiku-4-5`）。
             messages: 会話履歴。
             temperature: 応答のランダム性(0.0〜1.0)。
-            max_tokens: 出力トークン数の上限。未指定の場合は`max_tokens_fallback`を使う。
-            tools: 有効化するツール。Bedrock Mantleはサーバーサイドの組み込みツール
-                （web_search/mcp）に対応していないため、指定された場合は例外にする。
-            max_tokens_fallback: `max_tokens`未指定時に使うフォールバック値
-                （呼び出し元がAIモデルの`max_tokens`を渡す想定）。Anthropic Messages APIは
-                `max_tokens`が必須パラメータのため、どちらも未指定の場合はエラーになる。
+            max_tokens: 出力トークン数の上限。Anthropic Messages APIでは必須のため、
+                呼び出し元がAIモデルの上限で切り詰めた値（未指定時はAIモデルの上限）を渡す。
+            tools: 有効化するツール。対応していないため、指定された場合は例外にする
+                （呼び出し元は事前に`validate_request`で検証する）。
 
         Yields:
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
 
         Raises:
-            ValueError: `tools`が指定された場合、`max_tokens`・
-                `max_tokens_fallback`のいずれも指定されていない場合、または
-                メッセージに変換できない添付パートが含まれる場合。
+            ValueError: `tools`が指定された場合、またはメッセージに変換できない
+                添付パートが含まれる場合。
         """
-        if tools:
-            raise ValueError(
-                "Bedrock Mantle経由のClaude呼び出しはweb_search/mcp組み込みツールに"
-                "対応していません"
-            )
-
-        resolved_max_tokens = (
-            max_tokens if max_tokens is not None else max_tokens_fallback
-        )
-        if resolved_max_tokens is None:
-            raise ValueError(
-                "max_tokensを指定するか、max_tokens_fallbackを渡してください"
-            )
+        BedrockLlmChatClient.validate_request(tools)
 
         system_prompt = "\n\n".join(
             message.content
@@ -403,7 +429,7 @@ class BedrockLlmChatClient:
         create_kwargs: dict = {
             "model": model_id,
             "messages": conversation_messages,
-            "max_tokens": resolved_max_tokens,
+            "max_tokens": max_tokens,
             "temperature": temperature,
         }
         if system_prompt:

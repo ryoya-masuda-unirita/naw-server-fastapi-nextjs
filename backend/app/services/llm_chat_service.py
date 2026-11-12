@@ -24,7 +24,12 @@ from app.core.library_stream_router import (
     LIBRARY_USER_INSTRUCTION_PREFIX,
     LibraryStreamRouter,
 )
-from app.core.llm_client import AzureLlmChatClient, BedrockLlmChatClient, ChatMessage
+from app.core.llm_client import (
+    AzureLlmChatClient,
+    BedrockLlmChatClient,
+    ChatMessage,
+    cap_max_tokens,
+)
 from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.sse import sse_event
@@ -33,9 +38,8 @@ from app.core.token_usage_credit import (
     output_credits,
     positive_token_weight,
 )
-from app.models.ai_model import AIModelEndpointType
+from app.models.ai_model import CHAT_TENANT_ENDPOINT_TYPES, AIModelEndpointType
 from app.models.library import Library
-from app.models.tenant_endpoint import EndpointType
 from app.models.token_usage import TokenUsage
 from app.models.user import User
 from app.repositories.ai_model_repository import AIModelRepository
@@ -62,14 +66,6 @@ _LIBRARY_PROMPT_TYPE = "LIBRARY"
 
 # タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
 _LIBRARY_TITLE_MAX_LENGTH = 255
-
-# チャットAPIが扱えるAIモデルの種別と、それに対応するテナントエンドポイントの種別。
-# モデル検索の絞り込み・エンドポイントの解決をこの1か所で管理し、プロバイダ追加時の
-# 更新漏れを防ぐ。
-_CHAT_TENANT_ENDPOINT_TYPES: dict[AIModelEndpointType, EndpointType] = {
-    AIModelEndpointType.AZURE_OPENAI_CHAT: EndpointType.AZURE_OPENAI_CHAT,
-    AIModelEndpointType.BEDROCK_CHAT: EndpointType.BEDROCK_CHAT,
-}
 
 
 def _build_llm_response_format(
@@ -166,7 +162,8 @@ class LlmChatService:
                 AIモデル（Azure OpenAI/Bedrock）が存在しない・テナントにそのモデル種別に
                 対応するチャット用エンドポイントが存在しない・
                 createLibrary=trueなのにmessageId未指定・発話の`attachments`に
-                アップロードされていないファイル名がある場合は400、指定messageIdが
+                アップロードされていないファイル名がある・Bedrockのモデルで
+                非対応のパラメータ（tools）が指定された場合は400、指定messageIdが
                 テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
         """
         if req.createLibrary and not req.messageId:
@@ -178,14 +175,25 @@ class LlmChatService:
         await enforce_within_quota(tenant_id, session)
 
         ai_model = await AIModelRepository.find_by_name_and_endpoint_types(
-            req.deployName, _CHAT_TENANT_ENDPOINT_TYPES.keys(), session
+            req.deployName, CHAT_TENANT_ENDPOINT_TYPES.keys(), session
         )
         if ai_model is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"指定された deployName の AI モデルが見つかりません: {req.deployName}",
             )
-        tenant_endpoint_type = _CHAT_TENANT_ENDPOINT_TYPES[ai_model.endpoint_type]
+        tenant_endpoint_type = CHAT_TENANT_ENDPOINT_TYPES[ai_model.endpoint_type]
+
+        tools = _to_core_tool_configs(req.tools)
+        if ai_model.endpoint_type == AIModelEndpointType.BEDROCK_CHAT:
+            # ストリーミング開始後に失敗するとSSEのerrorとしてしか返せないため、
+            # Bedrockで扱えないパラメータは開始前に400で拒否する。
+            try:
+                BedrockLlmChatClient.validate_request(tools)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                ) from e
 
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
             tenant_id, tenant_endpoint_type, session
@@ -260,8 +268,7 @@ class LlmChatService:
         api_key = tenant_endpoint.api_key
         deploy_name = req.deployName
         temperature = req.temperature
-        max_tokens = req.maxTokens
-        tools = _to_core_tool_configs(req.tools)
+        max_tokens = cap_max_tokens(req.maxTokens, ai_model.max_tokens)
         user_id = current_user.id
         model_name = ai_model.name
         model_endpoint_type = ai_model.endpoint_type
@@ -301,9 +308,9 @@ class LlmChatService:
                     deploy_name,
                     chat_messages,
                     temperature,
-                    max_tokens,
+                    # Bedrockは上限が必須のため、未指定時はAIモデルの上限を使う。
+                    max_tokens if max_tokens is not None else model_max_tokens,
                     tools,
-                    max_tokens_fallback=model_max_tokens,
                 )
             try:
                 async for chunk in chat_stream:

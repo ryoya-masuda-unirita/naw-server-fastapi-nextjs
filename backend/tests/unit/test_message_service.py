@@ -2923,3 +2923,190 @@ class TestStreamMessageContentWithAttachmentFiles:
         final_event = _sse_events(body)[-1]
         assert final_event["type"] == "message_content"
         assert final_event["data"]["attachmentFiles"] == []
+
+
+_BEDROCK_MODEL = "anthropic.claude-sonnet-5"
+
+
+def _bedrock_tenant_endpoint() -> TenantEndpoint:
+    return TenantEndpoint(
+        id="endpoint-1",
+        tenant_id="tenant-1",
+        type=EndpointType.BEDROCK_CHAT,
+        endpoint_name="bedrock",
+        endpoint="https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+        api_key="api-key",
+    )
+
+
+def _bedrock_ai_model() -> AIModel:
+    return AIModel(
+        id=2,
+        endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        name=_BEDROCK_MODEL,
+        max_tokens=4096,
+        token_weight=Decimal("1.0"),
+    )
+
+
+class TestStreamMessageContentProviderDispatch:
+    """MessageService.stream_message_content のプロバイダ（Azure OpenAI/Bedrock）分岐のテスト"""
+
+    @pytest.fixture
+    def mocks(self):
+        """送信に必要なリポジトリ・LLMクライアント・永続化先をまとめてモックする。"""
+        from app.models.message import MessageContent, MessageContentStatus
+
+        async_targets = {
+            "find_message": "MessageRepository.find_by_tenant_id_and_id",
+            "require_owned_room": "require_owned_room",
+            "find_assistant": "AssistantRepository.find_by_id_and_tenant_id",
+            "enforce": "enforce_within_quota",
+            "find_endpoint": "AssistantEndpointRepository.find_chat_endpoint",
+            "find_model": "AIModelRepository.find_by_endpoint_type_and_name",
+            "find_room": "RoomRepository.find_by_id_and_tenant_id",
+        }
+        sync_targets = {
+            "azure_stream": "AzureLlmChatClient.stream_chat",
+            "bedrock_stream": "BedrockLlmChatClient.stream_chat",
+            "save_content": "MessageContentRepository.save",
+            "get_session_maker": "get_session_maker",
+        }
+        patchers = {
+            name: patch(
+                f"app.services.message_service.{target}", new_callable=AsyncMock
+            )
+            for name, target in async_targets.items()
+        }
+        patchers.update(
+            {
+                name: patch(f"app.services.message_service.{target}")
+                for name, target in sync_targets.items()
+            }
+        )
+        result = {name: patcher.start() for name, patcher in patchers.items()}
+
+        result["find_message"].return_value = _message()
+        result["find_assistant"].return_value = _assistant()
+        result["find_room"].return_value = MagicMock(updated_at=None)
+        result["save_content"].return_value = MessageContent(
+            id="content-1",
+            tenant_id="tenant-1",
+            message_id="msg-1",
+            status=MessageContentStatus.OK,
+            question="こんにちは",
+            answer="こんにちは",
+        )
+        result["new_session"] = _mock_new_session()
+        result["get_session_maker"].return_value = MagicMock(
+            return_value=result["new_session"]
+        )
+        yield result
+        for patcher in patchers.values():
+            patcher.stop()
+
+    @staticmethod
+    def _added_token_usages(new_session: MagicMock) -> list[TokenUsage]:
+        return [
+            call.args[0]
+            for call in new_session.add.call_args_list
+            if isinstance(call.args[0], TokenUsage)
+        ]
+
+    async def test_streams_with_bedrock_client_for_bedrock_endpoint(
+        self, mocks, test_user
+    ):
+        """Bedrockのエンドポイントでは、Bedrockの種別でAIモデルを検索し、Bedrockクライアントで応答して使用量にBEDROCK_CHATを記録すること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mocks["find_endpoint"].return_value = (
+            _assistant_endpoint(model=_BEDROCK_MODEL),
+            _bedrock_tenant_endpoint(),
+        )
+        mocks["find_model"].return_value = _bedrock_ai_model()
+        mocks["bedrock_stream"].return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(input_tokens=10),
+                ChatStreamChunk(text_delta="こんにちは"),
+                ChatStreamChunk(output_tokens=5),
+            ]
+        )
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        assert [event["type"] for event in _sse_events(body)] == [
+            "text_delta",
+            "message_stop",
+            "message_content",
+        ]
+        mocks["find_model"].assert_awaited_once_with(
+            AIModelEndpointType.BEDROCK_CHAT, _BEDROCK_MODEL, None
+        )
+        mocks["azure_stream"].assert_not_called()
+        args = mocks["bedrock_stream"].call_args.args
+        assert args[2] == _BEDROCK_MODEL
+        # Bedrockは上限が必須のため、AIモデルの上限が渡されること
+        assert args[5] == 4096
+        token_usages = self._added_token_usages(mocks["new_session"])
+        assert len(token_usages) == 1
+        assert token_usages[0].endpoint_type == "BEDROCK_CHAT"
+        assert token_usages[0].input_tokens == 10
+        assert token_usages[0].output_tokens == 5
+
+    async def test_raises_400_when_tools_specified_for_bedrock(self, mocks, test_user):
+        """Bedrockのエンドポイントでtoolsを指定すると、ストリーミング開始前に400になりLLM呼び出し・応答保存をしないこと"""
+        from app.schemas.message import ToolConfig
+
+        mocks["find_endpoint"].return_value = (
+            _assistant_endpoint(model=_BEDROCK_MODEL),
+            _bedrock_tenant_endpoint(),
+        )
+        mocks["find_model"].return_value = _bedrock_ai_model()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await MessageService.stream_message_content(
+                "tenant-1",
+                test_user,
+                _request(tools=[ToolConfig(name="web_search")]),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "web_search/mcp" in exc_info.value.detail
+        mocks["bedrock_stream"].assert_not_called()
+        mocks["azure_stream"].assert_not_called()
+        mocks["save_content"].assert_not_called()
+        mocks["new_session"].add.assert_not_called()
+
+    async def test_records_azure_endpoint_type_for_azure_endpoint(
+        self, mocks, test_user
+    ):
+        """Azure OpenAIのエンドポイントでは、Azureの種別でAIモデルを検索し、使用量にAZURE_OPENAI_CHATを記録すること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        mocks["find_endpoint"].return_value = (
+            _assistant_endpoint(),
+            _tenant_endpoint(),
+        )
+        mocks["find_model"].return_value = _ai_model()
+        mocks["azure_stream"].return_value = _AsyncChunkIterator(
+            [ChatStreamChunk(input_tokens=10, output_tokens=5)]
+        )
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        await _consume(response)
+
+        mocks["find_model"].assert_awaited_once_with(
+            AIModelEndpointType.AZURE_OPENAI_CHAT, "gpt-4o", None
+        )
+        mocks["bedrock_stream"].assert_not_called()
+        # Azureは従来どおり、メッセージ送信では上限を指定しない（モデルの既定値に従う）
+        assert mocks["azure_stream"].call_args.args[5] is None
+        token_usages = self._added_token_usages(mocks["new_session"])
+        assert len(token_usages) == 1
+        assert token_usages[0].endpoint_type == "AZURE_OPENAI_CHAT"

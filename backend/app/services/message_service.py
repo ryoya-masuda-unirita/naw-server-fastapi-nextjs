@@ -17,7 +17,12 @@ from app.core.library_stream_router import (
     LIBRARY_USER_INSTRUCTION_PREFIX,
     LibraryStreamRouter,
 )
-from app.core.llm_client import AzureLlmChatClient, AzureLlmEmbeddingClient, ChatMessage
+from app.core.llm_client import (
+    AzureLlmChatClient,
+    AzureLlmEmbeddingClient,
+    BedrockLlmChatClient,
+    ChatMessage,
+)
 from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import (
     can_view_room,
@@ -32,7 +37,7 @@ from app.core.token_usage_credit import (
     positive_token_weight,
 )
 from app.core.vector_store import AzureAiSearchVectorStoreClient, DEFAULT_TOP_K
-from app.models.ai_model import AIModelEndpointType
+from app.models.ai_model import CHAT_AI_MODEL_ENDPOINT_TYPES, AIModelEndpointType
 from app.models.assistant import Assistant, AssistantType
 from app.models.library import Library
 from app.models.message import (
@@ -738,7 +743,8 @@ class MessageService:
         Raises:
             HTTPException: 指定messageIdのメッセージが存在しない場合は404、所属
                 ルームの所有者でない場合は403、アシスタントが未解決・`SECURE`・
-                チャットエンドポイント/AIモデルが解決できない場合は400、SAAS_RAGで
+                チャットエンドポイント（Azure OpenAI/Bedrock）/AIモデルが解決できない・
+                Bedrockで非対応のパラメータ（tools）が指定された場合は400、SAAS_RAGで
                 インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
                 ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
         """
@@ -804,14 +810,28 @@ class MessageService:
             )
         assistant_endpoint, tenant_endpoint = endpoint_pair
 
+        # find_chat_endpointはチャット用の種別だけを返すため、逆引きは必ず成功する。
+        model_endpoint_type = CHAT_AI_MODEL_ENDPOINT_TYPES[tenant_endpoint.type]
         ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
-            AIModelEndpointType.AZURE_OPENAI_CHAT, assistant_endpoint.model, session
+            model_endpoint_type, assistant_endpoint.model, session
         )
         if ai_model is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"AI model not found: {assistant_endpoint.model}",
             )
+
+        tools = _to_core_tool_configs(req.tools)
+        if model_endpoint_type == AIModelEndpointType.BEDROCK_CHAT:
+            # ストリーミング開始後に失敗するとSSEのerrorとERRORステータスの応答が
+            # 残るため、Bedrockで扱えないパラメータは開始前（RAGの埋め込み呼び出し
+            # より前）に400で拒否する。
+            try:
+                BedrockLlmChatClient.validate_request(tools)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                ) from e
 
         history_messages = [
             ChatMessage(role=turn.role, content=turn.content)
@@ -906,10 +926,10 @@ class MessageService:
         )
         create_library = req.isCreateLibrary
         attachment_files = req.attachmentFiles
-        tools = _to_core_tool_configs(req.tools)
+        model_max_tokens = ai_model.max_tokens
 
         async def event_stream() -> AsyncIterator[bytes]:
-            """Azure OpenAIの応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
+            """LLM（Azure OpenAI/Bedrock）の応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
 
             永続化（`_persist_message_content`・`_persist_token_usage`）は`finally`で
             実行し、クライアントが切断してStarletteがこのジェネレータを`aclose()`する
@@ -937,16 +957,31 @@ class MessageService:
                 # （`01_要件定義.md`のスコープ外）ため、Issue #88の`LlmChatRequest`の
                 # デフォルト値(temperature=0.0)に合わせて固定値で呼び出す。将来モデル別に
                 # 調整したい場合は`AIModel`側にデフォルト値を持たせる形での対応を検討する。
-                async for chunk in AzureLlmChatClient.stream_chat(
-                    endpoint_url,
-                    api_key,
-                    deploy_name,
-                    chat_messages,
-                    0.0,
-                    None,
-                    tools,
-                    response_format_param,
-                ):
+                if model_endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
+                    chat_stream = AzureLlmChatClient.stream_chat(
+                        endpoint_url,
+                        api_key,
+                        deploy_name,
+                        chat_messages,
+                        0.0,
+                        None,
+                        tools,
+                        response_format_param,
+                    )
+                else:
+                    # Bedrockは上限が必須のため、AIモデルの上限を使う（移植元も
+                    # メッセージ送信ではAIモデルの上限で呼び出す）。responseFormatは
+                    # JSON出力指示の前置で対応する（LLMチャットAPIと同じ）。
+                    chat_stream = BedrockLlmChatClient.stream_chat(
+                        endpoint_url,
+                        api_key,
+                        deploy_name,
+                        chat_messages,
+                        0.0,
+                        model_max_tokens,
+                        tools,
+                    )
+                async for chunk in chat_stream:
                     if chunk.text_delta is not None:
                         if router is not None:
                             for kind, text in router.feed(chunk.text_delta):
@@ -1041,6 +1076,7 @@ class MessageService:
                     room_id=room_id,
                     message_id=message_id,
                     model_name=model_name,
+                    endpoint_type=model_endpoint_type,
                     token_weight=token_weight,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
@@ -1380,6 +1416,7 @@ class MessageService:
         room_id: str | None,
         message_id: str | None,
         model_name: str,
+        endpoint_type: AIModelEndpointType,
         token_weight: float,
         input_tokens: int,
         output_tokens: int,
@@ -1398,6 +1435,7 @@ class MessageService:
             room_id: 紐づくルームID。
             message_id: 紐づくメッセージID。
             model_name: 呼び出したAIモデル名。
+            endpoint_type: 実際に呼び出したプロバイダのエンドポイント種別。
             token_weight: 呼び出したAIモデルの重み係数。
             input_tokens: 入力トークン数。
             output_tokens: 出力トークン数。
@@ -1413,7 +1451,7 @@ class MessageService:
             user_id=user_id,
             room_id=room_id,
             message_id=message_id,
-            endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT.value,
+            endpoint_type=endpoint_type.value,
             model=model_name,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
