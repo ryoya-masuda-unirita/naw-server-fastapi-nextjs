@@ -1,9 +1,9 @@
 import { http, HttpResponse, delay } from 'msw';
-
-const BASE_URL = 'http://localhost:8000';
+import { API_PATHS } from '@/lib/constants/api-paths';
+import { mockPath } from '@/mocks/utils';
 
 export const authHandlers = [
-  http.post(`${BASE_URL}/auth/login`, async ({ request }) => {
+  http.post(mockPath(API_PATHS.AUTH.LOGIN), async ({ request }) => {
     const body = await request.json() as { username: string; password: string };
 
     if (body.username === 'reset_user' && body.password === 'pass') {
@@ -41,11 +41,28 @@ export const authHandlers = [
     return HttpResponse.json({ message: 'Invalid credentials' }, { status: 401 });
   }),
 
-  http.post(`${BASE_URL}/auth/logout`, () => {
+  http.post(mockPath(API_PATHS.AUTH.LOGIN_KEY), async ({ request }) => {
+    const body = await request.json() as { loginKey: string };
+
+    if (body.loginKey === 'valid-login-key') {
+      return HttpResponse.json({
+        loginStatus: 'SUCCESS',
+        id: 'user1',
+        name: 'Test User',
+        role: 'USER',
+        token: 'mock-token',
+        groups: [],
+      });
+    }
+
+    return HttpResponse.json({ message: 'Invalid login key' }, { status: 401 });
+  }),
+
+  http.post(mockPath(API_PATHS.AUTH.LOGOUT), () => {
     return HttpResponse.text('Logout successful.');
   }),
 
-  http.post(`${BASE_URL}/auth/password/reset`, async ({ request }) => {
+  http.post(mockPath(API_PATHS.AUTH.PASSWORD_RESET), async ({ request }) => {
     const body = await request.json() as { username: string; oldPassword: string; newPassword: string };
 
     if (body.newPassword.length < 8) {
@@ -63,7 +80,7 @@ export const authHandlers = [
     });
   }),
 
-  http.get(`${BASE_URL}/api/auth`, () => {
+  http.get(mockPath(API_PATHS.AUTH.SESSION), () => {
     return HttpResponse.json({
       id: 'user1',
       name: 'Test User',

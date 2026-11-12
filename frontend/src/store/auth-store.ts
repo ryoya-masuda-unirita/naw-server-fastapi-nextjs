@@ -7,6 +7,7 @@ import type {
   LoginCredentials,
   LoginResponse,
   LoginStatus,
+  LoginSuccessResponse,
   AuthSessionResponse,
   BackendAuthResponse,
 } from '@/types/auth';
@@ -21,8 +22,10 @@ interface AuthState {
 interface AuthStore extends AuthState {
   ensureInitialized: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<LoginStatus>;
+  loginWithKey: (loginKey: string) => Promise<boolean>;
   logout: () => Promise<void>;
   completePasswordReset: (response: AuthSessionResponse) => Promise<void>;
+  invalidateSession: () => void;
 }
 
 const mapToUser = (response: {
@@ -107,7 +110,7 @@ export const useAuthStore = create<AuthStore>((set) => {
         setUser(null);
         sessionStorage.removeItem('AUTH_USER');
         try {
-          await apiClient.post(API_PATHS.AUTH.LOGOUT, null);
+          await apiClient.post(API_PATHS.AUTH.LOGOUT, null, { responseType: 'text' });
         } catch {
           console.error('Logout during password reset failed');
         }
@@ -126,9 +129,28 @@ export const useAuthStore = create<AuthStore>((set) => {
       return 'SUCCESS';
     },
 
+    // 移植元 AuthStore.loginWithKey。URL の loginkey での自動ログイン（lib/initializers/login-key.ts）から呼ぶ
+    async loginWithKey(loginKey: string): Promise<boolean> {
+      try {
+        const response = await apiClient.post<LoginSuccessResponse>(API_PATHS.AUTH.LOGIN_KEY, {
+          loginKey,
+        });
+        const user = mapToUser(response);
+        setUser(user);
+        sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
+        return true;
+      } catch (e) {
+        console.error('Login-key authentication failed', e);
+        setUser(null);
+        sessionStorage.removeItem('AUTH_USER');
+        clearTenantId();
+        return false;
+      }
+    },
+
     async logout(): Promise<void> {
       try {
-        await apiClient.post(API_PATHS.AUTH.LOGOUT, null);
+        await apiClient.post(API_PATHS.AUTH.LOGOUT, null, { responseType: 'text' });
       } catch (e) {
         console.error('Logout service error', e);
       }
@@ -144,6 +166,15 @@ export const useAuthStore = create<AuthStore>((set) => {
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
       window.location.href = ROUTES.APP.DASHBOARD;
+    },
+
+    // API が 401 を返したとき（移植元 errorInterceptor）。移植元は sessionStorage を消すだけだが、
+    // React はストアの user が残るとログイン画面への遷移後も認証済み扱いになるため、ストアも空にする
+    invalidateSession(): void {
+      setUser(null);
+      initPromise = null;
+      sessionStorage.removeItem('AUTH_USER');
+      clearTenantId();
     },
   };
 });

@@ -137,6 +137,34 @@ interface PagedResponse<T> {
 }
 ```
 
+`PagedResponse` は `src/types/api-response.type.ts` にある。ただし backend の一部 API はこの形でない（ユーザー一覧の `page`、`GET /api/admin/groups` の `{ data, total, page, size }` など）。移植元の型と backend の応答の違いは `docs/issue-279/api-backend-diff.md` に一覧がある。画面を移植するときは、使う API の行を先に確認する。
+
+### API パス・型・api-client（#279）
+
+- **API パス**は `src/lib/constants/api-paths.ts` の `API_PATHS` を使い、文字列を直書きしない。移植元 `api-paths.config.ts` の全パスに加え、移植元で画面ごとに持っていた定数（`TEMPLATE_LIST_API_PATH`・`ASSISTANT_LIST_API_PATH`・`TRAINING_DATA_API_PATH`・`USER_LIST_API_PATH`）のパスもここにある。キー名は移植元と同じ
+  - 移植元と違い、値に `/api` を含める（例: 移植元 `/rooms` → `/api/rooms`）。ログイン系の `/auth/...` だけは `/api` を付けない（api-client が `VITE_AUTH_API_URL` を前置する。#240）
+  - 足りないパスが見つかったら、画面のファイルではなく `API_PATHS` に足す
+- **API の型**は `src/types/` にある（移植元 `src/types/` と同じファイル名・構成。`chat/`・`admin/` 配下も同じ）。画面ごとに API の型を作り直さない。UI だけで使う型は画面側に置いてよい
+- **api-client**（`src/lib/api-client.ts`）
+  - `get` / `post` / `put` / `patch` / `delete`（`delete` の本文は `options.body`）。どのメソッドも `headers`・`params` を渡せる
+  - `params` の配列は同じキーを繰り返して送る（`tagIds=a&tagIds=b`）。`undefined`・`null` は送らない
+  - 本文が `FormData` ならそのまま multipart で送る（`Content-Type` を付けない）
+  - `responseType: 'text' | 'blob'`（既定 `json`）。204・空の本文は `null` を返す
+  - エラーは `ApiError`（`status`・`body`・`method`・`path`。`message` は `HTTP {status}`）を投げる。通信自体の失敗は `status: 0`
+  - 共通のエラートーストを出したくない（画面で個別に表示する）ときは `skipGlobalErrorToast: true`
+  - `http(s)://` で始まる絶対 URL はベース URL を付けずに送り、401 でもセッションを破棄しない（移植元の `*FromCustomUrl`。ローカルサーバ向け）
+  - SSE など `Response` をそのまま読むときは `apiClient.stream(path, { body, headers })`（共通のエラー処理は通らない）
+  - 移植元 `errorInterceptor` 相当（エラートースト・401 でログイン画面へ）は `hooks/use-api-error-interceptor.ts` が `main.tsx` で登録している。トーストは `showErrorToast` に渡す（トースト部品の移植後に接続する）
+- **共通 util**: `src/lib/utils/`（`api-datetime`・`display-date`・`validation`・`form-errors`・`scroll-to-error`・`tab-query-param`）、hooks は `use-debounced-value`・`use-tab-query-param`・`use-credit-usage`・`use-token-usage`
+
+### MSW のハンドラー（#279 で決定）
+
+- 置き場所は `src/mocks/handlers/{機能}.ts`（例: `rooms.ts`・`admin-users.ts`）。1ファイルが `xxxHandlers` 配列を export し、`src/mocks/handlers/index.ts` の `handlers` に足す
+- URL は `mockPath(API_PATHS.X)`（`src/mocks/utils.ts`）で書く。先頭がワイルドカードになり、ベース URL（`VITE_API_URL`・`VITE_AUTH_API_URL`）に関係なく一致する。パスパラメータは `mockPath(API_PATHS.ROOMS.DETAIL(':roomId'))` のように `:名前` を渡す
+- `handlers` はテスト全体（`src/test/setup.ts`）の既定の応答。テストごとに変えたい応答は、テストの中で `server.use(...)` で上書きする（`afterEach` で元に戻る）
+- 応答の形は backend（`backend/app/schemas`）の実際の応答に合わせる。移植元のモック（`core/mocks/handlers/*.mock.ts`）は backend と形が違う場合があるため、そのまま写さない
+- 現在 MSW はテストだけで使う（開発サーバーでのモック起動はしていない）
+
 ---
 
 ## ディレクトリ構造
