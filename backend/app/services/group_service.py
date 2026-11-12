@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from app.core.credit_quota import (
     resolve_active_billing_period,
     validate_total_credits_sort,
 )
+from app.core.sort import SortOrder
 from app.models.group import Group
 from app.models.assistant import AssistantType
 from app.models.user import User, UserRole
@@ -237,7 +239,7 @@ class GroupService:
         tenant_id: str,
         current_user: User,
         search: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -250,7 +252,7 @@ class GroupService:
             tenant_id: テナントID。
             current_user: 認証済みユーザー。
             search: グループ名の部分一致検索文字列。
-            sort: ソート指定（例: "updatedAt,desc"）。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -267,16 +269,11 @@ class GroupService:
                 tenant_id, current_user.id, session
             )
 
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-
         groups, total = await GroupRepository.find_page(
             tenant_id,
             search,
             allowed_group_ids,
-            sort_col_name,
-            sort_dir,
+            sort,
             page,
             size,
             session,
@@ -423,7 +420,7 @@ class GroupService:
         current_user: User,
         search: str | None,
         role: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -443,7 +440,7 @@ class GroupService:
             current_user: 認証済みユーザー。
             search: ユーザー名・loginIdの部分一致検索文字列。
             role: グループ内ロールでの絞り込み（"ADMIN"または"USER"）。
-            sort: ソート指定（例: "updatedAt,desc"、"totalCredits,desc"）。
+            sort: 並べ替え指定の並び（`totalCredits`を含められる）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -463,11 +460,6 @@ class GroupService:
             group_id, tenant_id, current_user, session
         )
 
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        # 移植元(Spring Data の Sort.Direction)は方向指定を大文字小文字を区別せずに解釈する。
-        is_desc = len(sort_parts) > 1 and sort_parts[1].strip().lower() == "desc"
-
         billing_period = (
             await resolve_active_billing_period(tenant_id, session)
             if include_usage
@@ -486,8 +478,7 @@ class GroupService:
             tenant_id,
             search,
             role,
-            sort_col_name,
-            is_desc,
+            sort,
             page,
             size,
             session,
@@ -749,7 +740,7 @@ class GroupService:
         assistant_type: AssistantType | None,
         category_id: str | None,
         search: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -763,7 +754,7 @@ class GroupService:
             assistant_type: アシスタント種別での絞り込み。
             category_id: カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
             search: アシスタント名・説明の部分一致検索文字列。
-            sort: ソート指定（例: "addedAt,desc"）。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -779,18 +770,13 @@ class GroupService:
             group_id, tenant_id, current_user, session
         )
 
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-
         rows, total = await GroupAssistantRepository.find_page_by_group(
             group_id,
             tenant_id,
             assistant_type,
             category_id,
             search,
-            sort_col_name,
-            sort_dir,
+            sort,
             page,
             size,
             session,
@@ -906,7 +892,7 @@ class GroupService:
         tenant_id: str,
         current_user: User,
         search: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -918,7 +904,7 @@ class GroupService:
             tenant_id: テナントID。
             current_user: 認証済みユーザー。
             search: テンプレート名・説明の部分一致検索文字列。
-            sort: ソート指定（例: "addedAt,desc"）。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -934,12 +920,8 @@ class GroupService:
             group_id, tenant_id, current_user, session
         )
 
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-
         rows, total = await GroupPromptTemplateRepository.find_page_by_group(
-            group_id, tenant_id, search, sort_col_name, sort_dir, page, size, session
+            group_id, tenant_id, search, sort, page, size, session
         )
 
         template_ids = [template.id for _, template in rows]

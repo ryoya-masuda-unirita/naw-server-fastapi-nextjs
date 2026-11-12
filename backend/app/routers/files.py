@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.file_storage import FileStorage, get_file_storage
 from app.core.security import get_verified_tenant_id, require_admin_or_group_admin
+from app.core.sort import SortOrder, sort_query
 from app.models.user import User
 from app.schemas.file import (
     FileResponse,
@@ -33,7 +34,7 @@ async def get_files(
     status_: str | None = Query(None, alias="status"),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
-    sort: str = Query("updatedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("updatedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(require_admin_or_group_admin),
     session: AsyncSession = Depends(get_session),

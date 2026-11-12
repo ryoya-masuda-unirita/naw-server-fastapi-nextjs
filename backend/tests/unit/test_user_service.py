@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
 from app.core.security import hash_password
+from app.core.sort import parse_sort
 from app.services.user_service import UserService
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
@@ -42,7 +43,14 @@ class TestGetUsers:
         session.execute = AsyncMock(side_effect=[mock_count, mock_users])
 
         result = await UserService.get_users(
-            test_tenant.id, 0, 20, "created_at,desc", None, None, None, session
+            test_tenant.id,
+            0,
+            20,
+            parse_sort("created_at,desc"),
+            None,
+            None,
+            None,
+            session,
         )
 
         assert result.totalElements == 1
@@ -60,7 +68,14 @@ class TestGetUsers:
         session.execute = AsyncMock(side_effect=[mock_count, mock_users])
 
         result = await UserService.get_users(
-            test_tenant.id, 0, 20, "created_at,desc", "test", None, None, session
+            test_tenant.id,
+            0,
+            20,
+            parse_sort("created_at,desc"),
+            "test",
+            None,
+            None,
+            session,
         )
 
         assert result.totalElements == 1
@@ -76,7 +91,14 @@ class TestGetUsers:
         session.execute = AsyncMock(side_effect=[mock_count, mock_users])
 
         result = await UserService.get_users(
-            test_tenant.id, 0, 20, "created_at,desc", None, "USER", None, session
+            test_tenant.id,
+            0,
+            20,
+            parse_sort("created_at,desc"),
+            None,
+            "USER",
+            None,
+            session,
         )
 
         assert result.totalElements == 1
@@ -381,26 +403,43 @@ class TestEscapeLikePattern:
         assert result == "%a\\\\b%"
 
 
-class TestResolveSortColumn:
+class TestSortableColumns:
     def test_resolves_snake_case(self):
         """スネークケースの許可列名を解決できること"""
-        assert UserService._resolve_sort_column("created_at") is User.created_at
+        assert UserService._SORTABLE_COLUMNS["created_at"] is User.created_at
 
     def test_resolves_camel_case(self):
         """キャメルケースの許可列名（フロントエンドが実際に送信する形式）を解決できること"""
-        assert UserService._resolve_sort_column("updatedAt") is User.updated_at
-
-    def test_falls_back_to_created_at_for_unknown_column(self):
-        """許可リスト外の列名は作成日時にフォールバックすること"""
-        assert UserService._resolve_sort_column("login_key") is User.created_at
+        assert UserService._SORTABLE_COLUMNS["updatedAt"] is User.updated_at
 
     def test_role_sort_column_is_cast_to_string_on_postgresql(self):
         """権限順ソートがPostgreSQL上でenumの宣言順ではなく文字列順になるようキャストされること"""
-        col = UserService._resolve_sort_column("role")
+        col = UserService._SORTABLE_COLUMNS["role"]
 
         sql = str(col.compile(dialect=postgresql.dialect()))
 
         assert sql == "CAST(users.role AS VARCHAR)"
+
+
+class TestParseRole:
+    @pytest.mark.parametrize("role", ["USER", "ADMIN", "SYSTEM"])
+    def test_returns_user_role_for_valid_value(self, role):
+        """定義済みの権限名はUserRoleに変換されること"""
+        assert UserService._parse_role(role) is UserRole(role)
+
+    @pytest.mark.parametrize("role", [None, "", "   "])
+    def test_returns_none_when_blank(self, role):
+        """未指定・空文字・空白のみは絞り込みなし（None）になること（移植元と同じ）"""
+        assert UserService._parse_role(role) is None
+
+    @pytest.mark.parametrize("role", ["foo", "admin"])
+    def test_raises_400_for_unknown_value(self, role):
+        """未定義の値・小文字の権限名は400になること（移植元のvalueOfと同じく大文字小文字を区別）"""
+        with pytest.raises(HTTPException) as exc_info:
+            UserService._parse_role(role)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == f"不正なroleです: {role}"
 
 
 class TestIssueInitialPassword:

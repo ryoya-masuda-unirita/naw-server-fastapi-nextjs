@@ -10,6 +10,7 @@ from app.core.credit_quota import (
     is_sort_by_total_credits,
     validate_total_credits_sort,
 )
+from app.core.sort import parse_sort
 from app.models.plan import Plan
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
@@ -153,11 +154,18 @@ class TestIsSortByTotalCredits:
 
     def test_true_when_sort_property_is_total_credits(self):
         """sort=totalCredits,descの場合Trueを返すこと"""
-        assert is_sort_by_total_credits("totalCredits,desc") is True
+        assert is_sort_by_total_credits(parse_sort("totalCredits,desc")) is True
+
+    def test_true_when_total_credits_is_not_first(self):
+        """複数指定の2番目以降にtotalCreditsがあってもTrueを返すこと（移植元のanyMatchと同じ）"""
+        assert (
+            is_sort_by_total_credits(parse_sort(["name,asc", "totalCredits,desc"]))
+            is True
+        )
 
     def test_false_for_other_sort_property(self):
         """totalCredits以外のsortの場合Falseを返すこと"""
-        assert is_sort_by_total_credits("name,asc") is False
+        assert is_sort_by_total_credits(parse_sort("name,asc")) is False
 
 
 class TestValidateTotalCreditsSort:
@@ -166,15 +174,15 @@ class TestValidateTotalCreditsSort:
     def test_raises_400_when_sort_total_credits_without_include_usage(self):
         """sort=totalCreditsかつinclude_usage=Falseの場合400を返すこと"""
         with pytest.raises(HTTPException) as exc_info:
-            validate_total_credits_sort("totalCredits,desc", False)
+            validate_total_credits_sort(parse_sort("totalCredits,desc"), False)
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "sort=totalCredits requires includeUsage=true"
 
     def test_allows_sort_total_credits_with_include_usage(self):
         """sort=totalCreditsかつinclude_usage=Trueの場合例外にならないこと"""
-        validate_total_credits_sort("totalCredits,desc", True)
+        validate_total_credits_sort(parse_sort("totalCredits,desc"), True)
 
     def test_allows_other_sort_without_include_usage(self):
         """totalCredits以外のsortの場合include_usage=Falseでも例外にならないこと"""
-        validate_total_credits_sort("name,asc", False)
+        validate_total_credits_sort(parse_sort("name,asc"), False)

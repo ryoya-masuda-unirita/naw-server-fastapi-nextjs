@@ -1,10 +1,11 @@
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
 
 NO_GROUP_FILTER = "__none__"
@@ -86,7 +87,8 @@ class PromptTemplateRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        stmt = stmt.order_by(PromptTemplate.updated_at.desc())
+        # 同時刻のテンプレートがページ境界で入れ替わらないよう、IDを最終キーにする
+        stmt = stmt.order_by(PromptTemplate.updated_at.desc(), PromptTemplate.id.desc())
         stmt = stmt.offset(page * size).limit(size)
         templates = (await session.execute(stmt)).scalars().all()
         return list(templates), total
@@ -99,8 +101,7 @@ class PromptTemplateRepository:
         exclude_group_id: str | None,
         admin: bool,
         admin_group_ids: Collection[str],
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -114,8 +115,7 @@ class PromptTemplateRepository:
             exclude_group_id: 指定グループに紐付いていないテンプレートのみに絞り込む場合のグループID。
             admin: 全体管理者かどうか。
             admin_group_ids: グループ管理者が管理するグループID一覧（`admin` が False の場合に使用）。
-            sort_col_name: ソート対象項目（"name" または "updatedAt"。それ以外は "updatedAt" として扱う）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外は"updatedAt"として扱う）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -164,11 +164,16 @@ class PromptTemplateRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        sort_col = _ADMIN_SORT_COLUMNS.get(sort_col_name, PromptTemplate.updated_at)
-        # 同名・同時刻のテンプレートがページ境界で入れ替わらないよう、IDを第2キーにして順序を確定させる
+        # 同名・同時刻のテンプレートがページ境界で入れ替わらないよう、IDを最終キーにして
+        # 順序を確定させる（#170 で決めた常に昇順の挙動を維持する）
         stmt = stmt.order_by(
-            sort_col.desc() if sort_dir == "desc" else sort_col.asc(),
-            PromptTemplate.id.asc(),
+            *build_order_by(
+                sort,
+                _ADMIN_SORT_COLUMNS,
+                fallback=PromptTemplate.updated_at,
+                tie_breaker=PromptTemplate.id,
+                tie_breaker_ascending=True,
+            )
         )
         stmt = stmt.offset(page * size).limit(size)
         templates = (await session.execute(stmt)).scalars().all()

@@ -941,3 +941,42 @@ class TestDeletePromptTemplate:
             )
 
         assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+class TestGetPromptTemplatesTieBreaker:
+    """GET /api/prompt-templates の同値の並び（Issue #225）"""
+
+    async def test_ties_are_ordered_by_id_desc(
+        self, client, session, tenant, group, member_headers, member_of_group
+    ):
+        """更新日時が同じテンプレートはIDの降順（既定の並びと同じ方向）で並ぶこと"""
+        same_time = datetime(2026, 1, 1, tzinfo=UTC)
+        templates = [
+            PromptTemplate(
+                tenant_id=tenant.id,
+                name=f"tie-{i}",
+                description="d",
+                system_prompt="p",
+                updated_at=same_time,
+            )
+            for i in range(3)
+        ]
+        session.add_all(templates)
+        await session.flush()
+        session.add_all(
+            [
+                GroupPromptTemplate(
+                    group_id=group.id, prompt_template_id=t.id, tenant_id=tenant.id
+                )
+                for t in templates
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get("/api/prompt-templates", headers=member_headers)
+
+        assert response.status_code == 200
+        ids = [t["id"] for t in response.json()["content"]]
+        assert ids == sorted((t.id for t in templates), reverse=True)

@@ -1276,3 +1276,86 @@ class TestGetAIModels:
         body = response.json()
         assert body[0]["id"] == ai_model.id
         assert body[0]["name"] == "gpt-4o"
+
+
+async def _add_assistants(session, tenant_id, specs):
+    """(名前, 種別) の組からアシスタントを作成する。"""
+    for name, assistant_type in specs:
+        session.add(
+            Assistant(
+                tenant_id=tenant_id,
+                type=assistant_type,
+                name=name,
+                include_history=False,
+            )
+        )
+    await session.commit()
+
+
+async def _list_admin_assistants(c, headers, sort):
+    response = await c.get(
+        "/api/admin/assistants", params={"sort": sort}, headers=headers
+    )
+    assert response.status_code == 200
+    return response.json()["content"]
+
+
+@pytest.mark.asyncio
+class TestListAdminAssistantsSort:
+    """GET /api/admin/assistants の並べ替え（Issue #225）"""
+
+    async def test_sort_by_name_reverses_rows_with_same_name(
+        self, client, session, tenant, admin_headers
+    ):
+        """同名のアシスタントがいても昇順と降順で並びが完全に反転すること"""
+        await _add_assistants(
+            session, tenant.id, [("Same", AssistantType.SAAS_CHAT)] * 3
+        )
+
+        async with client as c:
+            asc = await _list_admin_assistants(c, admin_headers, "name,asc")
+            desc = await _list_admin_assistants(c, admin_headers, "name,desc")
+
+        asc_ids = [a["id"] for a in asc]
+        assert len(asc_ids) == 3
+        assert [a["id"] for a in desc] == list(reversed(asc_ids))
+
+    async def test_sort_direction_is_case_insensitive(
+        self, client, session, tenant, admin_headers
+    ):
+        """ソート方向を大文字(DESC)で指定しても降順になること"""
+        await _add_assistants(
+            session,
+            tenant.id,
+            [("alpha", AssistantType.SAAS_CHAT), ("zulu", AssistantType.SAAS_CHAT)],
+        )
+
+        async with client as c:
+            content = await _list_admin_assistants(c, admin_headers, "name,DESC")
+
+        assert [a["name"] for a in content] == ["zulu", "alpha"]
+
+    async def test_multiple_sort_params_are_applied_in_order(
+        self, client, session, tenant, admin_headers
+    ):
+        """sortを複数指定すると、第1キーが同値の行を第2キーで並べること"""
+        await _add_assistants(
+            session,
+            tenant.id,
+            [
+                ("Same", AssistantType.SAAS_CHAT),
+                ("Same", AssistantType.SECURE),
+                ("Other", AssistantType.SAAS_CHAT),
+            ],
+        )
+
+        async with client as c:
+            content = await _list_admin_assistants(
+                c, admin_headers, ["name,asc", "assistantType,desc"]
+            )
+
+        assert [(a["name"], a["type"]) for a in content] == [
+            ("Other", "SAAS_CHAT"),
+            ("Same", "SECURE"),
+            ("Same", "SAAS_CHAT"),
+        ]

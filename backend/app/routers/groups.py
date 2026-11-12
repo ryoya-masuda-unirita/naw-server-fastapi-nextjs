@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.security import get_current_user, get_verified_tenant_id, require_admin
+from app.core.sort import SortOrder, sort_query
 from app.models.assistant import AssistantType
 from app.models.user import User
 from app.schemas.assistant import PagedAssistantResponse
@@ -46,7 +47,7 @@ async def list_groups(
     q: str = Query(""),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=1000),
-    sort: str = Query("updatedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("updatedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -69,7 +70,7 @@ async def list_all_groups(
     q: str = Query(""),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
-    sort: str = Query("updatedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("updatedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
@@ -147,7 +148,7 @@ async def get_group_users(
     role: str | None = Query(None),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
-    sort: str = Query("name,asc"),
+    sort: list[SortOrder] = Depends(sort_query("name,asc")),
     includeUsage: bool = Query(False),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
@@ -222,7 +223,7 @@ async def get_group_assistants(
     search: str | None = Query(None),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
-    sort: str = Query("addedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("addedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -279,7 +280,7 @@ async def get_group_prompt_templates(
     search: str | None = Query(None),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
-    sort: str = Query("addedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("addedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),

@@ -1,8 +1,17 @@
+from collections.abc import Sequence
+from typing import Any
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.group import Group
+
+_SORT_COLUMNS: dict[str, Any] = {
+    "name": Group.name,
+    "updatedAt": Group.updated_at,
+}
 
 
 class GroupRepository:
@@ -68,8 +77,7 @@ class GroupRepository:
         tenant_id: str,
         name_search: str | None,
         allowed_group_ids: list[str] | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -81,8 +89,7 @@ class GroupRepository:
             name_search: グループ名の部分一致検索文字列。
             allowed_group_ids: 絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
                 Noneの場合は絞り込みなし。
-            sort_col_name: ソート対象列名（"name" または "updatedAt"）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外はグループ名順）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -104,8 +111,12 @@ class GroupRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        sort_col = Group.updated_at if sort_col_name == "updatedAt" else Group.name
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 同名・同時刻のグループの並びが不定にならないよう、IDを最終キーにする
+        stmt = stmt.order_by(
+            *build_order_by(
+                sort, _SORT_COLUMNS, fallback=Group.name, tie_breaker=Group.id
+            )
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         groups = (await session.execute(stmt)).scalars().all()

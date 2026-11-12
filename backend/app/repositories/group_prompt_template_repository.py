@@ -1,9 +1,20 @@
+from collections.abc import Sequence
+from typing import Any
+
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.group import Group
 from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
+
+# 移植元(GroupService)は addedAt を所属レコードの更新日時、name をテンプレート名に読み替える。
+# 対応表にないキーは従来どおり追加日時順にする。
+_SORT_COLUMNS: dict[str, Any] = {
+    "name": PromptTemplate.name,
+    "addedAt": GroupPromptTemplate.updated_at,
+}
 
 
 class GroupPromptTemplateRepository:
@@ -35,8 +46,7 @@ class GroupPromptTemplateRepository:
         group_id: str,
         tenant_id: str,
         search: str | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -47,8 +57,7 @@ class GroupPromptTemplateRepository:
             group_id: グループID。
             tenant_id: テナントID。
             search: テンプレート名・説明の部分一致検索文字列。
-            sort_col_name: ソート対象列名（"name" または "addedAt"）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"addedAt"。それ以外は追加日時順）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -78,12 +87,15 @@ class GroupPromptTemplateRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        sort_col = (
-            PromptTemplate.name
-            if sort_col_name == "name"
-            else GroupPromptTemplate.updated_at
+        # 同名・同時刻のテンプレートの並びが不定にならないよう、IDを最終キーにする
+        stmt = stmt.order_by(
+            *build_order_by(
+                sort,
+                _SORT_COLUMNS,
+                fallback=GroupPromptTemplate.updated_at,
+                tie_breaker=GroupPromptTemplate.prompt_template_id,
+            )
         )
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         stmt = stmt.offset(page * size).limit(size)
 
         rows = (await session.execute(stmt)).all()

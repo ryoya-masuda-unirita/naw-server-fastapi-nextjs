@@ -1,13 +1,28 @@
+from collections.abc import Sequence
+from typing import Any
+
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.assistant import (
     Assistant,
     AssistantCategoryMapping,
     AssistantType,
     GroupAssistant,
 )
+
+# 移植元(GroupService)は addedAt を所属レコードの更新日時、server をアシスタント種別、
+# name をアシスタント名に読み替える。対応表にないキーは従来どおり追加日時順にする。
+_SORT_COLUMNS: dict[str, Any] = {
+    "name": Assistant.name,
+    "assistant.name": Assistant.name,
+    "type": Assistant.type,
+    "server": Assistant.type,
+    "assistantType": Assistant.type,
+    "addedAt": GroupAssistant.updated_at,
+}
 
 
 class GroupAssistantRepository:
@@ -41,8 +56,7 @@ class GroupAssistantRepository:
         assistant_type: AssistantType | None,
         category_id: str | None,
         search: str | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -55,8 +69,7 @@ class GroupAssistantRepository:
             assistant_type: アシスタント種別での絞り込み。
             category_id: カテゴリでの絞り込み。Noneなら条件なし、"NONE"ならカテゴリ未設定のみ。
             search: アシスタント名・説明の部分一致検索文字列。
-            sort_col_name: ソート対象列名（"name"・"type"・"addedAt"など）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"type"・"addedAt"など）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -103,13 +116,15 @@ class GroupAssistantRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        if sort_col_name in {"name", "assistant.name"}:
-            sort_col = Assistant.name
-        elif sort_col_name in {"type", "server", "assistantType"}:
-            sort_col = Assistant.type
-        else:
-            sort_col = GroupAssistant.updated_at
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 同名・同時刻のアシスタントの並びが不定にならないよう、IDを最終キーにする
+        stmt = stmt.order_by(
+            *build_order_by(
+                sort,
+                _SORT_COLUMNS,
+                fallback=GroupAssistant.updated_at,
+                tie_breaker=GroupAssistant.assistant_id,
+            )
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         rows = (await session.execute(stmt)).all()

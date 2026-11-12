@@ -1,6 +1,7 @@
 import math
 import secrets
 import string
+from collections.abc import Sequence
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
@@ -16,6 +17,7 @@ from app.core.credit_quota import (
     total_credits_correlated_subquery,
     validate_total_credits_sort,
 )
+from app.core.sort import SortOrder, build_order_by, find_order
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
 from app.models.tenant import Tenant
@@ -58,7 +60,7 @@ class UserService:
         tenant_id: str,
         page: int,
         size: int,
-        sort: str,
+        sort: Sequence[SortOrder],
         search_text: str | None,
         role: str | None,
         exclude_group_id: str | None,
@@ -77,9 +79,9 @@ class UserService:
             tenant_id: テナントID。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
-            sort: ソート指定（例: "created_at,desc"、"totalCredits,desc"）。
+            sort: 並べ替え指定の並び。
             search_text: loginId・name の部分一致検索文字列。
-            role: ロールフィルター。
+            role: ロールフィルター（"USER"・"ADMIN"・"SYSTEM"）。
             exclude_group_id: 除外グループID（グループ機能実装時に対応）。
             session: 非同期DBセッション。
             include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
@@ -89,9 +91,10 @@ class UserService:
 
         Raises:
             HTTPException: `sort=totalCredits`が指定されているのに
-                `include_usage=False`の場合400を返す。
+                `include_usage=False`の場合、または`role`が不正な値の場合400を返す。
         """
         validate_total_credits_sort(sort, include_usage)
+        role_filter = UserService._parse_role(role)
 
         # SYSTEM ロール（Waha等の内部連携用ユーザー）は管理画面の一覧に表示しない。
         # role=SYSTEM が明示的に指定された場合もこの条件は外さず、結果は0件になる
@@ -109,18 +112,13 @@ class UserService:
                 )
             )
 
-        if role:
-            stmt = stmt.where(User.role == UserRole(role))
+        if role_filter is not None:
+            stmt = stmt.where(User.role == role_filter)
 
         # excludeGroupId はグループ機能実装時に対応する
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
-
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        # 移植元(Spring Data の Sort.Direction)は方向指定を大文字小文字を区別せずに解釈する。
-        is_desc = len(sort_parts) > 1 and sort_parts[1].strip().lower() == "desc"
 
         billing_period = (
             await resolve_active_billing_period(tenant_id, session)
@@ -135,22 +133,34 @@ class UserService:
             else None
         )
 
-        if sort_col_name == TOTAL_CREDITS_SORT_PROPERTY and period is not None:
+        total_credits_order = find_order(sort, TOTAL_CREDITS_SORT_PROPERTY)
+        if total_credits_order is not None and period is not None:
             period_from, period_to = period
             credits_subq = total_credits_correlated_subquery(
                 tenant_id, period_from, period_to, User.id
             )
-            order_col = credits_subq.desc() if is_desc else credits_subq.asc()
+            is_desc = total_credits_order.descending
             # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
-            stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
+            # 利用クレジット順の判定は移植元と同じく指定のいずれかに含まれるかで行い、
+            # 並びは従来どおり利用クレジット順＋表示名順とする（他の並べ替え指定は使わない）。
+            # 最後に一意な id を主キーと同じ方向で加え、並びを決定的にする。
+            id_col = cast(Any, User.id)
+            stmt = stmt.order_by(
+                credits_subq.desc() if is_desc else credits_subq.asc(),
+                cast(Any, User.name).asc(),
+                id_col.desc() if is_desc else id_col.asc(),
+            )
         else:
-            col = UserService._resolve_sort_column(sort_col_name)
-            stmt = stmt.order_by(col.desc() if is_desc else col.asc())
-        # ソートキーが同値の行（シード投入で同時刻になる更新日時、大半が同じ権限など）は
-        # ORDER BY だけでは順序が定まらず、昇順・降順を切り替えても同値グループ内の並びが
-        # 反転しない。一意な id を最終キーに主キーと同じ方向で加え、並びを決定的にする。
-        tie_breaker = cast(Any, User.id)
-        stmt = stmt.order_by(tie_breaker.desc() if is_desc else tie_breaker.asc())
+            # ソートキーが同値の行（シード投入で同時刻になる更新日時、大半が同じ権限など）は
+            # ORDER BY だけでは順序が定まらないため、一意な id を最終キーに加える。
+            stmt = stmt.order_by(
+                *build_order_by(
+                    sort,
+                    UserService._SORTABLE_COLUMNS,
+                    fallback=User.created_at,
+                    tie_breaker=User.id,
+                )
+            )
 
         stmt = stmt.offset(page * size).limit(size)
 
@@ -192,20 +202,31 @@ class UserService:
         return f"%{escaped}%"
 
     @staticmethod
-    def _resolve_sort_column(sort_col_name: str) -> Any:
-        """ソート対象列名を許可リストに基づいてORDER BY用の列式に解決する。
+    def _parse_role(role: str | None) -> UserRole | None:
+        """ロールフィルターの文字列を UserRole に変換する。
 
-        許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
-        既定の作成日時列にフォールバックする。
+        移植元(Spring Boot)`UserService`は`User.ROLE.valueOf(role)`で変換し、変換できない
+        値は`IllegalArgumentException`として400を返す。大文字小文字を区別し、空・空白のみは
+        絞り込みなしとして扱う点も移植元と同じ。
 
         Args:
-            sort_col_name: リクエストで指定されたソート対象列名。
+            role: リクエストで指定されたロールフィルター。
 
         Returns:
-            ソートに使用する列式。多くはモデル属性そのものだが、`role`は
-            文字列キャスト式（`CAST(users.role AS VARCHAR)`）を返す。
+            変換した UserRole。未指定・空白のみの場合は None。
+
+        Raises:
+            HTTPException: UserRole に存在しない値の場合400を返す。
         """
-        return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
+        if role is None or not role.strip():
+            return None
+        try:
+            return UserRole(role)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不正なroleです: {role}",
+            ) from None
 
     @staticmethod
     async def _issue_initial_password(
