@@ -795,7 +795,7 @@ class TestUpdatePromptTemplate:
         assert response.status_code == 403
 
 
-def _template_body(name):
+def _template_body(name: str) -> dict[str, str | None]:
     return {"name": name, "description": None, "systemPrompt": "prompt"}
 
 
