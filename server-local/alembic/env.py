@@ -1,5 +1,4 @@
 import asyncio
-import os
 from logging.config import fileConfig
 
 from sqlalchemy.engine import Connection
@@ -7,7 +6,7 @@ from sqlmodel import SQLModel
 
 import app.models  # noqa: F401 — モデルを読み込んでメタデータに登録する
 from alembic import context
-from app.core.config import Settings
+from app.core.config import DatabaseSettings
 from app.core.database import create_engine
 
 config = context.config
@@ -23,9 +22,8 @@ def _database_url() -> str:
     url = config.get_main_option("sqlalchemy.url")
     if url:
         return url
-    # Settings() を作ると認証キーが必須になるため、マイグレーションでは URL だけを読む
-    default = Settings.model_fields["database_url"].default
-    return os.environ.get("DATABASE_URL", default)
+    # アプリと同じく環境変数と .env から読む（認証キーなど DB 以外は読まない）
+    return DatabaseSettings().database_url
 
 
 def do_run_migrations(connection: Connection) -> None:

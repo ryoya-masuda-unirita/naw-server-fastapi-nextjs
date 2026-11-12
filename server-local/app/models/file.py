@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     SmallInteger,
     String,
     UniqueConstraint,
@@ -68,6 +69,9 @@ class FilePart(SQLModel, table=True):
     __tablename__ = "file_parts"
     __table_args__ = (
         UniqueConstraint("id", "file_id", name="uk_file_parts_id_file_id"),
+        # 移植元（H2）は外部キーに自動でインデックスを作るが、SQLite は作らないため
+        # 明示する（ファイルごとのパート取得・カスケード削除で使う）
+        Index("file_parts_file_id_idx", "file_id"),
     )
 
     id: str = Field(sa_column=Column(String(36), primary_key=True))

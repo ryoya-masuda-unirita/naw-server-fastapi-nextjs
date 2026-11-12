@@ -10,16 +10,29 @@ MAX_REQUEST_SIZE_BYTES = 215 * 1024 * 1024
 MS_PER_SECOND = 1000
 
 
-class Settings(BaseSettings):
-    """移植元 application.yml の各設定を環境変数で受け取る。
+class DatabaseSettings(BaseSettings):
+    """DB の接続先。マイグレーション（alembic）はこれだけを読む。
 
-    環境変数名は Spring のプロパティ名を大文字・アンダースコア区切りにしたもの
-    （例: `security.server-auth-key` → `SECURITY_SERVER_AUTH_KEY`）。
+    Settings は認証キーなどが必須のため、マイグレーションでは DB の設定だけを読む。
+    アプリと同じく環境変数と `.env` から読み、マイグレーション先とアプリの DB が
+    ずれないようにする。
     """
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
+
+    database_url: str = Field(
+        default="sqlite+aiosqlite:///./data/nawdb.sqlite3", alias="DATABASE_URL"
+    )
+
+
+class Settings(DatabaseSettings):
+    """移植元 application.yml の各設定を環境変数で受け取る。
+
+    環境変数名は Spring のプロパティ名を大文字・アンダースコア区切りにしたもの
+    （例: `security.server-auth-key` → `SECURITY_SERVER_AUTH_KEY`）。
+    """
 
     # 移植元では既定値がなく未設定だと起動に失敗する。認証なしで公開される事故を
     # 防ぐため、こちらも必須にする。
@@ -36,9 +49,6 @@ class Settings(BaseSettings):
 
     naw_base_url: str = Field(default="", alias="NAW_BASE_URL")
 
-    database_url: str = Field(
-        default="sqlite+aiosqlite:///./data/nawdb.sqlite3", alias="DATABASE_URL"
-    )
     context_path: str = Field(default="", alias="CONTEXT_PATH")
 
     stream_output_dir: str = Field(
