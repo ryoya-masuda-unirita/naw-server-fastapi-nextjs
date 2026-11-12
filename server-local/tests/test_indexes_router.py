@@ -524,7 +524,7 @@ class TestSyncFiles:
         """既に登録済みのファイル ID は追加・更新しないこと"""
         await insert_file(session_factory, "exists", display_name="元の名前")
         fake_waha.download_content = "/a/b.txt\tp9\texists\r\n/a/c.txt\tp8\tnew"
-        res = await client.post(f"{BASE}/sync", headers=TENANT, json={})
+        res = await client.post(f"{BASE}/sync", headers=TENANT, json={"userId": "u"})
         assert res.status_code == 204
         existing = await get_file(session_factory, "exists")
         assert existing is not None
@@ -543,7 +543,7 @@ class TestSyncFiles:
         fake_waha.download_content = (
             "/a/x.txt\tp1\tnew\r\n/a/x.txt\tp1\tnew\r\n/a/x.txt\tshared\tnew"
         )
-        res = await client.post(f"{BASE}/sync", headers=TENANT, json={})
+        res = await client.post(f"{BASE}/sync", headers=TENANT, json={"userId": "u"})
         assert res.status_code == 204
         assert await get_part_ids(session_factory, "new") == ["p1", "shared"]
         assert await get_part_ids(session_factory, "old") == []

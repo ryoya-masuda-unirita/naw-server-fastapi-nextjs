@@ -437,6 +437,10 @@ async def sync_files(
     await waha.end_session(session_id)
 
     existing_ids = await file_repository.find_all_ids(session)
+    if user_id is None and any(file_id not in existing_ids for file_id in files):
+        # 移植元は登録者が null のまま保存しようとして NOT NULL 制約で失敗する（500）。
+        # 新しく登録するファイルがあるときだけ失敗する点は同じにし、400 で返す
+        raise BadRequestError("userId が指定されていません")
     for file_id, file in files.items():
         if file_id in existing_ids:
             continue

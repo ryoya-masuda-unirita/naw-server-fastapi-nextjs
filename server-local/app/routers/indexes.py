@@ -5,13 +5,22 @@ multipart の項目は移植元の @ModelAttribute（record の項目名）と�
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, Header, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi import UploadFile as FastAPIUploadFile
 from fastapi.exceptions import RequestValidationError
 
 from app.core.config import MAX_FILE_SIZE_BYTES
 from app.core.deps import SessionDep, WahaDep
-from app.core.errors import PayloadTooLargeError
+from app.core.errors import BadRequestError, PayloadTooLargeError
 from app.models import FileStatus
 from app.repositories.file_repository import FileSearchCondition
 from app.schemas.index import DeleteIndexFileRequest, SyncIndexFilesRequest
@@ -21,8 +30,43 @@ from app.services import file_service
 router = APIRouter(prefix="/api/admin/indexes/{indexId}", tags=["indexes"])
 
 TenantHeader = Annotated[str, Header(alias="X-Tenant-ID")]
-OptionalForm = Annotated[str | None, Form()]
 OptionalFile = Annotated[FastAPIUploadFile | None, File()]
+
+
+def form_text(name: str) -> Any:
+    """multipart の文字列項目を、空文字は空文字のまま受け取る依存。
+
+    FastAPI の Form() は空文字を未指定（None）にするが、移植元の @ModelAttribute は
+    空文字をそのまま渡す（PATCH で `displayName=` を送ると表示名が空になる）ため。
+    """
+
+    async def dependency(request: Request) -> str | None:
+        value = (await request.form()).get(name)
+        return value if isinstance(value, str) else None
+
+    return Depends(dependency)
+
+
+CreationServiceNameForm = Annotated[str | None, form_text("creationServiceName")]
+DeletionServiceNameForm = Annotated[str | None, form_text("deletionServiceName")]
+NameForm = Annotated[str | None, form_text("name")]
+DisplayNameForm = Annotated[str | None, form_text("displayName")]
+ReferenceForm = Annotated[str | None, form_text("reference")]
+SplitLengthForm = Annotated[str | None, form_text("splitLength")]
+UserIdForm = Annotated[str | None, form_text("userId")]
+FeedbackIdForm = Annotated[str | None, form_text("feedbackId")]
+RoomIdForm = Annotated[str | None, form_text("roomId")]
+
+
+def _require_fields(**fields: str | None) -> None:
+    """登録するファイルの必須項目（name・userId）を確かめる。
+
+    移植元は未指定だと DB の NOT NULL 制約で失敗する（500）が、それは Waha! への
+    登録が終わった後になる。入力不備なので、Waha! を呼ぶ前に 400 で返す。
+    """
+    for field, value in fields.items():
+        if value is None:
+            raise BadRequestError(f"{field} が指定されていません")
 
 
 async def _to_uploaded(upload: FastAPIUploadFile | None) -> UploadedFile | None:
@@ -47,7 +91,8 @@ async def list_files(
     status_: Annotated[str | None, Query(alias="status")] = None,
 ) -> dict[str, Any]:
     file_status = None
-    if status_ is not None:
+    # Spring は空文字の列挙型パラメーターを未指定（null）として扱う
+    if status_:
         if status_ not in FileStatus.__members__:
             # Spring の型変換失敗（MethodArgumentTypeMismatchException）は 400
             raise RequestValidationError(
@@ -72,14 +117,15 @@ async def upload_file(
     session: SessionDep,
     waha: WahaDep,
     tenant_id: TenantHeader,
-    creationServiceName: OptionalForm = None,
-    name: OptionalForm = None,
-    displayName: OptionalForm = None,
-    reference: OptionalForm = None,
-    splitLength: OptionalForm = None,
-    userId: OptionalForm = None,
+    creationServiceName: CreationServiceNameForm,
+    name: NameForm,
+    displayName: DisplayNameForm,
+    reference: ReferenceForm,
+    splitLength: SplitLengthForm,
+    userId: UserIdForm,
     file: OptionalFile = None,
 ) -> dict[str, Any]:
+    _require_fields(name=name, userId=userId)
     return await file_service.create_file(
         session,
         waha,
@@ -102,15 +148,19 @@ async def update_file(
     session: SessionDep,
     waha: WahaDep,
     tenant_id: TenantHeader,
-    creationServiceName: OptionalForm = None,
-    deletionServiceName: OptionalForm = None,
-    name: OptionalForm = None,
-    displayName: OptionalForm = None,
-    reference: OptionalForm = None,
-    splitLength: OptionalForm = None,
-    userId: OptionalForm = None,
+    creationServiceName: CreationServiceNameForm,
+    deletionServiceName: DeletionServiceNameForm,
+    name: NameForm,
+    displayName: DisplayNameForm,
+    reference: ReferenceForm,
+    splitLength: SplitLengthForm,
+    userId: UserIdForm,
     file: OptionalFile = None,
 ) -> dict[str, Any]:
+    upload = await _to_uploaded(file)
+    if upload is not None and not upload.is_empty():
+        # ファイルを差し替えるときは登録し直すため、新規登録と同じ項目が必要
+        _require_fields(name=name, userId=userId)
     return await file_service.update_file(
         session,
         waha,
@@ -122,7 +172,7 @@ async def update_file(
         reference=reference,
         user_id=userId,
         index_id=indexId,
-        upload=await _to_uploaded(file),
+        upload=upload,
         split_length=splitLength,
         tenant_id=tenant_id,
     )
@@ -177,12 +227,13 @@ async def additional_learning(
     session: SessionDep,
     waha: WahaDep,
     tenant_id: TenantHeader,
-    creationServiceName: OptionalForm = None,
-    feedbackId: OptionalForm = None,
-    roomId: OptionalForm = None,
-    userId: OptionalForm = None,
+    creationServiceName: CreationServiceNameForm,
+    feedbackId: FeedbackIdForm,
+    roomId: RoomIdForm,
+    userId: UserIdForm,
     content: OptionalFile = None,
 ) -> Response:
+    _require_fields(userId=userId)
     await file_service.additional_learning(
         session,
         waha,
