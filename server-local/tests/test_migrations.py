@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from sqlmodel import SQLModel
 
@@ -56,6 +57,10 @@ def test_migration_matches_models(tmp_path: Path) -> None:
             "message_contents_message_id_idx",
             "message_contents_created_at_idx",
         } <= indexes
+        file_part_indexes = {
+            row[1] for row in conn.execute("PRAGMA index_list(file_parts)")
+        }
+        assert "file_parts_file_id_idx" in file_part_indexes
 
     command.downgrade(config, "base")
     with sqlite3.connect(db_path) as conn:
@@ -66,3 +71,27 @@ def test_migration_matches_models(tmp_path: Path) -> None:
             ).fetchall()
         }
         assert remaining == {"alembic_version"}
+
+
+def test_migration_uses_database_url_in_dotenv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """alembic もアプリと同じく .env の DATABASE_URL の DB にマイグレーションすること"""
+    db_path = tmp_path / "from-dotenv.sqlite3"
+    (tmp_path / ".env").write_text(
+        f"DATABASE_URL=sqlite+aiosqlite:///{db_path}\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
+    command.upgrade(config, "head")
+
+    with sqlite3.connect(db_path) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert set(SQLModel.metadata.tables) <= tables

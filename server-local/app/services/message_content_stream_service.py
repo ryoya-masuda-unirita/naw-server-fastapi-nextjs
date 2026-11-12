@@ -91,9 +91,14 @@ class StreamRuntime:
     mode: StreamMode
     queue: asyncio.Queue[str | None] = field(default_factory=asyncio.Queue)
     tail_reader: StreamFileTailReader = field(default_factory=StreamFileTailReader)
+    # tail の読み取りはスレッドで行う。ストリームの監視と確定前の読み残し処理が
+    # 同時に読むと読み取り位置が競合するため、1 つずつにする
+    tail_read_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     client_connected: bool = True
     file_terminal_reached: bool = False
     finalized: bool = False
+    # 確定処理に入ったか。ストリームの監視と結果のポーリングの両方から入れるため
+    finalize_started: bool = False
     empty_stream_file_logged: bool = False
     waha_session_id: str | None = None
     result_status: ResultStatus = ResultStatus.RUNNING
@@ -437,7 +442,9 @@ class MessageContentStreamService:
             )
             runtime.empty_stream_file_logged = True
 
-        result = runtime.tail_reader.read_new(path)
+        # ファイルの読み取りでイベントループを止めないよう、スレッドで読む
+        async with runtime.tail_read_lock:
+            result = await asyncio.to_thread(runtime.tail_reader.read_new, path)
         for chunk in result.chunks:
             self._handle_stream_chunk(runtime, chunk)
         if result.terminal_reached:
@@ -461,6 +468,10 @@ class MessageContentStreamService:
             return
         if runtime.mode == StreamMode.LEGACY_PASSTHROUGH:
             self._send_raw(runtime, payload)
+            return
+        if not payload:
+            # 移植元（Jackson の readTree）は空の data を MissingNode として読み、
+            # type が空になるため転送も終端判定もせずに無視する
             return
 
         node = json.loads(payload)
@@ -492,6 +503,11 @@ class MessageContentStreamService:
         """
         if runtime.finalized or runtime.result_status != ResultStatus.SUCCESS:
             return
+        if runtime.finalize_started:
+            # tail の読み取り（スレッド）を待つ間に、もう一方のタスクも確定処理に
+            # 入ってくることがあるため、最初に入った方だけが確定させる
+            return
+        runtime.finalize_started = True
         if not runtime.file_terminal_reached:
             logger.warning(
                 "Finalizing without stream terminal event; using Waha outputfile. "

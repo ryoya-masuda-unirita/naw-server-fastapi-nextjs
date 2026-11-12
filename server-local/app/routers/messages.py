@@ -1,4 +1,5 @@
 import logging
+from http import HTTPStatus
 from typing import Any
 
 from fastapi import APIRouter, Request, Response, status
@@ -6,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from starlette.datastructures import FormData, UploadFile
+from starlette.exceptions import HTTPException
 
 from app.core.config import MAX_FILE_SIZE_BYTES, MAX_REQUEST_SIZE_BYTES
 from app.core.deps import SessionDep, StreamServiceDep, WahaDep
@@ -64,18 +66,26 @@ async def _parse_message_request(
     ブラウザは textData を `application/json` の Blob として送るが、テストツール等で
     通常のフォーム文字列として送られても読めるよう、どちらも受け付ける。
     """
-    content_type = request.headers.get("content-type", "")
+    # メディアタイプは大文字小文字を区別しない（Spring の MediaType と同じ）
+    content_type = request.headers.get("content-type", "").lower()
     if not content_type.startswith(MULTIPART_FORM_DATA):
-        raise _bad_request("multipart/form-data が必要です")
+        # 移植元は consumes = multipart/form-data のため、Spring が 415 を返す
+        raise HTTPException(status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
     form = await request.form(max_part_size=MAX_REQUEST_SIZE_BYTES)
     # 自前で解析したフォームは FastAPI が閉じないため、一時ファイルを明示的に閉じる
     try:
         raw = form.get(TEXT_DATA_PART)
         if raw is None:
             raise _bad_request("textData がありません")
-        text = (
-            (await raw.read()).decode("utf-8") if isinstance(raw, UploadFile) else raw
-        )
+        try:
+            text = (
+                (await raw.read()).decode("utf-8")
+                if isinstance(raw, UploadFile)
+                else raw
+            )
+        except UnicodeDecodeError as e:
+            # 移植元（Jackson）は JSON の解析エラー（HttpMessageNotReadable）で 400
+            raise _bad_request(f"textData が UTF-8 ではありません: {e}") from e
         try:
             dto = CreateMessageContentRequest.model_validate_json(text)
         except ValidationError as e:

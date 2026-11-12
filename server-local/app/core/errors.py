@@ -49,6 +49,12 @@ def error_response_body(message: str) -> dict[str, Any]:
     return {"timestamp": int(time.time()), "message": message}
 
 
+# Spring（HttpStatus の理由句）と Python（http.HTTPStatus）で語が異なるもの
+SPRING_REASON_PHRASES: dict[int, str] = {
+    HTTPStatus.REQUEST_ENTITY_TOO_LARGE: "Payload Too Large",
+}
+
+
 def spring_default_error_body(status: int, path: str) -> dict[str, Any]:
     """Spring Boot の既定エラー応答（BasicErrorController）と同じ形にする。
 
@@ -58,9 +64,22 @@ def spring_default_error_body(status: int, path: str) -> dict[str, Any]:
     return {
         "timestamp": now.isoformat(timespec="milliseconds"),
         "status": status,
-        "error": HTTPStatus(status).phrase,
+        "error": SPRING_REASON_PHRASES.get(status, HTTPStatus(status).phrase),
         "path": path,
     }
+
+
+def unexpected_error_response(path: str) -> JSONResponse:
+    """想定外の例外をログに出し、Spring 既定の形の 500 を作る。
+
+    CORS の内側のミドルウェア（UnhandledErrorMiddleware）と、その外側で起きた例外を
+    扱う汎用の例外ハンドラーの両方で使う。
+    """
+    logger.exception("Unhandled exception: path=%s", path)
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+    return JSONResponse(
+        status_code=status, content=spring_default_error_body(status, path)
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -107,9 +126,5 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled exception: path=%s", request.url.path)
-        status = HTTPStatus.INTERNAL_SERVER_ERROR
-        return JSONResponse(
-            status_code=status,
-            content=spring_default_error_body(status, request.url.path),
-        )
+        # 認証ミドルウェアなど、UnhandledErrorMiddleware より外側で起きた例外を扱う
+        return unexpected_error_response(request.url.path)
