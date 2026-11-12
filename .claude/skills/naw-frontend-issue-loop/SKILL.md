@@ -52,7 +52,7 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
 メインの会話コンテキストを圧迫しないよう、Issue1件分の「着手〜実装〜テスト〜PR作成〜code-review」一式を `Agent(subagent_type: claude)` に委譲する。会話の前提を知らない前提で、以下を自己完結のプロンプトに含めること。
 
 - 対象Issue番号
-- `~/Documents/naw-server-fastapi-nextjs` の `.claude/skills/naw-frontend-issue-workflow/SKILL.md`（および参照先の `.claude/skills/naw-issue-workflow/references/doc-templates.md`）を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
+- `~/Documents/personal/naw-server-fastapi-nextjs` の `.claude/skills/naw-frontend-issue-workflow/SKILL.md`（および参照先の `.claude/skills/naw-issue-workflow/references/doc-templates.md`）を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
 - `frontend/.claude/CLAUDE.md`（技術スタック・Angular→React対応表・デザイン移行方針）を必ず読んで実装に反映すること
 - 以下の**本スキル独自の上書きルール**を明示すること（`naw-frontend-issue-workflow` のデフォルトと異なる部分なので、エージェントが読み違えないよう強調する）:
   1. **着手前に必ず `gh issue view {番号} --json title,body,labels` でIssue本文とラベルを確認し、`frontend-port` ラベルが付いていることを確認すること。** その上で `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を実行する（このスクリプトが `develop` の最新化・`feature/issue-{番号}` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）

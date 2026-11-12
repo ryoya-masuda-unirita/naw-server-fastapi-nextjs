@@ -28,8 +28,8 @@ description: Use when working on a GitHub Issue in this repository, including is
 
 移植元:
 
-- バックエンド: `~/Documents/secuaigent/server`
-- フロントエンド: `~/Documents/secuaigent/client`
+- バックエンド: `~/Documents/unirita-develop-pj/secuaigent-ref/server`
+- フロントエンド: `~/Documents/unirita-develop-pj/secuaigent-ref/client`
 
 ### 参照リポジトリ調査はサブエージェントに委譲する
 
@@ -85,8 +85,8 @@ NAW-XXXX の移植。〇〇機能を FastAPI / React で実装する。
 
 ## 参照
 - 元チケット: NAW-XXXX
-- 移植元（バックエンド）: `~/Documents/secuaigent/server/src/...`
-- 移植元（フロントエンド）: `~/Documents/secuaigent/client/src/...`
+- 移植元（バックエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/server/src/...`
+- 移植元（フロントエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/...`
 ```
 
 ## ブランチ規約

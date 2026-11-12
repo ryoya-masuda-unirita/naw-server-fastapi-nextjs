@@ -7,7 +7,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 この skill は、このリポジトリで frontend 移植（Angular `secuaigent/client` → React `frontend/`）の Issue 対応を進めるときに使う。
 
-backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名、ドキュメント構成、承認フロー、コミット規約は共通であり、本 skill では frontend 固有の差分だけを上書きする。
+backend（Spring Boot `secuaigent/server` → FastAPI `backend/`）の Issue 対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名、ドキュメント構成、承認フロー、コミット規約は共通であり、本 skill では frontend 固有の差分だけを上書きする。
 
 ## 使う場面
 
@@ -20,7 +20,7 @@ backend（Spring Boot `naw-server` → FastAPI `backend/`）の Issue 対応は 
 
 | 項目 | naw-issue-workflow（backend） | naw-frontend-issue-workflow（本 skill） |
 |---|---|---|
-| 移植元 | `~/Documents/secuaigent/server` | `~/Documents/secuaigent/client` |
+| 移植元 | `~/Documents/unirita-develop-pj/secuaigent-ref/server` | `~/Documents/unirita-develop-pj/secuaigent-ref/client` |
 | 移植先 | `backend/` | `frontend/` |
 | Issue ラベル | なし | 必ず `frontend-port` を付与する |
 | 自動テスト | `pytest` | `npm run test`, `npm run lint`, `npm run type-check` |
@@ -88,7 +88,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-{番�
 〇〇画面（Angular）を React に移植する。
 
 ## 参照
-- 移植元（frontend）: `~/Documents/secuaigent/client/src/app/...`
+- 移植元（frontend）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/app/...`
 - 移植先: `frontend/src/...`
 - 依存する backend API: `GET /api/...`（実装状況も明記）
 ```
