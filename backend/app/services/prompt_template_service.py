@@ -102,6 +102,7 @@ class PromptTemplateService:
         search: str | None,
         team: str | None,
         exclude_group_id: str | None,
+        sort: str,
         page: int,
         size: int,
         session: AsyncSession,
@@ -118,6 +119,7 @@ class PromptTemplateService:
             search: 名前・説明の部分一致検索文字列。
             team: チームフィルタ（グループID）。
             exclude_group_id: 除外グループフィルタ（グループID）。
+            sort: ソート指定（例: "updatedAt,desc"、"name,asc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -132,6 +134,11 @@ class PromptTemplateService:
                 tenant_id, current_user.id, session
             )
 
+        # 移植元（Spring Data）に合わせ、向きは大文字・小文字を区別せず、省略時は昇順とする
+        sort_parts = [part.strip() for part in sort.split(",")]
+        sort_col_name = sort_parts[0]
+        sort_dir = sort_parts[1].lower() if len(sort_parts) > 1 else "asc"
+
         templates, total = await PromptTemplateRepository.find_page_for_admin(
             tenant_id,
             search,
@@ -139,6 +146,8 @@ class PromptTemplateService:
             exclude_group_id,
             admin,
             admin_group_ids,
+            sort_col_name,
+            sort_dir,
             page,
             size,
             session,

@@ -58,7 +58,15 @@ class TestGetAdminPromptTemplates:
         mock_find_groups.return_value = {}
 
         await PromptTemplateService.get_admin_prompt_templates(
-            "tenant-1", _user(UserRole.ADMIN), None, None, None, 0, 20, session=None
+            "tenant-1",
+            _user(UserRole.ADMIN),
+            None,
+            None,
+            None,
+            "updatedAt,desc",
+            0,
+            20,
+            session=None,
         )
 
         mock_find_admin_group_ids.assert_not_called()
@@ -87,7 +95,15 @@ class TestGetAdminPromptTemplates:
         mock_find_groups.return_value = {}
 
         await PromptTemplateService.get_admin_prompt_templates(
-            "tenant-1", _user(UserRole.USER), None, None, None, 0, 20, session=None
+            "tenant-1",
+            _user(UserRole.USER),
+            None,
+            None,
+            None,
+            "updatedAt,desc",
+            0,
+            20,
+            session=None,
         )
 
         mock_find_admin_group_ids.assert_called_once()
@@ -116,9 +132,52 @@ class TestGetAdminPromptTemplates:
         mock_find_groups.return_value = {}
 
         result = await PromptTemplateService.get_admin_prompt_templates(
-            "tenant-1", _user(UserRole.USER), None, None, None, 0, 20, session=None
+            "tenant-1",
+            _user(UserRole.USER),
+            None,
+            None,
+            None,
+            "updatedAt,desc",
+            0,
+            20,
+            session=None,
         )
 
         args = mock_find_page.call_args.args
         assert args[5] == []  # admin_group_ids
         assert result.content == []
+
+    @patch(
+        "app.services.prompt_template_service.GroupPromptTemplateRepository.find_groups_grouped_by_template_ids",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.prompt_template_service.PromptTemplateRepository.find_page_for_admin",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.prompt_template_service.GroupUserRepository.find_admin_group_ids_for_user",
+        new_callable=AsyncMock,
+    )
+    async def test_passes_parsed_sort_to_repository(
+        self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
+    ):
+        """sort を項目と小文字の向きに分けてリポジトリへ渡すこと"""
+        mock_find_page.return_value = ([], 0)
+        mock_find_groups.return_value = {}
+
+        await PromptTemplateService.get_admin_prompt_templates(
+            "tenant-1",
+            _user(UserRole.ADMIN),
+            None,
+            None,
+            None,
+            "name,DESC",
+            0,
+            20,
+            session=None,
+        )
+
+        args = mock_find_page.call_args.args
+        assert args[6] == "name"  # sort_col_name
+        assert args[7] == "desc"  # sort_dir
