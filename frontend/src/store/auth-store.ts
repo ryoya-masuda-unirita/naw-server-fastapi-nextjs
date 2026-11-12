@@ -75,13 +75,12 @@ export const useAuthStore = create<AuthStore>((set) => {
     async ensureInitialized() {
       if (!initPromise) {
         initPromise = (async () => {
-          let previousGroups: User['groups'] = [];
+          let storedUser: User | null = null;
           const stored = sessionStorage.getItem('AUTH_USER');
           if (stored) {
             try {
-              const storedUser = JSON.parse(stored) as User;
+              storedUser = JSON.parse(stored) as User;
               setUser(storedUser);
-              previousGroups = storedUser.groups ?? [];
             } catch (e) {
               console.warn('AUTH_USER in sessionStorage is corrupted. Clearing.', e);
               sessionStorage.removeItem('AUTH_USER');
@@ -94,7 +93,9 @@ export const useAuthStore = create<AuthStore>((set) => {
             );
             const user = mapToUser(session);
             // GET /api/auth はグループを返さないため、ログイン時に保存したグループを引き継ぐ。
-            // 引き継がないと再読み込みでグループ管理者の権限（管理コンソール・グループ詳細）が消える（移植元 initializeSession と同じ）
+            // 引き継がないと再読み込みでグループ管理者の権限（管理コンソール・グループ詳細）が消える（移植元 initializeSession と同じ）。
+            // 移植元はユーザーを比べないが、別タブで別ユーザーにログインし直した場合に他人のグループを引き継がないよう ID を比べる
+            const previousGroups = storedUser?.id === user.id ? (storedUser.groups ?? []) : [];
             if (user.groups.length === 0 && previousGroups.length > 0) {
               user.groups = previousGroups;
             }

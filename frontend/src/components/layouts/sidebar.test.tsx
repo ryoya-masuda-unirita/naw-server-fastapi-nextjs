@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -89,7 +90,7 @@ describe('Sidebar', () => {
 
       await user.click(screen.getByText('SIDEBAR.RANABASE'));
 
-      expect(openSpy).toHaveBeenCalledWith('https://ranabase.com', '_blank');
+      expect(openSpy).toHaveBeenCalledWith('https://ranabase.com', '_blank', 'noopener,noreferrer');
     });
 
     test('新しいチャットをクリックすると新しいチャットのダイアログが開くこと', async () => {
@@ -143,13 +144,6 @@ describe('Sidebar', () => {
         screen.queryByRole('link', { name: 'ADMIN_CONSOLE.WORKSPACE_SETTINGS' })
       ).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'SIDEBAR.ASSISTANTS' })).not.toBeInTheDocument();
-    });
-
-    test('グループ管理者だけのユーザーがグループ以外の管理画面にいるとグループ一覧へ移ること', () => {
-      setAuthUser(FIXTURE_GROUP_ADMIN);
-      renderSidebar(['/admin/management']);
-
-      expect(currentPath()).toBe('/admin/groups');
     });
   });
 
@@ -218,6 +212,22 @@ describe('Sidebar', () => {
 
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['assistants'] });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['prompt-templates'] });
+    });
+
+    test('StrictMode でも初回描画では無効化しないこと', () => {
+      const queryClient = new QueryClient();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      render(
+        <StrictMode>
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/dashboard']}>
+              <Sidebar config={ADMIN_LAYOUT_CONFIG} />
+            </MemoryRouter>
+          </QueryClientProvider>
+        </StrictMode>
+      );
+
+      expect(invalidateSpy).not.toHaveBeenCalled();
     });
 
     test('ダッシュボード・新規チャット以外へ移っても無効化しないこと', async () => {

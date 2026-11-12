@@ -28,13 +28,13 @@ describe('NotPortedDialog', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  test('開いているときは担当未定と表示し、close で onClose が呼ばれること', async () => {
+  test('開いているときは担当未定と表示し、閉じるボタンで onClose が呼ばれること', async () => {
     const onClose = vi.fn();
     render(<NotPortedDialog name="XDialog" open onClose={onClose} />);
     const user = userEvent.setup();
 
     expect(screen.getByRole('dialog', { name: 'XDialog' })).toHaveTextContent('担当 Issue 未定');
-    await user.click(screen.getByRole('button', { name: 'close' }));
+    await user.click(screen.getByRole('button', { name: 'COMMON.CLOSE' }));
 
     expect(onClose).toHaveBeenCalled();
   });

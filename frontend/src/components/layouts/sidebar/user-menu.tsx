@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MatIcon } from '@/components/shared/icons/mat-icon';
 import type { UserMenuAction } from '@/types/layout';
@@ -28,6 +28,20 @@ export function UserMenu({
 }: UserMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // メニューの外をクリックしたら閉じる（移植元は cdk overlay の透明な backdrop）。
+  // サイドバー（aside）は transform を持ち fixed の基準になるため、全画面を覆う backdrop は置けず document で拾う
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
 
   const handleAction = (action: UserMenuAction) => {
     setIsOpen(false);
@@ -35,16 +49,7 @@ export function UserMenu({
   };
 
   return (
-    <div className="relative">
-      {isOpen && (
-        <button
-          type="button"
-          aria-label="close-user-menu"
-          className="fixed inset-0 z-40 cursor-default"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-
+    <div ref={containerRef} className="relative">
       {isOpen && (
         <div className="absolute bottom-full left-0 z-50 mb-1 flex min-w-70 flex-col gap-1 rounded-lg bg-bg-primary p-4 text-xs font-medium shadow-default">
           {actions.map((action) => (

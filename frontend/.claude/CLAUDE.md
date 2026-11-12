@@ -185,6 +185,7 @@ src/
   - 新しいチャット: `src/components/features/chat/new-chat-dialog.tsx`（#284）
   - チャット検索: `src/components/features/chat/chat-search-modal.tsx`（#287）
   - クレジット確認: `src/components/layouts/usage-dialog.tsx`（担当未定）
+- `AdminLayout` のモバイル用の開くボタン（`open-mobile-sidebar`）は移植元にない仮のもの。移植元どおりページヘッダー（#278 の `PageHeader`）に開閉ボタンが入ったら消す
 - サイドバーは `/dashboard`・`/chat/new` へ移るたびに TanStack Query の `['assistants']`・`['prompt-templates']` を無効化する（移植元と同じ）。アシスタント一覧・テンプレート一覧の query key はこの 2 つを先頭にする
 - 用語集（`/glossary` 配下）・データソースは移植元で非表示にした機能のため、ルートもサイドバー項目も作らない
 - i18n 辞書（`public/i18n/ja.json`・`en.json`）は移植元を丸ごと移植済み。**画面の移植でキーを足さない**（移植元にないキーが必要なら、移植元の最新を確認し、辞書ごと移植元に揃える）。React 独自のキーは `AUTH.LOGIN.TENANT_ID_*` だけ

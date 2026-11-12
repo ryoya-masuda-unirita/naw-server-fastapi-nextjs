@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 // 未移植の画面・ダイアログの目印。各画面の Issue で本物に置き換わり、全画面の移植が終わったらこのファイルごと消す。
 // 表示文言は製品の文言ではなく開発用の目印のため、i18n 辞書（移植元のクローン）には入れない。
@@ -30,6 +31,8 @@ interface NotPortedDialogProps extends NotPortedProps {
 }
 
 export function NotPortedDialog({ name, issue, open, onClose }: NotPortedDialogProps) {
+  const { t } = useTranslation();
+
   if (!open) {
     return null;
   }
@@ -45,7 +48,7 @@ export function NotPortedDialog({ name, issue, open, onClose }: NotPortedDialogP
           未移植: {name}（{issueLabel(issue)}）
         </p>
         <button type="button" onClick={onClose} className="self-end text-sm text-primary">
-          close
+          {t('COMMON.CLOSE')}
         </button>
       </div>
     </div>

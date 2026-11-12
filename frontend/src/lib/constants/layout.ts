@@ -9,7 +9,6 @@ export const ADMIN_LAYOUT_CONFIG: LayoutConfig = {
   dashboardRoute: ROUTES.APP.DASHBOARD,
   chatNewRoute: ROUTES.APP.CHAT_NEW,
   chatRoomRoute: ROUTES.APP.CHAT_ROOM,
-  libraryRoute: ROUTES.APP.LIBRARY,
   adminTenantRoute: ROUTES.APP.ADMIN_TENANT,
   externalSiteUrl: 'https://ranabase.com',
   adminTitleMap: {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
@@ -48,13 +48,14 @@ export function Sidebar({ config }: SidebarProps) {
   const isAdminMode = mode === 'admin';
   const isBackMode = mode === 'back';
 
-  // 移植元は NavigationEnd（遷移完了）ごとに行う処理。初回描画では行わない
-  const isFirstRender = useRef(true);
+  // 移植元は NavigationEnd（遷移完了）ごとに行う処理。初回描画では行わない。
+  // 「初回か」のフラグだと StrictMode の effect 二重実行で初回にも走るため、前回の pathname と比べる
+  const previousPathname = useRef(pathname);
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
+    if (previousPathname.current === pathname) {
       return;
     }
+    previousPathname.current = pathname;
     closeMobileSidebar();
 
     // アシスタント/テンプレートは画面遷移では再取得されないため、新規チャットに入るときに明示的に更新する
@@ -64,13 +65,6 @@ export function Sidebar({ config }: SidebarProps) {
       void queryClient.invalidateQueries({ queryKey: ['prompt-templates'] });
     }
   }, [pathname, config, closeMobileSidebar, queryClient]);
-
-  // グループ管理者だけのユーザーはグループ以外の管理画面に入れない（移植元 checkAdminRoute。初回描画でも行う）
-  useEffect(() => {
-    if (isAdminMode && isGroupAdminOnly && !pathname.startsWith(ROUTES.APP.ADMIN_GROUPS)) {
-      navigate(ROUTES.APP.ADMIN_GROUPS);
-    }
-  }, [isAdminMode, isGroupAdminOnly, pathname, navigate]);
 
   const toggleSection = (sectionIndex: number) => {
     setSectionGroups((sections) =>
@@ -185,31 +179,55 @@ export function Sidebar({ config }: SidebarProps) {
           <>
             <div className={`mb-6 shrink-0 md:mb-9 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
               <div>
-                {config.actionItems.map((item) => (
-                  <button
-                    key={item.labelKey}
-                    type="button"
-                    data-testid={
-                      item.labelKey === 'SIDEBAR.SEARCH_CHAT' ? 'chat-search-button' : undefined
-                    }
-                    title={t(item.labelKey)}
-                    onClick={() => onActionItemClick(item)}
-                    className={`flex h-9 items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-normal text-text-default transition-colors hover:bg-bg-brand-weak ${
-                      sidebarCollapsed ? 'w-9' : 'w-full'
-                    }`}
-                  >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                      <SvgIcon name={item.icon} className="h-5 w-5" />
-                    </span>
-                    <span
-                      className={`flex-1 origin-left whitespace-nowrap font-medium transition-all duration-300 ${
-                        sidebarCollapsed ? 'invisible opacity-0' : ''
+                {config.actionItems.map((item) =>
+                  !item.route.startsWith('#') ? (
+                    <NavLink
+                      key={item.labelKey}
+                      to={item.route}
+                      title={t(item.labelKey)}
+                      className={({ isActive }) =>
+                        `flex h-9 items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-normal text-text-default transition-colors hover:bg-bg-brand-weak! ${
+                          isActive ? 'bg-bg-brand-strong! text-primary!' : ''
+                        }`
+                      }
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                        <SvgIcon name={item.icon} className="h-5 w-5" />
+                      </span>
+                      <span
+                        className={`flex-1 whitespace-nowrap font-medium transition-all ${
+                          sidebarCollapsed ? 'invisible opacity-0' : ''
+                        }`}
+                      >
+                        {t(item.labelKey)}
+                      </span>
+                    </NavLink>
+                  ) : (
+                    <button
+                      key={item.labelKey}
+                      type="button"
+                      data-testid={
+                        item.labelKey === 'SIDEBAR.SEARCH_CHAT' ? 'chat-search-button' : undefined
+                      }
+                      title={t(item.labelKey)}
+                      onClick={() => onActionItemClick(item)}
+                      className={`flex h-9 items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-normal text-text-default transition-colors hover:bg-bg-brand-weak ${
+                        sidebarCollapsed ? 'w-9' : 'w-full'
                       }`}
                     >
-                      {t(item.labelKey)}
-                    </span>
-                  </button>
-                ))}
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                        <SvgIcon name={item.icon} className="h-5 w-5" />
+                      </span>
+                      <span
+                        className={`flex-1 origin-left whitespace-nowrap font-medium transition-all duration-300 ${
+                          sidebarCollapsed ? 'invisible opacity-0' : ''
+                        }`}
+                      >
+                        {t(item.labelKey)}
+                      </span>
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -237,7 +255,10 @@ export function Sidebar({ config }: SidebarProps) {
                           key={item.labelKey}
                           type="button"
                           title={t(item.labelKey)}
-                          onClick={() => window.open(config.externalSiteUrl, '_blank')}
+                          // 移植元は noopener を付けていないが、外部サイトに window.opener を渡さない（逆タブナビング対策）
+                          onClick={() =>
+                            window.open(config.externalSiteUrl, '_blank', 'noopener,noreferrer')
+                          }
                           className="group flex h-9 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-normal text-text-default transition-colors hover:bg-bg-brand-weak"
                         >
                           <span className="flex h-5 w-5 shrink-0 items-center justify-center">

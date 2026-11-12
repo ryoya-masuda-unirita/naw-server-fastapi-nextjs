@@ -42,8 +42,8 @@ export interface ActionItem {
 export interface LayoutConfig {
   dashboardRoute: string;
   chatNewRoute: string;
+  /** ルーム一覧（#285）で各ルームのリンク先を作る */
   chatRoomRoute: (roomId: string) => string;
-  libraryRoute: string;
   adminTenantRoute: string;
   externalSiteUrl: string;
   /** 管理モードにする URL の前方一致キーと、その画面のタイトルキー */

@@ -271,5 +271,25 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().adminGroupIds).toEqual(['g1', 'g3']);
       expect(useAuthStore.getState().canAccessAdminConsole).toBe(true);
     });
+
+    test('セッションのユーザーが保存済みのユーザーと違うときはグループを引き継がないこと', async () => {
+      await act(async () => {
+        await useAuthStore.getState().logout();
+      });
+      sessionStorage.setItem('AUTH_USER', JSON.stringify(FIXTURE_GROUP_ADMIN));
+      server.use(
+        http.get(`${BASE_URL}/api/auth`, () =>
+          HttpResponse.json({ id: 'other', name: '別ユーザー', role: 'USER' })
+        )
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().ensureInitialized();
+      });
+
+      expect(useAuthStore.getState().user?.id).toBe('other');
+      expect(useAuthStore.getState().user?.groups).toEqual([]);
+      expect(useAuthStore.getState().canAccessAdminConsole).toBe(false);
+    });
   });
 });

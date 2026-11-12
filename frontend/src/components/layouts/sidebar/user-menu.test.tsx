@@ -95,7 +95,7 @@ describe('UserMenu', () => {
       const user = userEvent.setup();
 
       await user.click(screen.getByRole('button', { name: 'user-menu' }));
-      await user.click(screen.getByRole('button', { name: 'close-user-menu' }));
+      await user.click(document.body);
 
       expect(screen.queryByText('USER_MENU.LOGOUT')).not.toBeInTheDocument();
     });
