@@ -61,6 +61,14 @@ _LIBRARY_PROMPT_TYPE = "LIBRARY"
 # タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
 _LIBRARY_TITLE_MAX_LENGTH = 255
 
+# チャットAPIが扱えるAIモデルの種別と、それに対応するテナントエンドポイントの種別。
+# モデル検索の絞り込み・エンドポイントの解決をこの1か所で管理し、プロバイダ追加時の
+# 更新漏れを防ぐ。
+_CHAT_TENANT_ENDPOINT_TYPES: dict[AIModelEndpointType, EndpointType] = {
+    AIModelEndpointType.AZURE_OPENAI_CHAT: EndpointType.AZURE_OPENAI_CHAT,
+    AIModelEndpointType.BEDROCK_CHAT: EndpointType.BEDROCK_CHAT,
+}
+
 
 def _sse(event: str, data: dict) -> bytes:
     """SSE(Server-Sent Events)形式の1イベントを組み立てる。
@@ -165,8 +173,9 @@ class LlmChatService:
             `text/event-stream`のストリーミングレスポンス。
 
         Raises:
-            HTTPException: クレジット上限超過時は429、指定deployNameのAIモデルが
-                存在しない・テナントにAzure OpenAI Chatエンドポイントが存在しない・
+            HTTPException: クレジット上限超過時は429、指定deployNameのチャット用
+                AIモデル（Azure OpenAI/Bedrock）が存在しない・テナントにそのモデル種別に
+                対応するチャット用エンドポイントが存在しない・
                 createLibrary=trueなのにmessageId未指定の場合は400、指定messageIdが
                 テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
         """
@@ -178,25 +187,15 @@ class LlmChatService:
 
         await enforce_within_quota(tenant_id, session)
 
-        ai_model = await AIModelRepository.find_by_name(req.deployName, session)
+        ai_model = await AIModelRepository.find_by_name_and_endpoint_types(
+            req.deployName, _CHAT_TENANT_ENDPOINT_TYPES.keys(), session
+        )
         if ai_model is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"指定された deployName の AI モデルが見つかりません: {req.deployName}",
             )
-        if ai_model.endpoint_type not in (
-            AIModelEndpointType.AZURE_OPENAI_CHAT,
-            AIModelEndpointType.BEDROCK_CHAT,
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"未対応のエンドポイント種別です: {ai_model.endpoint_type.value}",
-            )
-        tenant_endpoint_type = (
-            EndpointType.AZURE_OPENAI_CHAT
-            if ai_model.endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT
-            else EndpointType.BEDROCK_CHAT
-        )
+        tenant_endpoint_type = _CHAT_TENANT_ENDPOINT_TYPES[ai_model.endpoint_type]
 
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
             tenant_id, tenant_endpoint_type, session

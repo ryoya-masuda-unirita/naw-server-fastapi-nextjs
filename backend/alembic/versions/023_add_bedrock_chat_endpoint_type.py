@@ -26,6 +26,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     # PostgreSQLはenumから値を削除するネイティブ手段を提供していないため、
     # ダウングレードは既存の型を再作成する形で対応する。
+    # BEDROCK_CHATの行が残っていると、旧enumへのcastが
+    # "invalid input value for enum"で失敗するため、先に削除する
+    # （旧スキーマではBEDROCK_CHATを表現できず、残しても使えない行のため）。
+    # assistants_endpoints等はtenant_endpointsへのFKがON DELETE CASCADEのため連動して消える。
+    op.execute("DELETE FROM tenant_endpoints WHERE type = 'BEDROCK_CHAT'")
+    op.execute("DELETE FROM ai_models WHERE endpoint_type = 'BEDROCK_CHAT'")
+
     op.execute("ALTER TYPE endpointtype RENAME TO endpointtype_old")
     op.execute(
         "CREATE TYPE endpointtype AS ENUM ("

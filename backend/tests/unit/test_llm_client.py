@@ -715,3 +715,91 @@ class TestBedrockLlmChatClient:
                 tools=[ToolConfig(name="web_search")],
             ):
                 pass
+
+    async def test_converts_openai_image_parts_to_anthropic_format(self):
+        """OpenAI形式の画像パート(data URL)がAnthropic形式のimageパートに変換されること"""
+        mock_client = _mock_bedrock_client([])
+        openai_parts = [
+            {"type": "text", "text": "この画像は？"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="},
+            },
+        ]
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-haiku-4-5",
+                [ChatMessage(role="user", content=openai_parts)],
+                0.4,
+                1024,
+            ):
+                pass
+
+        _, kwargs = mock_client.messages.stream.call_args
+        assert kwargs["messages"] == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "この画像は？"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "iVBORw0KGgo=",
+                        },
+                    },
+                ],
+            }
+        ]
+
+    async def test_raises_for_non_data_url_image(self):
+        """base64のdata URLでない画像パートの場合はValueErrorになること"""
+        mock_client = _mock_bedrock_client([])
+        parts = [
+            {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}
+        ]
+
+        with (
+            patch(
+                "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+            ),
+            pytest.raises(ValueError),
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-haiku-4-5",
+                [ChatMessage(role="user", content=parts)],
+                0.4,
+                1024,
+            ):
+                pass
+
+    async def test_normalizes_role_to_lowercase(self):
+        """大文字を含むroleが小文字に正規化されて渡されること"""
+        mock_client = _mock_bedrock_client([])
+
+        with patch(
+            "app.core.llm_client.anthropic.AsyncAnthropic", return_value=mock_client
+        ):
+            async for _ in BedrockLlmChatClient.stream_chat(
+                "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+                "dummy-api-key",
+                "anthropic.claude-haiku-4-5",
+                [
+                    ChatMessage(role="User", content="こんにちは"),
+                    ChatMessage(role="Assistant", content="はい"),
+                ],
+                0.4,
+                1024,
+            ):
+                pass
+
+        _, kwargs = mock_client.messages.stream.call_args
+        assert [m["role"] for m in kwargs["messages"]] == ["user", "assistant"]

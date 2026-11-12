@@ -1,4 +1,6 @@
-"""Azure OpenAI(Chat/Embeddings) API呼び出しクライアント。
+"""Azure OpenAI(Chat/Embeddings)・AWS Bedrock(Claude) API呼び出しクライアント。
+
+Bedrock(Claude)は`BedrockLlmChatClient`が`anthropic`公式SDKで呼び出す（詳細は同クラス参照）。
 
 移植元(Spring Boot)版はチャット用(`openai-java`のResponses API)と埋め込み用
 (Spring AI経由の`azure-ai-openai`)で異なるSDK系統を使っているが、FastAPI側は
@@ -269,6 +271,62 @@ class AzureLlmChatClient:
                     raise RuntimeError(message)
 
 
+_DATA_URL_PREFIX = "data:"
+_DATA_URL_BASE64_MARKER = ";base64,"
+
+
+def _to_anthropic_content(
+    content: str | list[dict[str, object]],
+) -> str | list[dict[str, object]]:
+    """OpenAI形式のマルチモーダルcontentを、Anthropic Messages API形式に変換する。
+
+    添付ファイルのcontentは`build_user_content`がOpenAI Chat Completions API形式
+    （`image_url`パートにdata URL）で組み立てるが、Anthropic Messages APIは
+    `image`パート（base64の`source`）しか受け付けず、そのまま送ると400になるため変換する。
+
+    Args:
+        content: 文字列、またはテキストパート・画像パートのリスト。
+
+    Returns:
+        文字列はそのまま、リストはAnthropic形式のパートのリストに変換したもの。
+
+    Raises:
+        ValueError: base64のdata URLでない画像パート、または未知の種別のパートが
+            含まれる場合。
+    """
+    if isinstance(content, str):
+        return content
+
+    converted: list[dict[str, object]] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            converted.append({"type": "text", "text": part["text"]})
+        elif part_type == "image_url":
+            url = str(part["image_url"]["url"])  # type: ignore[index]
+            if (
+                not url.startswith(_DATA_URL_PREFIX)
+                or _DATA_URL_BASE64_MARKER not in url
+            ):
+                raise ValueError("画像はbase64のdata URL形式で指定してください")
+            media_type, data = url[len(_DATA_URL_PREFIX) :].split(
+                _DATA_URL_BASE64_MARKER, 1
+            )
+            converted.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": data,
+                    },
+                }
+            )
+        else:
+            raise ValueError(f"未対応のメッセージパート種別です: {part_type}")
+    return converted
+
+
 class BedrockLlmChatClient:
     """AWS Bedrock（Bedrock Mantle経由）でClaudeをストリーミング呼び出しするクライアント。
 
@@ -294,7 +352,7 @@ class BedrockLlmChatClient:
             endpoint: テナントに紐づくBedrock Mantleエンドポイント
                 （例: `https://bedrock-mantle.ap-northeast-1.api.aws/anthropic`）。
             api_key: テナントに紐づくBedrock API key（Bearerトークン）。
-            model_id: 呼び出すモデルID（例: `anthropic.claude-sonnet-5`）。
+            model_id: 呼び出すモデルID（例: `anthropic.claude-haiku-4-5`）。
             messages: 会話履歴。
             temperature: 応答のランダム性(0.0〜1.0)。
             max_tokens: 出力トークン数の上限。未指定の場合は`max_tokens_fallback`を使う。
@@ -308,8 +366,9 @@ class BedrockLlmChatClient:
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
 
         Raises:
-            ValueError: `tools`が指定された場合、または`max_tokens`・
-                `max_tokens_fallback`のいずれも指定されていない場合。
+            ValueError: `tools`が指定された場合、`max_tokens`・
+                `max_tokens_fallback`のいずれも指定されていない場合、または
+                メッセージに変換できない添付パートが含まれる場合。
         """
         if tools:
             raise ValueError(
@@ -330,8 +389,13 @@ class BedrockLlmChatClient:
             for message in messages
             if message.role.lower() == "system" and isinstance(message.content, str)
         )
+        # Anthropic Messages APIはroleを小文字の"user"/"assistant"しか受け付けないため、
+        # system判定と同じく小文字に正規化して渡す。
         conversation_messages = [
-            {"role": message.role, "content": message.content}
+            {
+                "role": message.role.lower(),
+                "content": _to_anthropic_content(message.content),
+            }
             for message in messages
             if message.role.lower() != "system"
         ]
