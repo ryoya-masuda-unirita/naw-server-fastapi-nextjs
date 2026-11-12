@@ -1,9 +1,11 @@
 import random
+from collections.abc import Sequence
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sort import SortOrder
 from app.models.assistant import Assistant, AssistantType
 from app.models.assistant_category import AssistantCategory
 from app.models.tenant_endpoint import EndpointType
@@ -30,18 +32,6 @@ from app.schemas.assistant import (
     AssistantUpdateRequest,
     PagedAssistantResponse,
 )
-
-# 移植元PageableSortUtil.remapSortのフロントエンド向けソートキーエイリアス。
-# secuaigent-client（AssistantSortField）は実際に"assistantType"を送信するため、
-# "type"（DBの実カラム名）に変換する。"serverType"・"server"は移植元Javaのマップに
-# 存在した別名で、念のため同様に扱う。
-# "category"はM2Mの多重度により単純な列ソートに落とし込めないため更新日時にフォールバックする。
-_SORT_ALIASES: dict[str, str] = {
-    "assistantType": "type",
-    "serverType": "type",
-    "server": "type",
-    "category": "updatedAt",
-}
 
 
 class AssistantService:
@@ -410,7 +400,7 @@ class AssistantService:
         category_id: str | None,
         group_id: str | None,
         exclude_group_id: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -428,7 +418,7 @@ class AssistantService:
             category_id: カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
             group_id: グループでの絞り込み（`"NONE"`は未所属）。
             exclude_group_id: 指定グループに所属していないものに絞り込む。
-            sort: ソート指定（例: "updatedAt,desc"）。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -443,10 +433,6 @@ class AssistantService:
                 tenant_id, current_user.id, session
             )
 
-        sort_parts = sort.split(",")
-        sort_col_name = _SORT_ALIASES.get(sort_parts[0], sort_parts[0])
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-
         assistants, total = await AssistantRepository.find_page(
             tenant_id,
             search,
@@ -455,8 +441,7 @@ class AssistantService:
             group_id,
             exclude_group_id,
             allowed_group_ids,
-            sort_col_name,
-            sort_dir,
+            sort,
             page,
             size,
             session,

@@ -1,13 +1,34 @@
+from collections.abc import Sequence
+from typing import Any
+
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.assistant import (
     Assistant,
     AssistantCategoryMapping,
     AssistantType,
     GroupAssistant,
 )
+
+# 移植元PageableSortUtil.remapSortのフロントエンド向けソートキーエイリアスを含む対応表。
+# secuaigent-client（AssistantSortField）は実際に"assistantType"を送信するため、
+# アシスタント種別の列に対応づける。"serverType"・"server"は移植元Javaのマップに
+# 存在した別名で、念のため同様に扱う。
+# "category"（カテゴリ名順）はM2Mの多重度により単純な列ソートに落とし込めないため、
+# 更新日時順にフォールバックする。対応表にないキーも更新日時順にする。
+_SORT_COLUMNS: dict[str, Any] = {
+    "name": Assistant.name,
+    "type": Assistant.type,
+    "assistantType": Assistant.type,
+    "serverType": Assistant.type,
+    "server": Assistant.type,
+    "includeHistory": Assistant.include_history,
+    "updatedAt": Assistant.updated_at,
+    "category": Assistant.updated_at,
+}
 
 
 class AssistantRepository:
@@ -137,8 +158,7 @@ class AssistantRepository:
         group_id: str | None,
         exclude_group_id: str | None,
         allowed_group_ids: list[str] | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -154,8 +174,7 @@ class AssistantRepository:
             exclude_group_id: 指定グループに所属していないものに絞り込む（Noneなら条件なし）。
             allowed_group_ids: 絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
                 Noneの場合は絞り込みなし。空リストの場合は該当なしとして早期リターンする。
-            sort_col_name: ソート対象列名（"name"・"type"・"updatedAt"）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"type"・"updatedAt"など）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -231,17 +250,15 @@ class AssistantRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        # カテゴリ名でのソート（移植元の`category`エイリアス）はM2Mの多重度により
-        # 単純な列ソートに落とし込めないため、更新日時ソートにフォールバックする。
-        if sort_col_name == "type":
-            sort_col = Assistant.type
-        elif sort_col_name == "name":
-            sort_col = Assistant.name
-        elif sort_col_name == "includeHistory":
-            sort_col = Assistant.include_history
-        else:
-            sort_col = Assistant.updated_at
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 同名・同時刻のアシスタントの並びが不定にならないよう、IDを最終キーにする
+        stmt = stmt.order_by(
+            *build_order_by(
+                sort,
+                _SORT_COLUMNS,
+                fallback=Assistant.updated_at,
+                tie_breaker=Assistant.id,
+            )
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         assistants = (await session.execute(stmt)).scalars().all()

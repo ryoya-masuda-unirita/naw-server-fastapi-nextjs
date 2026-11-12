@@ -1,8 +1,11 @@
+from collections.abc import Sequence
+
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import credit_quota, file_creation
 from app.core.file_storage import FileStorage
+from app.core.sort import SortOrder
 from app.models.index import Index, IndexType
 from app.models.user import User, UserRole
 from app.repositories.assistant_repository import AssistantRepository
@@ -132,8 +135,7 @@ class IndexService:
         current_user: User,
         group_id: str | None,
         search: str | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -145,8 +147,7 @@ class IndexService:
             current_user: 認証済みユーザー。
             group_id: グループでの絞り込み。
             search: 名前・説明の部分一致検索文字列。
-            sort_col_name: ソート対象列名。
-            sort_dir: ソート方向。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -171,8 +172,7 @@ class IndexService:
                 group_id,
                 None,
                 None,
-                sort_col_name,
-                sort_dir,
+                sort,
                 page,
                 size,
                 session,
@@ -190,8 +190,7 @@ class IndexService:
                 None,
                 allowed_index_ids,
                 allowed_group_ids,
-                sort_col_name,
-                sort_dir,
+                sort,
                 page,
                 size,
                 session,

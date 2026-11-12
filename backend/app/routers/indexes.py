@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.core.file_storage import FileStorage, get_file_storage
 from app.core.security import get_verified_tenant_id, require_admin_or_group_admin
+from app.core.sort import SortOrder, sort_query
 from app.models.user import User
 from app.schemas.index import (
     IndexAdditionalLearningForm,
@@ -22,22 +23,18 @@ async def get_indexes(
     search_text: str | None = Query(None, alias="searchText"),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=1000),
-    sort: str = Query("updatedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("updatedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(require_admin_or_group_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PagedIndexResponse:
     """インデックス一覧取得（グループ管理者は自分の管理範囲のみに絞り込まれる）"""
-    sort_parts = sort.split(",")
-    sort_col_name = sort_parts[0]
-    sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
     return await IndexService.list_indexes(
         x_tenant_id,
         current_user,
         group_id,
         search_text,
-        sort_col_name,
-        sort_dir,
+        sort,
         page,
         size,
         session,

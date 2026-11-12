@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
 from fastapi import HTTPException, UploadFile, status
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import credit_quota, file_creation
 from app.core.file_storage import FileStorage
+from app.core.sort import SortOrder
 from app.models.file import File, FileStatus
 from app.models.index import Index
 from app.models.user import User
@@ -179,7 +181,7 @@ class FileService:
         display_name: str | None,
         file_name: str | None,
         status_str: str | None,
-        sort: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -195,7 +197,7 @@ class FileService:
             display_name: 表示名の部分一致検索文字列。
             file_name: ファイル名の部分一致検索文字列。
             status_str: 絞り込み対象のステータス文字列。
-            sort: ソート指定（"列名,方向"形式。既定は"updatedAt,desc"）。
+            sort: 並べ替え指定の並び。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -208,10 +210,6 @@ class FileService:
         )
         resolved_status = FileService._parse_status(status_str)
 
-        sort_parts = sort.split(",")
-        sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
-
         files, total = await FileRepository.find_page(
             index_id,
             tenant_id,
@@ -221,8 +219,7 @@ class FileService:
             resolved_status,
             updated_at_from,
             updated_at_to,
-            sort_col_name,
-            sort_dir,
+            sort,
             page,
             size,
             session,

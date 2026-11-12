@@ -7,6 +7,7 @@ from app.core.security import (
     get_verified_tenant_id,
     require_admin_or_group_admin,
 )
+from app.core.sort import SortOrder, sort_query
 from app.models.assistant import AssistantType
 from app.models.user import User
 from app.schemas.assistant import (
@@ -78,7 +79,7 @@ async def list_admin_assistants(
     exclude_group_id: str | None = Query(None, alias="excludeGroupId"),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=1000),
-    sort: str = Query("updatedAt,desc"),
+    sort: list[SortOrder] = Depends(sort_query("updatedAt,desc")),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(require_admin_or_group_admin),
     session: AsyncSession = Depends(get_session),

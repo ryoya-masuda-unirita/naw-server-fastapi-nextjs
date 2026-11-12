@@ -1282,3 +1282,59 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+class TestListIndexesSort:
+    """GET /api/admin/indexes の並べ替え（Issue #225）"""
+
+    async def test_sort_by_name_reverses_rows_with_same_name(
+        self, client, admin_headers, session, tenant
+    ):
+        """同名のインデックスがあっても昇順と降順で並びが完全に反転すること"""
+        session.add_all(
+            [
+                Index(tenant_id=tenant.id, type=IndexType.SAAS_GLOBAL, name="Same")
+                for _ in range(3)
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            asc_res = await c.get(
+                "/api/admin/indexes", headers=admin_headers, params={"sort": "name,asc"}
+            )
+            desc_res = await c.get(
+                "/api/admin/indexes",
+                headers=admin_headers,
+                params={"sort": "name,desc"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_ids = [i["id"] for i in asc_res.json()["content"]]
+        desc_ids = [i["id"] for i in desc_res.json()["content"]]
+        assert len(asc_ids) == 3
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant
+    ):
+        """ソート方向を大文字(DESC)で指定しても降順になること"""
+        session.add_all(
+            [
+                Index(tenant_id=tenant.id, type=IndexType.SAAS_GLOBAL, name=name)
+                for name in ["alpha", "zulu"]
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/indexes",
+                headers=admin_headers,
+                params={"sort": "name,DESC"},
+            )
+
+        assert response.status_code == 200
+        assert [i["name"] for i in response.json()["content"]] == ["zulu", "alpha"]

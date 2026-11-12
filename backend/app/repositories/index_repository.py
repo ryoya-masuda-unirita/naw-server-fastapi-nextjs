@@ -1,12 +1,22 @@
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
+from typing import Any
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.index import Index, IndexEndpoint, IndexGroup, IndexType
 from app.models.tenant_endpoint import TenantEndpoint
+
+
+# 移植元(IndexService.ALLOWED_SORT_PROPERTIES)と同じキー。対応表にないキーは更新日時順にする。
+_SORT_COLUMNS: dict[str, Any] = {
+    "name": Index.name,
+    "type": Index.type,
+    "updatedAt": Index.updated_at,
+}
 
 
 class IndexRepository:
@@ -45,8 +55,7 @@ class IndexRepository:
         group_id: str | None,
         allowed_index_ids: Collection[str] | None,
         allowed_group_ids: Collection[str] | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -64,8 +73,7 @@ class IndexRepository:
             group_id: グループIDでの絞り込み（指定時は`allowed_index_ids`/`allowed_group_ids`は無視する）。
             allowed_index_ids: グループ管理者向けスコープ（アシスタント経由）。Noneなら絞り込みなし。
             allowed_group_ids: グループ管理者向けスコープ（グループ直接紐付け経由）。Noneなら絞り込みなし。
-            sort_col_name: ソート対象列名（"name"・"type"・"updatedAt"）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+            sort: 並べ替え指定の並び（キーは"name"・"type"・"updatedAt"。それ以外は更新日時順）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -102,13 +110,12 @@ class IndexRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        if sort_col_name == "name":
-            sort_col = Index.name
-        elif sort_col_name == "type":
-            sort_col = Index.type
-        else:
-            sort_col = Index.updated_at
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 同名・同時刻のインデックスの並びが不定にならないよう、IDを最終キーにする
+        stmt = stmt.order_by(
+            *build_order_by(
+                sort, _SORT_COLUMNS, fallback=Index.updated_at, tie_breaker=Index.id
+            )
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         indexes = (await session.execute(stmt)).scalars().all()

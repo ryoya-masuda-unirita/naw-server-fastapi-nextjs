@@ -6,6 +6,7 @@
 チェックのため、「serviceが別serviceを呼ばない」規約に抵触しないよう`core/`に置く。
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.billing_cycle import current_billing_reset_instant_utc
+from app.core.sort import SortOrder, find_order
 from app.models.plan import Plan
 from app.models.subscription import Subscription
 from app.models.token_usage import TokenUsage
@@ -122,19 +124,22 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
         )
 
 
-def is_sort_by_total_credits(sort: str) -> bool:
-    """ソート指定がtotalCreditsによるものかどうかを判定する。
+def is_sort_by_total_credits(sort: Sequence[SortOrder]) -> bool:
+    """並べ替え指定に totalCredits が含まれるかどうかを判定する。
+
+    移植元(Spring Boot)`UserBillingUsageService.isSortByTotalCredits`と同じく、
+    先頭に限らずいずれかの指定に含まれていれば True とする。
 
     Args:
-        sort: ソート指定文字列（例: "totalCredits,desc"）。
+        sort: 並べ替え指定の並び。
 
     Returns:
-        ソート対象列がtotalCreditsであればTrue。
+        totalCredits の指定が含まれていれば True。
     """
-    return sort.split(",")[0] == TOTAL_CREDITS_SORT_PROPERTY
+    return find_order(sort, TOTAL_CREDITS_SORT_PROPERTY) is not None
 
 
-def validate_total_credits_sort(sort: str, include_usage: bool) -> None:
+def validate_total_credits_sort(sort: Sequence[SortOrder], include_usage: bool) -> None:
     """sort=totalCredits指定時はincludeUsage=trueが必須であることを検証する。
 
     移植元(Spring Boot)`UserBillingUsageService.validateTotalCreditsSort`に対応する。
@@ -142,7 +147,7 @@ def validate_total_credits_sort(sort: str, include_usage: bool) -> None:
     「serviceが別serviceを呼ばない」規約に抵触しないよう`core/`に置く。
 
     Args:
-        sort: ソート指定文字列（例: "totalCredits,desc"）。
+        sort: 並べ替え指定の並び。
         include_usage: クレジット利用量をレスポンスに含めるかどうか（includeUsageクエリパラメータ）。
 
     Raises:

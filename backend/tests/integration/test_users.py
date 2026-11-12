@@ -679,3 +679,80 @@ class TestGetUsersPageSize:
             response = await c.get("/api/admin/users?size=1001", headers=admin_headers)
 
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+class TestGetUsersRoleFilterAndMultiSort:
+    """GET /api/admin/users の権限の絞り込みと複数の並べ替え指定（Issue #225）"""
+
+    @pytest.mark.parametrize("role", ["foo", "admin"])
+    async def test_unknown_role_returns_400(self, client, admin_headers, role):
+        """未定義の権限・小文字の権限名は500ではなく400になること（移植元と同じ）"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"role": role}
+            )
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": f"不正なroleです: {role}"}
+
+    async def test_blank_role_is_not_filtered(
+        self, client, admin_headers, session, tenant
+    ):
+        """空白のみの権限指定は絞り込みなしとして扱われること（移植元と同じ）"""
+        session.add(
+            User(
+                id=uuid4(),
+                tenant_id=tenant.id,
+                login_id="blank-role-user",
+                name="BlankRoleUser",
+                role=UserRole.USER,
+                is_required_password_reset=False,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"role": " "}
+            )
+
+        assert response.status_code == 200
+        roles = {u["role"] for u in response.json()["content"]}
+        assert roles == {"ADMIN", "USER"}
+
+    async def test_multiple_sort_params_are_applied_in_order(
+        self, client, admin_headers, session, tenant
+    ):
+        """sortを複数指定すると、権限順で同値の行を表示名の降順で並べること"""
+        specs = [("u-a", "a", UserRole.USER), ("u-b", "b", UserRole.USER)]
+        specs.append(("a-x", "x", UserRole.ADMIN))
+        session.add_all(
+            [
+                User(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    login_id=login_id,
+                    name=name,
+                    role=role,
+                    is_required_password_reset=False,
+                )
+                for login_id, name, role in specs
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params=[("sort", "role,asc"), ("sort", "name,desc")],
+            )
+
+        assert response.status_code == 200
+        names = [
+            u["name"]
+            for u in response.json()["content"]
+            if u["name"] in {"a", "b", "x"}
+        ]
+        assert names == ["x", "b", "a"]

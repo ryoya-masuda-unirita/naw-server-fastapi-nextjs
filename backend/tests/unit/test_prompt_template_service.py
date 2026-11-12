@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.sort import SortOrder, parse_sort
 from app.models.user import User, UserRole
 from app.services.prompt_template_service import PromptTemplateService
 
@@ -63,7 +64,7 @@ class TestGetAdminPromptTemplates:
             None,
             None,
             None,
-            "updatedAt,desc",
+            parse_sort("updatedAt,desc"),
             0,
             20,
             session=None,
@@ -100,7 +101,7 @@ class TestGetAdminPromptTemplates:
             None,
             None,
             None,
-            "updatedAt,desc",
+            parse_sort("updatedAt,desc"),
             0,
             20,
             session=None,
@@ -137,7 +138,7 @@ class TestGetAdminPromptTemplates:
             None,
             None,
             None,
-            "updatedAt,desc",
+            parse_sort("updatedAt,desc"),
             0,
             20,
             session=None,
@@ -159,10 +160,10 @@ class TestGetAdminPromptTemplates:
         "app.services.prompt_template_service.GroupUserRepository.find_admin_group_ids_for_user",
         new_callable=AsyncMock,
     )
-    async def test_passes_parsed_sort_to_repository(
+    async def test_passes_sort_orders_to_repository(
         self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
     ):
-        """sort を項目と小文字の向きに分けてリポジトリへ渡すこと"""
+        """解釈済みの並べ替え指定をそのままリポジトリへ渡すこと"""
         mock_find_page.return_value = ([], 0)
         mock_find_groups.return_value = {}
 
@@ -172,12 +173,11 @@ class TestGetAdminPromptTemplates:
             None,
             None,
             None,
-            "name,DESC",
+            [SortOrder("name", descending=True)],
             0,
             20,
             session=None,
         )
 
         args = mock_find_page.call_args.args
-        assert args[6] == "name"  # sort_col_name
-        assert args[7] == "desc"  # sort_dir
+        assert args[6] == [SortOrder("name", descending=True)]

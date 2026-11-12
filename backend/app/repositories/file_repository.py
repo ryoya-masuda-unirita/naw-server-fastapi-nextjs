@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 
 import sqlalchemy as sa
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by
 from app.models.file import File, FileStatus
 
 # 移植元は`Pageable`でエンティティの項目名をそのまま並べ替えキーにするため、`userId`は
@@ -107,8 +109,7 @@ class FileRepository:
         status: FileStatus | None,
         updated_at_from: datetime | None,
         updated_at_to: datetime | None,
-        sort_col_name: str,
-        sort_dir: str,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -124,9 +125,8 @@ class FileRepository:
             status: 絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
             updated_at_from: 更新日時の範囲開始（この値以上）。
             updated_at_to: 更新日時の範囲終了（この値以下）。
-            sort_col_name: ソート対象列名（"displayName"・"updatedAt"・"userId"・"status"）。
-                未知の列名は"updatedAt"として扱う。
-            sort_dir: ソート方向（"asc"または"desc"）。
+            sort: 並べ替え指定の並び（キーは"displayName"・"updatedAt"・"userId"・"status"）。
+                未知のキーは"updatedAt"として扱う。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -154,13 +154,17 @@ class FileRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        sort_col = _ORDER_BY_COLUMNS.get(sort_col_name, File.updated_at)
-        # 移植元（Spring `Direction.fromString`）同様、方向は大文字小文字を区別しない。
         # `status`・`userId`は値の重複が多く、同順位の並びが不定だとOFFSET/LIMITの
-        # ページ間で行が重複・欠落するため、`id`を第2キーにして順序を確定させる。
+        # ページ間で行が重複・欠落するため、`id`を最終キーにして順序を確定させる
+        # （#175 で決めた常に昇順の挙動を維持する）。
         stmt = stmt.order_by(
-            sort_col.desc() if sort_dir.lower() == "desc" else sort_col.asc(),
-            File.id.asc(),
+            *build_order_by(
+                sort,
+                _ORDER_BY_COLUMNS,
+                fallback=File.updated_at,
+                tie_breaker=File.id,
+                tie_breaker_ascending=True,
+            )
         )
         stmt = stmt.offset(page * size).limit(size)
 

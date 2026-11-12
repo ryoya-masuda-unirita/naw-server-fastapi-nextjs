@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
@@ -10,8 +11,19 @@ from app.core.credit_quota import (
     total_credits_correlated_subquery,
 )
 from app.core.search import escape_like_pattern
+from app.core.sort import SortOrder, build_order_by, find_order
 from app.models.group import GroupUser
-from app.models.user import User
+from app.models.user import User, UserRole
+
+# 移植元(GroupService.remapGroupMemberUserSort)は name を ignoreCase 指定で user.name に
+# 読み替え、lower(user.name) で並べる。role はチーム管理者フラグに読み替える。
+# 対応表にないキーは従来どおり表示名順にする。
+_MEMBER_NAME_SORT_COLUMN: Any = func.lower(User.name)
+_MEMBER_SORT_COLUMNS: dict[str, Any] = {
+    "name": _MEMBER_NAME_SORT_COLUMN,
+    "role": GroupUser.is_admin,
+    "updatedAt": GroupUser.updated_at,
+}
 
 
 class GroupUserRepository:
@@ -132,8 +144,7 @@ class GroupUserRepository:
         tenant_id: str,
         search_text: str | None,
         role: str | None,
-        sort_col_name: str,
-        is_desc: bool,
+        sort: Sequence[SortOrder],
         page: int,
         size: int,
         session: AsyncSession,
@@ -147,14 +158,13 @@ class GroupUserRepository:
             tenant_id: テナントID。
             search_text: ユーザー名・loginIdの部分一致検索文字列。
             role: グループ内ロール（"ADMIN"はis_admin=true、"USER"はis_admin=false）。
-            sort_col_name: ソート対象列名（"name"、"role"、"updatedAt"、"totalCredits"）。
-                それ以外の値はユーザー表示名順として扱う。
-            is_desc: Trueの場合は降順、Falseの場合は昇順。
+            sort: 並べ替え指定の並び（キーは"name"、"role"、"updatedAt"、"totalCredits"）。
+                それ以外のキーはユーザー表示名順として扱う。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
             billing_period: `(period_from, period_to)`のタプル。NAW-1172:
-                `sort_col_name=="totalCredits"`かつこの値が与えられた場合のみ、
+                `sort`に"totalCredits"が含まれ、かつこの値が与えられた場合のみ、
                 請求期間内クレジット合計でDBソートする（Noneの場合は既定のソートに
                 フォールバックする。呼び出し側で有効な請求期間がない旨をtotalCredits=None
                 として扱うのと整合させるため）。
@@ -165,7 +175,13 @@ class GroupUserRepository:
         stmt = (
             select(GroupUser, User)
             .join(User, User.id == GroupUser.user_id)
-            .where(GroupUser.group_id == group_id, GroupUser.tenant_id == tenant_id)
+            .where(
+                GroupUser.group_id == group_id,
+                GroupUser.tenant_id == tenant_id,
+                # SYSTEM ロール（Waha等の内部連携用ユーザー）は一覧・件数とも含めない
+                # （移植元 NAW-1096 の GroupUserSpecification.excludeSystemUsers と同じ）。
+                User.role != UserRole.SYSTEM,
+            )
         )
 
         if search_text:
@@ -183,31 +199,33 @@ class GroupUserRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        if sort_col_name == TOTAL_CREDITS_SORT_PROPERTY and billing_period is not None:
+        total_credits_order = find_order(sort, TOTAL_CREDITS_SORT_PROPERTY)
+        if total_credits_order is not None and billing_period is not None:
             period_from, period_to = billing_period
             credits_subq = total_credits_correlated_subquery(
                 tenant_id, period_from, period_to, GroupUser.user_id
             )
-            order_col = credits_subq.desc() if is_desc else credits_subq.asc()
+            is_desc = total_credits_order.descending
             # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
-            stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
+            # 最後に一意な user_id を主キーと同じ方向で加え、並びを決定的にする。
+            user_id_col = cast(Any, GroupUser.user_id)
+            stmt = stmt.order_by(
+                credits_subq.desc() if is_desc else credits_subq.asc(),
+                cast(Any, User.name).asc(),
+                user_id_col.desc() if is_desc else user_id_col.asc(),
+            )
         else:
-            sort_col: Any
-            if sort_col_name == "role":
-                sort_col = GroupUser.is_admin
-            elif sort_col_name == "updatedAt":
-                sort_col = GroupUser.updated_at
-            else:
-                # 移植元(GroupService.remapGroupMemberUserSort)は name を ignoreCase 指定で
-                # user.name に読み替え、lower(user.name) で並べる。
-                sort_col = func.lower(User.name)
-            stmt = stmt.order_by(sort_col.desc() if is_desc else sort_col.asc())
-        # ソートキーが同値の行（シード投入で同時刻になる追加日時、大半が同じ権限、
-        # 同名ユーザーなど）は ORDER BY だけでは順序が定まらず、昇順・降順を切り替えても
-        # 同値グループ内の並びが反転しない。一意な user_id を最終キーに主キーと同じ方向で
-        # 加え、並びを決定的にする。
-        tie_breaker = cast(Any, GroupUser.user_id)
-        stmt = stmt.order_by(tie_breaker.desc() if is_desc else tie_breaker.asc())
+            # ソートキーが同値の行（シード投入で同時刻になる追加日時、大半が同じ権限、
+            # 同名ユーザーなど）は ORDER BY だけでは順序が定まらないため、
+            # 一意な user_id を最終キーに加える。
+            stmt = stmt.order_by(
+                *build_order_by(
+                    sort,
+                    _MEMBER_SORT_COLUMNS,
+                    fallback=_MEMBER_NAME_SORT_COLUMN,
+                    tie_breaker=GroupUser.user_id,
+                )
+            )
         stmt = stmt.offset(page * size).limit(size)
 
         rows = (await session.execute(stmt)).all()

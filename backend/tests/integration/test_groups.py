@@ -1438,3 +1438,316 @@ class TestGroupAssistants:
             )
 
         assert response.status_code == 403
+
+
+SAME_TIMESTAMP = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+async def _add_groups(session, tenant_id: str, names: list[str]) -> None:
+    """指定した名前のグループを同じ更新日時で作成する。"""
+    for name in names:
+        session.add(
+            Group(
+                tenant_id=tenant_id,
+                name=name,
+                created_at=SAME_TIMESTAMP,
+                updated_at=SAME_TIMESTAMP,
+            )
+        )
+    await session.commit()
+
+
+@pytest.mark.asyncio
+class TestListGroupsSort:
+    """GET /api/admin/groups・/api/admin/all-groups の並べ替え（Issue #225）"""
+
+    @pytest.mark.parametrize("path", ["/api/admin/groups", "/api/admin/all-groups"])
+    async def test_sort_by_name_reverses_rows_with_same_name(
+        self, client, admin_headers, session, tenant, path
+    ):
+        """同名のグループがあっても昇順と降順で並びが完全に反転すること"""
+        await _add_groups(session, tenant.id, ["Same", "Same", "Same"])
+
+        async with client as c:
+            asc_res = await c.get(
+                path, headers=admin_headers, params={"sort": "name,asc"}
+            )
+            desc_res = await c.get(
+                path, headers=admin_headers, params={"sort": "name,desc"}
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_ids = [g["id"] for g in asc_res.json()["data"]]
+        desc_ids = [g["id"] for g in desc_res.json()["data"]]
+        assert len(asc_ids) == 3
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant
+    ):
+        """ソート方向を大文字(DESC)で指定しても降順になること"""
+        await _add_groups(session, tenant.id, ["alpha", "zulu"])
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/groups",
+                headers=admin_headers,
+                params={"sort": "name,DESC"},
+            )
+
+        assert response.status_code == 200
+        assert [g["name"] for g in response.json()["data"]] == ["zulu", "alpha"]
+
+    async def test_multiple_sort_params_are_applied_in_order(
+        self, client, admin_headers, session, tenant
+    ):
+        """sortを複数指定すると、第1キーが同値の行を第2キーで並べること"""
+        session.add_all(
+            [
+                Group(
+                    tenant_id=tenant.id,
+                    name="Same",
+                    updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                Group(
+                    tenant_id=tenant.id,
+                    name="Same",
+                    updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                ),
+                Group(
+                    tenant_id=tenant.id,
+                    name="Other",
+                    updated_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/groups",
+                headers=admin_headers,
+                params=[("sort", "name,desc"), ("sort", "updatedAt,asc")],
+            )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert [g["name"] for g in data] == ["Same", "Same", "Other"]
+        assert data[0]["updatedAt"] < data[1]["updatedAt"]
+
+    async def test_empty_sort_falls_back_to_default(
+        self, client, admin_headers, session, tenant
+    ):
+        """sort=（空）の場合は既定の更新日時の降順になること"""
+        session.add_all(
+            [
+                Group(
+                    tenant_id=tenant.id,
+                    name="old",
+                    updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                ),
+                Group(
+                    tenant_id=tenant.id,
+                    name="new",
+                    updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/groups", headers=admin_headers, params={"sort": ""}
+            )
+
+        assert response.status_code == 200
+        assert [g["name"] for g in response.json()["data"]] == ["new", "old"]
+
+
+@pytest.mark.asyncio
+class TestGroupMembersSort:
+    """GET /api/admin/groups/{groupId}/assistants・prompt-templates の並べ替え（Issue #225）"""
+
+    async def test_assistants_sort_by_added_at_reverses_rows_with_same_timestamp(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """追加日時が同値の所属アシスタントでも昇順と降順で並びが完全に反転すること"""
+        for i in range(3):
+            assistant = Assistant(
+                tenant_id=tenant.id,
+                type=AssistantType.SAAS_CHAT,
+                name=f"a{i}",
+                include_history=False,
+            )
+            session.add(assistant)
+            await session.flush()
+            session.add(
+                GroupAssistant(
+                    group_id=group.id,
+                    tenant_id=tenant.id,
+                    assistant_id=assistant.id,
+                    updated_at=SAME_TIMESTAMP,
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            asc_res = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"sort": "addedAt,asc"},
+            )
+            desc_res = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"sort": "addedAt,DESC"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_ids = [a["id"] for a in asc_res.json()["content"]]
+        desc_ids = [a["id"] for a in desc_res.json()["content"]]
+        assert len(asc_ids) == 3
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_assistants_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """所属アシスタントのソート方向を大文字(DESC)で指定しても降順になること"""
+        for name in ["alpha", "zulu"]:
+            assistant = Assistant(
+                tenant_id=tenant.id,
+                type=AssistantType.SAAS_CHAT,
+                name=name,
+                include_history=False,
+            )
+            session.add(assistant)
+            await session.flush()
+            session.add(
+                GroupAssistant(
+                    group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"sort": "name,DESC"},
+            )
+
+        assert response.status_code == 200
+        assert [a["name"] for a in response.json()["content"]] == ["zulu", "alpha"]
+
+    async def test_prompt_templates_sort_by_added_at_reverses_rows_with_same_timestamp(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """追加日時が同値の所属テンプレートでも昇順と降順で並びが完全に反転すること"""
+        for i in range(3):
+            template = PromptTemplate(
+                tenant_id=tenant.id,
+                name=f"t{i}",
+                description="d",
+                system_prompt="p",
+            )
+            session.add(template)
+            await session.flush()
+            session.add(
+                GroupPromptTemplate(
+                    group_id=group.id,
+                    tenant_id=tenant.id,
+                    prompt_template_id=template.id,
+                    updated_at=SAME_TIMESTAMP,
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            asc_res = await c.get(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                headers=admin_headers,
+                params={"sort": "addedAt,asc"},
+            )
+            desc_res = await c.get(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                headers=admin_headers,
+                params={"sort": "addedAt,DESC"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        asc_ids = [t["id"] for t in asc_res.json()["content"]]
+        desc_ids = [t["id"] for t in desc_res.json()["content"]]
+        assert len(asc_ids) == 3
+        assert desc_ids == list(reversed(asc_ids))
+
+    async def test_prompt_templates_sort_direction_is_case_insensitive(
+        self, client, admin_headers, session, tenant, group
+    ):
+        """所属テンプレートのソート方向を大文字(DESC)で指定しても降順になること"""
+        for name in ["alpha", "zulu"]:
+            template = PromptTemplate(
+                tenant_id=tenant.id, name=name, description="d", system_prompt="p"
+            )
+            session.add(template)
+            await session.flush()
+            session.add(
+                GroupPromptTemplate(
+                    group_id=group.id,
+                    tenant_id=tenant.id,
+                    prompt_template_id=template.id,
+                )
+            )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/prompt-templates",
+                headers=admin_headers,
+                params={"sort": "name,DESC"},
+            )
+
+        assert response.status_code == 200
+        assert [t["name"] for t in response.json()["content"]] == ["zulu", "alpha"]
+
+
+@pytest.mark.asyncio
+class TestGroupUsersExcludeSystem:
+    """GET /api/admin/groups/{groupId}/users の SYSTEM 除外（Issue #225）"""
+
+    async def test_excludes_system_users(
+        self, client, admin_headers, session, tenant, group_with_admin_member
+    ):
+        """SYSTEM権限の所属ユーザーは一覧にも総件数にも含まれないこと（移植元 NAW-1096）"""
+        system_user = User(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            login_id="system-member",
+            name="System",
+            role=UserRole.SYSTEM,
+            is_required_password_reset=False,
+        )
+        session.add(system_user)
+        await session.flush()
+        session.add(
+            GroupUser(
+                group_id=group_with_admin_member.id,
+                tenant_id=tenant.id,
+                user_id=system_user.id,
+                is_admin=False,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 1
+        assert str(system_user.id) not in [u["userId"] for u in body["content"]]
