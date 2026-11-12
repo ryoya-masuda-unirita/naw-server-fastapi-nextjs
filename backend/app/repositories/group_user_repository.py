@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import false, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.credit_quota import (
@@ -15,9 +15,9 @@ from app.core.sort import SortOrder, build_order_by, find_order
 from app.models.group import GroupUser
 from app.models.user import User, UserRole
 
-# 所属ユーザー一覧の role 絞り込みで受け付けるグループ内ロール（大文字で比較する）
-_GROUP_ROLE_ADMIN = "ADMIN"
-_GROUP_ROLE_USER = "USER"
+# 所属ユーザー一覧の role 絞り込みで受け付けるグループ内ロール（大文字で比較する）と、
+# 対応するチーム管理者フラグの値
+_IS_ADMIN_BY_GROUP_ROLE: dict[str, bool] = {"ADMIN": True, "USER": False}
 
 # 移植元(GroupService.remapGroupMemberUserSort)は name を ignoreCase 指定で user.name に
 # 読み替え、lower(user.name) で並べる。role はチーム管理者フラグに読み替える。
@@ -197,16 +197,14 @@ class GroupUserRepository:
             )
 
         # 移植元 GroupUserSpecification.matchesGroupRole と同じく、空白のみは絞り込まず、
-        # 大文字小文字を区別せずに判定し、未知の値は常に偽の条件で0件にする。
+        # 大文字小文字を区別せずに判定し、未知の値は0件にする（移植元は常に偽の条件を
+        # 付けるが、結果は必ず空なのでDBに問い合わせずに返す）。
         # 移植元は前後の空白を取り除かずに比較するため、ここでも取り除かない。
         if role is not None and role.strip():
-            normalized_role = role.upper()
-            if normalized_role == _GROUP_ROLE_ADMIN:
-                stmt = stmt.where(GroupUser.is_admin.is_(True))
-            elif normalized_role == _GROUP_ROLE_USER:
-                stmt = stmt.where(GroupUser.is_admin.is_(False))
-            else:
-                stmt = stmt.where(false())
+            is_admin = _IS_ADMIN_BY_GROUP_ROLE.get(role.upper())
+            if is_admin is None:
+                return [], 0
+            stmt = stmt.where(GroupUser.is_admin.is_(is_admin))
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
