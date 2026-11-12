@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
 from app.core.llm_client import ChatStreamChunk
@@ -350,9 +350,9 @@ def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
         yield ChatStreamChunk(text_delta=answer)
         yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
-    test_session_maker = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    # 本番の`get_session_maker`と同じ`async_sessionmaker`を使う（同期版の`sessionmaker`は
+    # `AsyncEngine`を受け取る型定義がなく、mypyでエラーになるため）。
+    test_session_maker = async_sessionmaker(engine, expire_on_commit=False)
     with (
         patch(
             "app.services.message_service.AzureLlmChatClient.stream_chat",

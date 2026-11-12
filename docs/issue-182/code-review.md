@@ -60,3 +60,20 @@ Starlette は `filename` 指定のないパートを `UploadFile` ではなく�
 ### 10. 既存テストへの `_patched_llm` 適用（🔵 提案）→ 対応しない
 
 本 PR で既存テストに加えた変更は送信形式（JSON → multipart）の置き換えに留め、モックの組み方まで書き換える差分は入れない（レビュー範囲を本 Issue の変更に絞るため）。
+
+## マージ後の追加対応（feature/issue-182-followup）
+
+PR #207 のマージ後、CI の mypy チェック（`uv run mypy app tests`）が失敗していた。
+
+- `tests/integration/test_messages.py`: テストヘルパー `_patched_llm` で同期版 `sessionmaker` に `AsyncEngine` を渡しており、型定義に合わず `call-overload` エラーになっていた。本番の `get_session_maker` と同じ `async_sessionmaker` に変更した。
+- `tests/integration/test_library_repository.py`（Issue #173 由来、同じ CI ジョブを失敗させていたため併せて修正）: `LibraryTagMapping.__table__`（SQLModel の型定義に現れない）をマッパー経由の列取得に、`visitors.iterate` へ渡す文を `ExternallyTraversible` として明示した。テストの挙動は変えていない。
+
+確認結果:
+
+```
+$ uv run mypy app tests
+Success: no issues found in 205 source files
+
+$ uv run pytest -p no:cacheprovider -q
+850 passed, 1082 warnings in 41.13s
+```
