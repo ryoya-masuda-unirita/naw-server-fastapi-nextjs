@@ -49,7 +49,7 @@
 
 | 対象 | 廃止内容 | 現在の方式 |
 |---|---|---|
-| frontend（React） | hostname パースは持たない（#193 で Angular 版から撤去した `resolveTenantId()` の hostname パース・`extractTenantIdFromHostname()` 相当は移植しない） | **方針**: ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信（#193 で Angular 版に入れた方式。React にも同じ方式が必要）。**現状（#213 時点）**: ログイン画面にテナントID入力欄がなく、`X-Tenant-ID` はログイン後に `GET /api/auth` で得た `tenant_id` を `sessionStorage` に保存してから送る。backend の `POST /auth/login` は `X-Tenant-ID` 必須のため、入力欄を移植するまで React からはログインできない |
+| frontend（React） | hostname パースは持たない（#193 で Angular 版から撤去した `resolveTenantId()` の hostname パース・`extractTenantIdFromHostname()` 相当は移植しない） | **方針**: ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信（#193 で Angular 版に入れた方式。React にも同じ方式が必要）。**現状（#213 時点）**: ログイン画面にテナントID入力欄がない。`X-Tenant-ID` は `sessionStorage` の `TENANT_ID` があるときだけ送り、`TENANT_ID` はログイン後に `GET /api/auth` のレスポンスの `tenant_id` から保存する作りになっている。しかし backend は `POST /auth/login`・`GET /api/auth` とも `X-Tenant-ID` 必須で、`GET /api/auth` のレスポンス（`AuthResponse`）に `tenant_id` もないため、この流れは成り立たず React からはログインできない。テナントID入力欄の移植と、入力したテナントIDを `sessionStorage` に保存してログイン・セッション取得の両方で送る修正が必要（未対応） |
 | infra（Issue #195） | Route53ホストゾーン、ACM証明書（ワイルドカードSAN）、CloudFrontエイリアス、ワイルドカードCORS正規表現 | CloudFrontデフォルトドメイン（`*.cloudfront.net`）配信、固定オリジンのCORS |
 
 **参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリでは #193 で当時の Angular 版から撤去し、Angular 版自体も #213 で削除した。React 側にも持ち込まない）。

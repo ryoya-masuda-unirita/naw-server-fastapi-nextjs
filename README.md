@@ -24,7 +24,7 @@ backend の動作確認は、自動テスト（`cd backend && uv run pytest`）�
 | ログイン    | `admin` / `admin@1234`（`backend/seed.sql` のシードユーザー）                     |
 
 
-> **現状の制約**: backend の `POST /auth/login` は `X-Tenant-ID` ヘッダ必須だが、React のログイン画面にはまだテナントID入力欄がない（ログイン後に `GET /api/auth` で得たテナントIDを使う作り）。入力欄を移植するまでは、React の画面からはログインできない。それまでは下の「バックエンド単体」の手順や自動テストで確認する。
+> **現状の制約**: backend の `POST /auth/login`・`GET /api/auth` は `X-Tenant-ID` ヘッダ必須だが、React のログイン画面にはまだテナントID入力欄がない（ログイン後に `GET /api/auth` のレスポンスからテナントIDを得る作りだが、そのリクエスト自体が `X-Tenant-ID` 必須で、レスポンスに `tenant_id` もないため成り立たない）。入力欄を移植するまでは、React の画面からはログインできない。それまでは下の「バックエンド単体」の手順や自動テストで確認する。
 
 
 
