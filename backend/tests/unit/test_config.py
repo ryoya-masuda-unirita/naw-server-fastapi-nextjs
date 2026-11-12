@@ -1,6 +1,12 @@
 import pytest
 
-from app.core.config import AwsSettings, AzureOpenAISettings, CorsSettings, Settings
+from app.core.config import (
+    AwsSettings,
+    AzureOpenAISettings,
+    CorsSettings,
+    PasswordResetSettings,
+    Settings,
+)
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
@@ -134,6 +140,30 @@ class TestCookieSameSite:
         """
         with pytest.raises(ValueError, match="COOKIE_SECURE=true"):
             _build_settings(COOKIE_SAME_SITE="none", COOKIE_SECURE="false")
+
+
+def _build_password_reset_settings(**env_overrides: str) -> PasswordResetSettings:
+    """テスト用に `.env` を読み込まずに `PasswordResetSettings` を組み立てる。"""
+    return PasswordResetSettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
+
+
+class TestPasswordResetSettings:
+    def test_defaults_to_reference_values(self):
+        """未設定時は移植元 application.yml と同じ 5 回・15 分になること"""
+        settings = _build_password_reset_settings()
+
+        assert settings.max_failure_attempts == 5
+        assert settings.lockout_minutes == 15
+
+    def test_reflects_env_overrides(self):
+        """回数・ロック時間を環境変数相当の値で上書きできること"""
+        settings = _build_password_reset_settings(
+            PASSWORD_RESET_MAX_FAILURE_ATTEMPTS="3",
+            PASSWORD_RESET_LOCKOUT_MINUTES="30",
+        )
+
+        assert settings.max_failure_attempts == 3
+        assert settings.lockout_minutes == 30
 
 
 class TestAzureOpenAISettings:
