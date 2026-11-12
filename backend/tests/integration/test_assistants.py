@@ -1105,6 +1105,7 @@ class TestListAdminAssistants:
                 headers=admin_headers,
             )
 
+        assert response.status_code == 200
         body = response.json()
         ids = [item["id"] for item in body["content"]]
         assert assistant.id in ids
@@ -1131,6 +1132,7 @@ class TestListAdminAssistants:
                 headers=admin_headers,
             )
 
+        assert response.status_code == 200
         body = response.json()
         ids = [item["id"] for item in body["content"]]
         assert described.id in ids
@@ -1156,6 +1158,7 @@ class TestListAdminAssistants:
                 headers=admin_headers,
             )
 
+        assert response.status_code == 200
         body = response.json()
         ids = [item["id"] for item in body["content"]]
         assert assistant.id in ids
@@ -1170,6 +1173,7 @@ class TestListAdminAssistants:
                 headers=admin_headers,
             )
 
+        assert response.status_code == 200
         body = response.json()
         ids = [item["id"] for item in body["content"]]
         assert assistant.id in ids
