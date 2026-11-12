@@ -24,7 +24,7 @@ backend（Spring Boot `secuaigent/server` → FastAPI `backend/`）の Issue 対
 | 移植先 | `backend/` | `frontend/` |
 | Issue ラベル | なし | 必ず `frontend-port` を付与する |
 | 自動テスト | `pytest` | `npm run test`, `npm run lint`, `npm run type-check` |
-| 動作確認 | `frontend-angular/` を使った backend 確認 | `frontend/` の画面確認 |
+| 動作確認 | 自動テスト、または `frontend/` の移植済み画面での backend 確認 | `frontend/` の画面確認 |
 | 実装ガイド | backend/AGENTS 中心 | `frontend/AGENTS.md` を必ず参照 |
 
 それ以外（ブランチ命名規則、ドキュメント構成、承認フロー、コミット規約、PR フォーマット）は `naw-issue-workflow` と共通。

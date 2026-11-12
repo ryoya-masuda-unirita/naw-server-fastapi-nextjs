@@ -16,13 +16,7 @@
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python、新設予定） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
-`frontend-angular/` は `secuaigent/client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
-
-**`secuaigent/client` → `frontend-angular/` の同期を意図した指示（文言が曖昧でも）を受けたときは、[frontend-angular-sync skill](.claude/skills/frontend-angular-sync/SKILL.md) を呼び出すこと。**
-
-例:「frontendを最新にして」「frontend-angularを最新にして」「secuaigent/clientから持ってきて」「secuaigent/clientからfrontend-angularにソースをコピーして」「Angular側を追従させて」等。
-
-`frontend/`（React移植）ではなく `frontend-angular/` を指しているかどうかの判断に迷う場合は、どちらを指すかユーザーに確認すること。`secuaigent/client` や `frontend-angular` という語が明示されていれば確認不要でこのskillを呼び出してよい。
+`frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`frontend/`）の移植済み画面で行う。
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
@@ -51,19 +45,18 @@
 
 ## テナント識別方式（サブドメイン廃止・移植/調査時の前提条件）
 
-**このプロジェクトはテナント識別にサブドメイン（`window.location.hostname` 等）を使わない。** Issue #193（frontend-angular）・#195（infra）で、サブドメインを前提とした実装を意図的に廃止した。
+**このプロジェクトはテナント識別にサブドメイン（`window.location.hostname` 等）を使わない。** Issue #193（当時の Angular 版フロント。#213 で削除）・#195（infra）で、サブドメインを前提とした実装を意図的に廃止した。
 
 | 対象 | 廃止内容 | 現在の方式 |
 |---|---|---|
-| frontend-angular（Issue #193） | `resolveTenantId()` の hostname パース、`user-list-tenant.helpers.ts` の `extractTenantIdFromHostname()` | ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信 |
+| frontend（React） | hostname パースは持たない（#193 で Angular 版から撤去した `resolveTenantId()` の hostname パース・`extractTenantIdFromHostname()` 相当は移植しない） | **方針**: ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信（#193 で Angular 版に入れた方式。React にも同じ方式が必要）。**現状（#213 時点）**: ログイン画面にテナントID入力欄がなく、`X-Tenant-ID` はログイン後に `GET /api/auth` で得た `tenant_id` を `sessionStorage` に保存してから送る。backend の `POST /auth/login` は `X-Tenant-ID` 必須のため、入力欄を移植するまで React からはログインできない |
 | infra（Issue #195） | Route53ホストゾーン、ACM証明書（ワイルドカードSAN）、CloudFrontエイリアス、ワイルドカードCORS正規表現 | CloudFrontデフォルトドメイン（`*.cloudfront.net`）配信、固定オリジンのCORS |
 
-**参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリの `frontend-angular` 側は #193 で撤去済み）。
+**参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリでは #193 で当時の Angular 版から撤去し、Angular 版自体も #213 で削除した。React 側にも持ち込まない）。
 
 - **未移植判定からの除外（最重要）**: `naw-explore` / `naw-frontend-explore` や Issue 一括起票系 skill（`naw-issue-batch` / `naw-frontend-issue-batch`）で参照リポジトリとの差分を検出する際、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計は「未移植の欠落」として検出・Issue化しない。意図的に廃止したものであり、差分として存在すること自体が正しい状態
 - 逆に、参照リポジトリの調査・読解自体（挙動理解、無関係な機能のリサーチ等）では通常どおりサブドメイン前提のコードも含めてそのまま読む。除外するのは「未移植候補としての検出」の場面に限る
 - 実際に移植作業でサブドメイン依存のロジックに行き当たった場合は、そのまま持ち込まず実装前に一言確認する
-- `frontend-angular-sync` skill（[.claude/skills/frontend-angular-sync/SKILL.md](.claude/skills/frontend-angular-sync/SKILL.md)）は `secuaigent/client` を丸ごとコピーするため、同期のたびにこの差分（`tenant.helpers.ts` 等）が巻き戻るリスクがある。同期後は必ず skill 内の該当チェック項目を確認すること
 
 ---
 
@@ -74,7 +67,7 @@
 - `backend/` と `frontend/` の Issue は、どちらも通常どおり起票・対応してよい。`frontend/` の不具合を見つけた場合も起票・修正の対象にする
 - 新しく移植対象に加わった `generative-ai-adapter/`・`server-local/`・その他のモジュールは、着手（Issue 起票を含む）前に優先順位をユーザーに確認する
 - 新しいチケットに着手する際は、Issue の内容から対象モジュール（`backend/` / `frontend/` / その他）を判断する。判断に迷う場合だけユーザーに確認する
-- バックエンドの動作確認（ブラウザ操作）には、React 移植が完了するまでは `frontend-angular/`（`http://localhost:4201`）を使う
+- バックエンドの動作確認は、自動テスト（`uv run pytest`）、または React（`frontend/`、`http://localhost:5173`）の移植済み画面で行う。未移植の画面が必要な確認は自動テストで代替する
 
 ---
 
@@ -119,7 +112,6 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 ```
 naw-server-fastapi-nextjs/
 ├── frontend/          # React（Vite + React Router、client/ の移植先）
-├── frontend-angular/  # client/ のコピー（React 移植完了までの動作確認用）
 ├── backend/           # FastAPI（server/ の移植先）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
