@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class LoginRequest(BaseModel):
@@ -17,7 +17,12 @@ class LoginKeyRequest(BaseModel):
 class PasswordResetRequest(BaseModel):
     """パスワードリセットリクエスト"""
 
-    loginId: str
+    # 移植元は @JsonAlias("username") で username キーも受け付ける。
+    # frontend-angular は username で送信するため、両方を許容する。
+    loginId: str = Field(
+        validation_alias=AliasChoices("loginId", "username"),
+        description="ログインID (username も許容)",
+    )
     oldPassword: str
     newPassword: str
 
