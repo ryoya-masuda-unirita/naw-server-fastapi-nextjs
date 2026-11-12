@@ -8,6 +8,8 @@ from tests.test_indexes_router import BASE, TENANT, get_file, insert_file
 
 
 class TestEmptyStatusParam:
+    """一覧取得で空文字の status を受け取ったときのテスト。"""
+
     async def test_list_files_with_empty_status(
         self,
         client: httpx.AsyncClient,
@@ -25,6 +27,8 @@ class TestEmptyStatusParam:
 
 
 class TestEmptyFormValues:
+    """フォームの空文字・未指定の項目の扱いのテスト。"""
+
     async def test_update_without_file_sets_empty_strings(
         self,
         client: httpx.AsyncClient,
@@ -80,6 +84,8 @@ class TestEmptyFormValues:
 
 
 class TestRequiredFileFields:
+    """登録・差し替えで name・userId が無いときのテスト。"""
+
     async def test_upload_without_name_returns_400(
         self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
     ) -> None:
@@ -118,8 +124,8 @@ class TestRequiredFileFields:
         fake_waha: FakeWahaClient,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """Waha! が既存のファイル ID を返す場合は、移植元（user_id は更新しない）と同じく
-        userId がなくても登録でき、登録者は変えないこと"""
+        """Waha! が既存のファイル ID を返す場合は、userId がなくても登録でき登録者は変えないこと"""
+        # 移植元も既存ファイルの user_id は更新しないため、それに揃える
         await insert_file(session_factory, "f1", user_id="owner")
         fake_waha.download_content = "f1\tp1"
         res = await client.post(
