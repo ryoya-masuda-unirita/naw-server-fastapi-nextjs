@@ -22,6 +22,7 @@ from app.services.stream.cleanup import run_cleanup_loop
 # 移植元 RestTemplate は既定でタイムアウトなし。Waha! の execute はジョブ完了まで
 # 応答しないことがあるため、同じく無制限にする。
 EXTERNAL_HTTP_TIMEOUT = httpx.Timeout(None)
+HTTPX_LOG_LEVEL = logging.WARNING
 
 
 def create_app(
@@ -38,6 +39,9 @@ def create_app(
         level=settings.log_level.upper(),
         format="%(asctime)s [%(name)s] %(levelname)s - %(message)s",
     )
+    # httpx は INFO でリクエストの URL をログに出し、Waha! の authkey（クエリ）が
+    # 毎回ログに残る。移植元（RestTemplate）はリクエストをログに出さないため止める
+    logging.getLogger("httpx").setLevel(HTTPX_LOG_LEVEL)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
