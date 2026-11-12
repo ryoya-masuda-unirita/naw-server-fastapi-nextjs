@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -113,6 +114,28 @@ def _file(file_id: str, reference: str | None) -> File:
         user_id="11111111-1111-1111-1111-111111111111",
         index_id="index-1",
     )
+
+
+def _sse_events(body: str) -> list[dict]:
+    """SSE本文を、`type`を持つイベントの一覧へ変換する。
+
+    secuaigent/clientの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
+    JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
+    サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
+
+    Args:
+        body: SSEレスポンスの本文。
+
+    Returns:
+        `type`を持つイベント(JSON)の一覧。
+    """
+    events = []
+    for line in body.splitlines():
+        if line.startswith("data:"):
+            event = json.loads(line[len("data:") :].strip())
+            if "type" in event:
+                events.append(event)
+    return events
 
 
 def _request(**overrides) -> MessageContentCreateRequest:
@@ -406,7 +429,7 @@ class TestStreamMessageContent:
         mock_get_session_maker,
         test_user,
     ):
-        """text_delta・message_stop・completeイベントを順に送出し、内容を永続化すること"""
+        """text_delta・message_stop・message_contentイベントを順に送出し、内容を永続化すること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus
 
@@ -441,14 +464,20 @@ class TestStreamMessageContent:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: text_delta" in body
-        assert '"text": "こんに"' in body
-        assert '"text": "ちは"' in body
-        assert "event: message_stop" in body
-        assert '"inputTokens": 10' in body
-        assert '"outputTokens": 5' in body
-        assert "event: complete" in body
-        assert '"id": "content-1"' in body
+        # 移植元と同じく、イベント名の行は付けずdata行のJSONのtypeで種別を表すこと
+        assert "event:" not in body
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "text_delta",
+            "message_stop",
+            "message_content",
+        ]
+        assert [event["text"] for event in events[:2]] == ["こんに", "ちは"]
+        assert events[2]["inputTokens"] == 10
+        assert events[2]["outputTokens"] == 5
+        assert events[3]["data"]["id"] == "content-1"
+        assert events[3]["data"]["status"] == "OK"
         mock_save_content.assert_awaited_once()
         # get_session_maker()は永続化(MessageContent保存後のRoom更新)とトークン使用量
         # 永続化の2箇所で呼ばれるため、addは2回(Room, TokenUsage)呼ばれる。
@@ -820,9 +849,11 @@ class TestStreamMessageContent:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: error" in body
-        assert "azure error" in body
-        assert "event: complete" in body
+        # 移植元と同じく、errorイベントの後にERRORステータスのmessage_contentが届くこと
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == ["error", "message_content"]
+        assert "azure error" in events[0]["message"]
+        assert events[1]["data"]["status"] == "ERROR"
 
         saved_content = mock_save_content.await_args.args[0]
         assert saved_content.status == MessageContentStatus.ERROR
@@ -1103,14 +1134,100 @@ class TestStreamMessageContentRegenerate:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: complete" in body
-        assert '"question": "元の質問"' in body
-        assert '"answer": "新しい回答"' in body
+        final_event = _sse_events(body)[-1]
+        assert final_event["type"] == "message_content"
+        assert final_event["data"]["question"] == "元の質問"
+        assert final_event["data"]["answer"] == "新しい回答"
 
         mock_update_answer.assert_awaited_once()
         _, update_kwargs = mock_update_answer.await_args
         assert update_kwargs["answer"] == "新しい回答"
         assert update_kwargs["status"] == MessageContentStatus.OK
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.update_answer")
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.MessageContentRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_emits_error_event_when_regenerate_target_deleted_during_stream(
+        self,
+        mock_find_content,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_update_answer,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """再生成対象がストリーミング中に削除され永続化できない場合、最後にerrorイベントを送ること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        # 開始時の存在確認では見つかり、永続化時の再取得では削除済み(None)になる競合
+        mock_find_content.side_effect = [
+            MessageContent(
+                id="content-1",
+                tenant_id="tenant-1",
+                message_id="msg-1",
+                status=MessageContentStatus.OK,
+                question="元の質問",
+                answer="元の回答",
+            ),
+            None,
+        ]
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="新しい回答"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_new_session = _mock_new_session()
+        mock_get_session_maker.return_value = MagicMock(return_value=mock_new_session)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(messageId=None, messageContentId="content-1"),
+            session=None,
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "message_stop",
+            "error",
+        ]
+        assert events[-1]["message"] == "エラーが発生しました。"
+        mock_update_answer.assert_not_called()
 
     @patch("app.services.message_service.get_session_maker")
     @patch("app.services.message_service.MessageContentRepository.update_answer")
@@ -1295,13 +1412,20 @@ class TestStreamMessageContentCreateLibrary:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: library_title_delta" in body
-        assert '"text": "タイトルA' in body
-        assert "event: library_content_delta" in body
-        assert '"text": "本文B' in body
-        assert "event: text_delta" in body
-        assert '"text": "コメントC"' in body
-        assert "event: message_stop" in body
+        events = _sse_events(body)
+        texts_by_type: dict[str, str] = {}
+        for event in events:
+            if "text" in event:
+                texts_by_type[event["type"]] = (
+                    texts_by_type.get(event["type"], "") + event["text"]
+                )
+        assert texts_by_type["library_title_delta"].startswith("タイトルA")
+        assert texts_by_type["library_content_delta"].startswith("本文B")
+        assert texts_by_type["text_delta"] == "コメントC"
+        assert [event["type"] for event in events][-2:] == [
+            "message_stop",
+            "message_content",
+        ]
 
         mock_save_library.assert_awaited_once()
         saved_library = mock_save_library.await_args.args[0]
@@ -2562,7 +2686,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_persists_attachment_files_and_reflects_them_in_complete_event(
+    async def test_persists_attachment_files_and_reflects_them_in_message_content_event(
         self,
         mock_find_message,
         mock_require_owned_room,
@@ -2577,7 +2701,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         mock_get_session_maker,
         test_user,
     ):
-        """attachmentFilesを含むリクエストの場合、MessageFileを保存しcompleteイベントに反映すること"""
+        """attachmentFilesを含むリクエストの場合、MessageFileを保存しmessage_contentイベントに反映すること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus, MessageFile
 
@@ -2739,7 +2863,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_persists_token_usage_and_emits_complete_even_when_attachment_save_fails(
+    async def test_persists_token_usage_and_emits_message_content_even_when_attachment_save_fails(
         self,
         mock_find_message,
         mock_require_owned_room,
@@ -2754,7 +2878,7 @@ class TestStreamMessageContentWithAttachmentFiles:
         mock_get_session_maker,
         test_user,
     ):
-        """添付ファイルの永続化が失敗しても、トークン使用量の永続化とcompleteイベント送出は行われること"""
+        """添付ファイルの永続化が失敗しても、トークン使用量の永続化とmessage_contentイベント送出は行われること"""
         from app.core.llm_client import ChatStreamChunk
         from app.models.message import MessageContent, MessageContentStatus
 
@@ -2795,6 +2919,7 @@ class TestStreamMessageContentWithAttachmentFiles:
 
         mock_save_attachment_files.assert_awaited_once()
         mock_new_session.rollback.assert_awaited_once()
-        # 添付ファイル保存失敗後もRoom更新・completeイベント送出まで到達すること
-        assert "event: complete" in body
-        assert '"attachmentFiles": []' in body
+        # 添付ファイル保存失敗後もRoom更新・message_contentイベント送出まで到達すること
+        final_event = _sse_events(body)[-1]
+        assert final_event["type"] == "message_content"
+        assert final_event["data"]["attachmentFiles"] == []

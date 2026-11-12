@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, clearTenantId, persistTenantId } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { ROUTES } from '@/lib/constants/routes';
 import type {
   User,
-  LoginRequest,
+  LoginCredentials,
   LoginResponse,
   LoginStatus,
   AuthSessionResponse,
@@ -20,7 +20,7 @@ interface AuthState {
 
 interface AuthStore extends AuthState {
   ensureInitialized: () => Promise<void>;
-  login: (credentials: LoginRequest) => Promise<LoginStatus>;
+  login: (credentials: LoginCredentials) => Promise<LoginStatus>;
   logout: () => Promise<void>;
   completePasswordReset: (response: AuthSessionResponse) => Promise<void>;
 }
@@ -73,9 +73,11 @@ export const useAuthStore = create<AuthStore>((set) => {
             );
             const user = mapToUser(session);
             setUser(user);
+            // backend の GET /api/auth は tenant_id を返さないため、ログイン時に保存した入力値をそのまま使う
             sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-            sessionStorage.setItem('TENANT_ID', session.tenant_id);
           } catch {
+            // パスワードリセット画面へのフルページ遷移後もリセット API に X-Tenant-ID が必要なため、
+            // 未ログイン（セッション確認失敗）ではテナントIDを消さない
             setUser(null);
             sessionStorage.removeItem('AUTH_USER');
           }
@@ -84,13 +86,24 @@ export const useAuthStore = create<AuthStore>((set) => {
       return initPromise;
     },
 
-    async login(credentials: LoginRequest): Promise<LoginStatus> {
-      const response = await apiClient.post<LoginResponse>(
-        API_PATHS.AUTH.LOGIN,
-        credentials
-      );
+    async login({ tenantId, username, password }: LoginCredentials): Promise<LoginStatus> {
+      // ログインリクエスト自体にも X-Tenant-ID ヘッダが必要なため、API 呼び出し前に保存する
+      persistTenantId(tenantId);
+      let response: LoginResponse;
+      try {
+        response = await apiClient.post<LoginResponse>(API_PATHS.AUTH.LOGIN, {
+          username,
+          password,
+        });
+      } catch (e) {
+        // 誤ったテナントIDを残さない。frontend-angular は 401 のときだけ消すが、
+        // 次回のログイン送信で入力値が保存し直されるため、失敗理由を問わず消してよい
+        clearTenantId();
+        throw e;
+      }
 
       if (response.loginStatus === 'REQUIRES_PASSWORD_RESET') {
+        // パスワードリセット API も X-Tenant-ID が必須のため、テナントIDは消さずにユーザー情報だけ消す
         setUser(null);
         sessionStorage.removeItem('AUTH_USER');
         try {
@@ -99,7 +112,7 @@ export const useAuthStore = create<AuthStore>((set) => {
           console.error('Logout during password reset failed');
         }
         // パスワードを URL に含めず sessionStorage 経由で渡す（URL 露出防止）
-        sessionStorage.setItem('PW_RESET_OLD_PASSWORD', credentials.password);
+        sessionStorage.setItem('PW_RESET_OLD_PASSWORD', password);
         window.location.href = `${ROUTES.AUTH.PW_RESET}?username=${encodeURIComponent(
           response.id
         )}&reason=${response.reason}`;
@@ -109,13 +122,6 @@ export const useAuthStore = create<AuthStore>((set) => {
       const user = mapToUser(response);
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-      // LoginResponse に tenant_id がないためセッション API から取得する
-      try {
-        const session = await apiClient.get<BackendAuthResponse>(API_PATHS.AUTH.SESSION);
-        sessionStorage.setItem('TENANT_ID', session.tenant_id);
-      } catch (e) {
-        console.warn('Failed to fetch tenant_id after login', e);
-      }
       window.location.href = ROUTES.APP.DASHBOARD;
       return 'SUCCESS';
     },
@@ -129,7 +135,7 @@ export const useAuthStore = create<AuthStore>((set) => {
       setUser(null);
       initPromise = null;
       sessionStorage.removeItem('AUTH_USER');
-      sessionStorage.removeItem('TENANT_ID');
+      clearTenantId();
       window.location.href = ROUTES.AUTH.LOGIN;
     },
 
@@ -137,13 +143,6 @@ export const useAuthStore = create<AuthStore>((set) => {
       const user = mapToUser(response);
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-      // AuthSessionResponse に tenant_id がないためセッション API から取得する
-      try {
-        const session = await apiClient.get<BackendAuthResponse>(API_PATHS.AUTH.SESSION);
-        sessionStorage.setItem('TENANT_ID', session.tenant_id);
-      } catch (e) {
-        console.warn('Failed to fetch tenant_id after password reset', e);
-      }
       window.location.href = ROUTES.APP.DASHBOARD;
     },
   };

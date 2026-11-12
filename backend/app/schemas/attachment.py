@@ -4,11 +4,10 @@ from pydantic import Base64Bytes, BaseModel, Field
 class AttachmentFile(BaseModel):
     """メッセージ送信時にクライアントから渡す添付ファイル1件。
 
-    移植元(Spring Boot)は`multipart/form-data`でファイルを受け取る。`LlmChatRequest`は
-    本ポートではJSONボディ内でBase64エンコードして受け取る。メッセージ送信API
-    (`MessageContentCreateRequest`)は、移植元クライアント(secuaigent/client)が移植元形式で
-    送るため移植元と同じくmultipartで受け取り、`parse_message_content_create_form`で
-    ファイルパートを本クラスへ変換する（issue-182）。
+    移植元(Spring Boot)は`multipart/form-data`でファイルを受け取る。本ポートも、
+    メッセージ送信API(`MessageContentCreateRequest`、issue-182)・LLMチャットAPI
+    (`LlmChatRequest`、issue-224)ともに移植元と同じくmultipartで受け取り、
+    `parse_text_data_form`でファイルパートを本クラスへ変換する。
 
     `data`は、画像等の任意バイナリをJSON文字列として安全に運ぶため、素の`bytes`
     ではなくPydantic v2の`Base64Bytes`型を使う（素の`bytes`はUTF-8としてそのまま

@@ -18,7 +18,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 | `server/`（Spring Boot 3.5 / Java 21） | FastAPI: `backend/` |
 | `client/`（Angular 21） | React（Vite + React Router）: `frontend/` |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター） | `generative-ai-adapter/`（Python、新設予定） |
-| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python、新設予定） |
+| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。

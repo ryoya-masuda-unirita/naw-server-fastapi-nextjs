@@ -1,0 +1,29 @@
+# server-local を単体で起動する Compose 定義。
+# 値は同じディレクトリの .env（.env.example をコピーして作る）から読み込む。
+services:
+  server-local:
+    build: .
+    image: naw-server-local:latest
+    container_name: naw-server-local
+    # ホストの ./data を書き込めるよう、ホストのユーザーと UID/GID を揃える
+    user: "${SERVER_LOCAL_UID:-1000}:${SERVER_LOCAL_GID:-1000}"
+    ports:
+      - "${SERVER_LOCAL_PORT:-8090}:8080"
+    environment:
+      SECURITY_SERVER_AUTH_KEY: ${SECURITY_SERVER_AUTH_KEY:?SECURITY_SERVER_AUTH_KEY を .env に設定してください}
+      WAHA_URL: ${WAHA_URL:-http://host.docker.internal/}
+      WAHA_AUTHKEY: ${WAHA_AUTHKEY:-}
+      NAW_BASE_URL: ${NAW_BASE_URL:-}
+      CONTEXT_PATH: ${CONTEXT_PATH:-}
+      STREAM_WAHA_OUTPUT_DIR: ${STREAM_WAHA_OUTPUT_DIR:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # 学習ファイル一覧の更新日（yyyy-MM-dd）はこのタイムゾーンの 0 時として解釈する
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      # SQLite（nawdb.sqlite3）とストリームファイル（stream-output/）を置く。
+      # Waha! はストリームファイルを書き込むため、Waha! からも同じディレクトリが見える必要がある
+      - ${SERVER_LOCAL_DATA_DIR:-./data}:/app/data
+    extra_hosts:
+      # Linux では host.docker.internal が既定で解決できないため、ホストの Waha! を呼べるようにする
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

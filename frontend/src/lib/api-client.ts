@@ -15,8 +15,19 @@ function buildUrl(path: string, params?: QueryParams): string {
   return url.toString();
 }
 
-function resolveTenantId(): string {
-  return sessionStorage.getItem('TENANT_ID') || '';
+// テナントはサブドメインから判定せず、ログイン画面で入力された値をセッションに保存して使う（#193・#229）
+const TENANT_ID_STORAGE_KEY = 'TENANT_ID';
+
+export function resolveTenantId(): string {
+  return sessionStorage.getItem(TENANT_ID_STORAGE_KEY) || '';
+}
+
+export function persistTenantId(tenantId: string): void {
+  sessionStorage.setItem(TENANT_ID_STORAGE_KEY, tenantId);
+}
+
+export function clearTenantId(): void {
+  sessionStorage.removeItem(TENANT_ID_STORAGE_KEY);
 }
 
 function getHeaders(customHeaders?: HeadersInit): Record<string, string> {
