@@ -1,8 +1,7 @@
 from datetime import datetime
 
 import base64
-import json
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import File, Form, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -10,6 +9,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    TypeAdapter,
     ValidationError,
     field_serializer,
     field_validator,
@@ -238,12 +238,21 @@ class MessageContentCreateRequest(BaseModel):
 _DEFAULT_ATTACHMENT_CONTENT_TYPE = "application/octet-stream"
 
 
-def _text_data_error(message: str, raw_text: str) -> RequestValidationError:
-    """`textData`パート自体が不正な場合の入力エラー(422)を組み立てる。
+# `textData`をJSONオブジェクトとして解釈する。不正なJSON・不正なUTF-8・オブジェクト
+# 以外は、いずれもValidationErrorとして検出される。
+_TEXT_DATA_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
+
+
+def _to_request_validation_error(error: ValidationError) -> RequestValidationError:
+    """`textData`の検証エラーを、ボディの入力エラー(422)へ変換する。
+
+    依存関数内で発生したValidationErrorはFastAPIが422へ変換しないため明示的に
+    変換する。locは`("body", "textData", ...)`に揃え、`input`は含めない
+    （モデル単位のエラーでは添付ファイルを含むリクエスト全体が入り、応答が
+    肥大化するため）。
 
     Args:
-        message: エラーメッセージ。
-        raw_text: 受け取った`textData`の文字列。
+        error: `textData`の解釈・検証で発生したエラー。
 
     Returns:
         FastAPIが422として返す入力エラー。
@@ -251,11 +260,11 @@ def _text_data_error(message: str, raw_text: str) -> RequestValidationError:
     return RequestValidationError(
         [
             {
-                "type": "value_error",
-                "loc": ("body", "textData"),
-                "msg": message,
-                "input": raw_text,
+                "type": detail["type"],
+                "loc": ("body", "textData", *detail["loc"]),
+                "msg": detail["msg"],
             }
+            for detail in error.errors(include_url=False)
         ]
     )
 
@@ -302,39 +311,27 @@ async def parse_message_content_create_form(
         検証済みのメッセージ送信リクエスト。
 
     Raises:
-        RequestValidationError: `textData`がJSONオブジェクトとして解釈できない場合、
-            または項目の検証に失敗した場合（いずれも422）。
+        RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
+            場合、または項目の検証に失敗した場合（いずれも422）。
     """
-    raw_text = (
-        textData
-        if isinstance(textData, str)
-        else (await textData.read()).decode("utf-8", errors="replace")
+    raw_text_data = (
+        textData.encode("utf-8") if isinstance(textData, str) else await textData.read()
     )
     try:
-        text_payload = json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        raise _text_data_error("textData はJSON形式で指定してください", raw_text) from e
-    if not isinstance(text_payload, dict):
-        raise _text_data_error(
-            "textData はJSONオブジェクトで指定してください", raw_text
-        )
-
-    payload = {
-        **text_payload,
-        "attachmentFiles": [
-            await _to_attachment_payload(upload) for upload in attachmentFiles or []
-        ],
-        "historyAttachmentFiles": [
-            await _to_attachment_payload(upload)
-            for upload in historyAttachmentFiles or []
-        ],
-    }
-    try:
+        text_payload = _TEXT_DATA_ADAPTER.validate_json(raw_text_data)
+        payload = {
+            **text_payload,
+            "attachmentFiles": [
+                await _to_attachment_payload(upload) for upload in attachmentFiles or []
+            ],
+            "historyAttachmentFiles": [
+                await _to_attachment_payload(upload)
+                for upload in historyAttachmentFiles or []
+            ],
+        }
         return MessageContentCreateRequest.model_validate(payload)
     except ValidationError as e:
-        # 依存関数内で発生したValidationErrorはFastAPIが422へ変換しないため、
-        # ボディの検証エラーと同じ扱いになるよう明示的に変換する。
-        raise RequestValidationError(e.errors(include_url=False)) from e
+        raise _to_request_validation_error(e) from e
 
 
 class MessageFeedbackCreateRequest(BaseModel):

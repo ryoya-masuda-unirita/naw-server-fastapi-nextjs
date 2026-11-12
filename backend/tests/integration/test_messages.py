@@ -1,14 +1,15 @@
 import base64
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from decimal import Decimal
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.core.llm_client import ChatStreamChunk
@@ -304,7 +305,7 @@ def client(override_get_session):
 
 
 def _content_form(
-    text_data: dict,
+    text_data: dict[str, Any],
     attachment_files: list[tuple[str, bytes, str]] | None = None,
     history_attachment_files: list[tuple[str, bytes, str]] | None = None,
 ) -> list[tuple[str, tuple[str, str | bytes, str]]]:
@@ -312,6 +313,14 @@ def _content_form(
 
     frontend-angularの`buildMessageContentFormData`と同じく、`textData`を
     `application/json`のBlob（ファイル名`blob`）として送る。
+
+    Args:
+        text_data: `textData`パートに入れるリクエスト本体。
+        attachment_files: `attachmentFiles`パート（ファイル名・内容・Content-Type）。
+        history_attachment_files: `historyAttachmentFiles`パート（同上）。
+
+    Returns:
+        httpxの`files`引数に渡すmultipartパートの一覧。
     """
     parts: list[tuple[str, tuple[str, str | bytes, str]]] = [
         ("textData", ("blob", json.dumps(text_data), "application/json"))
@@ -324,10 +333,20 @@ def _content_form(
 
 
 @contextmanager
-def _patched_llm(engine, answer: str) -> Iterator[None]:
-    """LLM呼び出しを固定回答に差し替え、ストリーミング後の永続化先をテスト用DBにする。"""
+def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
+    """LLM呼び出しを固定回答に差し替え、ストリーミング後の永続化先をテスト用DBにする。
 
-    async def _stream_chunks(*args, **kwargs):
+    Args:
+        engine: テスト用DBエンジン。
+        answer: LLMが返す回答テキスト。
+
+    Yields:
+        差し替えが有効な間の制御を呼び出し元へ渡す。
+    """
+
+    async def _stream_chunks(
+        *args: Any, **kwargs: Any
+    ) -> AsyncIterator[ChatStreamChunk]:
         yield ChatStreamChunk(text_delta=answer)
         yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
@@ -347,11 +366,20 @@ def _patched_llm(engine, answer: str) -> Iterator[None]:
         yield
 
 
-def _last_visible_message_id(records: list[dict], contents: list[dict]) -> str | None:
+def _last_visible_message_id(
+    records: list[dict[str, Any]], contents: list[dict[str, Any]]
+) -> str | None:
     """読み直した会話から、frontend-angularが次の送信の親にするメッセージIDを求める。
 
     frontend-angularの`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
     メッセージから各階層の最後の兄弟を辿り、本文があるメッセージのうち最後のものを返す。
+
+    Args:
+        records: メッセージ一覧取得APIの`messages`。
+        contents: メッセージ内容一覧取得APIの結果。
+
+    Returns:
+        次の送信の親になるメッセージID。本文を持つメッセージがなければNone。
     """
     messages_with_content = {content["messageId"] for content in contents}
     last_visible: str | None = None
@@ -933,6 +961,37 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 422
+            assert response.json()["detail"][0]["loc"] == ["body", "textData"]
+
+        async def test_returns_422_when_text_data_is_not_utf8(
+            self, client, owner_headers, owned_message
+        ):
+            """textDataがUTF-8でない場合は文字化けしたまま受け付けず422になること"""
+            text_data = json.dumps(
+                {"messageId": owned_message.id, "userInput": "こんにちは"},
+                ensure_ascii=False,
+            ).encode("shift_jis")
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=[("textData", ("blob", text_data, "application/json"))],
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
+
+        async def test_returns_401_before_parsing_text_data_when_unauthenticated(
+            self, client, messages_tenant
+        ):
+            """未認証の場合、textDataの解析より先に認証エラー(401)になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=[("textData", ("blob", "not-json", "application/json"))],
+                    headers={"X-Tenant-ID": messages_tenant.id},
+                )
+
+            assert response.status_code == 401
 
         async def test_returns_422_when_text_data_is_missing(
             self, client, owner_headers
