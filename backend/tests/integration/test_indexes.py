@@ -582,7 +582,7 @@ class TestIndexRouter:
         async def test_create_saas_index_invalid_endpoint_count_raises_error(
             self, client, admin_headers, tenant_endpoint_1
         ):
-            """SAAS_GLOBALでエンドポイントが2件でない場合422になること"""
+            """SAAS_GLOBALでエンドポイントが2件でない場合400になること"""
             payload = {
                 "name": "Bad Index",
                 "type": "SAAS_GLOBAL",
@@ -593,7 +593,7 @@ class TestIndexRouter:
                     "/api/admin/indexes", json=payload, headers=admin_headers
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_create_saas_index_over_limit_raises_error(
             self,
@@ -623,7 +623,7 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 400
-            assert "15個" in response.json()["detail"]
+            assert "15個" in response.json()["message"]
 
         async def test_create_local_index(
             self, client, admin_headers, tenant_endpoint_local
@@ -650,7 +650,7 @@ class TestIndexRouter:
         async def test_create_local_index_invalid_endpoint_count_raises_error(
             self, client, admin_headers, tenant_endpoint_local, tenant_endpoint_1
         ):
-            """LOCALでエンドポイントが1件でない場合422になること"""
+            """LOCALでエンドポイントが1件でない場合400になること"""
             payload = {
                 "name": "Bad Local Index",
                 "type": "LOCAL",
@@ -664,12 +664,12 @@ class TestIndexRouter:
                     "/api/admin/indexes", json=payload, headers=admin_headers
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_create_local_index_missing_waha_service_id_raises_error(
             self, client, admin_headers, tenant_endpoint_local
         ):
-            """LOCALでget/add/deleteのいずれかが空の場合422になること"""
+            """LOCALでget/add/deleteのいずれかが空の場合400になること"""
             payload = {
                 "name": "Bad Local Index",
                 "type": "LOCAL",
@@ -683,12 +683,12 @@ class TestIndexRouter:
                     "/api/admin/indexes", json=payload, headers=admin_headers
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_create_description_too_long_raises_error(
             self, client, admin_headers, tenant_endpoint_1, tenant_endpoint_2
         ):
-            """descriptionが256文字以上の場合422になること"""
+            """descriptionが256文字以上の場合400になること"""
             payload = {
                 "name": "Long Desc Index",
                 "description": "a" * 256,
@@ -700,7 +700,7 @@ class TestIndexRouter:
                     "/api/admin/indexes", json=payload, headers=admin_headers
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_create_unknown_endpoint_id_raises_error(
             self, client, admin_headers, tenant_endpoint_1
@@ -717,7 +717,7 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 404
-            assert "テナントエンドポイント" in response.json()["detail"]
+            assert "テナントエンドポイント" in response.json()["message"]
 
         async def test_create_unknown_group_id_raises_error(
             self, client, admin_headers, tenant_endpoint_1, tenant_endpoint_2
@@ -735,7 +735,7 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 404
-            assert "グループ" in response.json()["detail"]
+            assert "グループ" in response.json()["message"]
 
     class TestUpdate:
         """PATCH /api/admin/indexes/{id}"""
@@ -953,7 +953,7 @@ class TestIndexRouter:
 
             assert response.status_code == 400
             assert (
-                response.json()["detail"]
+                response.json()["message"]
                 == "ファイル一括同期機能はローカルAPIサーバしか対応していません。"
             )
 
@@ -975,7 +975,7 @@ class TestIndexRouter:
 
             assert response.status_code == 400
             assert (
-                response.json()["detail"]
+                response.json()["message"]
                 == "追加学習のデータソースが正しく指定されていません。"
             )
 
@@ -995,7 +995,7 @@ class TestIndexRouter:
 
             assert response.status_code == 400
             assert (
-                response.json()["detail"]
+                response.json()["message"]
                 == "追加学習のデータソースが正しく指定されていません。"
             )
 
@@ -1263,7 +1263,7 @@ class TestIndexRouter:
 
             assert response.status_code == 400
             assert (
-                response.json()["detail"]
+                response.json()["message"]
                 == "ローカルAPIサーバへのリクエストを処理できません。"
             )
 

@@ -164,8 +164,8 @@ class TestCreateAssistantCategory:
         assert body["description"] == "desc"
         assert "id" in body
 
-    async def test_create_with_blank_name_returns_422(self, client, admin_headers):
-        """名前が空白のみだと422になり作成されないこと"""
+    async def test_create_with_blank_name_returns_400(self, client, admin_headers):
+        """名前が空白のみだと400になり作成されないこと"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
@@ -173,10 +173,10 @@ class TestCreateAssistantCategory:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_create_with_name_17_chars_returns_422(self, client, admin_headers):
-        """名前が17文字だと422になり作成されないこと"""
+    async def test_create_with_name_17_chars_returns_400(self, client, admin_headers):
+        """名前が17文字だと400になり作成されないこと"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
@@ -184,12 +184,12 @@ class TestCreateAssistantCategory:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_create_with_description_256_chars_returns_422(
+    async def test_create_with_description_256_chars_returns_400(
         self, client, admin_headers
     ):
-        """説明が256文字だと422になり作成されないこと"""
+        """説明が256文字だと400になり作成されないこと"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
@@ -197,7 +197,7 @@ class TestCreateAssistantCategory:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_create_as_non_admin_returns_403(self, client, member_headers):
         """テナント管理者以外は作成できないこと"""
@@ -374,10 +374,10 @@ class TestUpdateAssistantCategory:
 
         assert response.status_code == 404
 
-    async def test_update_with_description_256_chars_returns_422(
+    async def test_update_with_description_256_chars_returns_400(
         self, client, admin_headers, category
     ):
-        """説明が256文字だと422になりDBの内容が変更されないこと"""
+        """説明が256文字だと400になりDBの内容が変更されないこと"""
         async with client as c:
             response = await c.patch(
                 f"/api/admin/assistant-categories/{category.id}",
@@ -385,7 +385,7 @@ class TestUpdateAssistantCategory:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_update_as_non_admin_returns_403(
         self, client, member_headers, category

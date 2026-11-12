@@ -330,7 +330,7 @@ class TestGetTokenUsages:
 
         assert response.status_code == 401
 
-    async def test_period_over_31_days_returns_422(
+    async def test_period_over_31_days_returns_400(
         self, client, admin_headers, token_usage_dataset
     ):
         """期間が31日を超えるとバリデーションエラーになること"""
@@ -340,9 +340,9 @@ class TestGetTokenUsages:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_from_after_to_returns_422(
+    async def test_from_after_to_returns_400(
         self, client, admin_headers, token_usage_dataset
     ):
         """fromがtoより後だとバリデーションエラーになること"""
@@ -354,7 +354,7 @@ class TestGetTokenUsages:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_unknown_user_id_returns_404(
         self, client, admin_headers, token_usage_dataset
@@ -368,7 +368,7 @@ class TestGetTokenUsages:
 
         assert response.status_code == 404
 
-    async def test_size_zero_returns_422(
+    async def test_size_zero_returns_400(
         self, client, admin_headers, token_usage_dataset
     ):
         """size=0だとバリデーションエラーになること（hasNextが常にTrueになる不具合を防ぐ）"""
@@ -378,9 +378,9 @@ class TestGetTokenUsages:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_negative_page_returns_422(
+    async def test_negative_page_returns_400(
         self, client, admin_headers, token_usage_dataset
     ):
         """page=-1だとバリデーションエラーになること（負のOFFSETによるDBエラーを防ぐ）"""
@@ -390,7 +390,7 @@ class TestGetTokenUsages:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_naive_and_aware_datetime_mixed_does_not_raise_500(
         self, client, admin_headers, token_usage_dataset

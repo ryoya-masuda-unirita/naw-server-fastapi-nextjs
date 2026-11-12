@@ -357,7 +357,7 @@ class TestGetPromptTemplates:
     async def test_size_zero_falls_back_to_default_page_size(
         self, client, member_headers, member_of_group, template_in_group
     ):
-        """size=0（チャット画面のテンプレート選択が送信する）は422にせずデフォルトページサイズになること"""
+        """size=0（チャット画面のテンプレート選択が送信する）は400にせずデフォルトページサイズになること"""
         async with client as c:
             response = await c.get(
                 "/api/prompt-templates",
@@ -819,7 +819,7 @@ class TestPromptTemplateNameMaxLength:
     async def test_create_rejects_name_over_max_length(
         self, client, admin_headers, session, tenant
     ):
-        """上限を超える名前は保存前に422で拒否され、テンプレートが作成されないこと"""
+        """上限を超える名前は保存前に400で拒否され、テンプレートが作成されないこと"""
         async with client as c:
             response = await c.post(
                 "/api/admin/prompt-templates",
@@ -827,8 +827,10 @@ class TestPromptTemplateNameMaxLength:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
-        assert response.json()["detail"][0]["loc"] == ["body", "name"]
+        assert response.status_code == 400
+        assert response.json()["message"] == (
+            f"String should have at most {NAME_MAX_LENGTH} characters"
+        )
         count = (
             await session.execute(
                 select(func.count())
@@ -856,7 +858,7 @@ class TestPromptTemplateNameMaxLength:
     async def test_create_rejects_multibyte_name_over_max_length(
         self, client, admin_headers
     ):
-        """マルチバイト文字でも上限を超えると422で拒否されること"""
+        """マルチバイト文字でも上限を超えると400で拒否されること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/prompt-templates",
@@ -864,7 +866,7 @@ class TestPromptTemplateNameMaxLength:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_update_accepts_name_at_max_length(
         self, client, admin_headers, template
@@ -884,7 +886,7 @@ class TestPromptTemplateNameMaxLength:
     async def test_update_rejects_name_over_max_length(
         self, client, admin_headers, session, template
     ):
-        """上限を超える名前での更新は422で拒否され、既存の名前が変わらないこと"""
+        """上限を超える名前での更新は400で拒否され、既存の名前が変わらないこと"""
         async with client as c:
             response = await c.patch(
                 f"/api/admin/prompt-templates/{template.id}",
@@ -892,7 +894,7 @@ class TestPromptTemplateNameMaxLength:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
         await session.refresh(template)
         assert template.name == "Template A"
 

@@ -23,7 +23,7 @@ class TenantAdminPatchRequest(BaseModel):
 
         Tenant.name はDB上NOT NULL制約のため、キーが存在するのに値がnullだと
         DB制約違反による500が発生してしまう。それを避けるため、リクエストの
-        バリデーション段階で422として弾く。
+        バリデーション段階で400として弾く。
         """
         if "tenantName" in self.model_fields_set and self.tenantName is None:
             raise ValueError("tenantName に null は指定できません")

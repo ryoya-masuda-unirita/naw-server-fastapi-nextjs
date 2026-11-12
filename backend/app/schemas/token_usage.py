@@ -25,7 +25,7 @@ class TokenUsagePeriodQuery(BaseModel):
         """タイムゾーン情報がない場合はUTCとして扱う。
 
         `from`/`to`の一方だけタイムゾーンなしで指定されると、後続の`_validate_period`での
-        比較時にnaive/aware混在で`TypeError`が送出され422ではなく500になってしまうため、
+        比較時にnaive/aware混在で`TypeError`が送出され400ではなく500になってしまうため、
         ここで両者を必ずaware(UTC)に揃える。
 
         Args:

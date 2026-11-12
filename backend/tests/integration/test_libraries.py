@@ -411,8 +411,8 @@ class TestListLibraries:
         assert body["totalElements"] == 1
         assert [item["id"] for item in body["content"]] == [str(library.id)]
 
-    async def test_list_with_invalid_tag_id_returns_422(self, client, owner_headers):
-        """UUIDとして不正なtagIdsは422になること"""
+    async def test_list_with_invalid_tag_id_returns_400(self, client, owner_headers):
+        """UUIDとして不正なtagIdsは400になること"""
         async with client as c:
             response = await c.get(
                 "/api/libraries",
@@ -420,7 +420,7 @@ class TestListLibraries:
                 headers=owner_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_list_pagination(
         self, session, client, owner_headers, lib_tenant, owner_user, message
@@ -746,10 +746,10 @@ class TestUpdateLibrary:
 
         assert response.status_code == 404
 
-    async def test_update_with_blank_name_returns_422(
+    async def test_update_with_blank_name_returns_400(
         self, client, owner_headers, library
     ):
-        """名前が空白のみだと422になること"""
+        """名前が空白のみだと400になること"""
         async with client as c:
             response = await c.put(
                 f"/api/libraries/{library.id}",
@@ -757,7 +757,7 @@ class TestUpdateLibrary:
                 headers=owner_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 @pytest.mark.asyncio

@@ -599,10 +599,10 @@ class TestCreateAssistant:
 
         assert response.status_code == 403
 
-    async def test_create_assistant_without_endpoints_returns_422(
+    async def test_create_assistant_without_endpoints_returns_400(
         self, client, admin_headers
     ):
-        """エンドポイントが1件もない場合422になること"""
+        """エンドポイントが1件もない場合400になること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistants",
@@ -615,12 +615,12 @@ class TestCreateAssistant:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_create_assistant_with_blank_name_returns_422(
+    async def test_create_assistant_with_blank_name_returns_400(
         self, client, admin_headers, tenant_endpoint
     ):
-        """名前が空白のみの場合422になること"""
+        """名前が空白のみの場合400になること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistants",
@@ -633,7 +633,7 @@ class TestCreateAssistant:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_create_secure_assistant_with_non_local_server_endpoint_returns_400(
         self, client, admin_headers, tenant_endpoint
@@ -900,7 +900,7 @@ class TestDeleteAssistant:
 
         assert response.status_code == 409
         assert (
-            response.json()["detail"]
+            response.json()["message"]
             == "このアシスタントはルームのデフォルトアシスタントとして使用されているため削除できません。"
         )
 

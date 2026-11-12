@@ -342,10 +342,10 @@ class TestTenantsRouter:
 
             assert response.status_code == 400
 
-        async def test_patch_returns_422_for_negative_credits(
+        async def test_patch_returns_400_for_negative_credits(
             self, client, tenant, admin_user
         ):
-            """負の値で422になること"""
+            """負の値で400になること"""
             async with client as ac:
                 response = await ac.patch(
                     f"/api/admin/tenants/{tenant.id}",
@@ -353,12 +353,12 @@ class TestTenantsRouter:
                     headers=_headers(admin_user.login_id, tenant.id),
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
-        async def test_patch_returns_422_for_null_tenant_name(
+        async def test_patch_returns_400_for_null_tenant_name(
             self, client, tenant, admin_user
         ):
-            """tenantNameキーの値がnullの場合422になること（DB列がNOT NULLのため）"""
+            """tenantNameキーの値がnullの場合400になること（DB列がNOT NULLのため）"""
             async with client as ac:
                 response = await ac.patch(
                     f"/api/admin/tenants/{tenant.id}",
@@ -366,12 +366,12 @@ class TestTenantsRouter:
                     headers=_headers(admin_user.login_id, tenant.id),
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
-        async def test_patch_returns_422_for_too_long_tenant_name(
+        async def test_patch_returns_400_for_too_long_tenant_name(
             self, client, tenant, admin_user
         ):
-            """tenantNameがDB列の上限(32文字)を超える場合422になること"""
+            """tenantNameがDB列の上限(32文字)を超える場合400になること"""
             async with client as ac:
                 response = await ac.patch(
                     f"/api/admin/tenants/{tenant.id}",
@@ -379,7 +379,7 @@ class TestTenantsRouter:
                     headers=_headers(admin_user.login_id, tenant.id),
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_patch_forbidden_when_tenant_path_mismatch(
             self, client, tenant, admin_user, other_tenant

@@ -241,8 +241,8 @@ class TestCreateLibraryTag:
         assert body["description"] == "desc"
         assert "id" in body
 
-    async def test_create_with_blank_name_returns_422(self, client, admin_headers):
-        """名前が空白のみだと422になること"""
+    async def test_create_with_blank_name_returns_400(self, client, admin_headers):
+        """名前が空白のみだと400になり、独自チェックのメッセージがそのまま返ること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/library-tags",
@@ -250,7 +250,8 @@ class TestCreateLibraryTag:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        assert response.json()["message"] == "タグ名は必須です"
 
     async def test_create_with_duplicate_name_returns_400(
         self, client, admin_headers, tag

@@ -101,7 +101,7 @@ async def parse_llm_chat_form(
 
     Raises:
         RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
-            場合、または項目の検証に失敗した場合（いずれも422）。
+            場合、または項目の検証に失敗した場合（いずれも400）。
     """
     return await parse_text_data_form(
         LlmChatRequest, textData, {"attachmentFiles": attachmentFiles}

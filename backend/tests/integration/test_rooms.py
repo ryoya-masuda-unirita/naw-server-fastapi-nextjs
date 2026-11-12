@@ -579,27 +579,33 @@ class TestAdminRoomHistories:
         assert response.status_code == 200
         assert [room["name"] for room in response.json()["content"]] == ["Alpha room"]
 
-    async def test_get_rooms_returns_422_when_page_is_negative(
+    async def test_get_rooms_returns_400_when_page_is_negative(
         self, client, room_owner_headers
     ):
-        """pageが負数の場合422になること"""
+        """pageが負数の場合400になること"""
         async with client as c:
             response = await c.get(
                 "/api/rooms", params={"page": -1}, headers=room_owner_headers
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        assert response.json()["message"] == (
+            "Input should be greater than or equal to 0"
+        )
 
-    async def test_get_rooms_returns_422_when_size_is_out_of_range(
+    async def test_get_rooms_returns_400_when_size_is_out_of_range(
         self, client, room_owner_headers
     ):
-        """sizeが上限超過の場合422になること"""
+        """sizeが上限超過の場合400になること"""
         async with client as c:
             response = await c.get(
                 "/api/rooms", params={"size": 101}, headers=room_owner_headers
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        assert response.json()["message"] == (
+            "Input should be less than or equal to 100"
+        )
 
     async def test_get_rooms_returns_403_when_tenant_header_mismatches_token(
         self, client, rooms_tenant, room_owner_user
@@ -1063,7 +1069,7 @@ class TestFeedbackRoom:
 
         assert response.status_code == 404
 
-    async def test_feedback_room_returns_422_for_invalid_rating(
+    async def test_feedback_room_returns_400_for_invalid_rating(
         self, client, room_owner_headers, owned_room
     ):
         """不正なratingでは満足度評価を登録できないこと"""
@@ -1074,4 +1080,4 @@ class TestFeedbackRoom:
                 headers=room_owner_headers,
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400

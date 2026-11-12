@@ -233,6 +233,10 @@ class PagedResponse(BaseModel, Generic[T]):
     size: int
 ```
 
+### エラー応答の形式
+
+移植元 `APIControllerAdvice` に合わせ、エラー応答の本文は `{"timestamp": UNIX秒, "message": "..."}`、入力チェックのエラーは 422 ではなく **400**（最初の 1 件のメッセージだけ）で返す（`app/core/errors.py`、Issue #228）。業務エラーは `HTTPException(status_code=..., detail="文字列")` で投げれば共通ハンドラが `message` に変換するので、`detail` には文字列を渡し、本文を自前で組み立てないこと。
+
 ---
 
 ## Human in the Loop（HITL）モード

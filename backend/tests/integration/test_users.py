@@ -673,12 +673,12 @@ class TestGetUsersPageSize:
 
         assert response.status_code == 200
 
-    async def test_size_over_limit_returns_422(self, client, admin_headers, admin_user):
-        """上限（1000）を超えるsize=1001は422になること"""
+    async def test_size_over_limit_returns_400(self, client, admin_headers, admin_user):
+        """上限（1000）を超えるsize=1001は400になること"""
         async with client as c:
             response = await c.get("/api/admin/users?size=1001", headers=admin_headers)
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -694,7 +694,7 @@ class TestGetUsersRoleFilterAndMultiSort:
             )
 
         assert response.status_code == 400
-        assert response.json() == {"detail": f"不正なroleです: {role}"}
+        assert response.json()["message"] == f"不正なroleです: {role}"
 
     async def test_blank_role_is_not_filtered(
         self, client, admin_headers, session, tenant
