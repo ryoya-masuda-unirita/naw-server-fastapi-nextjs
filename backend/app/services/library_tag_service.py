@@ -1,8 +1,7 @@
-import re
-
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.library_tag_id import normalize_library_tag_id, normalize_library_tag_ids
 from app.models.library_tag import LibraryTag
 from app.repositories.library_tag_repository import LibraryTagRepository
 from app.schemas.library_tag import (
@@ -10,12 +9,6 @@ from app.schemas.library_tag import (
     LibraryTagPageResponse,
     LibraryTagResponse,
     LibraryTagUpdateRequest,
-)
-
-# 保存形式（ハイフンなし32桁）と、移植元が受け付けるUUID標準形式（8-4-4-4-12）。
-_TAG_ID_PATTERN = re.compile(
-    r"[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-    re.IGNORECASE,
 )
 
 
@@ -48,16 +41,13 @@ class LibraryTagService:
         Raises:
             HTTPException: 存在しない場合、またはID形式でない場合404を返す。
         """
-        # IDは保存形式（ハイフンなし32桁の小文字hex）で保存しているが、移植元は
-        # UUID標準形式（ハイフン付き）で受け付ける。一覧のタグ絞り込み（#173）と同じく
-        # 保存形式に揃えて比べ、どちらの形式でも同じタグに当たるようにする。
-        # `uuid.UUID()`は`urn:uuid:`・波括弧・`0x`等も受け付け、1つのタグを指すIDの
-        # 表記が増えてしまうため、2つの形式だけを正規表現で受け付ける。
+        # ハイフン付き・なしのどちらでも同じタグに当たるよう保存形式に揃えて比べる。
         # 不正な形式は、ライブラリAPIのパス変数と同じく存在しないIDと同様に扱う（404）。
         tag = None
-        if _TAG_ID_PATTERN.fullmatch(tag_id):
+        normalized_id = normalize_library_tag_id(tag_id)
+        if normalized_id is not None:
             tag = await LibraryTagRepository.find_by_id_and_tenant_id(
-                tag_id.replace("-", "").lower(), tenant_id, session
+                normalized_id, tenant_id, session
             )
         if not tag:
             raise HTTPException(
@@ -194,7 +184,15 @@ class LibraryTagService:
 
         Args:
             tenant_id: テナントID。
-            ids: 削除対象のライブラリタグID一覧。
+            ids: 削除対象のライブラリタグID一覧（ハイフンなし32桁またはUUID標準形式）。
             session: 非同期DBセッション。
+
+        Raises:
+            HTTPException: どちらの形式でもないIDを含む場合400を返す（1件も削除しない）。
         """
-        await LibraryTagRepository.delete_by_tenant_id_and_ids(tenant_id, ids, session)
+        # 移植元は削除の前に全IDをUUIDへ変換し、失敗すれば400にするため、
+        # 削除より先に全件を正規化する。
+        normalized_ids = normalize_library_tag_ids(ids)
+        await LibraryTagRepository.delete_by_tenant_id_and_ids(
+            tenant_id, normalized_ids, session
+        )

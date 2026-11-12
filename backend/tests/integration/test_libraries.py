@@ -2,6 +2,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+from sqlmodel import col
 
 from app.core.security import create_access_token
 from app.main import app
@@ -229,6 +231,19 @@ def admin_headers(admin_user, lib_tenant):
 @pytest.fixture
 def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+async def _mapped_tag_ids(session, library_id: UUID) -> list[str]:
+    """ライブラリに付与されているタグIDを取得する。
+
+    テストとアプリが同じセッションを使うため、エンティティではなく列だけを取得する。
+    """
+    result = await session.execute(
+        select(col(LibraryTagMapping.library_tag_id)).where(
+            col(LibraryTagMapping.library_id) == library_id
+        )
+    )
+    return list(result.scalars().all())
 
 
 @pytest.mark.asyncio
@@ -716,11 +731,107 @@ class TestUpdateLibrary:
         async with client as c:
             response = await c.put(
                 f"/api/libraries/{library.id}",
-                json={"name": "更新後", "groups": None, "tags": ["nonexistent"]},
+                json={"name": "更新後", "groups": None, "tags": [uuid4().hex]},
                 headers=owner_headers,
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "指定されたタグが存在しません"
+
+    async def test_update_with_hyphenated_tag_id(
+        self, session, client, owner_headers, library, library_tag
+    ):
+        """ハイフン付き（UUID標準形式）のタグIDでも付与でき、保存形式で保存されること"""
+        async with client as c:
+            response = await c.put(
+                f"/api/libraries/{library.id}",
+                json={"name": "更新後", "tags": [str(UUID(library_tag.id))]},
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 200
+        assert await _mapped_tag_ids(session, library.id) == [library_tag.id]
+
+    async def test_update_with_same_tag_in_different_formats(
+        self, session, client, owner_headers, library, library_tag
+    ):
+        """同じタグを表記違いで重複指定しても1件として付与されること"""
+        async with client as c:
+            response = await c.put(
+                f"/api/libraries/{library.id}",
+                json={
+                    "name": "更新後",
+                    "tags": [library_tag.id, str(UUID(library_tag.id)).upper()],
+                },
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 200
+        assert await _mapped_tag_ids(session, library.id) == [library_tag.id]
+
+    async def test_update_with_other_tenant_tag_returns_400(
+        self, client, owner_headers, library, other_tenant_library_tag
+    ):
+        """他テナントのタグIDはハイフン付きで指定しても400になること"""
+        async with client as c:
+            response = await c.put(
+                f"/api/libraries/{library.id}",
+                json={
+                    "name": "更新後",
+                    "tags": [str(UUID(other_tenant_library_tag.id))],
+                },
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "指定されたタグが存在しません"
+
+    async def test_update_with_invalid_tag_id_format_returns_400(
+        self, session, client, owner_headers, library, library_tag, lib_tenant
+    ):
+        """不正な形式のタグIDを指定すると400になり、何も更新されないこと"""
+        session.add(
+            LibraryTagMapping(
+                tenant_id=lib_tenant.id,
+                library_id=library.id,
+                library_tag_id=library_tag.id,
+            )
+        )
+        await session.commit()
+        # ロールバック後に属性へ触れると遅延ロードが走るため、IDを先に退避する。
+        library_id = library.id
+        library_tag_id = library_tag.id
+
+        async with client as c:
+            response = await c.put(
+                f"/api/libraries/{library_id}",
+                json={"name": "更新後", "tags": ["nonexistent"]},
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "Invalid UUID string: nonexistent"
+        # 本番はリクエストごとのセッションをコミットせずに閉じる（ロールバックされる）。
+        # テストはアプリと同じセッションを使うため、閉じたときと同じ状態に戻してから確かめる。
+        await session.rollback()
+        title = await session.execute(
+            select(Library.title).where(Library.id == library_id)
+        )
+        assert title.scalar_one() == "契約書まとめ"
+        assert await _mapped_tag_ids(session, library_id) == [library_tag_id]
+
+    async def test_update_with_invalid_tag_id_as_non_owner_returns_403(
+        self, client, group_member_headers, library
+    ):
+        """所有者以外が不正な形式のタグIDを指定した場合、形式より先に権限で403になること"""
+        async with client as c:
+            response = await c.put(
+                f"/api/libraries/{library.id}",
+                json={"name": "更新後", "tags": ["nonexistent"]},
+                headers=group_member_headers,
+            )
+
+        assert response.status_code == 403
 
     async def test_update_as_non_owner_returns_403(
         self, client, group_member_headers, library
