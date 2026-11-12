@@ -109,6 +109,66 @@ class TestGetLibraryContent:
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library not found"
 
+    async def test_raises_library_not_found_before_checking_content(self, mocks):
+        """閲覧できない場合は本文の有無にかかわらずLibrary not foundの404になること"""
+        library = _library(None)
+        mocks.find_library.return_value = library
+        mocks.can_view_room.return_value = False
+        mocks.is_visible.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LibraryService.get_library_content(
+                _TENANT_ID, _user(), str(library.id), session=None
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Library not found"
+
+    async def test_raises_404_when_library_not_in_tenant(self, mocks):
+        """テナント内にライブラリが無い場合はLibrary not foundの404になること"""
+        library_id = uuid4()
+        mocks.find_library.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LibraryService.get_library_content(
+                _TENANT_ID, _user(), str(library_id), session=None
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Library not found"
+        mocks.find_library.assert_awaited_once_with(library_id, _TENANT_ID, None)
+
+    async def test_falls_back_to_visibility_when_message_missing(self, mocks):
+        """紐づくメッセージが無い場合はライブラリの可視判定で閲覧可否を決めること"""
+        library = _library("# 本文")
+        mocks.find_library.return_value = library
+        mocks.find_message.return_value = None
+        mocks.is_visible.return_value = True
+
+        result = await LibraryService.get_library_content(
+            _TENANT_ID, _user(), str(library.id), session=None
+        )
+
+        assert result.data == "# 本文"
+        mocks.find_room.assert_not_called()
+        mocks.can_view_room.assert_not_called()
+
+    async def test_falls_back_to_visibility_when_room_missing(self, mocks):
+        """紐づくルームが無く、ライブラリも見えない場合は404になること"""
+        library = _library("# 本文")
+        mocks.find_library.return_value = library
+        mocks.find_room.return_value = None
+        mocks.is_visible.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LibraryService.get_library_content(
+                _TENANT_ID, _user(), str(library.id), session=None
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Library not found"
+        mocks.can_view_room.assert_not_called()
+
     async def test_raises_404_when_content_is_none(self, mocks):
         """本文が無い場合はLibrary content not foundの404になること"""
         library = _library(None)

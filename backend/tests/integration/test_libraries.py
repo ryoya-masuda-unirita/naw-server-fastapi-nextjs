@@ -768,6 +768,22 @@ class TestGetLibraryContent:
         assert response.status_code == 404
         assert response.json()["message"] == "Library content not found"
 
+    async def test_get_content_with_empty_content_returns_empty_string(
+        self, session, client, owner_headers, library
+    ):
+        """本文が空文字のライブラリは200で空文字を返すこと"""
+        library.content = ""
+        session.add(library)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{library.id}/content", headers=owner_headers
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"data": ""}
+
     async def test_get_content_without_auth_returns_401(self, client, library):
         """未ログインでは取得できないこと"""
         async with client as c:
