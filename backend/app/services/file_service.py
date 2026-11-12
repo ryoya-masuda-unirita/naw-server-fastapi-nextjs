@@ -256,9 +256,16 @@ class FileService:
             作成されたファイルのレスポンス。
 
         Raises:
-            HTTPException: インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
-                当月クレジット上限超過の場合429を返す。
+            HTTPException: `name`が未指定・空の場合400、インデックスが存在しない場合404、
+                `LOCAL`インデックスの場合400、当月クレジット上限超過の場合429を返す。
         """
+        if not form.name:
+            # `files.name`はNOT NULLのため、未指定のまま保存処理に進ませない
+            # （置換更新時の`update_file`と同じ扱い）。
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ファイルをアップロードする場合、nameは必須です。",
+            )
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
         file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
