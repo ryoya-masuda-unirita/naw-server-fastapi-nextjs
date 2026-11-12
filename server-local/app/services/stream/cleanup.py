@@ -36,5 +36,13 @@ def cleanup_orphan_stream_files(output_dir: str, max_age_hours: int) -> int:
 
 async def run_cleanup_loop(output_dir: str, max_age_hours: int) -> None:
     while True:
-        await asyncio.to_thread(cleanup_orphan_stream_files, output_dir, max_age_hours)
+        try:
+            await asyncio.to_thread(
+                cleanup_orphan_stream_files, output_dir, max_age_hours
+            )
+        except Exception:
+            # 移植元（@Scheduled）は例外をログに出して次の回も実行する。ここで
+            # タスクが止まると以降の掃除が行われず、アプリの終了処理でこの例外が
+            # 再送出されて後続の終了処理も行われなくなるため、ログに出して続ける
+            logger.exception("Failed to cleanup orphan stream files: %s", output_dir)
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)

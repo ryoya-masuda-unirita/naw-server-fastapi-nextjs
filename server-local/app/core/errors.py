@@ -50,6 +50,12 @@ def error_response_body(message: str) -> dict[str, Any]:
     return {"timestamp": int(time.time()), "message": message}
 
 
+# Spring（HttpStatus の理由句）と Python（http.HTTPStatus）で語が異なるもの
+SPRING_REASON_PHRASES: dict[int, str] = {
+    HTTPStatus.REQUEST_ENTITY_TOO_LARGE: "Payload Too Large",
+}
+
+
 def spring_default_error_body(status: int, path: str) -> dict[str, Any]:
     """Spring Boot の既定エラー応答（BasicErrorController）と同じ形にする。
 
@@ -59,7 +65,7 @@ def spring_default_error_body(status: int, path: str) -> dict[str, Any]:
     return {
         "timestamp": now.isoformat(timespec="milliseconds"),
         "status": status,
-        "error": HTTPStatus(status).phrase,
+        "error": SPRING_REASON_PHRASES.get(status, HTTPStatus(status).phrase),
         "path": path,
     }
 

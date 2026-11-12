@@ -11,9 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.naw_api_client import NawApiClient
 from app.clients.waha_client import WahaClient
-from app.core.config import MS_PER_SECOND, Settings, get_settings
+from app.core.config import (
+    MAX_REQUEST_SIZE_BYTES,
+    MS_PER_SECOND,
+    Settings,
+    get_settings,
+)
 from app.core.database import create_engine, create_session_factory
 from app.core.errors import register_exception_handlers
+from app.core.middleware import MultipartSizeLimitMiddleware, UnhandledErrorMiddleware
 from app.core.security import ServerAuthKeyMiddleware
 from app.routers import hello, indexes, libraries, messages
 from app.services.message_content_stream_service import MessageContentStreamService
@@ -97,7 +103,11 @@ def create_app(
         app.include_router(router, prefix=settings.context_path)
 
     # add_middleware は後に追加したものが外側になる。CORS を外側にして、
-    # 認証エラー（401）にも CORS ヘッダーを付け、ブラウザから内容を読めるようにする。
+    # 認証エラー（401）・サイズ超過（413）・想定外のエラー（500）にも CORS ヘッダーを
+    # 付け、ブラウザから内容を読めるようにする（移植元も CORS をフィルターで付ける）。
+    # サイズ上限は移植元と同じく認証の後（マルチパートの解析時）に確かめる。
+    app.add_middleware(UnhandledErrorMiddleware)
+    app.add_middleware(MultipartSizeLimitMiddleware, max_bytes=MAX_REQUEST_SIZE_BYTES)
     app.add_middleware(
         ServerAuthKeyMiddleware,
         expected_key=settings.server_auth_key,
