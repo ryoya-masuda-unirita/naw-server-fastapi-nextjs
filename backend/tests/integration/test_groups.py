@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -584,18 +584,17 @@ async def usage_plan(session):
 
 
 async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
-    """2日前を契約開始日とする有効なサブスクリプションを作成する。
+    """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する。
 
-    契約開始日を「今日」ちょうどにすると、テスト実行環境のローカルタイムゾーンと
-    請求期間解決ロジック（UTC基準）のずれにより period が None になる場合があるため、
-    十分なマージンを持たせている。
+    請求期間解決ロジックはUTCの日付で判定するため、契約開始日もUTCの日付で作る
+    （ローカル日付で作るとUTCと日付が異なる時間帯に有効な契約として扱われない）。
     """
     session.add(
         Subscription(
             tenant_id=tenant_id,
             plan_id=plan_id,
             status=SubscriptionStatus.ACTIVE,
-            start_date=date.today() - timedelta(days=2),
+            start_date=datetime.now(timezone.utc).date(),
             end_date=None,
         )
     )
