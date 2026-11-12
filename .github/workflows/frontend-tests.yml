@@ -29,6 +29,12 @@ on:
 permissions:
   contents: read
 
+# 同じ PR に続けて push した場合、古いコミットの実行は結果を見る必要がないので取り消す。
+# develop への push は、マージされたコミットごとに結果を残したいので取り消さない。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # lint・型チェック・テスト・ビルドを 1 ジョブにまとめている。
   # backend のようにジョブを分けると、ジョブごとに npm ci（依存のインストール）が走って時間がかかる。
