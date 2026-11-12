@@ -76,6 +76,18 @@ class TestParseSort:
         """キーが残らない指定は空になること"""
         assert parse_sort(value) == []
 
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("name,desc,ignorecase", [SortOrder("name", descending=True)]),
+            ("name,IgnoreCase", [SortOrder("name", descending=False)]),
+            ("ignorecase", []),
+        ],
+    )
+    def test_skips_trailing_ignorecase_option(self, value, expected):
+        """末尾の ignorecase は読み飛ばし、方向・キーと取り違えないこと"""
+        assert parse_sort(value) == expected
+
     def test_accepts_single_string(self):
         """文字列1つを渡しても1文字ずつに分解しないこと"""
         assert parse_sort("updatedAt") == [SortOrder("updatedAt")]
@@ -114,18 +126,34 @@ class TestFindOrder:
 
 
 class TestBuildOrderBy:
-    def test_maps_known_and_unknown_properties(self):
-        """既知のキーは対応する列、未知のキーは読み替え先の列で並べること"""
+    def test_skips_unknown_properties_when_known_exists(self):
+        """未知のキーは読み飛ばし、後ろの既知のキーの優先度を下げないこと（移植元と同じ）"""
         clauses = build_order_by(
-            parse_sort(["name,desc", "unknown,asc"]),
+            parse_sort(["unknown,asc", "name,desc"]),
             _COLUMNS,
             fallback=_items.c.updated_at,
             tie_breaker=_items.c.id,
         )
 
-        assert _order_by_sql(clauses) == (
-            "items.name DESC, items.updated_at ASC, items.id DESC"
+        assert _order_by_sql(clauses) == "items.name DESC, items.id DESC"
+
+    @pytest.mark.parametrize(
+        ("sort", "expected"),
+        [
+            ("unknown,desc", "items.updated_at DESC, items.id DESC"),
+            ("unknown", "items.updated_at ASC, items.id ASC"),
+        ],
+    )
+    def test_falls_back_when_no_known_property(self, sort, expected):
+        """既知のキーが1つもなければ、先頭の指定の方向で読み替え先の列で並べること（従来の挙動）"""
+        clauses = build_order_by(
+            parse_sort(sort),
+            _COLUMNS,
+            fallback=_items.c.updated_at,
+            tie_breaker=_items.c.id,
         )
+
+        assert _order_by_sql(clauses) == expected
 
     def test_tie_breaker_follows_first_order_direction(self):
         """最終キーは先頭の並べ替え指定と同じ方向になること"""
