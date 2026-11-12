@@ -2908,3 +2908,183 @@ class TestStreamMessageContentWithAttachmentFiles:
         final_event = _sse_events(body)[-1]
         assert final_event["type"] == "message_content"
         assert final_event["data"]["attachmentFiles"] == []
+
+
+class TestStreamMessageContentPersistFailure:
+    """MessageService.stream_message_content の保存処理が失敗した場合のテスト（Issue #254）"""
+
+    # 内部の例外文字列。errorイベントにそのまま含まれないことを確かめるために使う。
+    _INTERNAL_ERROR = "db connection lost"
+
+    @pytest.fixture
+    def stream_mocks(self):
+        """ストリーミング開始前のDB検証・LLM呼び出し・保存処理をモックする。"""
+        from app.core.llm_client import ChatStreamChunk
+
+        prefix = "app.services.message_service"
+        with (
+            patch(
+                f"{prefix}.MessageRepository.find_by_tenant_id_and_id",
+                new_callable=AsyncMock,
+                return_value=_message(),
+            ),
+            patch(f"{prefix}.require_owned_room", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+                return_value=_assistant(),
+            ),
+            patch(f"{prefix}.enforce_within_quota", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+                return_value=(_assistant_endpoint(), _tenant_endpoint()),
+            ),
+            patch(
+                f"{prefix}.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+                return_value=_ai_model(),
+            ),
+            patch(
+                f"{prefix}.SystemPromptTemplateRepository.find_by_type",
+                new_callable=AsyncMock,
+                return_value=MagicMock(content="ライブラリ生成用システムプロンプト"),
+            ),
+            patch(f"{prefix}.AzureLlmChatClient.stream_chat") as mock_stream_chat,
+            patch.object(
+                MessageService, "_persist_message_content", new_callable=AsyncMock
+            ) as mock_persist_content,
+            patch.object(
+                MessageService, "_persist_library", new_callable=AsyncMock
+            ) as mock_persist_library,
+            patch.object(
+                MessageService, "_persist_token_usage", new_callable=AsyncMock
+            ) as mock_persist_usage,
+        ):
+            mock_stream_chat.return_value = _AsyncChunkIterator(
+                [
+                    ChatStreamChunk(text_delta="回答"),
+                    ChatStreamChunk(input_tokens=10, output_tokens=5),
+                ]
+            )
+            mock_persist_content.return_value = MagicMock(
+                model_dump=MagicMock(return_value={"id": "content-1"})
+            )
+            yield {
+                "stream_chat": mock_stream_chat,
+                "persist_content": mock_persist_content,
+                "persist_library": mock_persist_library,
+                "persist_usage": mock_persist_usage,
+            }
+
+    async def test_emits_error_event_when_persist_message_content_fails(
+        self, stream_mocks, test_user
+    ):
+        """メッセージ内容の保存でDB障害等の例外が起きた場合、errorイベントを送ってから終えること"""
+        stream_mocks["persist_content"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        events = _sse_events(b"".join(await _consume(response)).decode())
+
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "message_stop",
+            "error",
+        ]
+        assert events[-1]["message"] == "エラーが発生しました。"
+        # 保存に失敗しても、消費済みのトークン使用量は記録すること
+        stream_mocks["persist_usage"].assert_awaited_once()
+
+    async def test_emits_error_event_without_message_content_when_persist_token_usage_fails(
+        self, stream_mocks, test_user
+    ):
+        """トークン使用量の保存で例外が起きた場合、message_contentを送らずerrorイベントを送ること"""
+        stream_mocks["persist_usage"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        events = _sse_events(b"".join(await _consume(response)).decode())
+
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "message_stop",
+            "error",
+        ]
+        assert events[-1]["message"] == "エラーが発生しました。"
+
+    async def test_emits_error_event_without_message_content_when_persist_library_fails(
+        self, stream_mocks, test_user
+    ):
+        """ライブラリの保存で例外が起きた場合、message_contentを送らずerrorイベントを送ること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        stream_mocks["stream_chat"].return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="<<<TITLE>>>\nタイトルA\n"),
+                ChatStreamChunk(text_delta="<<<CONTENT>>>\n本文B\n"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        stream_mocks["persist_library"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(isCreateLibrary=True), session=None
+        )
+        events = _sse_events(b"".join(await _consume(response)).decode())
+
+        stream_mocks["persist_library"].assert_awaited_once()
+        assert "message_content" not in [event["type"] for event in events]
+        assert events[-1] == {"type": "error", "message": "エラーが発生しました。"}
+        stream_mocks["persist_usage"].assert_awaited_once()
+
+    async def test_does_not_expose_internal_exception_message_in_error_event(
+        self, stream_mocks, test_user
+    ):
+        """保存処理の例外文字列をerrorイベントにそのまま含めないこと"""
+        stream_mocks["persist_content"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        assert self._INTERNAL_ERROR not in body
+
+    async def test_emits_error_events_when_llm_and_persist_both_fail(
+        self, stream_mocks, test_user
+    ):
+        """LLM呼び出しと保存の両方が失敗した場合も、例外を伝播せずerrorイベントを送ること"""
+
+        async def _raise(*args, **kwargs):
+            raise RuntimeError("azure error")
+            yield  # pragma: no cover - ジェネレータにするためのダミー
+
+        stream_mocks["stream_chat"].return_value = _raise()
+        stream_mocks["persist_content"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        events = _sse_events(b"".join(await _consume(response)).decode())
+
+        assert [event["type"] for event in events] == ["error", "error"]
+        assert events[-1]["message"] == "エラーが発生しました。"
+
+    async def test_does_not_raise_when_persist_fails_after_client_disconnects(
+        self, stream_mocks, test_user
+    ):
+        """クライアント切断後の保存で例外が起きても、ジェネレータの終了処理で例外を送出しないこと"""
+        stream_mocks["persist_content"].side_effect = RuntimeError(self._INTERNAL_ERROR)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1", test_user, _request(), session=None
+        )
+        body_iterator = response.body_iterator
+        await body_iterator.__anext__()
+        await body_iterator.aclose()
+
+        stream_mocks["persist_content"].assert_awaited_once()
+        stream_mocks["persist_usage"].assert_awaited_once()
