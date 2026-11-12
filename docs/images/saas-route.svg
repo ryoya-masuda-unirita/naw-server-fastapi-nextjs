@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" width="1000" height="300" font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP','Yu Gothic',Meiryo,sans-serif">
+<rect width="1000" height="300" fill="#ffffff"/>
+        <defs>
+          <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:#1d2330"/>
+          </marker>
+          <marker id="bq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:#d9480f"/>
+          </marker>
+        </defs>
+        <rect x="180" y="10" width="160" height="280" rx="8" style="fill:#2f6fd6;opacity:.08"/>
+        <text x="260" y="32" text-anchor="middle" style="fill:#2f6fd6;font-size:13px;font-weight:700">クラウド（AWS）</text>
+        <g style="font-size:15px;font-weight:700" text-anchor="middle">
+          <text fill="#1d2330" x="90" y="70">ブラウザ</text>
+          <text fill="#1d2330" x="260" y="70">server（backend）</text>
+          <text fill="#1d2330" x="910" y="70">Azure OpenAI</text>
+        </g>
+        <g style="stroke:#c9cfda;stroke-width:2;stroke-dasharray:4 5">
+          <line x1="90" y1="82" x2="90" y2="280"/>
+          <line x1="260" y1="82" x2="260" y2="280"/>
+          <line x1="910" y1="82" x2="910" y2="280"/>
+        </g>
+        <g style="font-size:13px" text-anchor="middle">
+          <line x1="90" y1="130" x2="258" y2="130" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#bq)"/>
+          <text x="175" y="118" style="fill:#d9480f;font-weight:700">① 質問を送る</text>
+          <line x1="260" y1="170" x2="908" y2="170" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#bq)"/>
+          <text x="585" y="158" style="fill:#d9480f">② 回答を作らせる</text>
+          <line x1="910" y1="210" x2="262" y2="210" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#b)"/>
+          <text fill="#1d2330" x="585" y="200">③ 回答</text>
+          <line x1="260" y1="250" x2="92" y2="250" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#b)"/>
+          <text fill="#1d2330" x="175" y="240">④ 回答を表示</text>
+        </g>
+      </svg>

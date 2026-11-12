@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760" width="1000" height="760" font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP','Yu Gothic',Meiryo,sans-serif">
+<rect width="1000" height="760" fill="#ffffff"/>
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:#1d2330"/>
+          </marker>
+          <marker id="aq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" style="fill:#d9480f"/>
+          </marker>
+        </defs>
+
+        <!-- 区画（クラウド・社内） -->
+        <rect x="180" y="10" width="160" height="740" rx="8" style="fill:#2f6fd6;opacity:.08"/>
+        <rect x="360" y="10" width="630" height="740" rx="8" style="fill:#1f9d6b;opacity:.08"/>
+        <text x="260" y="32" text-anchor="middle" style="fill:#2f6fd6;font-size:13px;font-weight:700">クラウド（AWS）</text>
+        <text x="675" y="32" text-anchor="middle" style="fill:#1f9d6b;font-size:13px;font-weight:700">顧客の社内</text>
+
+        <!-- 登場人物 -->
+        <g style="font-size:15px;font-weight:700" text-anchor="middle">
+          <text fill="#1d2330" x="90" y="70">ブラウザ</text>
+          <text fill="#1d2330" x="260" y="70">server（backend）</text>
+          <text fill="#1d2330" x="440" y="70">server-local</text>
+          <text fill="#1d2330" x="600" y="70">Waha!</text>
+          <text fill="#1d2330" x="750" y="70">アダプタ</text>
+          <text fill="#1d2330" x="910" y="70">LLM</text>
+        </g>
+        <g style="stroke:#c9cfda;stroke-width:2;stroke-dasharray:4 5">
+          <line x1="90" y1="82" x2="90" y2="740"/>
+          <line x1="260" y1="82" x2="260" y2="740"/>
+          <line x1="440" y1="82" x2="440" y2="740"/>
+          <line x1="600" y1="82" x2="600" y2="740"/>
+          <line x1="750" y1="82" x2="750" y2="740"/>
+          <line x1="910" y1="82" x2="910" y2="740"/>
+        </g>
+
+        <g style="font-size:13px" text-anchor="middle">
+          <!-- 1 -->
+          <line x1="90" y1="120" x2="258" y2="120" style="stroke:#1d2330;stroke-width:2" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="175" y="110">① ログイン</text>
+          <!-- 2 -->
+          <line x1="260" y1="180" x2="92" y2="180" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="175" y="160">② local の宛先（URL・API キー）</text>
+          <text fill="#1d2330" x="175" y="174">　とトークンを返す</text>
+
+          <!-- 3 質問 -->
+          <line x1="90" y1="260" x2="438" y2="260" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#aq)"/>
+          <text x="265" y="248" style="fill:#d9480f;font-weight:700">③ 質問を送る（クラウドは通らない）</text>
+
+          <!-- 4 -->
+          <line x1="440" y1="330" x2="598" y2="330" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#aq)"/>
+          <text x="520" y="318" style="fill:#d9480f">④ 質問を渡す</text>
+          <!-- 5 -->
+          <line x1="600" y1="400" x2="748" y2="400" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#aq)"/>
+          <text x="675" y="380" style="fill:#d9480f">⑤ 検索して</text>
+          <text x="675" y="394" style="fill:#d9480f">回答を作って</text>
+          <!-- 6 -->
+          <line x1="750" y1="470" x2="908" y2="470" style="stroke:#d9480f;stroke-width:3.5" marker-end="url(#aq)"/>
+          <text x="830" y="458" style="fill:#d9480f">⑥ 回答を作らせる</text>
+
+          <!-- 戻り -->
+          <line x1="910" y1="540" x2="752" y2="540" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="830" y="528">⑦ 回答</text>
+          <line x1="750" y1="590" x2="602" y2="590" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="675" y="578">⑧ 回答</text>
+          <line x1="600" y1="640" x2="442" y2="640" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="520" y="628">⑨ 回答</text>
+          <line x1="440" y1="700" x2="92" y2="700" style="stroke:#1d2330;stroke-width:2;stroke-dasharray:6 4" marker-end="url(#a)"/>
+          <text fill="#1d2330" x="265" y="688">⑩ 回答を少しずつ表示（SSE）</text>
+        </g>
+      </svg>
