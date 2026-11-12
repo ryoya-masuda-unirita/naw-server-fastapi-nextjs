@@ -785,6 +785,14 @@ class TestApplyAttachmentFiles:
             "image_url",
         ]
 
+    def test_trims_role_when_judging_user_turn(self):
+        """前後に空白があるroleでもuser発話として添付すること"""
+        turns = [LlmChatTurn(role=" user ", content="質問", attachments=["a.png"])]
+        result = self._apply(turns, [self._file("a.png")])
+
+        assert isinstance(result[0].content, list)
+        assert result[0].content[1]["type"] == "image_url"
+
     def test_ignores_attachments_on_non_user_turns(self):
         """system/assistant発話のattachmentsは無視し、エラーにもしないこと"""
         turns = [

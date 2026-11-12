@@ -41,6 +41,16 @@ class TestLlmChatRequest:
 
         assert req.messages[0].attachments == []
 
+    def test_treats_null_attachments_as_empty(self):
+        """移植元と同じく、attachments: nullを添付なしとして扱うこと"""
+        req = LlmChatRequest.model_validate(
+            _payload(
+                messages=[{"role": "user", "content": "質問", "attachments": None}]
+            )
+        )
+
+        assert req.messages[0].attachments == []
+
     def test_accepts_attachments(self):
         """発話のattachmentsでファイル名の一覧を受け取れること"""
         req = LlmChatRequest.model_validate(

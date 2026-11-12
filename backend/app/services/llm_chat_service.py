@@ -446,8 +446,9 @@ class LlmChatService:
         """各"user"ロール発話に、`attachments`のファイル名で指定された添付ファイルを付与する。
 
         移植元Java版`indexAttachmentFiles`/`buildUserMessage`に対応する。アップロード
-        されたファイルをファイル名で引けるようにし（空のファイルは除外し、同名は先勝ち）、
-        元の発話の`role`が"user"（大文字小文字を区別しない）のものだけに付与する。
+        されたファイルをファイル名で引けるようにし（空のファイルは除外する。同名ファイルは
+        `LlmChatRequest`の検証で拒否済み）、元の発話の`role`が"user"（前後の空白・
+        大文字小文字を区別しない）のものだけに付与する。
         ライブラリ生成でsystemからuserへ降格した発話には付与しない（移植元はsystem発話を
         添付なしのuser発話へ変換するため）。
 
@@ -464,14 +465,12 @@ class LlmChatService:
             HTTPException: 発話の`attachments`に、アップロードされていないファイル名が
                 ある場合は400を返す。
         """
-        files_by_name: dict[str, AttachmentFile] = {}
-        for file in files:
-            if file.data:
-                files_by_name.setdefault(file.name, file)
+        files_by_name = {file.name: file for file in files if file.data}
 
         updated: list[ChatMessage] = []
         for message, turn in zip(messages, turns, strict=True):
-            if turn.role.lower() != "user" or not turn.attachments:
+            # 移植元`buildSpringAiMessages`と同じく、前後の空白を除いてroleを判定する。
+            if turn.role.strip().lower() != "user" or not turn.attachments:
                 updated.append(message)
                 continue
             missing = [name for name in turn.attachments if name not in files_by_name]

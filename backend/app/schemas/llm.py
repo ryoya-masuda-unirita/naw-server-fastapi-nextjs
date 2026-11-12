@@ -25,6 +25,12 @@ class LlmChatTurn(BaseModel):
         validation_alias=AliasChoices("attachments", "attatchments"),
     )
 
+    @field_validator("attachments", mode="before")
+    @classmethod
+    def _treat_null_attachments_as_empty(cls, value: object) -> object:
+        """`attachments: null`を添付なしとして扱う（移植元は`null`を添付なしとみなすため）。"""
+        return [] if value is None else value
+
 
 class LlmChatRequest(BaseModel):
     """LLMチャットAPIのリクエスト。

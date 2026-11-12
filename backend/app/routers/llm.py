@@ -21,8 +21,9 @@ router = APIRouter(prefix="/api/llm", tags=["llm"])
 async def chat(
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
-    # FastAPIは依存を宣言順に評価するため、添付ファイルの読み込み・検証が
-    # 未認証のリクエストで走らないよう、認証の依存より後に置く。
+    # FastAPIは依存を宣言順に評価するため、textDataの解釈と添付ファイルの変換・検証が
+    # 未認証のリクエストで走らないよう、認証の依存より後に置く（multipart本体の受信
+    # 自体は依存の評価前にFastAPIが行うため、これでは防げない）。
     req: LlmChatRequest = Depends(parse_llm_chat_form),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
