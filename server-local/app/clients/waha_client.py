@@ -49,6 +49,8 @@ def status_error_message(response: httpx.Response) -> str:
 
     例: `503 Service Unavailable: [no body]` / `500 Internal Server Error: "本文"`。
     移植元と同じく URL を含めないため、クエリの authkey が応答・ログに出ない（#252）。
+    理由句は応答のものをそのまま使う。理由句を返さないサーバーでは空になり
+    `503 : [no body]` となるが、移植元（HttpURLConnection）も同じ。
     """
     preface = f"{response.status_code} {response.reason_phrase}: "
     body = response.text
@@ -63,9 +65,11 @@ def io_error_message(method: str, url: str, error: httpx.RequestError) -> str:
     """通信エラーを、移植元の ResourceAccessException と同じ書式のメッセージにする。
 
     移植元は URL のクエリ（authkey など）を除いて出すため、同じく除く。
+    httpx の通信エラーは本文が空のことがあるため、そのときは例外の型名を出す。
     """
     resource = str(httpx.URL(url).copy_with(query=None))
-    return f'I/O error on {method} request for "{resource}": {error}'
+    reason = str(error) or type(error).__name__
+    return f'I/O error on {method} request for "{resource}": {reason}'
 
 
 def parse_result_status(response: str | None) -> ResultStatus:
@@ -98,15 +102,15 @@ class WahaClient:
     async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Waha! を呼び、失敗したら URL を含まない ExternalServiceError にする。
 
-        httpx の例外は authkey 付きの URL をメッセージに含むため、そのまま応答・SSE・
-        DB・ログに出さない。元の例外を連鎖させるとログのトレースバックに URL が
-        出るため、連鎖も切る（from None）。
+        httpx の HTTPStatusError は authkey 付きの URL をメッセージに含むため、
+        raise_for_status() は使わず、応答から直接メッセージを作る。通信エラー
+        （RequestError）のメッセージは URL を含まないため、原因を追えるよう連鎖は残す。
         """
         url = f"{self._api_base}{path}"
         try:
             response = await self._http.request(method, url, **kwargs)
         except httpx.RequestError as e:
-            raise ExternalServiceError(io_error_message(method, url, e)) from None
+            raise ExternalServiceError(io_error_message(method, url, e)) from e
         if not response.is_success:
             raise ExternalServiceError(status_error_message(response))
         return response

@@ -5,8 +5,8 @@
 """
 
 import logging
-from collections.abc import AsyncIterator, Callable
-from typing import Any
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 import httpx
 import pytest
@@ -16,9 +16,7 @@ from sqlmodel import col
 
 from app.clients.waha_client import WahaClient
 from app.core.config import Settings
-from app.main import create_app
 from app.models import MessageContent
-from tests.conftest import AUTH_HEADERS, FakeNawApiClient
 from tests.helpers import multipart_files, parse_sse
 
 FILES_URL = "/api/admin/indexes/idx-1/files"
@@ -28,58 +26,41 @@ TENANT = {"X-Tenant-ID": "tenant-1"}
 TEXT_DATA = {"assistantId": "svc", "messageId": "msg-1", "userInput": "質問"}
 UNAVAILABLE_MESSAGE = "503 Service Unavailable: [no body]"
 
-WahaHandler = Callable[[httpx.Request], httpx.Response]
 
+@dataclass
+class WahaStub:
+    """failing_path で終わるパスだけ 503 を返し、ほかは成功を返す Waha! の偽物。"""
 
-def waha_failing_at(failing_path_suffix: str) -> WahaHandler:
-    """指定したパスだけ 503 を返し、ほかは成功を返す Waha! の偽物。"""
+    failing_path: str = "/startsession"
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith(failing_path_suffix):
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith(self.failing_path):
             return httpx.Response(503)
         if request.url.path.endswith("/startsession"):
             return httpx.Response(200, text="waha-session-1")
         return httpx.Response(200, text="OK")
 
-    return handler
+
+@pytest.fixture
+def waha_stub() -> WahaStub:
+    return WahaStub()
 
 
 @pytest.fixture
-def waha_handler() -> list[WahaHandler]:
-    """テストごとに Waha! の応答を差し替えるための入れ物。"""
-    return [waha_failing_at("/startsession")]
-
-
-@pytest.fixture
-async def real_waha_client(
-    settings: Settings,
-    session_factory: async_sessionmaker[AsyncSession],
-    waha_handler: list[WahaHandler],
-) -> AsyncIterator[httpx.AsyncClient]:
-    waha_http = httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda request: waha_handler[0](request))
-    )
-    waha = WahaClient(
-        base_url=settings.waha_url,
-        auth_key=settings.waha_authkey,
-        http_client=waha_http,
-        result_retry_interval_seconds=0,
-        result_max_retries=settings.waha_result_max_retries,
-    )
-    naw: Any = FakeNawApiClient()  # 偽物を差し込むため型は一致しない
-    app: Any = create_app(
-        settings,
-        session_factory=session_factory,
-        waha_client=waha,
-        naw_client=naw,
-        enable_cleanup=False,
-    )
-    async with waha_http, app.router.lifespan_context(app):
-        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test", headers=AUTH_HEADERS
-        ) as client:
-            yield client
+async def fake_waha(
+    settings: Settings, waha_stub: WahaStub
+) -> AsyncIterator[WahaClient]:
+    """conftest の fake_waha を上書きし、このモジュールでは実際の WahaClient を使う。"""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(waha_stub.handle)
+    ) as waha_http:
+        yield WahaClient(
+            base_url=settings.waha_url,
+            auth_key=settings.waha_authkey,
+            http_client=waha_http,
+            result_retry_interval_seconds=0,
+            result_max_retries=settings.waha_result_max_retries,
+        )
 
 
 async def get_answers(session_factory: async_sessionmaker[AsyncSession]) -> list[str]:
@@ -89,13 +70,13 @@ async def get_answers(session_factory: async_sessionmaker[AsyncSession]) -> list
 
 
 async def test_upload_file_error_response_hides_authkey(
-    real_waha_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
     settings: Settings,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """学習ファイル登録で Waha! が 503 のとき、500 の message・ログに authkey を出さないこと"""
     with caplog.at_level(logging.DEBUG):
-        res = await real_waha_client.post(
+        res = await client.post(
             FILES_URL,
             headers=TENANT,
             data={"name": "a.txt", "userId": "u"},
@@ -108,16 +89,16 @@ async def test_upload_file_error_response_hides_authkey(
 
 
 async def test_sync_error_answer_hides_authkey(
-    real_waha_client: httpx.AsyncClient,
-    waha_handler: list[WahaHandler],
+    client: httpx.AsyncClient,
+    waha_stub: WahaStub,
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """同期の質問で Waha! が 503 のとき、応答・DB の回答・ログに authkey を出さないこと"""
-    waha_handler[0] = waha_failing_at("/execute/svc")
+    waha_stub.failing_path = "/execute/svc"
     with caplog.at_level(logging.DEBUG):
-        res = await real_waha_client.post(SYNC_URL, files=multipart_files(TEXT_DATA))
+        res = await client.post(SYNC_URL, files=multipart_files(TEXT_DATA))
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ERROR"
@@ -129,16 +110,16 @@ async def test_sync_error_answer_hides_authkey(
 
 
 async def test_sse_error_event_hides_authkey(
-    real_waha_client: httpx.AsyncClient,
-    waha_handler: list[WahaHandler],
+    client: httpx.AsyncClient,
+    waha_stub: WahaStub,
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """SSE で Waha! が 503 のとき、error イベント・DB の回答・ログに authkey を出さないこと"""
-    waha_handler[0] = waha_failing_at("/execute/svc")
+    waha_stub.failing_path = "/execute/svc"
     with caplog.at_level(logging.DEBUG):
-        res = await real_waha_client.post(CONTENT_URL, files=multipart_files(TEXT_DATA))
+        res = await client.post(CONTENT_URL, files=multipart_files(TEXT_DATA))
     events = parse_sse(res.text)
     assert events[0] == {"type": "error", "message": UNAVAILABLE_MESSAGE}
     assert await get_answers(session_factory) == [UNAVAILABLE_MESSAGE]

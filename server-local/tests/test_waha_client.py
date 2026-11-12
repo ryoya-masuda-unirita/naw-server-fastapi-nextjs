@@ -7,6 +7,7 @@ from app.clients.waha_client import ResultStatus, WahaClient
 from app.core.errors import ExternalServiceError
 
 API = "http://waha.test/WahaServer/servicerun/api"
+ENCODED_AUTH_KEY = "key%2B%2F%3D"
 
 
 def make_client(
@@ -175,7 +176,9 @@ async def test_http_error_message_hides_authkey() -> None:
             await client.start_session()
     exc = exc_info.value
     assert exc.message == "503 Service Unavailable: [no body]"
+    # URL に入る authkey は URL エンコードされるため、エンコード後の形でも確かめる
     assert "key+/=" not in str(exc)
+    assert ENCODED_AUTH_KEY not in str(exc)
     assert "authkey" not in str(exc)
     # 元の httpx の例外（URL 付き）をトレースバックに出さない
     assert exc.__cause__ is None
@@ -202,6 +205,17 @@ async def test_upload_http_error() -> None:
     assert exc_info.value.message == "404 Not Found: [no body]"
 
 
+async def test_http_error_without_reason_phrase() -> None:
+    """理由句のない応答では、移植元（HttpURLConnection）と同じく理由句を空にすること"""
+    client, http = make_client(
+        lambda _r: httpx.Response(503, extensions={"reason_phrase": b""})
+    )
+    async with http:
+        with pytest.raises(ExternalServiceError) as exc_info:
+            await client.start_session()
+    assert exc_info.value.message == "503 : [no body]"
+
+
 async def test_connection_error_message_hides_authkey() -> None:
     """通信エラーは、クエリ（authkey）を除いた URL で移植元と同じ書式の例外にすること"""
 
@@ -217,5 +231,21 @@ async def test_connection_error_message_hides_authkey() -> None:
         f'I/O error on GET request for "{API}/startsession": Connection refused'
     )
     assert "key" not in exc.message
-    assert exc.__cause__ is None
-    assert exc.__suppress_context__ is True
+    # 原因を追えるよう元の例外は連鎖させる（通信エラーのメッセージは URL を含まない）
+    assert isinstance(exc.__cause__, httpx.ConnectError)
+    assert "key" not in str(exc.__cause__)
+
+
+async def test_connection_error_without_message() -> None:
+    """通信エラーのメッセージが空のときは、例外の型名を出すこと"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("", request=request)
+
+    client, http = make_client(handler)
+    async with http:
+        with pytest.raises(ExternalServiceError) as exc_info:
+            await client.execute("s1", "svc")
+    assert exc_info.value.message == (
+        f'I/O error on GET request for "{API}/execute/svc": ReadError'
+    )
