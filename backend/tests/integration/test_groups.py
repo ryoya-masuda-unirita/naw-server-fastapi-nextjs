@@ -765,6 +765,88 @@ class TestGroupUsersSort:
         assert names == ["zulu", "alpha"]
 
 
+async def _get_members_by_role(
+    client, group_id: str, headers: dict, params: dict
+) -> dict:
+    """所属ユーザー一覧を取得し、レスポンス本文を返す。"""
+    async with client as c:
+        response = await c.get(
+            f"/api/admin/groups/{group_id}/users", headers=headers, params=params
+        )
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.mark.asyncio
+class TestGroupUsersRoleFilter:
+    """GET /api/admin/groups/{groupId}/users の role 絞り込み（Issue #237）"""
+
+    @pytest.fixture
+    async def group_with_members(
+        self, session, tenant, group_with_admin_member
+    ) -> Group:
+        """チーム管理者1名（member_user）と一般2名（u1・u2）が所属するグループ"""
+        await _add_members(session, tenant.id, group_with_admin_member.id, ["u1", "u2"])
+        return group_with_admin_member
+
+    @pytest.mark.parametrize("role", ["ADMIN", "admin", "Admin"])
+    async def test_admin_returns_group_admins_only(
+        self, client, admin_headers, member_user, group_with_members, role
+    ):
+        """大文字小文字を区別せず、ADMINでチーム管理者だけを返すこと"""
+        body = await _get_members_by_role(
+            client, group_with_members.id, admin_headers, {"role": role}
+        )
+
+        assert body["totalElements"] == 1
+        assert [u["userId"] for u in body["content"]] == [str(member_user.id)]
+        assert body["content"][0]["groupAdmin"] is True
+
+    @pytest.mark.parametrize("role", ["USER", "user", "User"])
+    async def test_user_returns_non_admins_only(
+        self, client, admin_headers, group_with_members, role
+    ):
+        """大文字小文字を区別せず、USERで一般の所属ユーザーだけを返すこと"""
+        body = await _get_members_by_role(
+            client, group_with_members.id, admin_headers, {"role": role}
+        )
+
+        assert body["totalElements"] == 2
+        assert [u["name"] for u in body["content"]] == ["u1", "u2"]
+        assert all(u["groupAdmin"] is False for u in body["content"])
+
+    @pytest.mark.parametrize("role", ["SYSTEM", "foo", " ADMIN", "ADMIN "])
+    async def test_unknown_role_returns_empty(
+        self, client, admin_headers, group_with_members, role
+    ):
+        """未知の値（前後に空白が付いた値を含む）ではエラーにせず0件を返すこと"""
+        body = await _get_members_by_role(
+            client, group_with_members.id, admin_headers, {"role": role}
+        )
+
+        assert body["totalElements"] == 0
+        assert body["content"] == []
+
+    @pytest.mark.parametrize("role", ["", "   "])
+    async def test_blank_role_returns_all(
+        self, client, admin_headers, group_with_members, role
+    ):
+        """空文字・空白のみの指定では絞り込まないこと"""
+        body = await _get_members_by_role(
+            client, group_with_members.id, admin_headers, {"role": role}
+        )
+
+        assert body["totalElements"] == 3
+
+    async def test_no_role_returns_all(self, client, admin_headers, group_with_members):
+        """roleを指定しなければ絞り込まないこと"""
+        body = await _get_members_by_role(
+            client, group_with_members.id, admin_headers, {}
+        )
+
+        assert body["totalElements"] == 3
+
+
 @pytest.mark.asyncio
 class TestGroupUsersWithUsage:
     """GET /api/admin/groups/{groupId}/users?includeUsage=true (NAW-1172)"""

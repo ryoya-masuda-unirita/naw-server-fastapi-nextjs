@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.credit_quota import (
@@ -14,6 +14,10 @@ from app.core.search import escape_like_pattern
 from app.core.sort import SortOrder, build_order_by, find_order
 from app.models.group import GroupUser
 from app.models.user import User, UserRole
+
+# 所属ユーザー一覧の role 絞り込みで受け付けるグループ内ロール（大文字で比較する）
+_GROUP_ROLE_ADMIN = "ADMIN"
+_GROUP_ROLE_USER = "USER"
 
 # 移植元(GroupService.remapGroupMemberUserSort)は name を ignoreCase 指定で user.name に
 # 読み替え、lower(user.name) で並べる。role はチーム管理者フラグに読み替える。
@@ -157,7 +161,8 @@ class GroupUserRepository:
             group_id: グループID。
             tenant_id: テナントID。
             search_text: ユーザー名・loginIdの部分一致検索文字列。
-            role: グループ内ロール（"ADMIN"はis_admin=true、"USER"はis_admin=false）。
+            role: グループ内ロール（大文字小文字を区別せず、"ADMIN"はis_admin=true、
+                "USER"はis_admin=false）。None・空白のみなら絞り込まず、未知の値なら0件にする。
             sort: 並べ替え指定の並び（キーは"name"、"role"、"updatedAt"、"totalCredits"）。
                 それ以外のキーはユーザー表示名順として扱う。
             page: ページ番号（0始まり）。
@@ -191,10 +196,17 @@ class GroupUserRepository:
                 | func.lower(User.login_id).like(pattern, escape="\\")
             )
 
-        if role == "ADMIN":
-            stmt = stmt.where(GroupUser.is_admin.is_(True))
-        elif role == "USER":
-            stmt = stmt.where(GroupUser.is_admin.is_(False))
+        # 移植元 GroupUserSpecification.matchesGroupRole と同じく、空白のみは絞り込まず、
+        # 大文字小文字を区別せずに判定し、未知の値は常に偽の条件で0件にする。
+        # 移植元は前後の空白を取り除かずに比較するため、ここでも取り除かない。
+        if role is not None and role.strip():
+            normalized_role = role.upper()
+            if normalized_role == _GROUP_ROLE_ADMIN:
+                stmt = stmt.where(GroupUser.is_admin.is_(True))
+            elif normalized_role == _GROUP_ROLE_USER:
+                stmt = stmt.where(GroupUser.is_admin.is_(False))
+            else:
+                stmt = stmt.where(false())
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0

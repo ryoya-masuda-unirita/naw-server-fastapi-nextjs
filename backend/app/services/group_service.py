@@ -439,7 +439,8 @@ class GroupService:
             tenant_id: テナントID。
             current_user: 認証済みユーザー。
             search: ユーザー名・loginIdの部分一致検索文字列。
-            role: グループ内ロールでの絞り込み（"ADMIN"または"USER"）。
+            role: グループ内ロールでの絞り込み（"ADMIN"または"USER"。大文字小文字を
+                区別しない。未知の値なら0件）。
             sort: 並べ替え指定の並び（`totalCredits`を含められる）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
