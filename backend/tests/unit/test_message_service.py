@@ -117,10 +117,11 @@ def _file(file_id: str, reference: str | None) -> File:
 
 
 def _sse_events(body: str) -> list[dict]:
-    """SSE本文を、frontend-angularと同じ規則でイベントの一覧へ変換する。
+    """SSE本文を、`type`を持つイベントの一覧へ変換する。
 
     frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
-    JSONとして読み、種別`type`を持つものをイベントとして扱う。
+    JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
+    サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 
     Args:
         body: SSEレスポンスの本文。
@@ -1142,6 +1143,91 @@ class TestStreamMessageContentRegenerate:
         _, update_kwargs = mock_update_answer.await_args
         assert update_kwargs["answer"] == "新しい回答"
         assert update_kwargs["status"] == MessageContentStatus.OK
+
+    @patch("app.services.message_service.get_session_maker")
+    @patch("app.services.message_service.MessageContentRepository.update_answer")
+    @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
+    @patch(
+        "app.services.message_service.AIModelRepository.find_by_endpoint_type_and_name",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.AssistantEndpointRepository.find_chat_endpoint",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.message_service.MessageContentRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    async def test_emits_error_event_when_regenerate_target_deleted_during_stream(
+        self,
+        mock_find_content,
+        mock_find_message,
+        mock_require_owned_room,
+        mock_find_assistant,
+        mock_enforce,
+        mock_find_endpoint,
+        mock_find_model,
+        mock_stream_chat,
+        mock_update_answer,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """再生成対象がストリーミング中に削除され永続化できない場合、最後にerrorイベントを送ること"""
+        from app.core.llm_client import ChatStreamChunk
+        from app.models.message import MessageContent, MessageContentStatus
+
+        # 開始時の存在確認では見つかり、永続化時の再取得では削除済み(None)になる競合
+        mock_find_content.side_effect = [
+            MessageContent(
+                id="content-1",
+                tenant_id="tenant-1",
+                message_id="msg-1",
+                status=MessageContentStatus.OK,
+                question="元の質問",
+                answer="元の回答",
+            ),
+            None,
+        ]
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant()
+        mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
+        mock_find_model.return_value = _ai_model()
+        mock_stream_chat.return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="新しい回答"),
+                ChatStreamChunk(input_tokens=10, output_tokens=5),
+            ]
+        )
+        mock_new_session = _mock_new_session()
+        mock_get_session_maker.return_value = MagicMock(return_value=mock_new_session)
+
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(messageId=None, messageContentId="content-1"),
+            session=None,
+        )
+        body = b"".join(await _consume(response)).decode()
+
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "message_stop",
+            "error",
+        ]
+        assert events[-1]["message"] == "エラーが発生しました。"
+        mock_update_answer.assert_not_called()
 
     @patch("app.services.message_service.get_session_maker")
     @patch("app.services.message_service.MessageContentRepository.update_answer")

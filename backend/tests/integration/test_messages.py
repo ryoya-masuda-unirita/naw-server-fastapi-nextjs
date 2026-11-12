@@ -367,10 +367,11 @@ def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
 
 
 def _sse_events(body: str) -> list[dict[str, Any]]:
-    """SSE本文を、frontend-angularと同じ規則でイベントの一覧へ変換する。
+    """SSE本文を、`type`を持つイベントの一覧へ変換する。
 
     frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
-    JSONとして読み、種別`type`を持つものをイベントとして扱う。
+    JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
+    サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 
     Args:
         body: SSEレスポンスの本文。
@@ -1142,14 +1143,26 @@ class TestMessageRouter:
             """編集・再送信で、編集後の質問文を持つmessage_contentが届き、編集前後が同じ親のバージョンになること(Issue #183)"""
             with _patched_llm(engine, "編集後の回答"):
                 async with client as c:
-                    # frontend-angularのeditMessageと同じく、編集前と同じ親で新しい
-                    # メッセージを作成し、編集後の質問文で送信する
+                    # 編集対象: 既存メッセージAに続けて送ったメッセージB（親がA）
+                    create_original = await c.post(
+                        "/api/messages",
+                        json={
+                            "roomId": owned_room.id,
+                            "assistantId": message_assistant.id,
+                            "parentMessageId": owned_message.id,
+                            "messageText": "編集前の質問",
+                        },
+                        headers=owner_headers,
+                    )
+                    original_message_id = create_original.json()["id"]
+                    # frontend-angularのeditMessageと同じく、編集前(B)と同じ親(A)で新しい
+                    # メッセージB'を作成し、編集後の質問文で送信する
                     create_edited = await c.post(
                         "/api/messages",
                         json={
                             "roomId": owned_room.id,
                             "assistantId": message_assistant.id,
-                            "parentMessageId": owned_message.parent_id,
+                            "parentMessageId": owned_message.id,
                             "messageText": "編集後の質問",
                         },
                         headers=owner_headers,
@@ -1172,6 +1185,8 @@ class TestMessageRouter:
                         headers=owner_headers,
                     )
 
+            assert create_original.status_code == 200
+            assert create_edited.status_code == 200
             assert resend.status_code == 200
             events = _sse_events(resend.text)
             assert [event["type"] for event in events] == [
@@ -1189,7 +1204,9 @@ class TestMessageRouter:
                 record["id"]: record["parentId"]
                 for record in list_response.json()["messages"]
             }
-            assert parent_by_id[edited_message_id] == parent_by_id[owned_message.id]
+            # 編集前(B)と編集後(B')が同じ親(A)を持つ兄弟＝バージョン分岐になること
+            assert parent_by_id[original_message_id] == owned_message.id
+            assert parent_by_id[edited_message_id] == owned_message.id
 
     class TestDeleteMessage:
         async def test_delete_message_removes_message(

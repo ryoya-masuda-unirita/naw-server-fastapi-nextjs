@@ -116,8 +116,14 @@ def _sse(event_type: str, payload: dict) -> bytes:
     Returns:
         SSE形式にエンコードされたバイト列。
     """
-    data = {"type": event_type, **payload}
+    # payloadに`type`キーが含まれていても種別が上書きされないよう、`type`を後に置く。
+    data = {**payload, "type": event_type}
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+# メッセージ内容の永続化に失敗した場合にerrorイベントで返す文言
+# （移植元`sendSseError`で例外メッセージがない場合の既定文言と同じ）。
+_PERSIST_ERROR_MESSAGE = "エラーが発生しました。"
 
 
 def _apply_additional_prompt(
@@ -1032,7 +1038,7 @@ class MessageService:
                     # ここで例外を伝播させるとfinally節の途中で処理が打ち切られ、
                     # トークン使用量の永続化やmessage_contentイベント送出が行われない
                     # ままジェネレータが異常終了してしまうため、ログのみ残して
-                    # message_contentイベントの送出をスキップする。
+                    # message_contentイベントの代わりにerrorイベントを送る（後段）。
                     logger.exception("メッセージ内容の永続化に失敗しました")
                     content_response = None
 
@@ -1072,6 +1078,11 @@ class MessageService:
                         "message_content",
                         {"data": content_response.model_dump(mode="json")},
                     )
+                elif stream_finished:
+                    # 永続化に失敗した場合も、移植元(`streamAndPersist`の外側のcatchで
+                    # `sendSseError`)と同じくerrorイベントで失敗を通知してから終える。
+                    # 内部の例外内容はログにのみ残し、固定文言で通知する。
+                    yield _sse("error", {"message": _PERSIST_ERROR_MESSAGE})
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
