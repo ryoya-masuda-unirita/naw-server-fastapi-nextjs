@@ -298,7 +298,7 @@ async def parse_message_content_create_form(
 
     移植元`MessageController.createMessageContent`は`@RequestPart("textData")`で
     リクエスト本体(JSON)を、`attachmentFiles`・`historyAttachmentFiles`で添付
-    ファイルを受け取る。クライアント(frontend-angular)は`textData`を
+    ファイルを受け取る。移植元クライアント(secuaigent/client)は`textData`を
     `application/json`のBlobとして送るためファイルパート(`UploadFile`)として届くが、
     通常のフォーム値として送られた場合も受け付ける。
 

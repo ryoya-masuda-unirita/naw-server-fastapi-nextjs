@@ -311,7 +311,7 @@ def _content_form(
 ) -> list[tuple[str, tuple[str, str | bytes, str]]]:
     """メッセージ送信APIへ送るmultipartパートを組み立てる。
 
-    frontend-angularの`buildMessageContentFormData`と同じく、`textData`を
+    移植元クライアント(secuaigent/client)の`buildMessageContentFormData`と同じく、`textData`を
     `application/json`のBlob（ファイル名`blob`）として送る。
 
     Args:
@@ -369,9 +369,9 @@ def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
 def _last_visible_message_id(
     records: list[dict[str, Any]], contents: list[dict[str, Any]]
 ) -> str | None:
-    """読み直した会話から、frontend-angularが次の送信の親にするメッセージIDを求める。
+    """読み直した会話から、移植元クライアント(secuaigent/client)が次の送信の親にするメッセージIDを求める。
 
-    frontend-angularの`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
+    移植元クライアント(secuaigent/client)の`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
     メッセージから各階層の最後の兄弟を辿り、本文があるメッセージのうち最後のものを返す。
 
     Args:
