@@ -114,8 +114,11 @@ naw-server-fastapi-nextjs/
 ├── frontend/          # React（Vite + React Router、client/ の移植先）
 ├── backend/           # FastAPI（server/ の移植先）
 ├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
+├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
+
+`e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
 `generative-ai-adapter/` などは、移植に着手するときにルートへ新設する（「プロジェクト概要」の対応表を参照）。
 
