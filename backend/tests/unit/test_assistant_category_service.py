@@ -122,6 +122,7 @@ class TestGetAssistantCategory:
             )
 
         assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "AssistantCategory not found with id:not-exist"
 
 
 @pytest.mark.asyncio
@@ -152,6 +153,8 @@ class TestUpdateAssistantCategory:
             )
 
         assert exc_info.value.status_code == 404
+        # 移植元は更新だけコロンの後に空白が入る
+        assert exc_info.value.detail == "AssistantCategory not found with id: not-exist"
         mock_update.assert_not_called()
 
     @patch(
@@ -244,4 +247,5 @@ class TestDeleteAssistantCategory:
             )
 
         assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "AssistantCategory not found with id:not-exist"
         mock_delete.assert_not_called()
