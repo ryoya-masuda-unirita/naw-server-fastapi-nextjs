@@ -18,7 +18,7 @@
 
 `frontend-angular/` は `secuaigent/client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
 
-**`secuaigent/client` → `frontend-angular/` の同期を意図した指示（文言が曖昧でも）を受けたときは、[frontend-angular-sync skill](skills/frontend-angular-sync/SKILL.md) を呼び出すこと。**
+**`secuaigent/client` → `frontend-angular/` の同期を意図した指示（文言が曖昧でも）を受けたときは、[frontend-angular-sync skill](.claude/skills/frontend-angular-sync/SKILL.md) を呼び出すこと。**
 
 例:「frontendを最新にして」「frontend-angularを最新にして」「secuaigent/clientから持ってきて」「secuaigent/clientからfrontend-angularにソースをコピーして」「Angular側を追従させて」等。
 
@@ -63,7 +63,7 @@
 - **未移植判定からの除外（最重要）**: `naw-explore` / `naw-frontend-explore` や Issue 一括起票系 skill（`naw-issue-batch` / `naw-frontend-issue-batch`）で参照リポジトリとの差分を検出する際、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計は「未移植の欠落」として検出・Issue化しない。意図的に廃止したものであり、差分として存在すること自体が正しい状態
 - 逆に、参照リポジトリの調査・読解自体（挙動理解、無関係な機能のリサーチ等）では通常どおりサブドメイン前提のコードも含めてそのまま読む。除外するのは「未移植候補としての検出」の場面に限る
 - 実際に移植作業でサブドメイン依存のロジックに行き当たった場合は、そのまま持ち込まず実装前に一言確認する
-- `frontend-angular-sync` skill（[.claude/skills/frontend-angular-sync/SKILL.md](skills/frontend-angular-sync/SKILL.md)）は `secuaigent/client` を丸ごとコピーするため、同期のたびにこの差分（`tenant.helpers.ts` 等）が巻き戻るリスクがある。同期後は必ず skill 内の該当チェック項目を確認すること
+- `frontend-angular-sync` skill（[.claude/skills/frontend-angular-sync/SKILL.md](.claude/skills/frontend-angular-sync/SKILL.md)）は `secuaigent/client` を丸ごとコピーするため、同期のたびにこの差分（`tenant.helpers.ts` 等）が巻き戻るリスクがある。同期後は必ず skill 内の該当チェック項目を確認すること
 
 ---
 
@@ -140,8 +140,8 @@ naw-server-fastapi-nextjs/
 - Issue 着手時は、原則 `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を使い、`develop` 最新化・ブランチ作成・Issue への linked branch 反映・`In Progress` への移動を自動化する
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、対応 Issue を GitHub Projects の `Review` に自動反映する前提で運用する
 - PR が `develop` にマージされたら、`Closes #XX` と `.github/workflows/project-status-sync.yml` により GitHub Projects の `Done` まで自動反映される前提で運用する
-- Issue 起票の具体的な `gh` コマンド手順・NAW チケット対応の書き方は [.claude/skills/naw-issue-workflow/SKILL.md](skills/naw-issue-workflow/SKILL.md) を参照すること
-- **フロントエンド移植（Angular `secuaigent/client` → React `frontend/`）用のIssue対応harness** は [.claude/skills/naw-frontend-issue-workflow/SKILL.md](skills/naw-frontend-issue-workflow/SKILL.md)（個別対応）・[naw-frontend-issue-batch](skills/naw-frontend-issue-batch/SKILL.md)（一括起票）・[naw-frontend-issue-loop](skills/naw-frontend-issue-loop/SKILL.md)（起票済みIssueの一括処理）として整備済み。バックエンド版（`naw-issue-workflow`/`naw-issue-batch`/`naw-issue-loop`）と対になる構成。フロントエンド移植Issueには必ず `frontend-port` ラベルを付与し、同じプロジェクトボード上でバックエンドIssueと区別する。現在の開発方針（バックエンド優先）に従い、着手前には必ずユーザーに優先順位を確認すること
+- Issue 起票の具体的な `gh` コマンド手順・NAW チケット対応の書き方は [.claude/skills/naw-issue-workflow/SKILL.md](.claude/skills/naw-issue-workflow/SKILL.md) を参照すること
+- **フロントエンド移植（Angular `secuaigent/client` → React `frontend/`）用のIssue対応harness** は [.claude/skills/naw-frontend-issue-workflow/SKILL.md](.claude/skills/naw-frontend-issue-workflow/SKILL.md)（個別対応）・[naw-frontend-issue-batch](.claude/skills/naw-frontend-issue-batch/SKILL.md)（一括起票）・[naw-frontend-issue-loop](.claude/skills/naw-frontend-issue-loop/SKILL.md)（起票済みIssueの一括処理）として整備済み。バックエンド版（`naw-issue-workflow`/`naw-issue-batch`/`naw-issue-loop`）と対になる構成。フロントエンド移植Issueには必ず `frontend-port` ラベルを付与し、同じプロジェクトボード上でバックエンドIssueと区別する。現在の開発方針（バックエンド優先）に従い、着手前には必ずユーザーに優先順位を確認すること
 
 ---
 
@@ -206,7 +206,7 @@ bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-X
 
 実装前に `docs/issue-X/`（NAW チケットあり: `docs/issue-X-NAW-XXXX/`）配下に `00_チケット内容.md`〜`08_動作確認.md` を順番に作成すること。ドキュメントが存在しないまま実装に着手しない。
 
-テンプレート・記載ルール・第1承認（設計承認）／第2承認（実装方式の選択）の承認フロー・Human in the Loop／全自動モードの進め方は [.claude/skills/naw-issue-workflow/SKILL.md](skills/naw-issue-workflow/SKILL.md) と [.claude/skills/naw-issue-workflow/references/doc-templates.md](skills/naw-issue-workflow/references/doc-templates.md) を参照すること（`code-review.md` のフォーマットは [naw-pr-workflow](skills/naw-pr-workflow/SKILL.md) を参照）。
+テンプレート・記載ルール・第1承認（設計承認）／第2承認（実装方式の選択）の承認フロー・Human in the Loop／全自動モードの進め方は [.claude/skills/naw-issue-workflow/SKILL.md](.claude/skills/naw-issue-workflow/SKILL.md) と [.claude/skills/naw-issue-workflow/references/doc-templates.md](.claude/skills/naw-issue-workflow/references/doc-templates.md) を参照すること（`code-review.md` のフォーマットは [naw-pr-workflow](.claude/skills/naw-pr-workflow/SKILL.md) を参照）。
 
 ---
 
@@ -231,4 +231,4 @@ async def test_insert_tenant(self, session):
 
 ## PR作成
 
-ベースブランチの決め方、タイトル・Description のフォーマット、`code-review.md` の記載ルールは [.claude/skills/naw-pr-workflow/SKILL.md](skills/naw-pr-workflow/SKILL.md) を参照すること。
+ベースブランチの決め方、タイトル・Description のフォーマット、`code-review.md` の記載ルールは [.claude/skills/naw-pr-workflow/SKILL.md](.claude/skills/naw-pr-workflow/SKILL.md) を参照すること。

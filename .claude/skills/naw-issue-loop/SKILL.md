@@ -62,7 +62,7 @@ bash .claude/skills/naw-issue-loop/scripts/next_todo_issue.sh
   3. `08_動作確認.md` のブラウザ操作による確認は行わず、自動テスト（pytest等）の実行結果のみで代替し、その旨をファイルに明記する
   4. 実装中に解消できないテスト失敗・仕様不明に遭遇し、これ以上進められないと判断した場合は、無理に実装を完成させようとせず、作業ブランチとドキュメントはそのまま残し、対象Issueに詰まった理由をコメントで残した上で「BLOCKED」として作業を終了する（PRは作らない、Project Statusは変更しない）
   5. 正常に完了できた場合は、`naw-pr-workflow` の [SKILL.md](../naw-pr-workflow/SKILL.md) に従いPRを作成し、`/code-review` を実行して `code-review.md` を作成し、🔴致命的指摘があれば修正すること。PR本文には必ず `Closes #{Issue番号}` を入れること
-  6. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `.claude/CLAUDE.md` に従うこと
+  6. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `CLAUDE.md` に従うこと
 - 最後に「PR作成に成功したか」「BLOCKEDで終わったか」を明確に報告するよう指示する（成功した場合はPR URLとブランチ名、BLOCKEDの場合は理由を含めて）
 
 `isolation` は指定しない（同一リポジトリを順番に使うため worktree 分離は不要。並列実行しない前提と矛盾するため）。
