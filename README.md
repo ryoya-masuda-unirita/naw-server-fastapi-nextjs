@@ -14,30 +14,9 @@
 
 ### SECURE アシスタント
 
-```mermaid
-sequenceDiagram
-    participant B as ブラウザ
-    box クラウド（AWS）
-        participant S as server（backend）
-    end
-    box 顧客の社内
-        participant L as server-local
-        participant W as Waha!
-        participant A as アダプタ
-    end
-    participant M as LLM
+![SECURE アシスタントの通信経路。オレンジの矢印が質問の本文が流れる通信で、クラウドを通らない](docs/images/secure-route.svg)
 
-    B->>S: ① ログイン
-    S-->>B: ② server-local の宛先（URL・API キー）とトークン
-    B->>L: ③ 質問を送る（クラウドは通らない）
-    L->>W: ④ 質問を渡してワークフローを実行
-    W->>A: ⑤ 検索・回答作成
-    A->>M: ⑥ 回答を作らせる
-    M-->>A: 回答
-    A-->>W: 回答
-    W-->>L: 回答
-    L-->>B: ⑩ 回答を少しずつ表示（SSE）
-```
+オレンジの矢印が、質問の本文が流れる通信。青の区画がクラウド、緑の区画が顧客の社内。
 
 - ②: クラウドの server は、テナントに登録された `LOCAL_SERVER` エンドポイントの URL と API キーを返す（移植元 `server` の `GetMessagesViewModel.java`）。SECURE アシスタントの質問を server に送ると 400 になる（`MessageService.java`）
 - ③: ブラウザは受け取った URL に `api/messages/content` を付けて、server-local に直接送る（移植元 `client` の `message-content-endpoint.resolver.ts`・`messages.service.ts` の `prepareSecureStreamContext`）
@@ -47,19 +26,7 @@ sequenceDiagram
 
 ### 普通のアシスタント（SAAS_CHAT・SAAS_RAG）
 
-```mermaid
-sequenceDiagram
-    participant B as ブラウザ
-    box クラウド（AWS）
-        participant S as server（backend）
-    end
-    participant M as Azure OpenAI
-
-    B->>S: ① 質問を送る
-    S->>M: ② 回答を作らせる（SAAS_RAG は先に Azure AI Search で検索）
-    M-->>S: 回答
-    S-->>B: ④ 回答を表示（SSE）
-```
+![普通のアシスタントの通信経路。質問がクラウドの server を通って Azure OpenAI に届く](docs/images/saas-route.svg)
 
 ### 部品ごとの担当
 
