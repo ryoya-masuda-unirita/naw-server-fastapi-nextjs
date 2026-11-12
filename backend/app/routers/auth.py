@@ -55,7 +55,7 @@ async def login(
 ) -> AuthResponse:
     """ログイン"""
     auth_response = await AuthService.login(
-        request.username, request.password, x_tenant_id, session
+        request.username, request.password, x_tenant_id, session, redis_client
     )
     await _issue_session(response, auth_response, x_tenant_id, redis_client)
     return auth_response

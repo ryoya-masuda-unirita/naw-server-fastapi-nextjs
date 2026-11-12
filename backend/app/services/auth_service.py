@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import redis.asyncio as redis
@@ -21,6 +22,54 @@ PASSWORD_RESET_LOCKED_MESSAGE = (
     "連続でパスワード更新に失敗したため、一定期間更新はできません。"
     "しばらく時間を空けて再度お試しください"
 )
+# 移植元`AuthService.login`が認証失敗時に`AccessDeniedException`へ渡す文言（403）。
+# ユーザーの有無で応答を変えるとログインIDの存在が分かってしまうため、ユーザー不在・
+# パスワード誤り・パスワード履歴なしで共通にする。
+LOGIN_FAILED_MESSAGE = "Authentication failed"
+# 移植元`TooManyLoginAttemptsException`の文言（429）
+LOGIN_LOCKED_MESSAGE = "Too many failed login attempts"
+
+
+def _login_locked_error() -> HTTPException:
+    """ログインがロック中であることを表す例外を返す。
+
+    Returns:
+        429 の HTTPException。
+    """
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=LOGIN_LOCKED_MESSAGE
+    )
+
+
+def _login_failed_error() -> HTTPException:
+    """ログインの認証失敗を表す例外を返す。
+
+    Returns:
+        403 の HTTPException。
+    """
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=LOGIN_FAILED_MESSAGE
+    )
+
+
+async def _record_login_failure(
+    user_id: uuid.UUID, tenant_id: str, redis_client: redis.Redis
+) -> HTTPException:
+    """ログインの失敗を記録し、応答する例外を返す。
+
+    Args:
+        user_id: ユーザーID。
+        tenant_id: テナントID。
+        redis_client: 失敗記録を保存するRedis非同期クライアント。
+
+    Returns:
+        今回の失敗でロックの条件を満たしたら 429、満たさなければ 403 の HTTPException。
+    """
+    if await password_mismatch_store.record_login_failure_and_check_lockout(
+        user_id, tenant_id, redis_client
+    ):
+        return _login_locked_error()
+    return _login_failed_error()
 
 
 class AuthService:
@@ -28,38 +77,50 @@ class AuthService:
 
     @staticmethod
     async def login(
-        username: str, password: str, tenant_id: str, session: AsyncSession
+        username: str,
+        password: str,
+        tenant_id: str,
+        session: AsyncSession,
+        redis_client: redis.Redis,
     ) -> AuthResponse:
         """ログイン処理を行い認証レスポンスを返す。
+
+        移植元`AuthService.login`・`LoginAttemptService`と同じく、認証の前にロック中かを
+        判定し、認証に失敗したら失敗を記録してロックを判定する。成功したら失敗記録を
+        すべて消す。失敗記録はパスワード再設定と共有する。
 
         Args:
             username: ログインID。
             password: 平文パスワード。
             tenant_id: テナントID。
             session: 非同期DBセッション。
+            redis_client: 失敗記録を保存するRedis非同期クライアント。
 
         Returns:
             認証結果を含む AuthResponse。
 
         Raises:
-            HTTPException: 認証失敗時は 401 を返す。
+            HTTPException: ユーザーが存在しない・パスワード履歴がない・パスワード不一致の
+                場合は 403、ロック中または今回の失敗でロックの条件を満たした場合は 429。
         """
         user = await UserRepository.find_by_login_id(username, tenant_id, session)
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-            )
+            # 移植元どおり、ユーザーが存在しない場合は失敗として数えずロックもしない
+            raise _login_failed_error()
+
+        # ロック中は、パスワードが正しくても認証しない
+        if await password_mismatch_store.is_login_locked_out(
+            user.id, tenant_id, redis_client
+        ):
+            raise _login_locked_error()
 
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
-        if not latest:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-            )
+        # 移植元はパスワード履歴がないユーザーも認証失敗としてユーザーの失敗を数える
+        if not latest or not await verify_password_async(password, latest.password):
+            raise await _record_login_failure(user.id, tenant_id, redis_client)
 
-        if not await verify_password_async(password, latest.password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-            )
+        # 移植元はパスワード再設定が必要かの判定より前に記録を消す
+        await password_mismatch_store.clear_failures(user.id, tenant_id, redis_client)
 
         # 移植元のPasswordResetService.evaluateと同じ優先順位で判定する。
         # EXPIRED（有効期限切れ）はINITIAL（初回ログイン）より優先される。
