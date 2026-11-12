@@ -540,6 +540,22 @@ class TestFeedbackRouter:
                 feedback_dataset["responded_user"].login_id
             ]
 
+        async def test_invalid_sort_order_returns_400(
+            self, client, admin_headers, feedback_dataset
+        ):
+            """sortOrderが不正だと400になり、移植元と同じ文言が返ること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackUser?sortOrder=up",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert (
+                response.json()["message"]
+                == "ソート順は asc または desc を指定してください"
+            )
+
         async def test_sorts_by_feedback_count_ascending(
             self, client, admin_headers, feedback_dataset
         ):

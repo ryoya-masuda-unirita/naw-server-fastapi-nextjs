@@ -174,9 +174,22 @@ class TestCreateAssistantCategory:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "カテゴリ名は必須です"
+
+    async def test_create_without_name_returns_400(self, client, admin_headers):
+        """名前が無いと400になり、移植元と同じ文言が返ること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistant-categories",
+                json={"description": "desc"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "カテゴリ名は必須です"
 
     async def test_create_with_name_17_chars_returns_400(self, client, admin_headers):
-        """名前が17文字だと400になり作成されないこと"""
+        """名前が17文字だと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
@@ -185,11 +198,12 @@ class TestCreateAssistantCategory:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "カテゴリ名は16文字以内で入力してください"
 
     async def test_create_with_description_256_chars_returns_400(
         self, client, admin_headers
     ):
-        """説明が256文字だと400になり作成されないこと"""
+        """説明が256文字だと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
@@ -198,6 +212,7 @@ class TestCreateAssistantCategory:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "説明は255文字以内で入力してください"
 
     async def test_create_as_non_admin_returns_403(self, client, member_headers):
         """テナント管理者以外は作成できないこと"""

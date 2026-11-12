@@ -13,19 +13,27 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.validation_messages import (
+    NOT_BLANK_DEFAULT_MESSAGE,
+    NOT_EMPTY_DEFAULT_MESSAGE,
+    NOT_NULL_DEFAULT_MESSAGE,
+    RequestModel,
+    ValidationMessages,
+)
 from app.models.message import MessageContentStatus, MessageRating
 from app.schemas.attachment import AttachmentFile
 from app.schemas.multipart_form import parse_text_data_form
 from app.schemas.response_format import ResponseFormatRequest
 
 
-class ToolConfig(BaseModel):
+class ToolConfig(RequestModel):
     """チャット送信時に指定するツール設定（web_search / mcp）。
 
     `authorization` / `headers` は秘密情報のため、永続化・レスポンス出力しない（受信のみ）。
     """
 
-    name: str
+    # 移植元は`@NotBlank`（メッセージ指定なし）のため既定文言を返す。
+    name: Annotated[str, ValidationMessages(not_blank=NOT_BLANK_DEFAULT_MESSAGE)]
     server_label: str | None = None
     server_url: str | None = None
     require_approval: str | None = None
@@ -57,9 +65,14 @@ class ToolConfig(BaseModel):
         return self
 
 
-class MessageCreateRequest(BaseModel):
+class MessageCreateRequest(RequestModel):
     roomId: str | None = None
-    assistantId: str = Field(min_length=1)
+    # 移植元は`@NotEmpty`（メッセージ指定なし）のため既定文言を返す。
+    assistantId: Annotated[
+        str,
+        Field(min_length=1),
+        ValidationMessages(not_empty=NOT_EMPTY_DEFAULT_MESSAGE),
+    ]
     parentMessageId: str | None = None
     messageText: str | None = None
     tools: list[ToolConfig] | None = None
@@ -171,7 +184,7 @@ class MessageContentHistoryTurn(BaseModel):
         return normalized
 
 
-class MessageContentCreateRequest(BaseModel):
+class MessageContentCreateRequest(RequestModel):
     """メッセージ送信（アシスタント応答生成）のリクエスト。
 
     移植元(Spring Boot)の`CreateMessageContentRequest`に対応する。`messageId`
@@ -194,9 +207,10 @@ class MessageContentCreateRequest(BaseModel):
 
     messageId: str | None = Field(default=None, min_length=1)
     messageContentId: str | None = Field(default=None, min_length=1)
-    # 移植元は`@NotNull`だけで空文字を許す（クライアントは本文が空でも添付ファイルが
-    # あれば送信できる）。項目の必須だけを残し、長さは制約しない（issue-245）。
-    userInput: str
+    # 移植元は`@NotNull`（メッセージ指定なし）だけで空文字を許す（クライアントは本文が
+    # 空でも添付ファイルがあれば送信できる）。項目の必須だけを残して長さは制約せず
+    # （issue-245）、欠落・nullは移植元の既定文言を返す（issue-239）。
+    userInput: Annotated[str, ValidationMessages(not_null=NOT_NULL_DEFAULT_MESSAGE)]
     additionalPrompt: str | None = None
     historyMessages: list[MessageContentHistoryTurn] = []
     attachmentFiles: list[AttachmentFile] = []

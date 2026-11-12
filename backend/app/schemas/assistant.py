@@ -1,8 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
 from app.models.ai_model import AIModelEndpointType
 from app.models.assistant import AssistantType
 from app.models.tenant_endpoint import EndpointType
@@ -46,39 +48,66 @@ class PagedAssistantResponse(BaseModel):
     size: int
 
 
-class AssistantEndpointInput(BaseModel):
+NAME_MAX_LENGTH = 32
+DESCRIPTION_MAX_LENGTH = 1000
+_NAME_REQUIRED_MESSAGE = "アシスタント表示名は必須です"
+_NAME_SIZE_MESSAGE = f"アシスタント表示名は{NAME_MAX_LENGTH}文字以内で入力してください"
+
+
+class AssistantEndpointInput(RequestModel):
     """作成・更新リクエストに含まれるエンドポイントとモデルの組。"""
 
-    id: str
+    id: Annotated[str, ValidationMessages(not_blank="エンドポイントIDは必須です")]
     url: str | None = None
-    model: str
+    model: Annotated[str, ValidationMessages(not_blank="生成AIモデルは必須です")]
 
 
-class AssistantRequestBase(BaseModel):
-    type: AssistantType
-    endpoints: list[AssistantEndpointInput] = Field(min_length=1)
+class AssistantRequestBase(RequestModel):
+    type: Annotated[
+        AssistantType,
+        ValidationMessages(not_null="接続サーバー（タイプ）を指定してください。"),
+    ]
+    endpoints: Annotated[
+        list[AssistantEndpointInput],
+        Field(min_length=1),
+        ValidationMessages(not_empty="少なくとも1つのエンドポイントが必要です。"),
+    ]
     indexId: str | None = None
     groups: list[str] | None = None
-    description: str | None = Field(default=None, max_length=1000)
+    description: Annotated[
+        str | None,
+        Field(max_length=DESCRIPTION_MAX_LENGTH),
+        ValidationMessages(
+            size=f"アシスタントの説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
+        ),
+    ] = None
     includeHistory: bool = False
     iconColor: str | None = None
     categoryIds: list[str] | None = None
 
 
 class AssistantCreateRequest(AssistantRequestBase):
-    name: str = Field(max_length=32)
+    name: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(not_blank=_NAME_REQUIRED_MESSAGE, size=_NAME_SIZE_MESSAGE),
+    ]
 
     @field_validator("name")
     @classmethod
     def _validate_name(cls, value: str) -> str:
         """アシスタント表示名が空白のみでないことを検証する。"""
         if not value.strip():
-            raise ValueError("アシスタント表示名は必須です")
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
         return value
 
 
 class AssistantUpdateRequest(AssistantRequestBase):
-    name: str | None = Field(default=None, max_length=32)
+    name: Annotated[
+        str | None,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(size=_NAME_SIZE_MESSAGE),
+    ] = None
 
     @field_validator("name")
     @classmethod
@@ -89,7 +118,7 @@ class AssistantUpdateRequest(AssistantRequestBase):
         `isNameNotBlankWhenPresent`と同様、空白のみの非空文字列だけを拒否する）。
         """
         if value is not None and value != "" and not value.strip():
-            raise ValueError("アシスタント表示名は空白にできません")
+            raise ValueError("アシスタント表示名は空白にできません。")
         return value
 
 

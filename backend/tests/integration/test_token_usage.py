@@ -341,6 +341,7 @@ class TestGetTokenUsages:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "指定期間は31日以内である必要があります"
 
     async def test_from_after_to_returns_400(
         self, client, admin_headers, token_usage_dataset
@@ -355,6 +356,9 @@ class TestGetTokenUsages:
             )
 
         assert response.status_code == 400
+        assert (
+            response.json()["message"] == "開始日時は終了日時以前である必要があります"
+        )
 
     async def test_unknown_user_id_returns_404(
         self, client, admin_headers, token_usage_dataset
@@ -379,6 +383,7 @@ class TestGetTokenUsages:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "件数は1以上である必要があります"
 
     async def test_negative_page_returns_400(
         self, client, admin_headers, token_usage_dataset
@@ -391,6 +396,51 @@ class TestGetTokenUsages:
             )
 
         assert response.status_code == 400
+        assert response.json()["message"] == "ページ番号は0以上である必要があります"
+
+    async def test_invalid_from_format_returns_400(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """fromが日時として解釈できないと400になり、移植元と同じ文言が返ること"""
+        to = _quote_datetime(BASE_TIME)
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?from=not-a-date&to={to}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert (
+            response.json()["message"]
+            == "開始日時は YYYY-MM-DDTHH:mm:ssZ 形式で指定してください"
+        )
+
+    async def test_missing_to_returns_400(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """toが無いと400になり、終了日時の必須の文言が返ること"""
+        from_ = _quote_datetime(BASE_TIME)
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?from={from_}",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "終了日時は必須です"
+
+    async def test_size_over_100_returns_400(
+        self, client, admin_headers, token_usage_dataset
+    ):
+        """size=101だと400になり、移植元と同じ文言が返ること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?{_period_query()}&size=101",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "件数は100以下である必要があります"
 
     async def test_naive_and_aware_datetime_mixed_does_not_raise_500(
         self, client, admin_headers, token_usage_dataset

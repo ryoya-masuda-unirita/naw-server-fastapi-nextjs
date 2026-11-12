@@ -1,10 +1,12 @@
 from datetime import date, datetime
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
 
-class TenantAdminPatchRequest(BaseModel):
+
+class TenantAdminPatchRequest(RequestModel):
     """管理用テナントPATCHのリクエストボディ。
 
     どのキーが送られたかは`model_fields_set`で判定する（値が`None`かどうかではなく、
@@ -15,7 +17,13 @@ class TenantAdminPatchRequest(BaseModel):
     """
 
     tenantName: str | None = Field(default=None, max_length=32)
-    maxUsageBasedCreditsPerMonth: int | None = Field(default=None, ge=0)
+    maxUsageBasedCreditsPerMonth: Annotated[
+        int | None,
+        Field(ge=0),
+        ValidationMessages(
+            min_value="maxUsageBasedCreditsPerMonth は 0 以上である必要があります"
+        ),
+    ] = None
 
     @model_validator(mode="after")
     def _validate_tenant_name_not_null_when_present(self) -> Self:

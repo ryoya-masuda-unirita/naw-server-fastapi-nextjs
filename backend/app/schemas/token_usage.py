@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
 from app.models.token_usage import TokenUsage
 
 MAX_PERIOD_DAYS = 31
@@ -10,13 +12,26 @@ MAX_PERIOD_DAYS = 31
 ALLOWED_ORDER_BY_COLUMNS = ("createdAt", "totalTokens")
 
 
-class TokenUsagePeriodQuery(BaseModel):
+class TokenUsagePeriodQuery(RequestModel):
     """一覧・サマリ共通の期間クエリ。`from`/`to`必須、31日以内、from<=toを検証する。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
-    from_: datetime = Field(alias="from")
-    to: datetime
+    from_: Annotated[
+        datetime,
+        Field(alias="from"),
+        ValidationMessages(
+            not_blank="開始日時は必須です",
+            iso8601_instant="開始日時は YYYY-MM-DDTHH:mm:ssZ 形式で指定してください",
+        ),
+    ]
+    to: Annotated[
+        datetime,
+        ValidationMessages(
+            not_blank="終了日時は必須です",
+            iso8601_instant="終了日時は YYYY-MM-DDTHH:mm:ssZ 形式で指定してください",
+        ),
+    ]
     user_id: UUID | None = Field(default=None, alias="userId")
 
     @field_validator("from_", "to")
@@ -49,15 +64,26 @@ class TokenUsagePeriodQuery(BaseModel):
             ValueError: 期間の前後関係が逆、または31日を超える場合。
         """
         if self.from_ > self.to:
-            raise ValueError("fromはto以前の日時を指定してください")
+            raise ValueError("開始日時は終了日時以前である必要があります")
         if (self.to - self.from_) > timedelta(days=MAX_PERIOD_DAYS):
-            raise ValueError(f"期間は{MAX_PERIOD_DAYS}日以内で指定してください")
+            raise ValueError(f"指定期間は{MAX_PERIOD_DAYS}日以内である必要があります")
         return self
 
 
 class TokenUsageListQuery(TokenUsagePeriodQuery):
-    page: int = Field(default=0, ge=0)
-    size: int = Field(default=10, ge=1, le=100)
+    page: Annotated[
+        int,
+        Field(ge=0),
+        ValidationMessages(min_value="ページ番号は0以上である必要があります"),
+    ] = 0
+    size: Annotated[
+        int,
+        Field(ge=1, le=100),
+        ValidationMessages(
+            min_value="件数は1以上である必要があります",
+            max_value="件数は100以下である必要があります",
+        ),
+    ] = 10
     order_by: str = Field(default="createdAt", alias="orderBy")
     reverse: bool = True
 
@@ -73,7 +99,7 @@ class TokenUsageListQuery(TokenUsagePeriodQuery):
         """
         if self.order_by not in ALLOWED_ORDER_BY_COLUMNS:
             raise ValueError(
-                f"orderByは{ALLOWED_ORDER_BY_COLUMNS}のいずれかを指定してください"
+                "ソート項目は createdAt または totalTokens のいずれかを指定してください"
             )
         return self
 

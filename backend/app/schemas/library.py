@@ -1,18 +1,47 @@
 from datetime import datetime
+from typing import Annotated
 
+from fastapi import Query
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
+
 NAME_MAX_LENGTH = 255
+_NAME_REQUIRED_MESSAGE = "ライブラリ名は必須です"
+PAGE_SIZE_MIN = 1
+PAGE_SIZE_MAX = 100
+
+# ライブラリ一覧のクエリパラメータ。移植元`LibraryListPageRequest`の制約と文言。
+LibraryPageNumber = Annotated[
+    int,
+    Query(ge=0),
+    ValidationMessages(min_value="ページ番号は0以上である必要があります"),
+]
+LibraryPageSize = Annotated[
+    int,
+    Query(ge=PAGE_SIZE_MIN, le=PAGE_SIZE_MAX),
+    ValidationMessages(
+        min_value=f"ページサイズは{PAGE_SIZE_MIN}以上である必要があります",
+        max_value=f"ページサイズは{PAGE_SIZE_MAX}以下である必要があります",
+    ),
+]
 
 
-class LibraryUpdateRequest(BaseModel):
+class LibraryUpdateRequest(RequestModel):
     """ライブラリ更新リクエスト。
 
     リクエストに含まれた内容で既存ライブラリを上書きする（完全置換）。
     `groups`・`tags`は空配列またはNoneで全解除する。
     """
 
-    name: str = Field(max_length=NAME_MAX_LENGTH)
+    name: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(
+            not_blank=_NAME_REQUIRED_MESSAGE,
+            size=f"ライブラリ名は{NAME_MAX_LENGTH}文字以内で入力してください",
+        ),
+    ]
     groups: list[str] | None = Field(default=None)
     tags: list[str] | None = Field(default=None)
 
@@ -31,7 +60,7 @@ class LibraryUpdateRequest(BaseModel):
             ValueError: 空白のみの場合。
         """
         if not value.strip():
-            raise ValueError("ライブラリ名は必須です")
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
         return value
 
 

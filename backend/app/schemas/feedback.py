@@ -18,6 +18,8 @@ _SORT_FIELD_VALUES = {
     "review5",
 }
 _SORT_ORDER_VALUES = {"asc", "desc"}
+# 移植元の3つのフィードバック一覧のRequestで共通の`@Pattern`の文言。
+_SORT_ORDER_MESSAGE = "ソート順は asc または desc を指定してください"
 _FEEDBACK_MESSAGE_SORT_FIELD_VALUES = {"updatedAt", "name", "accuracy", "add", "folder"}
 _FEEDBACK_ROOM_SORT_FIELD_VALUES = {"updatedAt", "chat", "name", "level"}
 
@@ -52,7 +54,8 @@ class FeedbackUserListRequest(BaseModel):
         """sortFieldが許容値のいずれかであることを検証する。"""
         if value not in _SORT_FIELD_VALUES:
             raise ValueError(
-                "sortField は updatedAt, name, count, review1〜review5 のいずれかです"
+                "ソート項目は updatedAt, name, count, review1, review2, review3,"
+                " review4, review5 のいずれかを指定してください"
             )
         return value
 
@@ -61,7 +64,7 @@ class FeedbackUserListRequest(BaseModel):
     def _validate_sort_order(cls, value: str) -> str:
         """sortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("sortOrder は asc または desc です")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 
@@ -115,7 +118,8 @@ class FeedbackMessageListRequest(BaseModel):
         """feedbackMessage用のsortFieldが許容値のいずれかであることを検証する。"""
         if value not in _FEEDBACK_MESSAGE_SORT_FIELD_VALUES:
             raise ValueError(
-                "sortField は updatedAt, name, accuracy, add, folder のいずれかです"
+                "ソート項目は updatedAt, name, accuracy, add, folder"
+                " のいずれかを指定してください"
             )
         return value
 
@@ -124,7 +128,7 @@ class FeedbackMessageListRequest(BaseModel):
     def _validate_feedback_message_sort_order(cls, value: str) -> str:
         """feedbackMessage用のsortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("sortOrder は asc または desc です")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 
@@ -183,7 +187,9 @@ class FeedbackRoomListRequest(BaseModel):
     def _validate_feedback_room_sort_field(cls, value: str) -> str:
         """feedbackRoom用のsortFieldが許容値のいずれかであることを検証する。"""
         if value not in _FEEDBACK_ROOM_SORT_FIELD_VALUES:
-            raise ValueError("sortField は updatedAt, chat, name, level のいずれかです")
+            raise ValueError(
+                "ソート項目は updatedAt, chat, name, level のいずれかを指定してください"
+            )
         return value
 
     @field_validator("sortOrder")
@@ -191,7 +197,7 @@ class FeedbackRoomListRequest(BaseModel):
     def _validate_feedback_room_sort_order(cls, value: str) -> str:
         """feedbackRoom用のsortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("sortOrder は asc または desc です")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 

@@ -1,19 +1,36 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
+
+from app.core.validation_messages import RequestModel, ValidationMessages
 
 # 移植元Java（`@Size(max=16)`）に合わせたAPIバリデーション用の上限。
 # DBカラム（AssistantCategory.name）は移植元Liquibaseに合わせてvarchar(32)だが、
 # API側は将来の拡張余地としてDBより厳しい16文字を維持する（意図的な差分）。
 NAME_MAX_LENGTH = 16
 DESCRIPTION_MAX_LENGTH = 255
+_NAME_REQUIRED_MESSAGE = "カテゴリ名は必須です"
 
 
-class _AssistantCategoryRequestBase(BaseModel):
+class _AssistantCategoryRequestBase(RequestModel):
     """作成・更新リクエストで共通のフィールド・バリデーション。"""
 
-    name: str = Field(max_length=NAME_MAX_LENGTH)
-    description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
+    name: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(
+            not_blank=_NAME_REQUIRED_MESSAGE,
+            size=f"カテゴリ名は{NAME_MAX_LENGTH}文字以内で入力してください",
+        ),
+    ]
+    description: Annotated[
+        str | None,
+        Field(max_length=DESCRIPTION_MAX_LENGTH),
+        ValidationMessages(
+            size=f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
+        ),
+    ] = None
 
     @field_validator("name")
     @classmethod
@@ -30,7 +47,7 @@ class _AssistantCategoryRequestBase(BaseModel):
             ValueError: 空白のみの場合。
         """
         if not value.strip():
-            raise ValueError("カテゴリ名は必須です")
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
         return value
 
 

@@ -1,12 +1,21 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
+
 NAME_MAX_LENGTH = 255
+_NAME_REQUIRED_MESSAGE = "タグ名は必須です"
+_NAME_SIZE_MESSAGE = f"タグ名は{NAME_MAX_LENGTH}文字以内で入力してください"
 
 
-class LibraryTagCreateRequest(BaseModel):
-    name: str = Field(max_length=NAME_MAX_LENGTH)
+class LibraryTagCreateRequest(RequestModel):
+    name: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(not_blank=_NAME_REQUIRED_MESSAGE, size=_NAME_SIZE_MESSAGE),
+    ]
     description: str | None = Field(default=None)
 
     @field_validator("name")
@@ -24,19 +33,27 @@ class LibraryTagCreateRequest(BaseModel):
             ValueError: 空白のみの場合。
         """
         if not value.strip():
-            raise ValueError("タグ名は必須です")
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
         return value
 
 
-class LibraryTagUpdateRequest(BaseModel):
+class LibraryTagUpdateRequest(RequestModel):
     """name・descriptionともに未指定(None)または空白のみの場合は現状維持する。"""
 
-    name: str | None = Field(default=None, max_length=NAME_MAX_LENGTH)
+    name: Annotated[
+        str | None,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(size=_NAME_SIZE_MESSAGE),
+    ] = None
     description: str | None = Field(default=None)
 
 
-class LibraryTagDeleteRequest(BaseModel):
-    ids: list[str] = Field(min_length=1)
+class LibraryTagDeleteRequest(RequestModel):
+    ids: Annotated[
+        list[str],
+        Field(min_length=1),
+        ValidationMessages(not_empty="削除対象のIDを1件以上指定してください"),
+    ]
 
 
 class LibraryTagResponse(BaseModel):

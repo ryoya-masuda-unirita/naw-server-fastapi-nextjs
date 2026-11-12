@@ -3,20 +3,31 @@ from typing import Annotated
 from fastapi import File, Form, UploadFile
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
 from app.schemas.attachment import AttachmentFile
 from app.schemas.message import ToolConfig
 from app.schemas.multipart_form import parse_text_data_form
 from app.schemas.response_format import ResponseFormatRequest
 
 
-class LlmChatTurn(BaseModel):
+_DEPLOY_NAME_REQUIRED_MESSAGE = "deployName は必須です"
+_INPUT_REQUIRED_MESSAGE = "input は必須です"
+
+
+class LlmChatTurn(RequestModel):
     """チャット会話履歴の1発話。
 
     移植元(Spring Boot)の`LlmChatTurnRequest`に対応する。
     """
 
-    role: str = Field(min_length=1)
-    content: str = Field(min_length=1)
+    role: Annotated[
+        str, Field(min_length=1), ValidationMessages(not_blank="role は必須です")
+    ]
+    # 移植元は`@NotNull`のため、欠落・nullだけを移植元の文言にする。空文字の拒否
+    # （`min_length=1`）はbackend独自の制約のため文言を置き換えない。
+    content: Annotated[
+        str, Field(min_length=1), ValidationMessages(not_null="content は必須です")
+    ]
     # この発話に添付するファイルのファイル名。multipartの`attachmentFiles`パートの
     # ファイル名と突き合わせる。移植元`@JsonAlias("attatchments")`に合わせ、綴り違いの
     # 項目名でも受け付ける。
@@ -32,7 +43,7 @@ class LlmChatTurn(BaseModel):
         return [] if value is None else value
 
 
-class LlmChatRequest(BaseModel):
+class LlmChatRequest(RequestModel):
     """LLMチャットAPIのリクエスト。
 
     移植元(Spring Boot)の`LlmChatTextDataRequest`（`textData`パート）と
@@ -50,12 +61,29 @@ class LlmChatRequest(BaseModel):
     # 属性名での生成も許可する。
     model_config = ConfigDict(populate_by_name=True)
 
-    deployName: str = Field(min_length=1)
+    deployName: Annotated[
+        str,
+        Field(min_length=1),
+        ValidationMessages(not_blank=_DEPLOY_NAME_REQUIRED_MESSAGE),
+    ]
     messageId: str | None = None
     additionalPrompt: str | None = None
-    temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    temperature: Annotated[
+        float,
+        Field(ge=0.0, le=1.0),
+        ValidationMessages(
+            min_value="temperature は 0.0 以上である必要があります",
+            max_value="temperature は 1.0 以下である必要があります",
+        ),
+    ] = 0.0
     maxTokens: int | None = Field(default=None, gt=0)
-    messages: list[LlmChatTurn] = Field(min_length=1)
+    # 移植元は`@NotNull @NotEmpty(message=...)`で、nullのときはどちらの違反が先に
+    # なるか決まらない。指定のある`@NotEmpty`の文言を返す。
+    messages: Annotated[
+        list[LlmChatTurn],
+        Field(min_length=1),
+        ValidationMessages(not_empty="messages は1件以上必要です"),
+    ]
     attachmentFiles: list[AttachmentFile] = []
     tools: list[ToolConfig] | None = None
     # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
@@ -108,19 +136,34 @@ async def parse_llm_chat_form(
     )
 
 
-class LlmEmbeddingRequest(BaseModel):
+class LlmEmbeddingRequest(RequestModel):
     """LLM埋め込みAPIのリクエスト。"""
 
-    deployName: str = Field(min_length=1)
-    input: str = Field(min_length=1)
-    dimensions: int | None = Field(default=None, ge=1, le=32767)
+    deployName: Annotated[
+        str,
+        Field(min_length=1),
+        ValidationMessages(not_blank=_DEPLOY_NAME_REQUIRED_MESSAGE),
+    ]
+    input: Annotated[
+        str,
+        Field(min_length=1),
+        ValidationMessages(not_blank=_INPUT_REQUIRED_MESSAGE),
+    ]
+    dimensions: Annotated[
+        int | None,
+        Field(ge=1, le=32767),
+        ValidationMessages(
+            min_value="dimensions は 1 以上である必要があります",
+            max_value="dimensions は 32767 以下である必要があります",
+        ),
+    ] = None
 
     @field_validator("input")
     @classmethod
     def _validate_input_not_blank(cls, value: str) -> str:
         """inputが空白のみでないことを検証する。"""
         if not value.strip():
-            raise ValueError("inputは必須です")
+            raise ValueError(_INPUT_REQUIRED_MESSAGE)
         return value
 
 
