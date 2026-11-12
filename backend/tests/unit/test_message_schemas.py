@@ -27,6 +27,16 @@ class TestMessageContentCreateRequest:
         assert req.messageId == "msg-1"
         assert req.messageContentId is None
 
+    def test_accepts_empty_user_input(self):
+        """userInputが空文字でも、移植元と同じく受け付けること"""
+        req = MessageContentCreateRequest(messageId="msg-1", userInput="")
+        assert req.userInput == ""
+
+    def test_raises_error_when_user_input_is_missing(self):
+        """userInputの項目がない場合バリデーションエラーになること"""
+        with pytest.raises(ValidationError):
+            MessageContentCreateRequest.model_validate({"messageId": "msg-1"})
+
     def test_accepts_spring_create_library_name(self):
         """移植元のcreateLibraryで指定したライブラリ生成フラグを受け取れること"""
         req = MessageContentCreateRequest.model_validate(
