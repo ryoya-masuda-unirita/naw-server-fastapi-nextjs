@@ -465,7 +465,8 @@ class GroupService:
 
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
+        # 移植元(Spring Data の Sort.Direction)は方向指定を大文字小文字を区別せずに解釈する。
+        is_desc = len(sort_parts) > 1 and sort_parts[1].strip().lower() == "desc"
 
         billing_period = (
             await resolve_active_billing_period(tenant_id, session)
@@ -486,7 +487,7 @@ class GroupService:
             search,
             role,
             sort_col_name,
-            sort_dir,
+            is_desc,
             page,
             size,
             session,
