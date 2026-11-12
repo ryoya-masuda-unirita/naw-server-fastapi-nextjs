@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth-store';
 import { routes } from '@/routes/index';
 import '@/lib/i18n';
+// 移植元の <mat-icon> は fontSet: material-symbols-outlined のため outlined だけ読み込む
+import 'material-symbols/outlined.css';
 import './index.css';
 
 const queryClient = new QueryClient();

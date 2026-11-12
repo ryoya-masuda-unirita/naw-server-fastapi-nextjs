@@ -17,7 +17,7 @@ const renderPwReset = (search = '') => {
       { client: queryClient },
       createElement(
         MemoryRouter,
-        { initialEntries: [`/auth/pw-reset${search}`] },
+        { initialEntries: [`/auth/password/reset${search}`] },
         createElement(PwResetPage)
       )
     ) as ReactNode
