@@ -1,10 +1,15 @@
+import importlib
+import inspect
+import pkgutil
 from datetime import datetime
 from typing import Annotated, Any
 
 import pytest
 from fastapi import FastAPI, Query
 from httpx import ASGITransport, AsyncClient
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
+
+import app.schemas
 
 from app.core.errors import register_exception_handlers, validation_error_message
 from app.core.validation_messages import RequestModel, ValidationMessages
@@ -171,6 +176,16 @@ class TestValidationMessages:
             ("string_too_long", ("plain",)),
         ]
 
+    def test_kept_error_context_is_preserved(self):
+        """他の項目の置き換えで作り直しても、置き換えないエラーのctxは元のまま残ること"""
+        with pytest.raises(ValidationError) as exc_info:
+            _Sample.model_validate({"name": "ng", "count": 0})
+
+        errors = exc_info.value.errors()
+        assert errors[0]["type"] == "value_error"
+        assert str(errors[0]["ctx"]["error"]) == CUSTOM_MESSAGE
+        assert errors[1]["msg"] == COUNT_MIN
+
     def test_value_error_prefix_is_still_removed(self):
         """他の項目の置き換えで作り直した後も、独自チェックの接頭辞が外れること"""
         with pytest.raises(ValidationError) as exc_info:
@@ -246,3 +261,31 @@ class TestValidationMessagesInApi:
         parameters = _create_app().openapi()["paths"]["/items"]["get"]["parameters"]
 
         assert parameters[0]["schema"]["minimum"] == 0
+
+
+def _schema_models() -> list[type[BaseModel]]:
+    models: list[type[BaseModel]] = []
+    for module_info in pkgutil.iter_modules(app.schemas.__path__):
+        module = importlib.import_module(f"app.schemas.{module_info.name}")
+        models.extend(
+            obj
+            for _, obj in inspect.getmembers(module, inspect.isclass)
+            if issubclass(obj, BaseModel) and obj.__module__ == module.__name__
+        )
+    return models
+
+
+def test_schemas_with_messages_inherit_request_model():
+    """文言を添えた項目を持つスキーマは、欠落も置き換えられるようRequestModelを継承していること"""
+    missing_base = [
+        model.__name__
+        for model in _schema_models()
+        if any(
+            isinstance(metadata, ValidationMessages)
+            for field in model.model_fields.values()
+            for metadata in field.metadata
+        )
+        and not issubclass(model, RequestModel)
+    ]
+
+    assert missing_base == []

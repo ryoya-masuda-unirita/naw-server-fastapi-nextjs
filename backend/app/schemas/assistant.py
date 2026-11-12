@@ -51,7 +51,7 @@ class PagedAssistantResponse(BaseModel):
 NAME_MAX_LENGTH = 32
 DESCRIPTION_MAX_LENGTH = 1000
 _NAME_REQUIRED_MESSAGE = "アシスタント表示名は必須です"
-_NAME_SIZE_MESSAGE = "アシスタント表示名は32文字以内で入力してください"
+_NAME_SIZE_MESSAGE = f"アシスタント表示名は{NAME_MAX_LENGTH}文字以内で入力してください"
 
 
 class AssistantEndpointInput(RequestModel):
@@ -77,7 +77,9 @@ class AssistantRequestBase(RequestModel):
     description: Annotated[
         str | None,
         Field(max_length=DESCRIPTION_MAX_LENGTH),
-        ValidationMessages(size="アシスタントの説明は1000文字以内で入力してください"),
+        ValidationMessages(
+            size=f"アシスタントの説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
+        ),
     ] = None
     includeHistory: bool = False
     iconColor: str | None = None

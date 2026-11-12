@@ -68,9 +68,10 @@ class FooRequest(RequestModel):
 ```
 
 ```python
-# Good（Pydantic v2のデコレータ構文をそのまま使う）
-class FooRequest(BaseModel):
-    name: str
+# Good（空白のみを拒否する独自チェック。Pydantic v2のデコレータ構文をそのまま使う。
+# 欠落・nullの文言はValidationMessagesで添える）
+class FooRequest(RequestModel):
+    name: Annotated[str, ValidationMessages(not_blank="名前は必須です")]
 
     @field_validator("name")
     @classmethod

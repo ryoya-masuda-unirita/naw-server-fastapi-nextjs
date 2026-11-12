@@ -21,13 +21,15 @@ class _AssistantCategoryRequestBase(RequestModel):
         Field(max_length=NAME_MAX_LENGTH),
         ValidationMessages(
             not_blank=_NAME_REQUIRED_MESSAGE,
-            size="カテゴリ名は16文字以内で入力してください",
+            size=f"カテゴリ名は{NAME_MAX_LENGTH}文字以内で入力してください",
         ),
     ]
     description: Annotated[
         str | None,
         Field(max_length=DESCRIPTION_MAX_LENGTH),
-        ValidationMessages(size="説明は255文字以内で入力してください"),
+        ValidationMessages(
+            size=f"説明は{DESCRIPTION_MAX_LENGTH}文字以内で入力してください"
+        ),
     ] = None
 
     @field_validator("name")

@@ -7,7 +7,7 @@ from app.core.validation_messages import RequestModel, ValidationMessages
 
 NAME_MAX_LENGTH = 255
 _NAME_REQUIRED_MESSAGE = "タグ名は必須です"
-_NAME_SIZE_MESSAGE = "タグ名は255文字以内で入力してください"
+_NAME_SIZE_MESSAGE = f"タグ名は{NAME_MAX_LENGTH}文字以内で入力してください"
 
 
 class LibraryTagCreateRequest(RequestModel):

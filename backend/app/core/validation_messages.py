@@ -12,7 +12,8 @@ message = "カテゴリ名は16文字以内で入力してください")`）、�
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Self
+from functools import cache
+from typing import Any, Self, get_args
 
 from pydantic import (
     AliasChoices,
@@ -28,6 +29,7 @@ from pydantic_core import (
     PydanticCustomError,
     core_schema,
 )
+from pydantic_core.core_schema import ErrorType
 
 # 移植元にメッセージの指定が無い制約の文言。移植元はリクエストの`Accept-Language`で
 # Hibernate Validator（Spring Boot 3.5.10の既定の8.0.3.Final）の既定文言を補間し、
@@ -45,6 +47,9 @@ _BELOW_MIN_ERROR_TYPES = frozenset({"greater_than", "greater_than_equal"})
 _ABOVE_MAX_ERROR_TYPES = frozenset({"less_than", "less_than_equal"})
 _MISSING_ERROR_TYPE = "missing"
 _DATETIME_ERROR_TYPE_PREFIX = "datetime_"
+# Pydantic組み込みのエラーの種類。置き換えないエラーは、元の種類と`ctx`のまま
+# 作り直すために使う（独自の種類は`PydanticCustomError`でしか作り直せない）。
+_KNOWN_ERROR_TYPES: frozenset[str] = frozenset(get_args(ErrorType))
 
 
 @dataclass(frozen=True)
@@ -53,8 +58,11 @@ class ValidationMessages:
 
     引数名は移植元の注釈に対応させている。指定の無い制約のエラーは置き換えない。
 
+    文言を置き換えるだけで、制約は追加しない。たとえば`not_blank`を指定しても空白のみの
+    値は弾かれず、弾くには`Field(min_length=1)`や独自チェックを別に書く必要がある。
+
     Attributes:
-        not_blank: `@NotBlank`。欠落・null・空文字・空白のみで弾いたとき。
+        not_blank: `@NotBlank`。欠落・null・空文字・空白のみの値が弾かれたとき。
         not_null: `@NotNull`。欠落・nullで弾いたとき（空文字・空配列は対象外）。
         not_empty: `@NotEmpty`。欠落・null・空文字・空配列で弾いたとき。
         size: `@Size`。文字数・件数の上限を超えたとき。
@@ -158,7 +166,8 @@ def _replace_messages(
     """エラーの文言を置き換えた`ValidationError`を作る。
 
     エラーの種類（`type`）・位置・入力は保つ。種類を保つことで、共通の例外ハンドラの
-    接頭辞の除去（`value_error`）とログ（位置と種類）がそのまま動く。
+    接頭辞の除去（`value_error`）とログ（位置と種類）がそのまま動く。置き換えない
+    Pydantic組み込みのエラーは、`ctx`も含めて元のまま作り直す。
 
     Args:
         exc: 元のエラー。
@@ -171,15 +180,37 @@ def _replace_messages(
     messages = [message_for(error) for error in errors]
     if all(message is None for message in messages):
         return None
-    line_errors: list[InitErrorDetails] = [
-        {
-            "type": PydanticCustomError(error["type"], message or error["msg"]),
-            "loc": error["loc"],
-            "input": error["input"],
-        }
+    line_errors = [
+        _line_error(error, message)
         for error, message in zip(errors, messages, strict=True)
     ]
     return ValidationError.from_exception_data(exc.title, line_errors)
+
+
+def _line_error(error: ErrorDetails, message: str | None) -> InitErrorDetails:
+    """`ValidationError`を作り直すための1件分のエラーを作る。
+
+    Args:
+        error: 元のエラー。
+        message: 置き換える文言。置き換えないなら`None`。
+
+    Returns:
+        作り直すエラー。
+    """
+    if message is None and error["type"] in _KNOWN_ERROR_TYPES:
+        line_error: InitErrorDetails = {
+            "type": error["type"],
+            "loc": error["loc"],
+            "input": error["input"],
+        }
+        if "ctx" in error:
+            line_error["ctx"] = error["ctx"]
+        return line_error
+    return {
+        "type": PydanticCustomError(error["type"], message or error["msg"]),
+        "loc": error["loc"],
+        "input": error["input"],
+    }
 
 
 class RequestModel(BaseModel):
@@ -230,12 +261,14 @@ class RequestModel(BaseModel):
         return messages.required if messages else None
 
 
+@cache
 def _field_messages_by_loc(
     model: type[BaseModel],
 ) -> dict[str | int, ValidationMessages]:
     """エラーの位置（項目名・別名）から、項目の`ValidationMessages`を引く表を作る。
 
     Pydanticはエラーの位置を別名で出すため、項目名と別名のどちらでも引けるようにする。
+    モデルの項目は定義後に変わらないため、モデルごとに一度だけ作る。
 
     Args:
         model: 対象のモデル。
