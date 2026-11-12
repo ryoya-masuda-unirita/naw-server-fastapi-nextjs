@@ -1,8 +1,9 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
-from uuid import uuid4
 
 from app.core.security import hash_password
 from app.services.user_service import UserService

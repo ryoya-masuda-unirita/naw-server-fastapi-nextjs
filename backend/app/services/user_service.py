@@ -193,7 +193,7 @@ class UserService:
 
     @staticmethod
     def _resolve_sort_column(sort_col_name: str) -> Any:
-        """ソート対象列名を許可リストに基づいてモデル属性に解決する。
+        """ソート対象列名を許可リストに基づいてORDER BY用の列式に解決する。
 
         許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
         既定の作成日時列にフォールバックする。
@@ -202,7 +202,8 @@ class UserService:
             sort_col_name: リクエストで指定されたソート対象列名。
 
         Returns:
-            ソートに使用するモデル属性。
+            ソートに使用する列式。多くはモデル属性そのものだが、`role`は
+            文字列キャスト式（`CAST(users.role AS VARCHAR)`）を返す。
         """
         return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
 
