@@ -140,6 +140,58 @@ class TestAuthAPI:
         assert response.json()["loginStatus"] == "SUCCESS"
         assert response.json()["token"] is not None
 
+    async def test_post_auth_password_reset_rejects_password_violating_policy(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset 複雑性ポリシー違反（数字のみ）は 400 になりパスワードは更新されないこと"""
+        login_id = test_user_with_password["user"].login_id
+        plain_password = test_user_with_password["plain_password"]
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "loginId": login_id,
+                    "oldPassword": plain_password,
+                    "newPassword": "12345678",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            # 元のパスワードがまだ旧パスワード照合を通ることで、更新されていないことを確認する
+            retry_response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "loginId": login_id,
+                    "oldPassword": plain_password,
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "新パスワードには大文字を含めてください。"
+        assert retry_response.status_code == 200
+
+    async def test_post_auth_password_reset_rejects_password_without_valid_symbol(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset 使用可能な記号を含まない新パスワードは 400 になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "loginId": test_user_with_password["user"].login_id,
+                    "oldPassword": test_user_with_password["plain_password"],
+                    "newPassword": "Abcdefg1?",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "新パスワードには次の記号のいずれかを含めてください: "
+            f"{test_tenant.pw_policy_valid_symbols}"
+        )
+
     async def test_get_api_auth_success(self, client, test_tenant, valid_jwt_token):
         """GET /api/auth 成功ケース"""
         async with client as c:
