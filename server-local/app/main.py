@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.naw_api_client import NawApiClient
 from app.clients.waha_client import WahaClient
-from app.core.config import Settings, get_settings
+from app.core.config import MS_PER_SECOND, Settings, get_settings
 from app.core.database import create_engine, create_session_factory
 from app.core.errors import register_exception_handlers
 from app.core.security import ServerAuthKeyMiddleware
@@ -19,7 +19,6 @@ from app.routers import hello, indexes, libraries, messages
 from app.services.message_content_stream_service import MessageContentStreamService
 from app.services.stream.cleanup import run_cleanup_loop
 
-MS_PER_SECOND = 1000
 # 移植元 RestTemplate は既定でタイムアウトなし。Waha! の execute はジョブ完了まで
 # 応答しないことがあるため、同じく無制限にする。
 EXTERNAL_HTTP_TIMEOUT = httpx.Timeout(None)

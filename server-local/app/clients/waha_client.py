@@ -81,13 +81,6 @@ class WahaClient:
         session_id: str,
         content_type: str | None = None,
     ) -> str:
-        if slot == SLOT_TEXTDATA:
-            logger.info(
-                "Waha textData.json upload content: sessionId=%s, filename=%s, body=%s",
-                session_id,
-                filename,
-                content.decode("utf-8", errors="replace"),
-            )
         media_type = (
             content_type or mimetypes.guess_type(filename)[0] or DEFAULT_CONTENT_TYPE
         )

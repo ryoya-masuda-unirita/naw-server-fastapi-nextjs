@@ -1,10 +1,13 @@
 import asyncio
 import json
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.waha_client import ResultStatus
@@ -94,6 +97,46 @@ async def test_prepare_stream_creates_stub_and_file(
     assert content.answer == ""
     assert content.question == "質問"
     assert content.status == "OK"
+
+
+async def test_prepare_stream_file_failure_leaves_no_record(
+    tmp_path: Path,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_waha: FakeWahaClient,
+    fake_naw: FakeNawApiClient,
+) -> None:
+    """ストリームファイルを作れなければ仮レコードを残さず、同じ messageId で再試行できること"""
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("x")
+    settings = make_settings(tmp_path, STREAM_OUTPUT_DIR=str(blocker / "out"))
+    service = make_service(settings, session_factory, fake_waha, fake_naw)
+    command = CreateMessageContentCommand(
+        assistant_id="svc",
+        message_id="msg-1",
+        message_content_id=None,
+        additional_prompt=None,
+        user_input="質問",
+    )
+    async with session_factory() as session:
+        with pytest.raises(OSError):
+            await service.prepare_stream(session, command)
+    async with session_factory() as session:
+        rows = (await session.execute(select(MessageContent))).scalars().all()
+        assert rows == []
+
+
+async def test_access_token_is_not_logged(
+    client: httpx.AsyncClient,
+    fake_waha: FakeWahaClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """textData のログにアクセストークンを出さず、Waha! には送ること"""
+    with caplog.at_level(logging.DEBUG):
+        await client.post(CONTENT_URL, files=multipart_files(TEXT_DATA))
+    assert "token-abc" not in caplog.text
+    assert '"accessToken":"***"' in caplog.text
+    upload = next(u for u in fake_waha.uploads if u.slot == "textdata")
+    assert json.loads(upload.content)["accessToken"] == "token-abc"
 
 
 async def test_prepare_stream_regenerate_resets_content(

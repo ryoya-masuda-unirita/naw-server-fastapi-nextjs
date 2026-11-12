@@ -14,6 +14,7 @@ from app.core.jsonutil import to_compact_json
 from app.schemas.message import (
     CreateMessageContentCommand,
     CreateMessageContentRequest,
+    FileSummary,
     GetMessageContentsRequest,
     UploadedFile,
 )
@@ -39,15 +40,20 @@ def _bad_request(detail: str) -> RequestValidationError:
     return RequestValidationError([{"type": "value_error", "msg": detail, "loc": ()}])
 
 
-async def _read_files(form: FormData, name: str) -> list[UploadedFile]:
-    files: list[UploadedFile] = []
-    for value in form.getlist(name):
-        if not isinstance(value, UploadFile):
-            continue
-        if value.size is not None and value.size > MAX_FILE_SIZE_BYTES:
+def _uploads(form: FormData, name: str) -> list[UploadFile]:
+    uploads = [v for v in form.getlist(name) if isinstance(v, UploadFile)]
+    for upload in uploads:
+        if upload.size is not None and upload.size > MAX_FILE_SIZE_BYTES:
             raise PayloadTooLargeError(name)
-        files.append(await UploadedFile.from_upload(value))
-    return files
+    return uploads
+
+
+async def _read_files(form: FormData, name: str) -> list[UploadedFile]:
+    return [await UploadedFile.from_upload(u) for u in _uploads(form, name)]
+
+
+def _summarize_files(form: FormData, name: str) -> list[FileSummary]:
+    return [FileSummary(u.filename, u.size or 0) for u in _uploads(form, name)]
 
 
 async def _parse_message_request(
@@ -62,16 +68,22 @@ async def _parse_message_request(
     if not content_type.startswith(MULTIPART_FORM_DATA):
         raise _bad_request("multipart/form-data が必要です")
     form = await request.form(max_part_size=MAX_REQUEST_SIZE_BYTES)
-    raw = form.get(TEXT_DATA_PART)
-    if raw is None:
-        raise _bad_request("textData がありません")
-    text = (await raw.read()).decode("utf-8") if isinstance(raw, UploadFile) else raw
+    # 自前で解析したフォームは FastAPI が閉じないため、一時ファイルを明示的に閉じる
     try:
-        dto = CreateMessageContentRequest.model_validate_json(text)
-    except ValidationError as e:
-        raise _bad_request(f"textData が不正です: {e}") from e
-    attachment_files = await _read_files(form, ATTACHMENT_FILES_PART)
-    history_files = await _read_files(form, HISTORY_ATTACHMENT_FILES_PART)
+        raw = form.get(TEXT_DATA_PART)
+        if raw is None:
+            raise _bad_request("textData がありません")
+        text = (
+            (await raw.read()).decode("utf-8") if isinstance(raw, UploadFile) else raw
+        )
+        try:
+            dto = CreateMessageContentRequest.model_validate_json(text)
+        except ValidationError as e:
+            raise _bad_request(f"textData が不正です: {e}") from e
+        attachment_files = await _read_files(form, ATTACHMENT_FILES_PART)
+        history_files = _summarize_files(form, HISTORY_ATTACHMENT_FILES_PART)
+    finally:
+        await form.close()
     command = CreateMessageContentCommand.from_request(
         dto, attachment_files, history_files
     )
@@ -83,8 +95,13 @@ def _log_received_request(
     dto: CreateMessageContentRequest,
     command: CreateMessageContentCommand,
 ) -> None:
-    def describe(files: list[UploadedFile]) -> str:
-        return "[" + ", ".join(f"{f.filename}({len(f.data)}bytes)" for f in files) + "]"
+    def describe(files: list[UploadedFile] | list[FileSummary]) -> str:
+        items = [
+            f"{f.filename}({len(f.data) if isinstance(f, UploadedFile) else f.size}"
+            "bytes)"
+            for f in files
+        ]
+        return "[" + ", ".join(items) + "]"
 
     logger.info(
         "Received message content request: endpoint=%s, textData=%s, "

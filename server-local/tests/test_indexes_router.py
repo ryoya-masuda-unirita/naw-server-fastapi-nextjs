@@ -336,6 +336,66 @@ class TestUpdateFile:
         assert delete_upload.content == b"p1\np2\n"
         assert delete_upload.filename.startswith("ids")
 
+    async def test_update_with_same_ids_recreates_parts(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """差し替え後に Waha! が同じファイル ID・パート ID を返してもパートが残ること"""
+        await insert_file(session_factory, "f1", user_id="owner", part_ids=["p1", "p2"])
+        fake_waha.download_content = "f1\tp1\r\nf1\tp2"
+        res = await client.patch(
+            f"{BASE}/files/f1",
+            headers=TENANT,
+            data={"name": "b.txt", "displayName": "差し替え", "userId": "u2"},
+            files={"file": ("b.txt", b"new", "text/plain")},
+        )
+        assert res.status_code == 200
+        assert sorted(p["id"] for p in res.json()["fileParts"]) == ["p1", "p2"]
+        assert await get_part_ids(session_factory, "f1") == ["p1", "p2"]
+        file = await get_file(session_factory, "f1")
+        assert file is not None
+        assert file.display_name == "差し替え"
+
+    async def test_update_with_file_rolls_back_delete_on_failure(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """再登録に失敗したら削除も取り消し、元のファイルとパートが残ること"""
+        await insert_file(session_factory, "f1", part_ids=["p1"])
+        fake_waha.fail_on = {"execute_learning"}
+        res = await client.patch(
+            f"{BASE}/files/f1",
+            headers=TENANT,
+            data={"name": "b.txt", "userId": "u"},
+            files={"file": ("b.txt", b"new", "text/plain")},
+        )
+        assert res.status_code == 500
+        assert await get_file(session_factory, "f1") is not None
+        assert await get_part_ids(session_factory, "f1") == ["p1"]
+
+    async def test_upload_existing_file_keeps_user_id(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """既存のファイル ID で登録し直しても登録者（user_id）は変えないこと"""
+        await insert_file(session_factory, "f1", user_id="owner")
+        fake_waha.download_content = "f1\tp9"
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "displayName": "再登録", "userId": "other"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 200
+        assert res.json()["userId"] == "owner"
+        assert res.json()["displayName"] == "再登録"
+
 
 class TestDeleteFile:
     async def test_delete_physical(
@@ -471,6 +531,22 @@ class TestSyncFiles:
         assert existing.display_name == "元の名前"
         assert await get_part_ids(session_factory, "exists") == []
         assert await get_file(session_factory, "new") is not None
+
+    async def test_sync_merges_duplicate_and_existing_parts(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """TSV 内の重複パートや既存のパート ID があっても上書きで同期できること"""
+        await insert_file(session_factory, "old", part_ids=["shared"])
+        fake_waha.download_content = (
+            "/a/x.txt\tp1\tnew\r\n/a/x.txt\tp1\tnew\r\n/a/x.txt\tshared\tnew"
+        )
+        res = await client.post(f"{BASE}/sync", headers=TENANT, json={})
+        assert res.status_code == 204
+        assert await get_part_ids(session_factory, "new") == ["p1", "shared"]
+        assert await get_part_ids(session_factory, "old") == []
 
 
 class TestAdditionalLearning:

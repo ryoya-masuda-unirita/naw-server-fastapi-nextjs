@@ -7,7 +7,6 @@
 """
 
 import asyncio
-import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -25,7 +24,7 @@ from app.clients.waha_client import (
     ResultStatus,
     WahaClient,
 )
-from app.core.config import Settings
+from app.core.config import MS_PER_SECOND, Settings
 from app.core.errors import EntityNotFoundError
 from app.core.ids import create_unique_id
 from app.core.jsonutil import to_compact_json
@@ -59,6 +58,7 @@ logger = logging.getLogger(__name__)
 TEXT_DATA_FILENAME = "textData.json"
 STREAM_FILE_SUFFIX = ".txt"
 LOG_PREVIEW_MAX_LENGTH = 500
+MASKED_VALUE = "***"
 
 # NAW 互換モードでクライアントへ中継するストリームファイルのイベント
 FORWARD_EVENT_TYPES = frozenset(
@@ -101,6 +101,17 @@ class StreamRuntime:
     library_title: list[str] = field(default_factory=list)
     library_content: list[str] = field(default_factory=list)
     poll_tasks: list[asyncio.Task[None]] = field(default_factory=list)
+
+
+def _mask_access_token(text_data: dict[str, Any]) -> dict[str, Any]:
+    """ログに NAW のアクセストークンを残さないよう伏せ字にする。
+
+    移植元は textData.json を本文ごとログに出していたが、トークンが漏れると
+    NAW API を利用者として呼べてしまうため、ログでは値を出さない。
+    """
+    if "accessToken" not in text_data:
+        return text_data
+    return {**text_data, "accessToken": MASKED_VALUE}
 
 
 def _preview(value: str | None) -> str | None:
@@ -159,9 +170,11 @@ class MessageContentStreamService:
             session.add(content)
             await session.flush()
             await save_attachment_files(session, content.id, command.attachment_files)
+        # ストリームファイルの作成に失敗したら仮レコードも残さないよう、コミット前に作る
+        # （message_id は一意のため、残ると同じ messageId で再試行できなくなる）
+        stream_file_path = self._prepare_stream_file(content.id)
         await session.commit()
 
-        stream_file_path = self._prepare_stream_file(content.id)
         logger.info(
             "Stream session prepared: messageContentId=%s, messageId=%s, "
             "streamfilepath=%s",
@@ -219,7 +232,9 @@ class MessageContentStreamService:
     async def sse_events(self, runtime: StreamRuntime) -> AsyncIterator[str]:
         """キューに積まれた SSE をクライアントへ流す（SseEmitter 相当）。"""
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + self._settings.stream_emitter_timeout_ms / 1000
+        deadline = (
+            loop.time() + self._settings.stream_emitter_timeout_ms / MS_PER_SECOND
+        )
         try:
             while True:
                 remaining = deadline - loop.time()
@@ -308,9 +323,17 @@ class MessageContentStreamService:
     ) -> None:
         if runtime.waha_session_id is None:
             raise RuntimeError("Waha session is not started")
+        text_data = self._build_text_data(runtime, stream_file_path)
+        logger.info(
+            "Preparing textData.json: messageContentId=%s, wahaSessionId=%s, "
+            "content=%s",
+            runtime.session.message_content_id,
+            runtime.waha_session_id,
+            to_compact_json(_mask_access_token(text_data)),
+        )
         await self._waha.upload_file(
             filename=TEXT_DATA_FILENAME,
-            content=self._build_text_data(runtime, stream_file_path).encode("utf-8"),
+            content=to_compact_json(text_data).encode("utf-8"),
             slot=SLOT_TEXTDATA,
             session_id=runtime.waha_session_id,
         )
@@ -319,7 +342,9 @@ class MessageContentStreamService:
         )
 
     @staticmethod
-    def _build_text_data(runtime: StreamRuntime, stream_file_path: str) -> str:
+    def _build_text_data(
+        runtime: StreamRuntime, stream_file_path: str
+    ) -> dict[str, Any]:
         """移植元 WahaTextDataDTO（@JsonInclude(NON_NULL)、空の tools は省略）。"""
         text_data: dict[str, Any] = {
             "streamfilepath": stream_file_path,
@@ -331,7 +356,7 @@ class MessageContentStreamService:
             text_data["accessToken"] = runtime.command.access_token
         if runtime.session.message_id:
             text_data["messageId"] = runtime.session.message_id
-        return to_compact_json(text_data)
+        return text_data
 
     # ------------------------------------------------------------------
     # ポーリング
@@ -345,7 +370,7 @@ class MessageContentStreamService:
         ]
 
     async def _tail_loop(self, runtime: StreamRuntime) -> None:
-        interval = self._settings.stream_tail_poll_interval_ms / 1000
+        interval = self._settings.stream_tail_poll_interval_ms / MS_PER_SECOND
         while not runtime.finalized:
             try:
                 await self._process_stream_file_read(runtime, attempt_finalize=True)
@@ -362,7 +387,7 @@ class MessageContentStreamService:
 
     async def _result_loop(self, runtime: StreamRuntime) -> None:
         # ジョブ起動直後の未確定応答を FAILURE と誤判定しないよう、初回も間隔を空ける
-        interval = self._settings.stream_result_poll_interval_ms / 1000
+        interval = self._settings.stream_result_poll_interval_ms / MS_PER_SECOND
         while True:
             await asyncio.sleep(interval)
             if runtime.finalized or runtime.waha_session_id is None:
@@ -676,5 +701,5 @@ class MessageContentStreamService:
     @staticmethod
     def _close(runtime: StreamRuntime) -> None:
         # 積んだイベントを流し切った後にレスポンスを閉じるため、番兵を入れる
-        with contextlib.suppress(Exception):
-            runtime.queue.put_nowait(None)
+        # （キューは上限なしのため put_nowait は失敗しない）
+        runtime.queue.put_nowait(None)

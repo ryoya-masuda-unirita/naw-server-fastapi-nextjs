@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.waha_client import SLOT_FILE, SLOT_OUTPUT, WahaClient
 from app.core.errors import BadRequestError, EntityNotFoundError
-from app.core.jsonutil import java_split
+from app.core.jsonutil import java_split, utcnow
 from app.models import File, FilePart, FileStatus
 from app.repositories import file_repository
 from app.repositories.file_repository import FileSearchCondition
@@ -183,6 +183,7 @@ async def _save(
 ) -> dict[str, Any]:
     file = await file_repository.find_by_id_and_tenant_id(session, file_id, tenant_id)
     if file is None:
+        # user_id は移植元で updatable=false のため、新規作成時にだけ設定する
         file = File(
             id=file_id,
             tenant_id=tenant_id,
@@ -196,7 +197,6 @@ async def _save(
     file.name = file_name or ""
     file.display_name = display_name
     file.reference = reference
-    file.user_id = user_id or ""
     file.index_id = index_id
     file.status = int(FileStatus.ENABLE)
     file.feedback_id = feedback_id
@@ -204,16 +204,25 @@ async def _save(
     file.touch()
     await session.flush()
 
-    for part_id in part_ids:
-        # 移植元は JPA の merge で保存するため、同じ ID のパートは上書きになる
-        existing = await session.get(FilePart, part_id)
-        if existing is None:
-            session.add(FilePart(id=part_id, tenant_id=tenant_id, file_id=file_id))
-        else:
-            existing.tenant_id = tenant_id
-            existing.file_id = file_id
+    for part_id in dict.fromkeys(part_ids):
+        await _upsert_part(
+            session, part_id=part_id, tenant_id=tenant_id, file_id=file_id
+        )
     await session.commit()
     return (await _with_parts(session, [file]))[0]
+
+
+async def _upsert_part(
+    session: AsyncSession, *, part_id: str, tenant_id: str, file_id: str
+) -> None:
+    """移植元は JPA の merge（cascade）で保存するため、同じ ID のパートは上書きになる。"""
+    existing = await session.get(FilePart, part_id)
+    if existing is None:
+        session.add(FilePart(id=part_id, tenant_id=tenant_id, file_id=file_id))
+        return
+    existing.tenant_id = tenant_id
+    existing.file_id = file_id
+    existing.updated_at = utcnow()
 
 
 async def _run_waha_delete(
@@ -224,12 +233,19 @@ async def _run_waha_delete(
     file_id: str,
     index_id: str,
     physical_delete: bool,
+    commit: bool = True,
 ) -> None:
+    """Waha! の削除ジョブを実行し、DB から物理削除または論理削除する。
+
+    ファイル差し替え（update_file）では、再登録に失敗したときに削除も取り消せるよう
+    commit=False で呼び、再登録と同じトランザクションで確定する（移植元の
+    @Transactional と同じ範囲）。
+    """
     file = await file_repository.find_by_id_and_index_id(session, file_id, index_id)
     if file is None:
         raise EntityNotFoundError("ファイルが存在しません。")
-    parts = await file_repository.find_parts_by_file_ids(session, [file.id])
-    ids_text = "".join(f"{p.id}\n" for p in parts[file.id])
+    parts = (await file_repository.find_parts_by_file_ids(session, [file.id]))[file.id]
+    ids_text = "".join(f"{p.id}\n" for p in parts)
 
     session_id = await waha.start_session()
     try:
@@ -245,11 +261,19 @@ async def _run_waha_delete(
         await waha.execute(session_id, service_name or "")
         await waha.get_results(session_id)
         if physical_delete:
-            await file_repository.delete_by_id(session, file_id)
+            # SQL の一括 DELETE だとセッション内に削除済みのパートが残り、同じ ID で
+            # 再登録するときに既存扱いされて INSERT されないため、ORM 経由で削除する
+            # モデル間に relationship がなく削除順が保証されないため、パートを先に消す
+            for part in parts:
+                await session.delete(part)
+            await session.flush()
+            await session.delete(file)
         else:
             file.status = int(FileStatus.DELETED)
             file.touch()
-        await session.commit()
+        await session.flush()
+        if commit:
+            await session.commit()
     finally:
         await waha.end_session(session_id)
 
@@ -322,6 +346,7 @@ async def update_file(
         file_id=file_id,
         index_id=index_id,
         physical_delete=True,
+        commit=False,
     )
     return await _run_waha_create(
         session,
@@ -417,8 +442,10 @@ async def sync_files(
             continue
         session.add(file)
         await session.flush()
-        for part_id in parts[file_id]:
-            session.add(FilePart(id=part_id, tenant_id=tenant_id, file_id=file_id))
+        for part_id in dict.fromkeys(parts[file_id]):
+            await _upsert_part(
+                session, part_id=part_id, tenant_id=tenant_id, file_id=file_id
+            )
     await session.commit()
 
 

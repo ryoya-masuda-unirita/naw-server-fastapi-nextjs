@@ -75,6 +75,18 @@ class UploadedFile:
 
 
 @dataclass(frozen=True)
+class FileSummary:
+    """中身を使わないファイル（履歴の添付）のログ用情報。
+
+    移植元でも履歴の添付ファイルは Waha! に送らず使われないため、
+    大きなファイルをメモリに読み込まないよう名前とサイズだけを持つ。
+    """
+
+    filename: str | None
+    size: int
+
+
+@dataclass(frozen=True)
 class CreateMessageContentCommand:
     """移植元 CreateMessageContentViewModel。"""
 
@@ -85,7 +97,7 @@ class CreateMessageContentCommand:
     user_input: str | None
     attachment_files: list[UploadedFile] = field(default_factory=list)
     history_messages: list[HistoryMessageContent] = field(default_factory=list)
-    history_attachment_files: list[UploadedFile] = field(default_factory=list)
+    history_attachment_files: list[FileSummary] = field(default_factory=list)
     access_token: str | None = None
     tools: list[ToolConfig] = field(default_factory=list)
     create_library: bool = False
@@ -96,7 +108,7 @@ class CreateMessageContentCommand:
         cls,
         request: CreateMessageContentRequest,
         attachment_files: list[UploadedFile],
-        history_attachment_files: list[UploadedFile],
+        history_attachment_files: list[FileSummary],
     ) -> "CreateMessageContentCommand":
         return cls(
             assistant_id=request.assistantId,

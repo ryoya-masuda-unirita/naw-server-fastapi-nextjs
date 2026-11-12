@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import ColumnElement, delete, func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import File, FilePart, FileStatus
@@ -90,8 +90,3 @@ async def find_parts_by_file_ids(
     for part in result.scalars().all():
         grouped[part.file_id].append(part)
     return grouped
-
-
-async def delete_by_id(session: AsyncSession, file_id: str) -> None:
-    # ファイルパートは外部キーの ON DELETE CASCADE で一緒に消える
-    await session.execute(delete(File).where(File.id == file_id))

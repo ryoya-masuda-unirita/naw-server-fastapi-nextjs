@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 移植元 application.yml の spring.servlet.multipart に合わせた上限
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 MAX_REQUEST_SIZE_BYTES = 215 * 1024 * 1024
+# 設定値はミリ秒（移植元の *-ms）で受け取り、asyncio には秒で渡すための換算
+MS_PER_SECOND = 1000
 
 
 class Settings(BaseSettings):
