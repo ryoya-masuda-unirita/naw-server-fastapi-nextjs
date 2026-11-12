@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -124,12 +124,12 @@ async def files_plan(session):
 
 
 async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
-    """本日を契約開始日とする有効なサブスクリプションを作成する。"""
+    """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する。"""
     subscription = Subscription(
         tenant_id=tenant_id,
         plan_id=plan_id,
         status=SubscriptionStatus.ACTIVE,
-        start_date=date.today(),
+        start_date=datetime.now(timezone.utc).date(),
         end_date=None,
     )
     session.add(subscription)

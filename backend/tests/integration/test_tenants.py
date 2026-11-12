@@ -124,12 +124,12 @@ async def plan(session):
 async def _create_active_subscription(
     session, tenant_id: str, plan_id: str
 ) -> Subscription:
-    """本日を契約開始日とする有効なサブスクリプションを作成する（常にテスト実行時点で有効になる）。"""
+    """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する（常にテスト実行時点で有効になる）。"""
     subscription = Subscription(
         tenant_id=tenant_id,
         plan_id=plan_id,
         status=SubscriptionStatus.ACTIVE,
-        start_date=date.today(),
+        start_date=datetime.now(timezone.utc).date(),
         end_date=None,
     )
     session.add(subscription)

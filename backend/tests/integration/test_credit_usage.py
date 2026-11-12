@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -96,12 +96,12 @@ async def credit_usage_plan(session):
 async def _create_active_subscription(
     session, tenant_id: str, plan_id: str
 ) -> Subscription:
-    """本日を契約開始日とする有効なサブスクリプションを作成する（常にテスト実行時点で有効になる）。"""
+    """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する（常にテスト実行時点で有効になる）。"""
     subscription = Subscription(
         tenant_id=tenant_id,
         plan_id=plan_id,
         status=SubscriptionStatus.ACTIVE,
-        start_date=date.today(),
+        start_date=datetime.now(timezone.utc).date(),
         end_date=None,
     )
     session.add(subscription)
@@ -293,12 +293,13 @@ class TestCreditUsageRouter:
             credit_usage_headers,
         ):
             """end_dateが過去のサブスクリプションは有効として扱われず空レスポンスになること"""
+            today_utc = datetime.now(timezone.utc).date()
             subscription = Subscription(
                 tenant_id=credit_usage_tenant.id,
                 plan_id=credit_usage_plan.id,
                 status=SubscriptionStatus.ACTIVE,
-                start_date=date.today() - timedelta(days=60),
-                end_date=date.today() - timedelta(days=1),
+                start_date=today_utc - timedelta(days=60),
+                end_date=today_utc - timedelta(days=1),
             )
             session.add(subscription)
             await session.commit()
