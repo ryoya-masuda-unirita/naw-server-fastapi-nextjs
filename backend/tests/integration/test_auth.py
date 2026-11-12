@@ -140,6 +140,58 @@ class TestAuthAPI:
         assert response.json()["loginStatus"] == "SUCCESS"
         assert response.json()["token"] is not None
 
+    async def test_post_auth_password_reset_with_username_key(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset ログインIDを username キーで送っても成功すること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "oldPassword": test_user_with_password["plain_password"],
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["loginStatus"] == "SUCCESS"
+        assert response.json()["token"] is not None
+
+    async def test_post_auth_password_reset_with_username_key_and_invalid_old_password(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset username キーで旧パスワード誤りなら 422 ではなく 403 になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "oldPassword": "WrongPassword999!",
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 403
+
+    async def test_post_auth_password_reset_without_login_id(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset loginId・username のどちらもなければ 422 になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "oldPassword": test_user_with_password["plain_password"],
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 422
+
     async def test_get_api_auth_success(self, client, test_tenant, valid_jwt_token):
         """GET /api/auth 成功ケース"""
         async with client as c:
