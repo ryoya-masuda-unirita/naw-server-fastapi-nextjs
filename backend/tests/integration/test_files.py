@@ -250,6 +250,60 @@ class TestFilesRouter:
 
             assert response.status_code == 429
 
+        async def test_upload_file_with_query_params(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """file以外の項目をクエリパラメータで送ってもアップロードできること"""
+            # 画面（training-api.service.ts）と同じく、fileのみボディ・他はクエリで送る
+            async with client as ac:
+                response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files={"file": ("q.txt", b"query", "text/plain")},
+                    params={
+                        "name": "q.txt",
+                        "displayName": "クエリ表示名",
+                        "reference": "ref",
+                    },
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["fileName"] == "q.txt"
+            assert body["displayName"] == "クエリ表示名"
+            assert body["reference"] == "ref"
+
+        async def test_upload_without_name_returns_422(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """nameがボディ・クエリのどちらにも無い場合は422になること"""
+            async with client as ac:
+                response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files={"file": ("q.txt", b"query", "text/plain")},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 422
+            assert response.json()["detail"][0]["loc"] == ["body", "name"]
+
+        async def test_form_value_takes_precedence_over_query(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """同じ項目がボディとクエリの両方にある場合はボディの値が採用されること"""
+            files, data = _upload_payload(display_name="form")
+            async with client as ac:
+                response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    params={"displayName": "query"},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 200
+            assert response.json()["displayName"] == "form"
+
     class TestDownload:
         async def test_download_file(
             self,
@@ -443,6 +497,37 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 429
+
+        async def test_update_metadata_with_query_params(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """file未添付時にクエリパラメータで送った項目が更新されること"""
+            files, data = _upload_payload()
+            async with client as ac:
+                upload_response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    headers=files_admin_headers,
+                )
+                file_id = upload_response.json()["id"]
+
+                # 画面はファイル未添付の更新時、ボディ無しで項目をクエリに載せて送る
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    params={
+                        "displayName": "クエリで更新",
+                        "reference": "new-ref",
+                        "status": "DISABLE",
+                    },
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["displayName"] == "クエリで更新"
+            assert body["reference"] == "new-ref"
+            assert body["status"] == FileStatus.DISABLE.value
 
     class TestDelete:
         async def test_soft_delete_marks_status_deleted(
