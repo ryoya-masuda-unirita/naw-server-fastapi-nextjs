@@ -688,6 +688,95 @@ class TestGetLibrary:
 
 
 @pytest.mark.asyncio
+class TestGetLibraryContent:
+    """GET /api/libraries/{libraryId}/content"""
+
+    async def test_get_content_as_room_owner(self, client, owner_headers, library):
+        """ルーム所有者が本文を{"data": 本文}で取得できること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{library.id}/content", headers=owner_headers
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"data": library.content}
+
+    async def test_get_content_shared_via_library_group(
+        self, session, client, group_member_headers, library, group, lib_tenant
+    ):
+        """ルームへのアクセス権はないが、ライブラリの共有先グループに所属していれば取得できること"""
+        session.add(
+            ShareLibrary(
+                tenant_id=lib_tenant.id, library_id=library.id, group_id=group.id
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{library.id}/content", headers=group_member_headers
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"data": library.content}
+
+    async def test_get_content_without_access_returns_404(
+        self, client, unrelated_headers, library
+    ):
+        """閲覧できないユーザーは404 Library not foundになること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{library.id}/content", headers=unrelated_headers
+            )
+
+        assert response.status_code == 404
+        assert response.json()["message"] == "Library not found"
+
+    async def test_get_content_not_found_returns_404(self, client, owner_headers):
+        """存在しないlibraryIdは404 Library not foundになること"""
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{uuid4()}/content", headers=owner_headers
+            )
+
+        assert response.status_code == 404
+        assert response.json()["message"] == "Library not found"
+
+    async def test_get_content_invalid_id_returns_404(self, client, owner_headers):
+        """UUID形式でないlibraryIdは404 Library not foundになること"""
+        async with client as c:
+            response = await c.get(
+                "/api/libraries/not-a-uuid/content", headers=owner_headers
+            )
+
+        assert response.status_code == 404
+        assert response.json()["message"] == "Library not found"
+
+    async def test_get_content_without_content_returns_404(
+        self, session, client, owner_headers, library
+    ):
+        """本文が無いライブラリは404 Library content not foundになること"""
+        library.content = None
+        session.add(library)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/libraries/{library.id}/content", headers=owner_headers
+            )
+
+        assert response.status_code == 404
+        assert response.json()["message"] == "Library content not found"
+
+    async def test_get_content_without_auth_returns_401(self, client, library):
+        """未ログインでは取得できないこと"""
+        async with client as c:
+            response = await c.get(f"/api/libraries/{library.id}/content")
+
+        assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 class TestUpdateLibrary:
     """PUT /api/libraries/{libraryId}"""
 

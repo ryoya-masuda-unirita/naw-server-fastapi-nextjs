@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.library import (
     LibraryPageNumber,
     LibraryPageSize,
+    LibraryContentResponse,
     LibraryGetResponse,
     LibraryListItemResponse,
     LibraryPageResponse,
@@ -74,6 +75,19 @@ async def get_library(
 ) -> LibraryGetResponse:
     """ライブラリのMarkdownコンテンツ取得"""
     return await LibraryService.get_library(
+        x_tenant_id, current_user, library_id, session
+    )
+
+
+@library_router.get("/{library_id}/content", response_model=LibraryContentResponse)
+async def get_library_content(
+    library_id: str,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LibraryContentResponse:
+    """ライブラリ本文取得"""
+    return await LibraryService.get_library_content(
         x_tenant_id, current_user, library_id, session
     )
 
