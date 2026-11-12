@@ -8,9 +8,13 @@ from sqlalchemy.orm import InstrumentedAttribute
 from app.core.search import escape_like_pattern
 from app.models.file import File, FileStatus
 
+# 移植元は`Pageable`でエンティティの項目名をそのまま並べ替えキーにするため、`userId`は
+# ユーザー名ではなく`user_id`列、`status`は序数（ENABLE→DISABLE→DELETED）で並べ替える。
 _ORDER_BY_COLUMNS: dict[str, InstrumentedAttribute] = {
     "displayName": File.display_name,
     "updatedAt": File.updated_at,
+    "userId": File.user_id,
+    "status": File.status,
 }
 
 
@@ -117,10 +121,11 @@ class FileRepository:
             display_name: 表示名の部分一致検索文字列。
             file_name: ファイル名の部分一致検索文字列。
             user_id: 絞り込み対象のユーザーID（解決済みUUID）。Noneなら絞り込まない。
-            status: 絞り込み対象のステータス。Noneなら絞り込まない。
+            status: 絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
             updated_at_from: 更新日時の範囲開始（この値以上）。
             updated_at_to: 更新日時の範囲終了（この値以下）。
-            sort_col_name: ソート対象列名（"displayName"または"updatedAt"）。
+            sort_col_name: ソート対象列名（"displayName"・"updatedAt"・"userId"・"status"）。
+                未知の列名は"updatedAt"として扱う。
             sort_dir: ソート方向（"asc"または"desc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
@@ -137,6 +142,10 @@ class FileRepository:
             stmt = stmt.where(File.user_id == user_id)
         if status is not None:
             stmt = stmt.where(File.status == status)
+        else:
+            # 削除は状態をDELETEDにするだけ（論理削除）のため、指定が無いときは一覧から除く
+            # （移植元 NAW-1332 と同じ）。
+            stmt = stmt.where(File.status != FileStatus.DELETED)
         if updated_at_from is not None:
             stmt = stmt.where(File.updated_at >= updated_at_from)
         if updated_at_to is not None:
@@ -146,7 +155,13 @@ class FileRepository:
         total = (await session.execute(count_stmt)).scalar() or 0
 
         sort_col = _ORDER_BY_COLUMNS.get(sort_col_name, File.updated_at)
-        stmt = stmt.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
+        # 移植元（Spring `Direction.fromString`）同様、方向は大文字小文字を区別しない。
+        # `status`・`userId`は値の重複が多く、同順位の並びが不定だとOFFSET/LIMITの
+        # ページ間で行が重複・欠落するため、`id`を第2キーにして順序を確定させる。
+        stmt = stmt.order_by(
+            sort_col.desc() if sort_dir.lower() == "desc" else sort_col.asc(),
+            File.id.asc(),
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         files = (await session.execute(stmt)).scalars().all()

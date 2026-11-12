@@ -52,7 +52,7 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
 メインの会話コンテキストを圧迫しないよう、Issue1件分の「着手〜実装〜テスト〜PR作成〜code-review」一式を `Agent(subagent_type: claude)` に委譲する。会話の前提を知らない前提で、以下を自己完結のプロンプトに含めること。
 
 - 対象Issue番号
-- `~/Documents/naw-server-fastapi-nextjs` の `.claude/skills/naw-frontend-issue-workflow/SKILL.md`（および参照先の `.claude/skills/naw-issue-workflow/references/doc-templates.md`）を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
+- `~/Documents/personal/naw-server-fastapi-nextjs` の `.claude/skills/naw-frontend-issue-workflow/SKILL.md`（および参照先の `.claude/skills/naw-issue-workflow/references/doc-templates.md`）を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
 - `frontend/.claude/CLAUDE.md`（技術スタック・Angular→React対応表・デザイン移行方針）を必ず読んで実装に反映すること
 - 以下の**本スキル独自の上書きルール**を明示すること（`naw-frontend-issue-workflow` のデフォルトと異なる部分なので、エージェントが読み違えないよう強調する）:
   1. **着手前に必ず `gh issue view {番号} --json title,body,labels` でIssue本文とラベルを確認し、`frontend-port` ラベルが付いていることを確認すること。** その上で `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を実行する（このスクリプトが `develop` の最新化・`feature/issue-{番号}` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）
@@ -61,7 +61,7 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
   4. 依存するバックエンドAPIが `backend/` に未実装であることが判明した場合、無理にモックで実装を完成させようとせず、「BLOCKED」として作業を終了する（実装対象がフロントエンドのみのIssueに限定されているはずだが、調査不足で見落としがあった場合の保険）
   5. 実装中に解消できないテスト失敗・仕様不明に遭遇し、これ以上進められないと判断した場合は、無理に実装を完成させようとせず、作業ブランチとドキュメントはそのまま残し、対象Issueに詰まった理由をコメントで残した上で「BLOCKED」として作業を終了する（PRは作らない、Project Statusは変更しない）
   6. 正常に完了できた場合は、`naw-pr-workflow` の [SKILL.md](../naw-pr-workflow/SKILL.md) に従いPRを作成し、`/code-review` を実行して `code-review.md` を作成し、🔴致命的指摘があれば修正すること。PR本文には必ず `Closes #{Issue番号}` を入れること
-  7. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `.claude/CLAUDE.md` に従うこと
+  7. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `CLAUDE.md` に従うこと
 - 最後に「PR作成に成功したか」「BLOCKEDで終わったか」を明確に報告するよう指示する（成功した場合はPR URLとブランチ名、BLOCKEDの場合は理由を含めて）
 
 `isolation` は指定しない(同一リポジトリを順番に使うため worktree 分離は不要。並列実行しない前提と矛盾するため)。

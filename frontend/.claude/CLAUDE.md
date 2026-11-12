@@ -2,7 +2,7 @@
 
 ## 移植元リポジトリ
 
-Angular 実装: `~/Documents/secuaigent-client`
+Angular 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/client`
 
 **このリポジトリは日々更新される**。実装前に必ず最新の Angular 実装を確認してからポートすること。
 
@@ -33,9 +33,9 @@ Angular 実装: `~/Documents/secuaigent-client`
 
 | リソース | パス |
 |---|---|
-| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/secuaigent-client/src/styles.css` |
-| 翻訳ファイル（日本語） | `~/Documents/secuaigent-client/public/i18n/ja.json` |
-| 翻訳ファイル（英語） | `~/Documents/secuaigent-client/public/i18n/en.json` |
+| グローバル CSS（カラー・フォント・コンポーネント） | `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/styles.css` |
+| 翻訳ファイル（日本語） | `~/Documents/unirita-develop-pj/secuaigent-ref/client/public/i18n/ja.json` |
+| 翻訳ファイル（英語） | `~/Documents/unirita-develop-pj/secuaigent-ref/client/public/i18n/en.json` |
 | 各ページの HTML テンプレート | `*.component.html` |
 
 ### 移行手順

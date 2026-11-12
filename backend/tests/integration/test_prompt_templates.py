@@ -1,12 +1,18 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 
 from app.core.security import create_access_token
 from app.main import app
 from app.models.group import Group, GroupUser
-from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
+from app.models.prompt_template import (
+    NAME_MAX_LENGTH,
+    GroupPromptTemplate,
+    PromptTemplate,
+)
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 
@@ -485,6 +491,162 @@ class TestGetAdminPromptTemplates:
         assert template_in_group.id not in ids
 
 
+# 名前順と更新日時順が異なる並びになるよう、名前と更新日時を組み合わせる
+FIXTURE_SORTABLE_TEMPLATES = [
+    ("Bravo", datetime(2026, 1, 3, tzinfo=UTC)),
+    ("Delta", datetime(2026, 1, 1, tzinfo=UTC)),
+    ("Alpha", datetime(2026, 1, 2, tzinfo=UTC)),
+    ("Charlie", datetime(2026, 1, 4, tzinfo=UTC)),
+]
+
+
+@pytest.fixture
+async def sortable_templates(session, tenant):
+    """並べ替え確認用のテンプレート4件（更新日時を明示）"""
+    templates = [
+        PromptTemplate(
+            tenant_id=tenant.id,
+            name=name,
+            description=None,
+            system_prompt="p",
+            updated_at=updated_at,
+        )
+        for name, updated_at in FIXTURE_SORTABLE_TEMPLATES
+    ]
+    session.add_all(templates)
+    await session.commit()
+    return templates
+
+
+async def _get_admin_template_names(client, headers, params):
+    async with client as c:
+        response = await c.get(
+            "/api/admin/prompt-templates", params=params, headers=headers
+        )
+    assert response.status_code == 200
+    return [t["name"] for t in response.json()["content"]]
+
+
+@pytest.mark.asyncio
+class TestGetAdminPromptTemplatesSort:
+    """GET /api/admin/prompt-templates の sort パラメータ"""
+
+    async def test_sorts_by_name_asc(self, client, admin_headers, sortable_templates):
+        """sort=name,asc でテンプレート名の昇順に並ぶこと"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "name,asc"}
+        )
+
+        assert names == ["Alpha", "Bravo", "Charlie", "Delta"]
+
+    async def test_sorts_by_name_desc(self, client, admin_headers, sortable_templates):
+        """sort=name,desc でテンプレート名の降順に並ぶこと"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "name,desc"}
+        )
+
+        assert names == ["Delta", "Charlie", "Bravo", "Alpha"]
+
+    async def test_sorts_by_updated_at_asc(
+        self, client, admin_headers, sortable_templates
+    ):
+        """sort=updatedAt,asc で更新日時の昇順に並ぶこと"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "updatedAt,asc"}
+        )
+
+        assert names == ["Delta", "Alpha", "Bravo", "Charlie"]
+
+    async def test_default_sort_is_updated_at_desc(
+        self, client, admin_headers, sortable_templates
+    ):
+        """sort 未指定の場合は従来どおり更新日時の降順に並ぶこと"""
+        names = await _get_admin_template_names(client, admin_headers, {})
+
+        assert names == ["Charlie", "Bravo", "Alpha", "Delta"]
+
+    async def test_sort_is_applied_before_paging(
+        self, client, admin_headers, sortable_templates
+    ):
+        """並べ替えはページングより前に適用され、2ページ目に名前順の3〜4件目が返ること"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "name,asc", "page": 1, "size": 2}
+        )
+
+        assert names == ["Charlie", "Delta"]
+
+    async def test_sort_direction_defaults_to_asc(
+        self, client, admin_headers, sortable_templates
+    ):
+        """向きを省略した場合は昇順になること（Spring Data と同じ）"""
+        names = await _get_admin_template_names(client, admin_headers, {"sort": "name"})
+
+        assert names == ["Alpha", "Bravo", "Charlie", "Delta"]
+
+    async def test_unknown_sort_property_falls_back_to_updated_at(
+        self, client, admin_headers, sortable_templates
+    ):
+        """対応外の項目を指定してもエラーにならず更新日時順になること"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "unknown,asc"}
+        )
+
+        assert names == ["Delta", "Alpha", "Bravo", "Charlie"]
+
+    async def test_empty_sort_falls_back_to_default(
+        self, client, admin_headers, sortable_templates
+    ):
+        """sort= （空文字）の場合は未指定と同じく更新日時の降順になること"""
+        names = await _get_admin_template_names(client, admin_headers, {"sort": ""})
+
+        assert names == ["Charlie", "Bravo", "Alpha", "Delta"]
+
+    async def test_sort_ignores_surrounding_spaces(
+        self, client, admin_headers, sortable_templates
+    ):
+        """項目・向きの前後に空白があっても指定どおりに並ぶこと"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "name, desc"}
+        )
+
+        assert names == ["Delta", "Charlie", "Bravo", "Alpha"]
+
+    async def test_ties_are_ordered_by_id(self, client, admin_headers, session, tenant):
+        """同名のテンプレートはIDの昇順で並ぶこと（ページ境界で順序が揺れないように）"""
+        later_id = "b" * 32
+        earlier_id = "a" * 32
+        session.add_all(
+            [
+                PromptTemplate(
+                    id=later_id,
+                    tenant_id=tenant.id,
+                    name="Same",
+                    description=None,
+                    system_prompt="p",
+                ),
+                PromptTemplate(
+                    id=earlier_id,
+                    tenant_id=tenant.id,
+                    name="Same",
+                    description=None,
+                    system_prompt="p",
+                ),
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/prompt-templates",
+                params={"sort": "name,desc"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        ids = [t["id"] for t in response.json()["content"]]
+        assert ids == [earlier_id, later_id]
+
+
 @pytest.mark.asyncio
 class TestCreatePromptTemplate:
     """POST /api/admin/prompt-templates"""
@@ -631,6 +793,108 @@ class TestUpdatePromptTemplate:
             )
 
         assert response.status_code == 403
+
+
+def _template_body(name: str) -> dict[str, str | None]:
+    return {"name": name, "description": None, "systemPrompt": "prompt"}
+
+
+@pytest.mark.asyncio
+class TestPromptTemplateNameMaxLength:
+    """テンプレート名の上限（DBカラムと同じ32文字）の検証（Issue #171）"""
+
+    async def test_create_accepts_name_at_max_length(self, client, admin_headers):
+        """上限ちょうどの名前でテンプレートを作成できること"""
+        name = "a" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_create_rejects_name_over_max_length(
+        self, client, admin_headers, session, tenant
+    ):
+        """上限を超える名前は保存前に422で拒否され、テンプレートが作成されないこと"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body("a" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["loc"] == ["body", "name"]
+        count = (
+            await session.execute(
+                select(func.count())
+                .select_from(PromptTemplate)
+                .where(PromptTemplate.tenant_id == tenant.id)
+            )
+        ).scalar()
+        assert count == 0
+
+    async def test_create_counts_multibyte_characters_as_one(
+        self, client, admin_headers
+    ):
+        """日本語などのマルチバイト文字も1文字として数え、上限ちょうどなら作成できること"""
+        name = "あ" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_create_rejects_multibyte_name_over_max_length(
+        self, client, admin_headers
+    ):
+        """マルチバイト文字でも上限を超えると422で拒否されること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/prompt-templates",
+                json=_template_body("あ" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+
+    async def test_update_accepts_name_at_max_length(
+        self, client, admin_headers, template
+    ):
+        """上限ちょうどの名前でテンプレートを更新できること"""
+        name = "a" * NAME_MAX_LENGTH
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/prompt-templates/{template.id}",
+                json=_template_body(name),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == name
+
+    async def test_update_rejects_name_over_max_length(
+        self, client, admin_headers, session, template
+    ):
+        """上限を超える名前での更新は422で拒否され、既存の名前が変わらないこと"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/prompt-templates/{template.id}",
+                json=_template_body("a" * (NAME_MAX_LENGTH + 1)),
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 422
+        await session.refresh(template)
+        assert template.name == "Template A"
 
 
 @pytest.mark.asyncio

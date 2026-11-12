@@ -14,6 +14,7 @@ from app.schemas.message import (
     MessageCreateResponse,
     MessageFeedbackCreateRequest,
     MessageFeedbackResponse,
+    parse_message_content_create_form,
 )
 from app.services.message_service import MessageService
 
@@ -59,9 +60,11 @@ async def get_message_contents(
 
 @router.post("/content")
 async def create_message_content(
-    req: MessageContentCreateRequest,
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
+    # FastAPIは依存を宣言順に評価するため、添付ファイルの読み込み・検証が
+    # 未認証のリクエストで走らないよう、認証の依存より後に置く。
+    req: MessageContentCreateRequest = Depends(parse_message_content_create_form),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """メッセージ送信（アシスタント応答生成・SSEストリーミング）"""

@@ -5,7 +5,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 
 # frontend-angular 同期 skill
 
-`frontend-angular/` は `~/Documents/secuaigent/client`（Angular、単独リポジトリ）をこのモノレポに
+`frontend-angular/` は `~/Documents/unirita-develop-pj/secuaigent-ref/client`（Angular。移植元モノレポ `secuaigent` の `client/`。参照専用 worktree）をこのモノレポに
 そのまま取り込んだもの。バックエンド（FastAPI, `backend/`）の動作確認用フロントエンドとして使う。
 
 `secuaigent/client` は日々更新されるため、`frontend-angular/` は定期的に**丸ごと同期**する。
@@ -19,7 +19,7 @@ description: Use when syncing frontend-angular/ in this monorepo with the upstre
 
 ## 同期の考え方
 
-1. `secuaigent/client` 側の `develop` ブランチを最新化する（`git fetch` → `git checkout develop` → `git pull --ff-only`）
+1. 参照専用 worktree（`~/Documents/unirita-develop-pj/secuaigent-ref`）を `origin/develop` に合わせる（`git fetch origin develop` → `git checkout --detach origin/develop`）。業務の作業ツリー（`~/Documents/unirita-develop-pj/secuaigent`）のブランチには触れない
 2. `frontend-angular/` 配下を一旦クリアし、`secuaigent/client/` を丸ごとコピーする
    （`.git/`, `node_modules/`, `.angular/`, `dist/`, `coverage/` は除外）
 3. モノレポ向けの設定差分を再適用する（下表）

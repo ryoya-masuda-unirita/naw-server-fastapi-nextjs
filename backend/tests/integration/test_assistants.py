@@ -1101,14 +1101,82 @@ class TestListAdminAssistants:
         async with client as c:
             response = await c.get(
                 "/api/admin/assistants",
-                params={"q": assistant.name},
+                params={"search": assistant.name},
                 headers=admin_headers,
             )
 
+        assert response.status_code == 200
         body = response.json()
         ids = [item["id"] for item in body["content"]]
         assert assistant.id in ids
         assert other.id not in ids
+
+    async def test_search_by_description_case_insensitive(
+        self, client, session, tenant, admin_headers, assistant
+    ):
+        """説明の部分一致検索が大文字小文字を区別せずにできること"""
+        described = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="Described",
+            description="Translation Helper",
+            include_history=False,
+        )
+        session.add(described)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"search": "translation"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        ids = [item["id"] for item in body["content"]]
+        assert described.id in ids
+        assert assistant.id not in ids
+
+    async def test_search_empty_returns_all(
+        self, client, session, tenant, admin_headers, assistant
+    ):
+        """searchが空文字の場合は絞り込まれず全件取得できること"""
+        other = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SAAS_CHAT,
+            name="ZZZ",
+            include_history=False,
+        )
+        session.add(other)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"search": ""},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        ids = [item["id"] for item in body["content"]]
+        assert assistant.id in ids
+        assert other.id in ids
+
+    async def test_legacy_q_param_is_ignored(self, client, admin_headers, assistant):
+        """移植元に存在しない旧パラメータ名qでは絞り込まれないこと"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistants",
+                params={"q": "no-match-keyword"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        ids = [item["id"] for item in body["content"]]
+        assert assistant.id in ids
 
     async def test_sort_by_assistant_type_alias(
         self, client, session, tenant, admin_headers

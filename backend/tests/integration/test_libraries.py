@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -337,6 +337,90 @@ class TestListLibraries:
         assert body["content"][0]["tags"] == [
             {"id": library_tag.id, "name": library_tag.name}
         ]
+
+    async def test_list_filters_by_tag_ids_in_hyphenated_uuid_format(
+        self, session, client, owner_headers, library, library_tag, lib_tenant
+    ):
+        """ハイフン付きUUID形式のtagIdsでも絞り込めること"""
+        session.add(
+            LibraryTagMapping(
+                tenant_id=lib_tenant.id,
+                library_id=library.id,
+                library_tag_id=library_tag.id,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/libraries",
+                params={"tagIds": [str(UUID(library_tag.id))]},
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert [item["id"] for item in body["content"]] == [str(library.id)]
+
+    async def test_list_filters_by_tag_ids_excludes_libraries_with_other_tags(
+        self,
+        session,
+        client,
+        owner_headers,
+        library,
+        library_tag,
+        lib_tenant,
+        owner_user,
+        message,
+    ):
+        """指定外のタグのみが付与されたライブラリは返らないこと"""
+        other_tag = LibraryTag(tenant_id=lib_tenant.id, name="議事録")
+        other_library = Library(
+            tenant_id=lib_tenant.id,
+            message_id=message.id,
+            user_id=owner_user.id,
+            title="議事録まとめ",
+        )
+        session.add_all([other_tag, other_library])
+        await session.commit()
+        session.add_all(
+            [
+                LibraryTagMapping(
+                    tenant_id=lib_tenant.id,
+                    library_id=library.id,
+                    library_tag_id=library_tag.id,
+                ),
+                LibraryTagMapping(
+                    tenant_id=lib_tenant.id,
+                    library_id=other_library.id,
+                    library_tag_id=other_tag.id,
+                ),
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/libraries",
+                params={"tagIds": [library_tag.id]},
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert body["totalElements"] == 1
+        assert [item["id"] for item in body["content"]] == [str(library.id)]
+
+    async def test_list_with_invalid_tag_id_returns_422(self, client, owner_headers):
+        """UUIDとして不正なtagIdsは422になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/libraries",
+                params={"tagIds": ["not-a-uuid"]},
+                headers=owner_headers,
+            )
+
+        assert response.status_code == 422
 
     async def test_list_pagination(
         self, session, client, owner_headers, lib_tenant, owner_user, message

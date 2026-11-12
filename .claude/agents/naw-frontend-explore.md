@@ -13,7 +13,7 @@ model: sonnet
 
 ## 参照先
 
-- フロントエンド移植元: `~/Documents/secuaigent/client`（Angular。途中からgit管理のため全履歴は追えない場合あり。最新コードを読んで実装を把握する）
+- フロントエンド移植元: `~/Documents/unirita-develop-pj/secuaigent-ref/client`（Angular。移植元モノレポ `secuaigent` の `client/`。`origin/develop` に detached した参照専用 worktree。2026-07-13 にモノレポへ取り込まれ、それ以前の履歴は追えない場合あり。最新コードを読んで実装を把握する）
 - フロントエンド移植先: `frontend/`（Vite + React 19 + React Router v7 + TypeScript）
 - バックエンドAPI（React側が呼び出す先）: `backend/`（FastAPI。エンドポイント仕様の確認に使う）
 - `frontend/.claude/CLAUDE.md`: React移植の技術スタック・Angular→React対応表・デザイン移行方針が定義されている。調査前に必ず読むこと
@@ -25,7 +25,7 @@ model: sonnet
 
 ## 調査時の手順
 
-1. 依頼された対象領域について、`~/Documents/secuaigent/client` の最新状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）
+1. 依頼された対象領域について、`~/Documents/unirita-develop-pj/secuaigent-ref/client` の最新状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）
    - 対象は主に `src/app/**/*.component.ts`（+ 対応する `.html`/`.scss`）、`src/app/core/services/`、NgRx signalStore、ルーティング定義
 2. 対象領域の画面・コンポーネント・API連携（呼び出しているエンドポイント）を洗い出す
 3. 移植先の対応実装の有無を `frontend/src/` 配下（`pages/`, `components/`, `hooks/`, `lib/`）で確認する

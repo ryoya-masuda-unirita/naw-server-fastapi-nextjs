@@ -4,6 +4,10 @@ from datetime import datetime
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
+# 移植元のDBカラム（Liquibase `prompt_templates` changeset-001 の `name varchar(32)`）に合わせる。
+# リクエスト検証（`PromptTemplateCreateRequest`）でも同じ値を使い、DBカラム長とずれないようにする。
+NAME_MAX_LENGTH = 32
+
 
 class PromptTemplate(SQLModel, table=True):
     __tablename__ = "prompt_templates"
@@ -18,7 +22,7 @@ class PromptTemplate(SQLModel, table=True):
             nullable=False,
         ),
     )
-    name: str = Field(max_length=32)
+    name: str = Field(max_length=NAME_MAX_LENGTH)
     description: str | None = Field(
         default=None, sa_column=sa.Column(sa.Text, nullable=True)
     )

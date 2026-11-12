@@ -71,7 +71,7 @@ async def delete_assistant(
 
 @admin_router.get("", response_model=PagedAssistantResponse)
 async def list_admin_assistants(
-    q: str = Query(""),
+    search: str | None = Query(None),
     type: AssistantType | None = Query(None),
     category_id: str | None = Query(None, alias="categoryId"),
     group_id: str | None = Query(None, alias="groupId"),
@@ -87,7 +87,7 @@ async def list_admin_assistants(
     return await AssistantService.list_admin_assistants(
         x_tenant_id,
         current_user,
-        q or None,
+        search or None,
         type,
         category_id,
         group_id,

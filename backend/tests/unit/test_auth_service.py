@@ -350,6 +350,10 @@ class TestAuthServicePasswordReset:
                 )
 
         assert exc_info.value.status_code == 400
+        assert (
+            exc_info.value.detail
+            == "新パスワードは過去のパスワードと異なるものを設定してください。"
+        )
 
     async def test_reset_password_calls_save(
         self, test_tenant, test_user_with_password

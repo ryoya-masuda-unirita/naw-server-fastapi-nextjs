@@ -46,7 +46,7 @@ Issue1件分の「着手〜実装〜テスト〜PR作成〜code-review」一式�
 作業時は以下を守る。
 
 - 対象Issue番号を明確に保持する
-- `~/Documents/naw-server-fastapi-nextjs` の `.codex/skills/naw-issue-workflow/SKILL.md` と `.codex/skills/naw-issue-workflow/references/doc-templates.md` を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
+- `~/Documents/personal/naw-server-fastapi-nextjs` の `.codex/skills/naw-issue-workflow/SKILL.md` と `.codex/skills/naw-issue-workflow/references/doc-templates.md` を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
 - 以下の**このフロー独自の上書きルール**を適用すること（`naw-issue-workflow` のデフォルトと異なる部分なので読み違えないようにする）:
   1. **着手前に必ず `gh issue view {番号} --json title,body` でIssue本文を確認し、`NAW-XXXX` 形式の元チケット参照があるかを判定すること。** その上で `bash .codex/skills/naw-issue-workflow/scripts/start_issue.sh` を次のいずれかの引数で実行する（このスクリプトが `develop` の最新化・`feature/issue-*` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）
      - NAW番号の記載なし: `issue-{番号}`（→ `feature/issue-{番号}` ブランチ、`docs/issue-{番号}/`）
