@@ -6,15 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from app.core.search import escape_like_pattern
-from app.core.sort import SortOrder, build_order_by
+from app.core.sort import SortOrder, build_order_by, enum_as_string
 from app.models.index import Index, IndexEndpoint, IndexGroup, IndexType
 from app.models.tenant_endpoint import TenantEndpoint
 
 
 # 移植元(IndexService.ALLOWED_SORT_PROPERTIES)と同じキー。対応表にないキーは更新日時順にする。
+# 種別は移植元が varchar で持つため、宣言順ではなく文字列順で並べる。
 _SORT_COLUMNS: dict[str, Any] = {
     "name": Index.name,
-    "type": Index.type,
+    "type": enum_as_string(Index.type),
     "updatedAt": Index.updated_at,
 }
 

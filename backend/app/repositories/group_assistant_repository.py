@@ -5,7 +5,7 @@ from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
-from app.core.sort import SortOrder, build_order_by
+from app.core.sort import SortOrder, build_order_by, enum_as_string
 from app.models.assistant import (
     Assistant,
     AssistantCategoryMapping,
@@ -13,14 +13,17 @@ from app.models.assistant import (
     GroupAssistant,
 )
 
+# 移植元は種別を varchar で持つため、宣言順ではなく文字列順で並べる
+_TYPE_SORT_COLUMN: Any = enum_as_string(Assistant.type)
+
 # 移植元(GroupService)は addedAt を所属レコードの更新日時、server をアシスタント種別、
 # name をアシスタント名に読み替える。対応表にないキーは従来どおり追加日時順にする。
 _SORT_COLUMNS: dict[str, Any] = {
     "name": Assistant.name,
     "assistant.name": Assistant.name,
-    "type": Assistant.type,
-    "server": Assistant.type,
-    "assistantType": Assistant.type,
+    "type": _TYPE_SORT_COLUMN,
+    "server": _TYPE_SORT_COLUMN,
+    "assistantType": _TYPE_SORT_COLUMN,
     "addedAt": GroupAssistant.updated_at,
 }
 

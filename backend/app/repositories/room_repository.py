@@ -6,6 +6,7 @@ from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
+from app.core.sort import enum_as_string
 from app.models.assistant import Assistant
 from app.models.room import Room, RoomPin, RoomRating
 from app.models.share import ShareRoom
@@ -176,7 +177,8 @@ class RoomRepository:
         elif sort_column == "assistant_id":
             order_col = Room.default_assistant_id
         elif sort_column == "rating":
-            order_col = Room.rating
+            # 移植元は評価を varchar で持つため、宣言順ではなく文字列順で並べる
+            order_col = enum_as_string(Room.rating)
         else:
             order_col = Room.updated_at
 
