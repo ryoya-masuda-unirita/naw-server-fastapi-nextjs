@@ -1,4 +1,4 @@
-import uuid
+import re
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,12 @@ from app.schemas.library_tag import (
     LibraryTagPageResponse,
     LibraryTagResponse,
     LibraryTagUpdateRequest,
+)
+
+# 保存形式（ハイフンなし32桁）と、移植元が受け付けるUUID標準形式（8-4-4-4-12）。
+_TAG_ID_PATTERN = re.compile(
+    r"[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
 )
 
 
@@ -40,22 +46,19 @@ class LibraryTagService:
             該当するライブラリタグ。
 
         Raises:
-            HTTPException: 存在しない場合、またはUUIDとして解釈できない場合404を返す。
+            HTTPException: 存在しない場合、またはID形式でない場合404を返す。
         """
         # IDは保存形式（ハイフンなし32桁の小文字hex）で保存しているが、移植元は
         # UUID標準形式（ハイフン付き）で受け付ける。一覧のタグ絞り込み（#173）と同じく
-        # UUIDとして解釈して保存形式に揃え、どちらの形式でも同じタグに当たるようにする。
-        try:
-            normalized_id = uuid.UUID(tag_id).hex
-        except ValueError:
-            # ライブラリAPIのパス変数と同じく、不正な形式は存在しないIDと同様に扱う。
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Library tag not found",
-            ) from None
-        tag = await LibraryTagRepository.find_by_id_and_tenant_id(
-            normalized_id, tenant_id, session
-        )
+        # 保存形式に揃えて比べ、どちらの形式でも同じタグに当たるようにする。
+        # `uuid.UUID()`は`urn:uuid:`・波括弧・`0x`等も受け付け、1つのタグを指すIDの
+        # 表記が増えてしまうため、2つの形式だけを正規表現で受け付ける。
+        # 不正な形式は、ライブラリAPIのパス変数と同じく存在しないIDと同様に扱う（404）。
+        tag = None
+        if _TAG_ID_PATTERN.fullmatch(tag_id):
+            tag = await LibraryTagRepository.find_by_id_and_tenant_id(
+                tag_id.replace("-", "").lower(), tenant_id, session
+            )
         if not tag:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

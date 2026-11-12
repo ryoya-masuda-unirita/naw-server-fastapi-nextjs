@@ -412,6 +412,21 @@ class TestUpdateLibraryTag:
 
         assert response.status_code == 400
 
+    @pytest.mark.parametrize("id_format", ["urn:uuid:{uuid}", "{{{uuid}}}"])
+    async def test_update_with_non_standard_id_format_returns_404(
+        self, client, admin_headers, tag, id_format
+    ):
+        """ハイフン付き・32桁以外の表記（urn・波括弧）は同じタグを指していても404になること"""
+        tag_id = id_format.format(uuid=UUID(tag.id))
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{tag_id}",
+                json={"name": "updated"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
     async def test_update_other_tenant_tag_with_hyphenated_id_returns_404(
         self, client, admin_headers, other_tenant_tag
     ):
