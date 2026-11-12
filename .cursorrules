@@ -4,13 +4,13 @@
 
 企業向け AI チャット管理 SaaS の**移植プロジェクト**。
 
-移植元は GitLab のモノレポ `secuaigent`（参照専用 worktree `~/Documents/unirita-develop-pj/secuaigent-ref`）。複数のプロジェクトが入っており、すべて移植対象とする（対応表・移植先の詳細は `.claude/CLAUDE.md` を参照）。
+移植元は GitLab のモノレポ `secuaigent`（参照専用 worktree `~/Documents/unirita-develop-pj/secuaigent-ref`）。複数のプロジェクトが入っており、すべて移植対象とする（対応表・移植先の詳細は `CLAUDE.md` を参照）。
 
 | 移植元（`secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
 | `client/`（Angular） | React（Vite + React Router） → `frontend/` |
 | `server/`（Spring Boot） | FastAPI → `backend/` |
-| `generative-ai-adapter/`・`secuaigent-server-local/` ほか | `.claude/CLAUDE.md` 参照 |
+| `generative-ai-adapter/`・`secuaigent-server-local/` ほか | `CLAUDE.md` 参照 |
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
