@@ -2,7 +2,7 @@
 
 ## 移植元リポジトリ
 
-Angular 実装: `~/Documents/secuaigent-client`
+Angular 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/client`
 
 **このリポジトリは日々更新される**。実装前に必ず最新の Angular 実装を確認してからポートすること。
 

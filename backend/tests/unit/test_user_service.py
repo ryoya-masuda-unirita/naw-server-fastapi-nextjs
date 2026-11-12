@@ -1,7 +1,9 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import HTTPException
 from uuid import uuid4
+
+from fastapi import HTTPException
+from sqlalchemy.dialects import postgresql
 
 from app.core.security import hash_password
 from app.services.user_service import UserService
@@ -391,6 +393,14 @@ class TestResolveSortColumn:
     def test_falls_back_to_created_at_for_unknown_column(self):
         """許可リスト外の列名は作成日時にフォールバックすること"""
         assert UserService._resolve_sort_column("login_key") is User.created_at
+
+    def test_role_sort_column_is_cast_to_string_on_postgresql(self):
+        """権限順ソートがPostgreSQL上でenumの宣言順ではなく文字列順になるようキャストされること"""
+        col = UserService._resolve_sort_column("role")
+
+        sql = str(col.compile(dialect=postgresql.dialect()))
+
+        assert sql == "CAST(users.role AS VARCHAR)"
 
 
 class TestIssueInitialPassword:

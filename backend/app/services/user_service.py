@@ -6,7 +6,8 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from typing import Any, cast
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import String, select, func, or_
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.credit_quota import (
@@ -44,7 +45,10 @@ class UserService:
         "login_id": User.login_id,
         "loginId": User.login_id,
         "name": User.name,
-        "role": User.role,
+        # 移植元は users.role を varchar(32) で保持するため権限順は文字列順
+        # (ADMIN < SYSTEM < USER) になる。こちらは PostgreSQL のネイティブ enum で
+        # 宣言順 (USER < ADMIN < SYSTEM) に並んでしまうため、文字列にキャストして揃える。
+        "role": sa_cast(User.role, String),
         "updated_at": User.updated_at,
         "updatedAt": User.updated_at,
     }
@@ -115,7 +119,8 @@ class UserService:
 
         sort_parts = sort.split(",")
         sort_col_name = sort_parts[0]
-        sort_dir = sort_parts[1] if len(sort_parts) > 1 else "asc"
+        # 移植元(Spring Data の Sort.Direction)は方向指定を大文字小文字を区別せずに解釈する。
+        is_desc = len(sort_parts) > 1 and sort_parts[1].strip().lower() == "desc"
 
         billing_period = (
             await resolve_active_billing_period(tenant_id, session)
@@ -135,14 +140,17 @@ class UserService:
             credits_subq = total_credits_correlated_subquery(
                 tenant_id, period_from, period_to, User.id
             )
-            order_col = (
-                credits_subq.desc() if sort_dir == "desc" else credits_subq.asc()
-            )
+            order_col = credits_subq.desc() if is_desc else credits_subq.asc()
             # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
             stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
         else:
             col = UserService._resolve_sort_column(sort_col_name)
-            stmt = stmt.order_by(col.desc() if sort_dir == "desc" else col.asc())
+            stmt = stmt.order_by(col.desc() if is_desc else col.asc())
+        # ソートキーが同値の行（シード投入で同時刻になる更新日時、大半が同じ権限など）は
+        # ORDER BY だけでは順序が定まらず、昇順・降順を切り替えても同値グループ内の並びが
+        # 反転しない。一意な id を最終キーに主キーと同じ方向で加え、並びを決定的にする。
+        tie_breaker = cast(Any, User.id)
+        stmt = stmt.order_by(tie_breaker.desc() if is_desc else tie_breaker.asc())
 
         stmt = stmt.offset(page * size).limit(size)
 
@@ -185,7 +193,7 @@ class UserService:
 
     @staticmethod
     def _resolve_sort_column(sort_col_name: str) -> Any:
-        """ソート対象列名を許可リストに基づいてモデル属性に解決する。
+        """ソート対象列名を許可リストに基づいてORDER BY用の列式に解決する。
 
         許可リスト外の列名が指定された場合は、任意の内部属性へのソートを防ぐため
         既定の作成日時列にフォールバックする。
@@ -194,7 +202,8 @@ class UserService:
             sort_col_name: リクエストで指定されたソート対象列名。
 
         Returns:
-            ソートに使用するモデル属性。
+            ソートに使用する列式。多くはモデル属性そのものだが、`role`は
+            文字列キャスト式（`CAST(users.role AS VARCHAR)`）を返す。
         """
         return UserService._SORTABLE_COLUMNS.get(sort_col_name, User.created_at)
 

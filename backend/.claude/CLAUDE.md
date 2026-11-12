@@ -2,7 +2,7 @@
 
 ## 移植元リポジトリ
 
-Spring Boot 実装: `~/Documents/naw-server`
+Spring Boot 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/server`
 
 **このリポジトリは日々更新される**。実装前に必ず最新の Spring Boot 実装を確認してからポートすること。
 
@@ -156,7 +156,7 @@ class Assistant(SQLModel, table=True):
 FastAPI側では、こうしたテーブルも省略せず、すべて `SQLModel(table=True)` のモデルクラスとして `models/` 配下に定義すること。
 
 - 追加カラムを持つ中間テーブル（例: グループ所属ユーザーの管理者フラグ等）はもちろん、追加カラムのない単純なM2M中間テーブルも、SQLModelには「Entityなしで暗黙的にJoinTableを扱う」というSpring同等の省略記法がないため、明示的なモデルクラスとして定義する
-- 移植対象のテーブルにSpring側のEntityクラスが存在しない場合でも、対応するLiquibaseのchangelog（`~/Documents/naw-server/src/main/resources/liquibase/changelog/`）を確認し、カラム構成を正しく再現したモデルを作成すること
+- 移植対象のテーブルにSpring側のEntityクラスが存在しない場合でも、対応するLiquibaseのchangelog（`~/Documents/unirita-develop-pj/secuaigent-ref/server/src/main/resources/liquibase/changelog/`）を確認し、カラム構成を正しく再現したモデルを作成すること
 
 ### N+1問題を発生させない
 

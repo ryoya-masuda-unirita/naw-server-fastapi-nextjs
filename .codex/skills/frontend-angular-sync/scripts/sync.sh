@@ -6,14 +6,14 @@
 # Usage:
 #   bash .codex/skills/frontend-angular-sync/scripts/sync.sh [secuaigent/client のパス] [--force]
 #
-# デフォルトの参照元: ~/Documents/secuaigent/client
+# デフォルトの参照元: ~/Documents/unirita-develop-pj/secuaigent-ref/client
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TARGET_DIR="$REPO_ROOT/frontend-angular"
 
-SRC_DIR="${1:-$HOME/Documents/secuaigent/client}"
+SRC_DIR="${1:-$HOME/Documents/unirita-develop-pj/secuaigent-ref/client}"
 FORCE=""
 for arg in "$@"; do
   if [[ "$arg" == "--force" ]]; then
@@ -38,16 +38,17 @@ if [[ -z "$FORCE" ]]; then
   fi
 fi
 
-echo "== 0. secuaigent/client の develop ブランチを最新化 =="
+echo "== 0. 参照専用 worktree を origin/develop に合わせる =="
 
 if ! git -C "$SRC_DIR" diff --quiet || ! git -C "$SRC_DIR" diff --cached --quiet; then
   echo "$SRC_DIR の追跡済みファイルに未コミットの変更があります。先にコミット/stashしてから実行してください。" >&2
   exit 1
 fi
 
-git -C "$SRC_DIR" fetch origin
-git -C "$SRC_DIR" checkout develop
-git -C "$SRC_DIR" pull --ff-only origin develop
+# 参照元は業務の作業ツリーではなく、origin/develop に detached した参照専用 worktree。
+# develop ブランチを checkout すると作業ツリー側で develop を使えなくなるため、detached のまま合わせる。
+git -C "$SRC_DIR" fetch origin develop
+git -C "$SRC_DIR" checkout --detach origin/develop
 
 echo "== 1. secuaigent/client を frontend-angular/ に同期 =="
 echo "  参照元: $SRC_DIR"

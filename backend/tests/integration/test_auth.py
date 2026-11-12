@@ -140,6 +140,74 @@ class TestAuthAPI:
         assert response.json()["loginStatus"] == "SUCCESS"
         assert response.json()["token"] is not None
 
+    async def test_post_auth_password_reset_with_username_key(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset ログインIDを username キーで送っても更新・セッション発行まで行われること"""
+        login_id = test_user_with_password["user"].login_id
+        new_password = "NewPassword123!"
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "username": login_id,
+                    "oldPassword": test_user_with_password["plain_password"],
+                    "newPassword": new_password,
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            # 新パスワードが旧パスワード照合を通ることで、実際に更新されたことを確認する。
+            # /auth/login は SQLite が naive datetime を返すため有効期限比較で失敗し、
+            # テスト環境では更新確認に使えない。
+            second_response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "username": login_id,
+                    "oldPassword": new_password,
+                    "newPassword": "AnotherPassword456!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["loginStatus"] == "SUCCESS"
+        assert response.json()["token"] is not None
+        assert SESSION_COOKIE_NAME in response.cookies
+        assert second_response.status_code == 200
+
+    async def test_post_auth_password_reset_with_username_key_and_invalid_old_password(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset username キーで旧パスワード誤りなら 422 ではなく 403 になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "username": test_user_with_password["user"].login_id,
+                    "oldPassword": "WrongPassword999!",
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 403
+        # "User not found" ではなく旧パスワード照合まで到達したことを確認する
+        assert response.json()["detail"] == "Invalid old password"
+
+    async def test_post_auth_password_reset_without_login_id(self, client, test_tenant):
+        """POST /auth/password/reset loginId・username のどちらもなければ 422 になること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "oldPassword": "OldPassword123!",
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 422
+
     async def test_post_auth_password_reset_rejects_password_violating_policy(
         self, client, test_tenant, test_user_with_password
     ):

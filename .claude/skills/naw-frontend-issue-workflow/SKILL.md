@@ -7,7 +7,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 この skill は、このリポジトリで**フロントエンド移植**（Angular `secuaigent/client` → React `frontend/`）のIssue対応を進めるときに使う。
 
-バックエンド（Spring Boot `naw-server` → FastAPI `backend/`）のIssue対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名・ドキュメント構成・承認フロー・コミット規約は共通のためそちらを踏襲し、本skillでは**移植元・移植先・調査エージェント・動作確認方法が異なる点のみ**を上書きする。
+バックエンド（Spring Boot `secuaigent/server` → FastAPI `backend/`）のIssue対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名・ドキュメント構成・承認フロー・コミット規約は共通のためそちらを踏襲し、本skillでは**移植元・移植先・調査エージェント・動作確認方法が異なる点のみ**を上書きする。
 
 ## 使う場面
 
@@ -20,7 +20,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 | 項目 | naw-issue-workflow（バックエンド） | naw-frontend-issue-workflow（本skill） |
 |---|---|---|
-| 移植元 | `~/Documents/secuaigent/server`（Spring Boot） | `~/Documents/secuaigent/client`（Angular） |
+| 移植元 | `~/Documents/unirita-develop-pj/secuaigent-ref/server`（Spring Boot） | `~/Documents/unirita-develop-pj/secuaigent-ref/client`（Angular） |
 | 移植先 | `backend/`（FastAPI） | `frontend/`（React） |
 | 調査エージェント | `naw-explore` | `naw-frontend-explore` |
 | Issueラベル | なし | 必ず `frontend-port` を付与する |
@@ -93,7 +93,7 @@ git push -u origin feature/issue-{番号}
 〇〇画面（Angular）を React に移植する。
 
 ## 参照
-- 移植元（フロントエンド）: `~/Documents/secuaigent/client/src/app/...`
+- 移植元（フロントエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/app/...`
 - 移植先: `frontend/src/...`
 - 依存するバックエンドAPI: `GET /api/...`（backend側の実装状況を明記）
 ```
