@@ -66,7 +66,8 @@ async def _parse_message_request(
     ブラウザは textData を `application/json` の Blob として送るが、テストツール等で
     通常のフォーム文字列として送られても読めるよう、どちらも受け付ける。
     """
-    content_type = request.headers.get("content-type", "")
+    # メディアタイプは大文字小文字を区別しない（Spring の MediaType と同じ）
+    content_type = request.headers.get("content-type", "").lower()
     if not content_type.startswith(MULTIPART_FORM_DATA):
         # 移植元は consumes = multipart/form-data のため、Spring が 415 を返す
         raise HTTPException(status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)

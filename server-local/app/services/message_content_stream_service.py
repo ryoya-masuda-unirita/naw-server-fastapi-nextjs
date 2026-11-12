@@ -97,6 +97,8 @@ class StreamRuntime:
     client_connected: bool = True
     file_terminal_reached: bool = False
     finalized: bool = False
+    # 確定処理に入ったか。ストリームの監視と結果のポーリングの両方から入れるため
+    finalize_started: bool = False
     empty_stream_file_logged: bool = False
     waha_session_id: str | None = None
     result_status: ResultStatus = ResultStatus.RUNNING
@@ -501,6 +503,11 @@ class MessageContentStreamService:
         """
         if runtime.finalized or runtime.result_status != ResultStatus.SUCCESS:
             return
+        if runtime.finalize_started:
+            # tail の読み取り（スレッド）を待つ間に、もう一方のタスクも確定処理に
+            # 入ってくることがあるため、最初に入った方だけが確定させる
+            return
+        runtime.finalize_started = True
         if not runtime.file_terminal_reached:
             logger.warning(
                 "Finalizing without stream terminal event; using Waha outputfile. "

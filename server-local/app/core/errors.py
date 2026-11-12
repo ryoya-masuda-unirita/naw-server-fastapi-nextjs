@@ -70,6 +70,19 @@ def spring_default_error_body(status: int, path: str) -> dict[str, Any]:
     }
 
 
+def unexpected_error_response(path: str) -> JSONResponse:
+    """想定外の例外をログに出し、Spring 既定の形の 500 を作る。
+
+    CORS の内側のミドルウェア（UnhandledErrorMiddleware）と、その外側で起きた例外を
+    扱う汎用の例外ハンドラーの両方で使う。
+    """
+    logger.exception("Unhandled exception: path=%s", path)
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+    return JSONResponse(
+        status_code=status, content=spring_default_error_body(status, path)
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
@@ -125,9 +138,5 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled exception: path=%s", request.url.path)
-        status = HTTPStatus.INTERNAL_SERVER_ERROR
-        return JSONResponse(
-            status_code=status,
-            content=spring_default_error_body(status, request.url.path),
-        )
+        # 認証ミドルウェアなど、UnhandledErrorMiddleware より外側で起きた例外を扱う
+        return unexpected_error_response(request.url.path)

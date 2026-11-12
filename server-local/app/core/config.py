@@ -8,6 +8,13 @@ MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 MAX_REQUEST_SIZE_BYTES = 215 * 1024 * 1024
 # 設定値はミリ秒（移植元の *-ms）で受け取り、asyncio には秒で渡すための換算
 MS_PER_SECOND = 1000
+# 移植元（logging.level）のレベル名のうち、Python の logging にないものの読み替え
+SPRING_LOG_LEVEL_ALIASES = {
+    "TRACE": "DEBUG",
+    "WARN": "WARNING",
+    "FATAL": "CRITICAL",
+    "OFF": "CRITICAL",
+}
 
 
 class DatabaseSettings(BaseSettings):
@@ -73,6 +80,13 @@ class Settings(DatabaseSettings):
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    @field_validator("log_level")
+    @classmethod
+    def normalize_log_level(cls, v: str) -> str:
+        """移植元と同じレベル名（TRACE・WARN・FATAL・OFF など）で書けるようにする。"""
+        level = v.strip().upper()
+        return SPRING_LOG_LEVEL_ALIASES.get(level, level)
 
     @field_validator("context_path")
     @classmethod

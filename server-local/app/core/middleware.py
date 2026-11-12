@@ -6,7 +6,6 @@ CORS ミドルウェアの外になる。移植元は Spring Security のフィ�
 内側で返す。
 """
 
-import logging
 from http import HTTPStatus
 
 from fastapi.responses import JSONResponse
@@ -14,9 +13,7 @@ from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.errors import spring_default_error_body
-
-logger = logging.getLogger(__name__)
+from app.core.errors import spring_default_error_body, unexpected_error_response
 
 MULTIPART_CONTENT_TYPE_PREFIX = "multipart/"
 
@@ -49,13 +46,7 @@ class UnhandledErrorMiddleware:
         except Exception:
             if response_started:
                 raise
-            path = scope["path"]
-            logger.exception("Unhandled exception: path=%s", path)
-            status = HTTPStatus.INTERNAL_SERVER_ERROR
-            response = JSONResponse(
-                status_code=status, content=spring_default_error_body(status, path)
-            )
-            await response(scope, receive, send)
+            await unexpected_error_response(scope["path"])(scope, receive, send)
 
 
 class MultipartSizeLimitMiddleware:
@@ -74,7 +65,8 @@ class MultipartSizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
-        content_type = headers.get("content-type", "")
+        # メディアタイプは大文字小文字を区別しない（Starlette も小文字にして解析する）
+        content_type = headers.get("content-type", "").lower()
         if not content_type.startswith(MULTIPART_CONTENT_TYPE_PREFIX):
             await self.app(scope, receive, send)
             return

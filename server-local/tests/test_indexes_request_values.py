@@ -95,9 +95,13 @@ class TestRequiredFileFields:
         assert fake_waha.calls == []
 
     async def test_upload_without_user_id_returns_400(
-        self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """userId のない登録は Waha! を呼ばずに 400 にすること"""
+        """userId のない新規登録は、移植元と同じく保存時に失敗させ 400 にすること"""
+        fake_waha.download_content = "f1\tp1"
         res = await client.post(
             f"{BASE}/files",
             headers=TENANT,
@@ -106,7 +110,26 @@ class TestRequiredFileFields:
         )
         assert res.status_code == 400
         assert res.json()["message"] == "userId が指定されていません"
-        assert fake_waha.calls == []
+        assert await get_file(session_factory, "f1") is None
+
+    async def test_upload_existing_file_without_user_id(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Waha! が既存のファイル ID を返す場合は、移植元（user_id は更新しない）と同じく
+        userId がなくても登録でき、登録者は変えないこと"""
+        await insert_file(session_factory, "f1", user_id="owner")
+        fake_waha.download_content = "f1\tp1"
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 200
+        assert res.json()["userId"] == "owner"
 
     async def test_upload_with_empty_name_and_user_id(
         self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
@@ -123,14 +146,34 @@ class TestRequiredFileFields:
         assert res.json()["name"] == ""
         assert res.json()["userId"] == ""
 
+    async def test_replace_without_name_returns_400(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """ファイルを差し替える PATCH で name がなければ Waha! を呼ばずに 400 にすること"""
+        await insert_file(session_factory, "f1", part_ids=["p1"])
+        res = await client.patch(
+            f"{BASE}/files/f1",
+            headers=TENANT,
+            data={"userId": "u"},
+            files={"file": ("b.txt", b"new", "text/plain")},
+        )
+        assert res.status_code == 400
+        assert res.json()["message"] == "name が指定されていません"
+        assert fake_waha.calls == []
+        assert await get_file(session_factory, "f1") is not None
+
     async def test_replace_without_user_id_returns_400(
         self,
         client: httpx.AsyncClient,
         fake_waha: FakeWahaClient,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """ファイルを差し替える PATCH で userId がなければ Waha! を呼ばずに 400 にすること"""
+        """差し替えで登録し直すファイルの userId がなければ 400 にし、元のファイルを残すこと"""
         await insert_file(session_factory, "f1", part_ids=["p1"])
+        fake_waha.download_content = "f-new\tq1"
         res = await client.patch(
             f"{BASE}/files/f1",
             headers=TENANT,
@@ -139,13 +182,17 @@ class TestRequiredFileFields:
         )
         assert res.status_code == 400
         assert res.json()["message"] == "userId が指定されていません"
-        assert fake_waha.calls == []
         assert await get_file(session_factory, "f1") is not None
+        assert await get_file(session_factory, "f-new") is None
 
     async def test_additional_learning_without_user_id_returns_400(
-        self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """userId のない追加学習は Waha! を呼ばずに 400 にすること"""
+        """userId のない追加学習で新しいファイルになる場合は 400 にし、保存しないこと"""
+        fake_waha.download_content = "fb-file\tp1"
         res = await client.post(
             f"{BASE}/additionalLeaning",
             headers=TENANT,
@@ -154,7 +201,7 @@ class TestRequiredFileFields:
         )
         assert res.status_code == 400
         assert res.json()["message"] == "userId が指定されていません"
-        assert fake_waha.calls == []
+        assert await get_file(session_factory, "fb-file") is None
 
     async def test_sync_new_files_without_user_id_returns_400(
         self,

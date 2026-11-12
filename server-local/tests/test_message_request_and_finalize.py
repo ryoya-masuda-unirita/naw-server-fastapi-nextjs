@@ -1,6 +1,8 @@
 """質問 API の入力の扱いと SSE の確定処理を移植元に揃えること（#253）。"""
 
+import asyncio
 import json
+import logging
 
 import httpx
 import pytest
@@ -8,17 +10,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clients.waha_client import ResultStatus
+from app.core.config import Settings
 from app.models import MessageContent
-from tests.conftest import FakeWahaClient
+from app.schemas.message import CreateMessageContentCommand
+from app.services.message_content_stream_service import StreamMode, StreamRuntime
+from tests.conftest import FakeNawApiClient, FakeWahaClient
 from tests.helpers import multipart_files, parse_sse
 from tests.test_message_content_stream import (
     CONTENT_URL,
     TEXT_DATA,
     event_types,
+    make_service,
     write_stream,
 )
 
 SYNC_URL = "/api/messages/content/sync"
+FINALIZE_WITHOUT_TERMINAL_LOG = "Finalizing without stream terminal event"
 INVALID_UTF8 = b'{"assistantId":"svc","messageId":"m","userInput":"\xff\xfe"}'
 
 
@@ -126,3 +133,38 @@ class TestNawStream:
         assert contents[0].answer == events[0]["message"]
         assert events[0]["message"]
         assert fake_waha.call_names()[-1] == "end_session"
+
+
+async def test_concurrent_finalize_runs_once(
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_waha: FakeWahaClient,
+    fake_naw: FakeNawApiClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """ストリームの監視と結果のポーリングが同時に確定処理に入っても、確定処理（読み残しの
+    処理・outputfile の取得）は 1 回だけ行うこと"""
+    service = make_service(settings, session_factory, fake_waha, fake_naw)
+    command = CreateMessageContentCommand(
+        assistant_id="svc",
+        message_id="msg-1",
+        message_content_id=None,
+        additional_prompt=None,
+        user_input="質問",
+    )
+    async with session_factory() as session:
+        stream_session = await service.prepare_stream(session, command)
+    runtime = StreamRuntime(
+        command=command, session=stream_session, mode=StreamMode.NAW_COMPATIBLE
+    )
+    runtime.result_status = ResultStatus.SUCCESS
+    runtime.waha_session_id = "session-1"
+
+    with caplog.at_level(logging.WARNING):
+        await asyncio.gather(
+            service._try_finalize(runtime), service._try_finalize(runtime)
+        )
+
+    assert fake_waha.call_names().count("download_file") == 1
+    assert caplog.text.count(FINALIZE_WITHOUT_TERMINAL_LOG) == 1
+    await service.shutdown()

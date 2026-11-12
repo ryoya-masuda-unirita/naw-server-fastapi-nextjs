@@ -54,7 +54,7 @@ SSE（`POST /api/messages/content`）では、Waha! がストリームファイ�
 | `STREAM_EMITTER_TIMEOUT_MS` | 600000 | `stream.emitter-timeout-ms` | |
 | `STREAM_ORPHAN_CLEANUP_MAX_AGE_HOURS` | 24 | `stream.orphan-cleanup-max-age-hours` | 1 時間ごとに古いストリームファイルを削除する |
 | `WAHA_RESULT_RETRY_INTERVAL_MS` / `WAHA_RESULT_MAX_RETRIES` | 2000 / 10 | 定数 | Waha! のジョブ完了待ちの間隔と回数 |
-| `LOG_LEVEL` | `INFO` | `logging.level.root` | 移植元と同じく `WARN` とも書ける（uvicorn には `warning` として渡す） |
+| `LOG_LEVEL` | `INFO` | `logging.level.root` | 移植元と同じレベル名（`TRACE`・`DEBUG`・`INFO`・`WARN`・`ERROR`・`FATAL`・`OFF`）で書ける。Python・uvicorn にない名前は近いレベルに読み替える（`TRACE` はアプリでは `DEBUG`、`FATAL`・`OFF` は `CRITICAL`） |
 | `TZ` | `Asia/Tokyo`（compose） | JVM のタイムゾーン | 学習ファイル一覧の更新日（`yyyy-MM-dd`）をこのタイムゾーンの 0 時として解釈する |
 
 ## ローカルで開発する
@@ -74,6 +74,6 @@ uv run ruff check . && uv run ruff format --check .
 
 - DB は H2 ではなく SQLite。H2 の Web コンソール（`/h2-console`）は提供しない
 - 稼働確認 API（`/api/hello`）の認証除外は、移植元がハードコードしていた `/secuaigent` ではなく `CONTEXT_PATH` に追従する
-- 移植元でハンドラー未定義のため 500 になり得た入力不備（質問の対象未指定・追加学習の指定不備・学習ファイルの未添付・不正な日付・学習ファイルの `name` / `userId` の未指定）は 400 で返す。`name` / `userId` は移植元では Waha! への登録後に DB の NOT NULL 制約で失敗するが、Waha! を呼ぶ前に返す（同期の `userId` は、移植元と同じく新しく登録するファイルがあるときだけ確かめる）
+- 移植元でハンドラー未定義のため 500 になり得た入力不備（質問の対象未指定・追加学習の指定不備・学習ファイルの未添付・不正な日付・学習ファイルの `name` / `userId` の未指定）は 400 で返す。移植元では Waha! への登録後に DB の NOT NULL 制約で失敗する。`name` は必ず失敗するため Waha! を呼ぶ前に返す。`userId` は移植元で更新されない列のため、新しくファイルを作るときだけ（Waha! の処理の後に）確かめる
 - 必須ヘッダー・パラメーターの欠落は FastAPI 既定の 422 ではなく、Spring と同じ 400（`{"timestamp","status","error","path"}`）で返す
 - 学習ファイルの表示名検索は、H2 の `LIKE` と同じく大文字小文字を区別する部分一致

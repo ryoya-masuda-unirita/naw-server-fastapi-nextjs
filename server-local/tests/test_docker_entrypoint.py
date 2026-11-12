@@ -1,13 +1,18 @@
-"""docker-entrypoint.sh が LOG_LEVEL を uvicorn の受け付ける値にすること（#253）。
+"""LOG_LEVEL を移植元（logging.level）と同じレベル名で書けること（#253）。
 
-alembic・uvicorn は引数を表示するだけの偽物に差し替えて、実行されるコマンドを確かめる。
+docker-entrypoint.sh は、alembic・uvicorn を引数を表示するだけの偽物に差し替えて、
+実行されるコマンドを確かめる。
 """
 
+import logging
 import os
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from app.core.config import Settings
+from tests.conftest import make_settings
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENTRYPOINT = PROJECT_ROOT / "docker-entrypoint.sh"
@@ -26,6 +31,9 @@ def _write_stub(bin_dir: Path, name: str) -> None:
     [
         ("WARN", "warning"),
         ("warn", "warning"),
+        ("TRACE", "trace"),
+        ("FATAL", "critical"),
+        ("OFF", "critical"),
         ("WARNING", "warning"),
         ("INFO", "info"),
         ("DEBUG", "debug"),
@@ -35,7 +43,7 @@ def _write_stub(bin_dir: Path, name: str) -> None:
 def test_entrypoint_passes_log_level_uvicorn_accepts(
     tmp_path: Path, log_level: str | None, expected: str
 ) -> None:
-    """LOG_LEVEL を小文字にし、移植元の WARN は uvicorn が受け付ける warning にすること"""
+    """LOG_LEVEL を小文字にし、uvicorn が受け付けない移植元のレベル名は読み替えること"""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name in ("alembic", "uvicorn"):
@@ -52,3 +60,24 @@ def test_entrypoint_passes_log_level_uvicorn_accepts(
         "alembic upgrade head",
         f"uvicorn {UVICORN_ARGS} --log-level {expected}",
     ]
+
+
+@pytest.mark.parametrize(
+    ("log_level", "expected"),
+    [
+        ("TRACE", "DEBUG"),
+        ("WARN", "WARNING"),
+        ("warn", "WARNING"),
+        ("FATAL", "CRITICAL"),
+        ("OFF", "CRITICAL"),
+        ("INFO", "INFO"),
+        ("error", "ERROR"),
+    ],
+)
+def test_settings_accepts_spring_log_level_names(
+    tmp_path: Path, log_level: str, expected: str
+) -> None:
+    """アプリの LOG_LEVEL も、Python の logging にない移植元のレベル名を読み替えること"""
+    settings: Settings = make_settings(tmp_path, LOG_LEVEL=log_level)
+    assert settings.log_level == expected
+    assert settings.log_level in logging.getLevelNamesMapping()

@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api/admin/indexes/{indexId}", tags=["indexes"])
 
 TenantHeader = Annotated[str, Header(alias="X-Tenant-ID")]
 OptionalFile = Annotated[FastAPIUploadFile | None, File()]
+NAME_NOT_SPECIFIED_MESSAGE = "name が指定されていません"
 
 
 def form_text(name: str) -> Any:
@@ -58,15 +59,15 @@ FeedbackIdForm = Annotated[str | None, form_text("feedbackId")]
 RoomIdForm = Annotated[str | None, form_text("roomId")]
 
 
-def _require_fields(**fields: str | None) -> None:
-    """登録するファイルの必須項目（name・userId）を確かめる。
+def _require_name(name: str | None) -> None:
+    """登録するファイルの name を確かめる。
 
-    移植元は未指定だと DB の NOT NULL 制約で失敗する（500）が、それは Waha! への
+    移植元は未指定だと DB の NOT NULL 制約で必ず失敗する（500）が、それは Waha! への
     登録が終わった後になる。入力不備なので、Waha! を呼ぶ前に 400 で返す。
+    userId は既存のファイルの更新なら未指定でも成功するため、保存時に確かめる。
     """
-    for field, value in fields.items():
-        if value is None:
-            raise BadRequestError(f"{field} が指定されていません")
+    if name is None:
+        raise BadRequestError(NAME_NOT_SPECIFIED_MESSAGE)
 
 
 async def _to_uploaded(upload: FastAPIUploadFile | None) -> UploadedFile | None:
@@ -125,7 +126,7 @@ async def upload_file(
     userId: UserIdForm,
     file: OptionalFile = None,
 ) -> dict[str, Any]:
-    _require_fields(name=name, userId=userId)
+    _require_name(name)
     return await file_service.create_file(
         session,
         waha,
@@ -159,8 +160,8 @@ async def update_file(
 ) -> dict[str, Any]:
     upload = await _to_uploaded(file)
     if upload is not None and not upload.is_empty():
-        # ファイルを差し替えるときは登録し直すため、新規登録と同じ項目が必要
-        _require_fields(name=name, userId=userId)
+        # ファイルを差し替えるときは登録し直すため、新規登録と同じく name が必要
+        _require_name(name)
     return await file_service.update_file(
         session,
         waha,
@@ -233,7 +234,6 @@ async def additional_learning(
     userId: UserIdForm,
     content: OptionalFile = None,
 ) -> Response:
-    _require_fields(userId=userId)
     await file_service.additional_learning(
         session,
         waha,

@@ -28,6 +28,7 @@ ADDITIONAL_LEARNING_DISPLAY_NAME = "フィードバック学習"
 ADD_FILE_FAILED_MESSAGE = "ファイルの追加に失敗しました。"
 DOWNLOAD_FAILED_MESSAGE = "ファイルをダウンロードできません"
 FILE_NOT_SPECIFIED_MESSAGE = "ファイルが指定されていません"
+USER_ID_NOT_SPECIFIED_MESSAGE = "userId が指定されていません"
 DELETE_IDS_FILENAME_PREFIX = "ids"
 DELETE_IDS_FILENAME_SUFFIX = ".txt"
 UPLOAD_FALLBACK_FILENAME = "file"
@@ -183,13 +184,16 @@ async def _save(
 ) -> dict[str, Any]:
     file = await file_repository.find_by_id_and_tenant_id(session, file_id, tenant_id)
     if file is None:
-        # user_id は移植元で updatable=false のため、新規作成時にだけ設定する
+        # user_id は移植元で updatable=false のため、新規作成時にだけ設定する。
+        # 未指定だと移植元は NOT NULL 制約で失敗する（500）ため、入力不備の 400 にする
+        if user_id is None:
+            raise BadRequestError(USER_ID_NOT_SPECIFIED_MESSAGE)
         file = File(
             id=file_id,
             tenant_id=tenant_id,
             name=file_name or "",
             status=int(FileStatus.ENABLE),
-            user_id=user_id or "",
+            user_id=user_id,
             index_id=index_id,
         )
         session.add(file)
@@ -440,7 +444,7 @@ async def sync_files(
     if user_id is None and any(file_id not in existing_ids for file_id in files):
         # 移植元は登録者が null のまま保存しようとして NOT NULL 制約で失敗する（500）。
         # 新しく登録するファイルがあるときだけ失敗する点は同じにし、400 で返す
-        raise BadRequestError("userId が指定されていません")
+        raise BadRequestError(USER_ID_NOT_SPECIFIED_MESSAGE)
     for file_id, file in files.items():
         if file_id in existing_ids:
             continue
