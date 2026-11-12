@@ -3,7 +3,8 @@ import { act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/setup';
 import { persistTenantId } from '@/lib/api-client';
-import { useAuthStore } from './auth-store';
+import type { User } from '@/types/auth';
+import { deriveAuthState, useAuthStore } from './auth-store';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 const FIXTURE_TENANT_ID = 'tenant-1';
@@ -207,6 +208,88 @@ describe('useAuthStore', () => {
       });
 
       expect(useAuthStore.getState().userName).toBe('Test User');
+    });
+  });
+  describe('権限の派生値', () => {
+    const FIXTURE_GROUP_ADMIN: User = {
+      id: 'u2',
+      name: 'グループ管理者',
+      role: 'USER',
+      groups: [
+        { groupId: 'g1', groupAdmin: true },
+        { groupId: 'g2', groupAdmin: false },
+        { groupId: 'g3', groupAdmin: true },
+      ],
+    };
+
+    test('グループ管理者は管理コンソールに入れ、管理グループIDを持つこと', () => {
+      const state = deriveAuthState(FIXTURE_GROUP_ADMIN);
+
+      expect(state.isAdmin).toBe(false);
+      expect(state.isGroupAdmin).toBe(true);
+      expect(state.isGroupAdminOnly).toBe(true);
+      expect(state.canAccessAdminConsole).toBe(true);
+      expect(state.adminGroupIds).toEqual(['g1', 'g3']);
+    });
+
+    test('テナント管理者はグループ管理者でなくても管理コンソールに入れること', () => {
+      const state = deriveAuthState({ id: 'a', name: 'admin', role: 'ADMIN', groups: [] });
+
+      expect(state.isGroupAdmin).toBe(false);
+      expect(state.isGroupAdminOnly).toBe(false);
+      expect(state.canAccessAdminConsole).toBe(true);
+    });
+
+    test('一般ユーザーは管理コンソールに入れないこと', () => {
+      const state = deriveAuthState({
+        id: 'u',
+        name: 'user',
+        role: 'USER',
+        groups: [{ groupId: 'g1', groupAdmin: false }],
+      });
+
+      expect(state.canAccessAdminConsole).toBe(false);
+      expect(state.adminGroupIds).toEqual([]);
+    });
+
+    test('セッション確認がグループを返さないとき、保存済みのグループを引き継ぐこと', async () => {
+      await act(async () => {
+        await useAuthStore.getState().logout();
+      });
+      sessionStorage.setItem('AUTH_USER', JSON.stringify(FIXTURE_GROUP_ADMIN));
+      server.use(
+        http.get(`${BASE_URL}/api/auth`, () =>
+          HttpResponse.json({ id: 'u2', name: 'グループ管理者', role: 'USER' })
+        )
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().ensureInitialized();
+      });
+
+      expect(useAuthStore.getState().user?.groups).toEqual(FIXTURE_GROUP_ADMIN.groups);
+      expect(useAuthStore.getState().adminGroupIds).toEqual(['g1', 'g3']);
+      expect(useAuthStore.getState().canAccessAdminConsole).toBe(true);
+    });
+
+    test('セッションのユーザーが保存済みのユーザーと違うときはグループを引き継がないこと', async () => {
+      await act(async () => {
+        await useAuthStore.getState().logout();
+      });
+      sessionStorage.setItem('AUTH_USER', JSON.stringify(FIXTURE_GROUP_ADMIN));
+      server.use(
+        http.get(`${BASE_URL}/api/auth`, () =>
+          HttpResponse.json({ id: 'other', name: '別ユーザー', role: 'USER' })
+        )
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().ensureInitialized();
+      });
+
+      expect(useAuthStore.getState().user?.id).toBe('other');
+      expect(useAuthStore.getState().user?.groups).toEqual([]);
+      expect(useAuthStore.getState().canAccessAdminConsole).toBe(false);
     });
   });
 });

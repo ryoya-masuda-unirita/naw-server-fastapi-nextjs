@@ -25,6 +25,7 @@
   --color-text-medium: #666666;
   --color-text-weak: #adadad;
   --color-text-muted: #666666;
+  --color-text-lighter: #adadad;
   --color-text-white: #ffffff;
   --color-text-disabled: #adadad99;
 
@@ -51,6 +52,9 @@
   /* Status */
   --color-error: #dc2626;
   --color-status-error: #e92345;
+
+  /* Shadow（移植元 styles.css） */
+  --shadow-default: 0 8px 12px 0 #0000001a, 0 0 1px 0 #0003;
 
   /* Typography */
   --text-h1: 22px;
