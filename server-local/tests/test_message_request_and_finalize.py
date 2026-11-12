@@ -104,6 +104,7 @@ class TestNawStream:
             ("outputfile が JSON ではない", set()),
             ('{"answer":"回答です"}', {"download_file"}),
         ],
+        ids=["invalid_outputfile", "download_failure"],
     )
     async def test_finalize_failure_sends_error(
         self,
