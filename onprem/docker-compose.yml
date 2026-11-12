@@ -1,0 +1,77 @@
+name: naw-onprem
+
+services:
+  # 社内の SECURE の窓口（ブラウザから質問を受け、Waha! で回答を作る）
+  server-local:
+    build: ../server-local
+    ports:
+      - "127.0.0.1:18090:8080"
+    environment:
+      SECURITY_SERVER_AUTH_KEY: ${SERVER_LOCAL_AUTH_KEY:-onprem-local-key}
+      WAHA_URL: http://waha-emulator:8080/
+      WAHA_AUTHKEY: ${WAHA_AUTHKEY:-onprem-waha-key}
+      NAW_BASE_URL: ${NAW_BASE_URL:-http://host.docker.internal:8001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: Asia/Tokyo
+    volumes:
+      - server-local-data:/app/data
+      - stream-output:/app/data/stream-output
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/hello', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      waha-emulator:
+        condition: service_healthy
+
+  # Waha!（とアダプタ）の代わり
+  waha-emulator:
+    build: ../waha-emulator
+    ports:
+      - "127.0.0.1:18091:8080"
+    environment:
+      WAHA_AUTHKEY: ${WAHA_AUTHKEY:-onprem-waha-key}
+      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: Asia/Tokyo
+    volumes:
+      - stream-output:/app/data/stream-output
+      - ./file-server:/mnt/file-server:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      vector-db:
+        condition: service_healthy
+
+  # アダプタが使うベクトルDB（PostgreSQL + pgvector + PGroonga + Apache AGE）
+  vector-db:
+    build: ./vector-db
+    ports:
+      - "127.0.0.1:15432:5432"
+    environment:
+      POSTGRES_DB: onprem_vector
+      POSTGRES_USER: onprem_vector
+      POSTGRES_PASSWORD: onprem_vector_password
+      TZ: Asia/Tokyo
+    volumes:
+      - vector-db-data:/var/lib/postgresql/data
+      - ./vector-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U onprem_vector -d onprem_vector"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  server-local-data:
+  stream-output:
+  vector-db-data:
