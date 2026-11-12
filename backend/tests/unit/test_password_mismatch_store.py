@@ -3,6 +3,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app.core import password_mismatch_store
+from app.core.config import get_password_reset_settings
 from app.core.password_mismatch_store import (
     LOGIN_FAILURE_THRESHOLD,
     LOGIN_RATE_LIMIT_MINUTES,
@@ -217,6 +218,18 @@ class TestLoginLockout:
             await _record_login(user_id, fake_redis)
 
         assert await _record(user_id, fake_redis) is True
+
+    async def test_caps_retained_failures_without_changing_lockout(self, fake_redis):
+        """記録は判定に必要な件数だけ残し、件数を捨ててもロックの判定が変わらないこと"""
+        user_id = uuid4()
+        retained = max(
+            LOGIN_FAILURE_THRESHOLD, get_password_reset_settings().max_failure_attempts
+        )
+        for _ in range(retained + 3):
+            await _record_login(user_id, fake_redis)
+
+        assert await fake_redis.zcard(_key(user_id)) == retained
+        assert await _is_login_locked(user_id, fake_redis) is True
 
     async def test_login_unlocked_after_clear(self, fake_redis):
         """失敗記録を削除するとロックが解除されること"""

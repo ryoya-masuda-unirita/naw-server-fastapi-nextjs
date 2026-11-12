@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import NoReturn
 
 import redis.asyncio as redis
 from fastapi import HTTPException, status
@@ -52,24 +53,24 @@ def _login_failed_error() -> HTTPException:
     )
 
 
-async def _record_login_failure(
+async def _fail_login(
     user_id: uuid.UUID, tenant_id: str, redis_client: redis.Redis
-) -> HTTPException:
-    """ログインの失敗を記録し、応答する例外を返す。
+) -> NoReturn:
+    """ログインの失敗を記録し、認証失敗またはロックの例外を送出する。
 
     Args:
         user_id: ユーザーID。
         tenant_id: テナントID。
         redis_client: 失敗記録を保存するRedis非同期クライアント。
 
-    Returns:
-        今回の失敗でロックの条件を満たしたら 429、満たさなければ 403 の HTTPException。
+    Raises:
+        HTTPException: 今回の失敗でロックの条件を満たしたら 429、満たさなければ 403。
     """
     if await password_mismatch_store.record_login_failure_and_check_lockout(
         user_id, tenant_id, redis_client
     ):
-        return _login_locked_error()
-    return _login_failed_error()
+        raise _login_locked_error()
+    raise _login_failed_error()
 
 
 class AuthService:
@@ -117,7 +118,7 @@ class AuthService:
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
         # 移植元はパスワード履歴がないユーザーも認証失敗としてユーザーの失敗を数える
         if not latest or not await verify_password_async(password, latest.password):
-            raise await _record_login_failure(user.id, tenant_id, redis_client)
+            await _fail_login(user.id, tenant_id, redis_client)
 
         # 移植元はパスワード再設定が必要かの判定より前に記録を消す
         await password_mismatch_store.clear_failures(user.id, tenant_id, redis_client)
