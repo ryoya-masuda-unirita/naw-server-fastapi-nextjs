@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from uuid import uuid4
 
 from app.core import password_mismatch_store
+from app.core.config import get_password_reset_settings
 from app.services.auth_service import (
     INVALID_CREDENTIALS_MESSAGE,
     PASSWORD_RESET_LOCKED_MESSAGE,
@@ -15,9 +16,9 @@ from app.core.security import hash_password
 
 REPO_PATH = "app.services.auth_service.PasswordHistoryRepository"
 
-# 移植元 application.yml の password-reset.* の既定値
-MAX_FAILURE_ATTEMPTS = 5
-LOCKOUT_MINUTES = 15
+# サービスと同じ設定から取り、.env で上限を変えてもテストが実装とずれないようにする
+MAX_FAILURE_ATTEMPTS = get_password_reset_settings().max_failure_attempts
+LOCKOUT_MINUTES = get_password_reset_settings().lockout_minutes
 
 
 def _mismatch_key(user: User) -> str:

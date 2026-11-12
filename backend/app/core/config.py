@@ -137,11 +137,15 @@ class PasswordResetSettings(BaseSettings):
     )
 
     # ロック時間内の失敗がこの回数に達したらロックする
+    # 0 以下だと全員が常にロック中になる、またはロックが掛からなくなるため 1 以上に限る
     max_failure_attempts: int = Field(
-        default=5, alias="PASSWORD_RESET_MAX_FAILURE_ATTEMPTS"
+        default=5, ge=1, alias="PASSWORD_RESET_MAX_FAILURE_ATTEMPTS"
     )
-    # 失敗を数える期間（分）。この期間を過ぎた失敗は数えない
-    lockout_minutes: int = Field(default=15, alias="PASSWORD_RESET_LOCKOUT_MINUTES")
+    # 失敗を数える期間（分）。この期間を過ぎた失敗は数えない。
+    # 0 以下だと記録の有効期限（EXPIRE）が即時またはエラーになるため 1 以上に限る
+    lockout_minutes: int = Field(
+        default=15, ge=1, alias="PASSWORD_RESET_LOCKOUT_MINUTES"
+    )
 
 
 class RedisSettings(BaseSettings):

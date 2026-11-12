@@ -23,7 +23,29 @@ _SECONDS_PER_MINUTE = 60
 
 
 def _key(user_id: uuid.UUID, tenant_id: str) -> str:
+    """ユーザーの失敗記録を保存するキーを返す。
+
+    Args:
+        user_id: ユーザーID。
+        tenant_id: テナントID。
+
+    Returns:
+        Redisのキー。
+    """
     return f"{_KEY_PREFIX}{tenant_id}:{user_id}"
+
+
+def _window_start(lockout_minutes: int, now: float) -> float:
+    """失敗を数える期間の開始時刻（UNIX秒）を返す。
+
+    Args:
+        lockout_minutes: 失敗を数える期間（分）。
+        now: 現在時刻（UNIX秒）。
+
+    Returns:
+        期間の開始時刻。この時刻ちょうどの記録は数えない。
+    """
+    return now - lockout_minutes * _SECONDS_PER_MINUTE
 
 
 async def is_locked_out(
@@ -45,7 +67,7 @@ async def is_locked_out(
     Returns:
         ロック中なら`True`。
     """
-    since = time.time() - lockout_minutes * _SECONDS_PER_MINUTE
+    since = _window_start(lockout_minutes, time.time())
     # 移植元の`countBy...CreatedAtAfter`と同じく、期間の開始時刻ちょうどの記録は含めない
     failures = await redis_client.zcount(_key(user_id, tenant_id), f"({since}", "+inf")
     return int(failures) >= max_attempts
@@ -72,18 +94,18 @@ async def record_failure_and_check_lockout(
     """
     key = _key(user_id, tenant_id)
     now = time.time()
-    window_seconds = lockout_minutes * _SECONDS_PER_MINUTE
+    since = _window_start(lockout_minutes, now)
     async with redis_client.pipeline(transaction=True) as pipe:
         # 同じ時刻の失敗も別件として数えるため、メンバーは失敗ごとに一意にする
         pipe.zadd(key, {uuid.uuid4().hex: now})
         # ロック時間を過ぎた記録は判定に使わないため、記録のたびに捨てる
-        pipe.zremrangebyscore(key, "-inf", now - window_seconds)
+        pipe.zremrangebyscore(key, "-inf", since)
         # 最後の失敗からロック時間が経てば記録は不要になるため、キーごと自動で消す
-        pipe.expire(key, window_seconds)
-        await pipe.execute()
-    return await is_locked_out(
-        user_id, tenant_id, max_attempts, lockout_minutes, redis_client
-    )
+        pipe.expire(key, lockout_minutes * _SECONDS_PER_MINUTE)
+        # 記録と同じトランザクションで数え、判定のための往復を増やさない
+        pipe.zcount(key, f"({since}", "+inf")
+        results = await pipe.execute()
+    return int(results[-1]) >= max_attempts
 
 
 async def clear_failures(

@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.core.config import (
     AwsSettings,
@@ -164,6 +165,16 @@ class TestPasswordResetSettings:
 
         assert settings.max_failure_attempts == 3
         assert settings.lockout_minutes == 30
+
+    @pytest.mark.parametrize(
+        "env_name",
+        ["PASSWORD_RESET_MAX_FAILURE_ATTEMPTS", "PASSWORD_RESET_LOCKOUT_MINUTES"],
+    )
+    @pytest.mark.parametrize("value", ["0", "-1"])
+    def test_rejects_non_positive_values(self, env_name, value):
+        """回数・ロック時間が 0 以下ならロックが正しく働かないため起動時にエラーになること"""
+        with pytest.raises(ValidationError):
+            _build_password_reset_settings(**{env_name: value})
 
 
 class TestAzureOpenAISettings:

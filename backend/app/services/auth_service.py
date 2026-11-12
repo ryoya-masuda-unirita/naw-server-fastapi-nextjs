@@ -230,10 +230,12 @@ class AuthService:
         user.is_required_password_reset = False
         session.add(user)
         await session.flush()
-        await session.commit()
-        # 移植元は再設定と同じトランザクションの最後で失敗記録を消すため、
-        # コミットが成功した場合だけ消す
+        # 移植元は再設定と同じトランザクションの最後で失敗記録を消し、消せなければ
+        # 再設定ごと取り消す。コミット後に消すと、Redisの障害時にパスワードは
+        # 変わったのにエラー応答になるため、コミット前に消す（ここに来た時点で
+        # 旧パスワードは正しいので、コミットが失敗して記録だけ消えても害はない）
         await password_mismatch_store.clear_failures(user.id, tenant_id, redis_client)
+        await session.commit()
 
         token = create_access_token(user.login_id, tenant_id)
 

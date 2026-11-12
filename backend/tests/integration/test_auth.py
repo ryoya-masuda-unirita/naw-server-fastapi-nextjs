@@ -3,13 +3,14 @@ import json
 import pytest
 
 from app.core.session_store import SESSION_COOKIE_NAME
+from app.core.config import get_password_reset_settings
 from app.services.auth_service import (
     INVALID_CREDENTIALS_MESSAGE,
     PASSWORD_RESET_LOCKED_MESSAGE,
 )
 
-# 移植元 application.yml の password-reset.max-failure-attempts の既定値
-MAX_FAILURE_ATTEMPTS = 5
+# サービスと同じ設定から取り、.env で上限を変えてもテストが実装とずれないようにする
+MAX_FAILURE_ATTEMPTS = get_password_reset_settings().max_failure_attempts
 
 
 def _reset_body(
