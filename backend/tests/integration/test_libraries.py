@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
 from app.core.security import create_access_token
@@ -233,10 +234,17 @@ def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _mapped_tag_ids(session, library_id: UUID) -> list[str]:
+async def _mapped_tag_ids(session: AsyncSession, library_id: UUID) -> list[str]:
     """ライブラリに付与されているタグIDを取得する。
 
     テストとアプリが同じセッションを使うため、エンティティではなく列だけを取得する。
+
+    Args:
+        session: テストとアプリで共有する非同期DBセッション。
+        library_id: 対象のライブラリID。
+
+    Returns:
+        付与されているタグID一覧。
     """
     result = await session.execute(
         select(col(LibraryTagMapping.library_tag_id)).where(

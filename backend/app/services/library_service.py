@@ -307,9 +307,7 @@ class LibraryService:
 
         # 移植元と同じく共有グループの確認の後にタグIDの形式を確認する（不正なら400）。
         # 保存形式に揃えてから重複を除き、表記違いの同じタグを1件として扱う。
-        tag_ids = (
-            list(dict.fromkeys(normalize_library_tag_ids(req.tags))) if req.tags else []
-        )
+        tag_ids = list(dict.fromkeys(normalize_library_tag_ids(req.tags or [])))
         if tag_ids:
             found_tags = await LibraryTagRepository.find_by_tenant_id_and_ids(
                 tenant_id, tag_ids, session

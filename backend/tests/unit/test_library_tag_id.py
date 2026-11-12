@@ -68,3 +68,11 @@ class TestNormalizeLibraryTagIds:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Invalid UUID string: bad"
+
+    def test_normalize_ids_with_too_long_id_omits_value(self) -> None:
+        """37文字以上の不正なIDは、値を含めず移植元と同じ文言で400になること"""
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_library_tag_ids(["x" * 37])
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "UUID string too large"

@@ -2,6 +2,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
 from app.core.security import create_access_token
@@ -444,11 +445,17 @@ class TestUpdateLibraryTag:
         assert response.status_code == 404
 
 
-async def _remaining_tag_ids(session) -> set[str]:
+async def _remaining_tag_ids(session: AsyncSession) -> set[str]:
     """DBに残っているライブラリタグIDを取得する。
 
     テストとアプリが同じセッションを使うため、エンティティではなく列だけを取得し、
     セッションに残った削除前のオブジェクトを読まないようにする。
+
+    Args:
+        session: テストとアプリで共有する非同期DBセッション。
+
+    Returns:
+        全テナントのライブラリタグIDの集合。
     """
     result = await session.execute(select(col(LibraryTag.id)))
     return set(result.scalars().all())
