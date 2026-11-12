@@ -133,7 +133,7 @@ class FileRepository:
             user_id: 絞り込み対象のユーザーID（解決済みUUID）。Noneなら絞り込まない。
             status: 絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
             updated_at_from: 更新日時の範囲開始（この値以上）。
-            updated_at_to: 更新日時の範囲終了（この値以下）。
+            updated_at_to: 更新日時の範囲終了（この値より前）。
             sort: 並べ替え指定の並び（キーは"displayName"・"updatedAt"・"userId"・"status"）。
                 未知のキーは"updatedAt"として扱う。
             page: ページ番号（0始まり）。
@@ -158,7 +158,9 @@ class FileRepository:
         if updated_at_from is not None:
             stmt = stmt.where(File.updated_at >= updated_at_from)
         if updated_at_to is not None:
-            stmt = stmt.where(File.updated_at <= updated_at_to)
+            # 画面は「終了日の翌日 0:00」を送るため、その時刻ちょうどは含めない
+            # （移植元 NAW-1334 と同じ）。
+            stmt = stmt.where(File.updated_at < updated_at_to)
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0

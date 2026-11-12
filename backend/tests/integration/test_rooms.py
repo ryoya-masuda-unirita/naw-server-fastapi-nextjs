@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -533,7 +533,7 @@ class TestAdminRoomHistories:
         assert response.status_code == 403
 
     async def test_invalid_created_at_returns_400(self, client, admin_headers):
-        """createdAtFromがyyyy-MM-dd形式でない場合400になること"""
+        """createdAtFromが日時でない場合400になること"""
         async with client as c:
             response = await c.get(
                 "/api/admin/histories",
@@ -542,6 +542,68 @@ class TestAdminRoomHistories:
             )
 
         assert response.status_code == 400
+
+    async def test_date_only_created_at_returns_400(self, client, admin_headers):
+        """createdAtFromが時刻を持たない日付の場合400になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                params={"createdAtFrom": "2026-10-09"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == (
+            "createdAtFrom は 2026-10-08T15:00:00Z のような"
+            " ISO 8601 の日時で指定してください"
+        )
+
+    async def test_admin_histories_filter_by_created_at_range_excludes_end(
+        self,
+        client,
+        session,
+        admin_headers,
+        rooms_tenant,
+        room_owner_user,
+        room_assistant,
+    ):
+        """作成日時は開始の時刻以上・終了の時刻より前のルームだけが返ること"""
+        created = {}
+        for label, created_at in [
+            ("before_day_starts", "2026-10-08T14:59:59.999000+00:00"),
+            ("at_day_start", "2026-10-08T15:00:00+00:00"),
+            ("before_day_ends", "2026-10-09T14:59:59.999000+00:00"),
+            ("at_next_day_start", "2026-10-09T15:00:00+00:00"),
+        ]:
+            room = Room(
+                tenant_id=rooms_tenant.id,
+                name=label,
+                default_assistant_id=room_assistant.id,
+                user_id=room_owner_user.id,
+                created_at=datetime.fromisoformat(created_at),
+            )
+            session.add(room)
+            created[label] = room
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/histories",
+                # 日本時間の 2026-10-09 を、オフセット付きで指定する
+                params={
+                    "createdAtFrom": "2026-10-09T00:00:00+09:00",
+                    "createdAtTo": "2026-10-10T00:00:00+09:00",
+                },
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalElements"] == 2
+        assert {room["id"] for room in body["content"]} == {
+            created["at_day_start"].id,
+            created["before_day_ends"].id,
+        }
 
     async def test_get_rooms_filters_by_name_case_insensitive(
         self,

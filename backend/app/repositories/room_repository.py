@@ -205,8 +205,8 @@ class RoomRepository:
         Args:
             tenant_id: テナントID。
             user_id: ユーザーIDでの絞り込み。
-            created_at_from: 作成日時下限。
-            created_at_to: 作成日時上限。
+            created_at_from: 作成日時の範囲開始（この値以上）。
+            created_at_to: 作成日時の範囲終了（この値より前）。
             room_rate: 評価での絞り込み。`unRated` の場合は未評価。
             name: ルーム名の部分一致検索文字列。
             visible_assistant_ids: グループ管理者向けに可視なアシスタントID一覧。Noneなら制限なし。
@@ -245,7 +245,9 @@ class RoomRepository:
         if created_at_from is not None:
             stmt = stmt.where(Room.created_at >= created_at_from)
         if created_at_to is not None:
-            stmt = stmt.where(Room.created_at <= created_at_to)
+            # 画面は「終了日の翌日 0:00」を送るため、その時刻ちょうどは含めない
+            # （移植元`RoomService.getRooms`と同じ）。
+            stmt = stmt.where(Room.created_at < created_at_to)
         if room_rate == "unRated":
             stmt = stmt.where(Room.rating.is_(None))
         elif room_rate:

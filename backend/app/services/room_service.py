@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -45,20 +45,6 @@ class RoomService:
             createdAt=room.created_at,
             updatedAt=room.updated_at,
         )
-
-    @staticmethod
-    def _parse_date(value: str | None, *, end_of_day: bool) -> datetime | None:
-        """yyyy-MM-dd形式の日付文字列をdatetimeに変換する。"""
-        if value is None:
-            return None
-        try:
-            parsed = datetime.strptime(value, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid date format",
-            )
-        return datetime.combine(parsed, time.max if end_of_day else time.min)
 
     @staticmethod
     def _parse_user_id(value: str | None) -> UUID | None:
@@ -145,8 +131,8 @@ class RoomService:
         page: int,
         size: int,
         user_id: str | None,
-        created_at_from: str | None,
-        created_at_to: str | None,
+        created_at_from: datetime | None,
+        created_at_to: datetime | None,
         room_rate: str | None,
         name: str | None,
         order_by: str,
@@ -171,8 +157,8 @@ class RoomService:
         rows, total = await RoomRepository.find_admin_histories(
             tenant_id,
             RoomService._parse_user_id(user_id),
-            RoomService._parse_date(created_at_from, end_of_day=False),
-            RoomService._parse_date(created_at_to, end_of_day=True),
+            created_at_from,
+            created_at_to,
             room_rate,
             name,
             visible_assistant_ids,

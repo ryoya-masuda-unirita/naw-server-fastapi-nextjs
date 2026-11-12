@@ -897,6 +897,76 @@ class TestFilesRouter:
             assert body["totalElements"] == 1
             assert body["content"][0]["displayName"] == "Alpha"
 
+        async def test_filter_by_updated_at_range_excludes_end(
+            self, client, session, files_index, files_admin_user, files_admin_headers
+        ):
+            """更新日時は開始の時刻以上・終了の時刻より前のファイルだけが返ること"""
+            # 日本時間の 2026-10-09 を選んだときに画面が送る範囲の前後に置く
+            # （移植元 FileIT の期間絞り込みと同じ境界）
+            created = {}
+            for label, updated_at in [
+                ("before_day_starts", "2026-10-08T14:59:59.999000+00:00"),
+                ("at_day_start", "2026-10-08T15:00:00+00:00"),
+                ("before_day_ends", "2026-10-09T14:59:59.999000+00:00"),
+                ("at_next_day_start", "2026-10-09T15:00:00+00:00"),
+            ]:
+                created[label] = await _create_file(
+                    session,
+                    files_index,
+                    files_admin_user.id,
+                    FileStatus.ENABLE,
+                    datetime.fromisoformat(updated_at),
+                )
+
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    params={
+                        "updatedAtFrom": "2026-10-08T15:00:00.000Z",
+                        "updatedAtTo": "2026-10-09T15:00:00.000Z",
+                    },
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["totalElements"] == 2
+            assert {item["id"] for item in body["content"]} == {
+                created["at_day_start"].id,
+                created["before_day_ends"].id,
+            }
+
+        async def test_date_only_updated_at_from_returns_400(
+            self, client, files_index, files_admin_headers
+        ):
+            """updatedAtFromが時刻を持たない日付の場合、移植元と同じメッセージで400になること"""
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    params={"updatedAtFrom": "2026-10-09"},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert response.json()["message"] == (
+                "updatedAtFrom は 2026-10-08T15:00:00Z のような"
+                " ISO 8601 の日時で指定してください"
+            )
+
+        async def test_invalid_updated_at_to_returns_400(
+            self, client, files_index, files_admin_headers
+        ):
+            """updatedAtToが日時でない場合400になること"""
+            async with client as ac:
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    params={"updatedAtTo": "abc"},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert "updatedAtTo" in response.json()["message"]
+
         async def test_sort_by_user_id(
             self, client, session, files_tenant, files_index, files_admin_headers
         ):
