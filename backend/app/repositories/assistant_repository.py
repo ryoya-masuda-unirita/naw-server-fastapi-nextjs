@@ -5,13 +5,16 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
-from app.core.sort import SortOrder, build_order_by
+from app.core.sort import SortOrder, build_order_by, enum_as_string
 from app.models.assistant import (
     Assistant,
     AssistantCategoryMapping,
     AssistantType,
     GroupAssistant,
 )
+
+# 移植元は種別を varchar で持つため、宣言順ではなく文字列順で並べる
+_TYPE_SORT_COLUMN: Any = enum_as_string(Assistant.type)
 
 # 移植元PageableSortUtil.remapSortのフロントエンド向けソートキーエイリアスを含む対応表。
 # secuaigent-client（AssistantSortField）は実際に"assistantType"を送信するため、
@@ -21,10 +24,10 @@ from app.models.assistant import (
 # 更新日時順にフォールバックする。対応表にないキーも更新日時順にする。
 _SORT_COLUMNS: dict[str, Any] = {
     "name": Assistant.name,
-    "type": Assistant.type,
-    "assistantType": Assistant.type,
-    "serverType": Assistant.type,
-    "server": Assistant.type,
+    "type": _TYPE_SORT_COLUMN,
+    "assistantType": _TYPE_SORT_COLUMN,
+    "serverType": _TYPE_SORT_COLUMN,
+    "server": _TYPE_SORT_COLUMN,
     "includeHistory": Assistant.include_history,
     "updatedAt": Assistant.updated_at,
     "category": Assistant.updated_at,

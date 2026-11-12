@@ -1,10 +1,11 @@
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, select
+from sqlalchemy import Column, Enum, Integer, MetaData, String, Table, select
 from sqlalchemy.dialects import postgresql
 
 from app.core.sort import (
     SortOrder,
     build_order_by,
+    enum_as_string,
     find_order,
     parse_sort,
     sort_query,
@@ -16,6 +17,7 @@ _items = Table(
     Column("id", Integer, primary_key=True),
     Column("name", String),
     Column("updated_at", String),
+    Column("kind", Enum("SECURE", "SAAS_CHAT", name="itemkind")),
 )
 _COLUMNS = {"name": _items.c.name, "updatedAt": _items.c.updated_at}
 
@@ -187,3 +189,24 @@ class TestBuildOrderBy:
         )
 
         assert _order_by_sql(clauses) == "items.id ASC"
+
+
+class TestEnumAsString:
+    def test_casts_column_to_varchar_on_postgresql(self):
+        """ネイティブENUM列をPostgreSQL上で文字列にキャストした列式にすること"""
+        sql = str(enum_as_string(_items.c.kind).compile(dialect=postgresql.dialect()))
+
+        assert sql == "CAST(items.kind AS VARCHAR)"
+
+    def test_order_by_uses_casted_column(self):
+        """並べ替えに使うと文字列にキャストした列で並べること"""
+        clauses = build_order_by(
+            [SortOrder("kind", descending=True)],
+            {"kind": enum_as_string(_items.c.kind)},
+            fallback=_items.c.updated_at,
+            tie_breaker=_items.c.id,
+        )
+
+        assert (
+            _order_by_sql(clauses) == "CAST(items.kind AS VARCHAR) DESC, items.id DESC"
+        )

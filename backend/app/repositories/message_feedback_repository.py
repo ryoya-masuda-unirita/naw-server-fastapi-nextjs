@@ -2,6 +2,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.sort import enum_as_string
 from app.models.message import Message, MessageContent, MessageFeedback
 from app.models.room import Room, RoomRating
 from app.models.user import User
@@ -159,7 +160,8 @@ class MessageFeedbackRepository:
         if sort_column == "assistant_id":
             order_col = Message.assistant_id
         elif sort_column == "rating":
-            order_col = MessageFeedback.rating
+            # 移植元は評価を varchar で持つため、宣言順ではなく文字列順で並べる
+            order_col = enum_as_string(MessageFeedback.rating)
         elif sort_column == "index_id":
             order_col = MessageFeedback.index_id
         else:
