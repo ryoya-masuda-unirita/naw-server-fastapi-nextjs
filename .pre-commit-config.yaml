@@ -3,10 +3,10 @@ repos:
     rev: v0.15.20
     hooks:
       - id: ruff-format
-        files: ^backend/
+        files: ^(backend|server-local)/
       - id: ruff-check
         args: [--fix]
-        files: ^backend/
+        files: ^(backend|server-local)/
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.97.1
     hooks:

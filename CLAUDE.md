@@ -13,7 +13,7 @@
 | `server/`（Spring Boot 3.5 / Java 21） | `backend/`（FastAPI） |
 | `client/`（Angular 21） | `frontend/`（React、Vite + React Router） |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター） | `generative-ai-adapter/`（Python、新設予定） |
-| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python、新設予定） |
+| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
 `frontend-angular/` は `secuaigent/client`（Angular）をそのままモノレポに取り込んだもの。React 移植（`frontend/`）が完了するまでの間、バックエンド（`backend/`）の動作確認用フロントエンドとして使う。開発サーバーは `http://localhost:4201`。
@@ -121,10 +121,11 @@ naw-server-fastapi-nextjs/
 ├── frontend/          # React（Vite + React Router、client/ の移植先）
 ├── frontend-angular/  # client/ のコピー（React 移植完了までの動作確認用）
 ├── backend/           # FastAPI（server/ の移植先）
+├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
 
-`generative-ai-adapter/`・`server-local/` などは、移植に着手するときにルートへ新設する（「プロジェクト概要」の対応表を参照）。
+`generative-ai-adapter/` などは、移植に着手するときにルートへ新設する（「プロジェクト概要」の対応表を参照）。
 
 フロントエンド固有の規約は `frontend/.claude/CLAUDE.md`、バックエンド固有は `backend/.claude/CLAUDE.md` を参照すること。
 
