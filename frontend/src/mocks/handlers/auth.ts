@@ -68,7 +68,6 @@ export const authHandlers = [
       id: 'user1',
       name: 'Test User',
       role: 'USER',
-      tenant_id: 'tenant-1',
     });
   }),
 ];
