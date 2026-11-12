@@ -18,7 +18,7 @@ docker compose down            # 停止（データも消すなら down -v）
 | server-local | 18090 | 社内の SECURE の窓口（`server-local/`）。認証キーは `onprem-local-key` |
 | waha-emulator | 18091 | Waha!（とアダプタ）の代わり（`waha-emulator/`）。LLM は既定で echo |
 | vector-db | 15432 | アダプタが使うベクトルDB（pgvector + PGroonga + Apache AGE）。DB・ユーザー `onprem_vector`、パスワード `onprem_vector_password` |
-| `file-server/` | - | 顧客のファイルサーバーの代わり（サンプル文書）。エミュレーターの `/mnt/file-server` に読み取り専用で見える |
+| `file-server/` | - | 顧客のファイルサーバーの代わり（サンプル文書）。エミュレーターの `/mnt/file-server` に読み取り専用で見える（ベクトルDB とともに、アダプタの取り込み後に使う） |
 
 server-local と エミュレーターの接続・ストリームファイルの共有は設定済み。
 
@@ -39,5 +39,5 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
    docker exec -i naw-fastapi-postgres psql -U root -d postgres < onprem/cloud-seed.sql
    ```
 
-2. `cloud-seed.sql` で、`test-tenant` に SECURE アシスタント「社内アシスタント（オンプレ）」と LOCAL_SERVER エンドポイント（URL `http://localhost:18090/`、API キー `onprem-local-key`）が登録される。ブラウザはこの URL の server-local に直接質問を送る
+2. `cloud-seed.sql` で、`test-tenant` に SECURE アシスタント「社内アシスタント（オンプレ）」と LOCAL_SERVER エンドポイント（URL `http://localhost:18090/`、API キー `onprem-local-key`）が登録される。ブラウザはこの URL の server-local に直接質問を送る（`.env` で認証キーを変えたら `cloud-seed.sql` の `api_key` も同じ値にする）
 3. server-local はライブラリのスタブ作成で `http://host.docker.internal:8001`（ルートの compose の backend）を呼ぶ。backend を別のポートで動かすときは `.env` の `NAW_BASE_URL` を変える

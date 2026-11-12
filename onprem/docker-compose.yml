@@ -38,6 +38,7 @@ services:
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       TZ: Asia/Tokyo
     volumes:
@@ -48,9 +49,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-    depends_on:
-      vector-db:
-        condition: service_healthy
 
   # アダプタが使うベクトルDB（PostgreSQL + pgvector + PGroonga + Apache AGE）
   vector-db:
