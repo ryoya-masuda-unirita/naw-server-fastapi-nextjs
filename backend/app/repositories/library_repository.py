@@ -120,8 +120,12 @@ class LibraryRepository:
             conditions.append(Library.user_id.not_in(exclude_subquery))
 
         if tag_ids:
+            # library_tag_id は String(32) でハイフンなしhexを保存している。UUIDのまま
+            # in_() に渡すとバインド型がUuidと推論され、PostgreSQLでは
+            # `varchar = uuid` の型不一致になるため、保存形式の文字列に揃えて比較する。
+            tag_id_hexes = [tag_id.hex for tag_id in tag_ids]
             tag_subquery = select(LibraryTagMapping.library_id).where(
-                LibraryTagMapping.library_tag_id.in_(tag_ids),
+                LibraryTagMapping.library_tag_id.in_(tag_id_hexes),
                 LibraryTagMapping.tenant_id == tenant_id,
             )
             conditions.append(Library.id.in_(tag_subquery))
