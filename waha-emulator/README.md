@@ -18,7 +18,7 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 | `GET /startsession` | `authkey` | セッション ID。authkey が違えば 401 |
 | `GET /endsession` | `sessionid` | `OK`。スロットのファイルを破棄し、実行中のジョブを止める |
 | `POST /upload/{slot}` | `sessionid`、multipart の `file` | `OK`。入力スロット（`file`・`question`・`attachmentfile`・`history`・`textdata`）だけ受け付ける |
-| `GET /execute/{serviceId}` | `sessionid`、ほかはワークフローに渡す（`streamfilepath`・`splitLength`・`filepath`・`start`・`end`） | 既定はジョブの完了まで待って `/result` と同じ文字列。`EXECUTE_WAIT_FOR_COMPLETION=false` ならすぐ `OK` |
+| `GET /execute/{serviceId}`（サービス ID が空の `/execute/` も可） | `sessionid`、ほかはワークフローに渡す（`streamfilepath`・`splitLength`・`filepath`・`start`・`end`） | 既定はジョブの完了まで待って `/result` と同じ文字列。`EXECUTE_WAIT_FOR_COMPLETION=false` ならすぐ `OK` |
 | `GET /result` | `sessionid` | `RUNNING` / `SUCCESS` / `FAILURE: 理由`。execute の前は `RUNNING` |
 | `GET /download/{slot}` | `sessionid` | スロットの中身（出力は `outputfile`） |
 
@@ -60,7 +60,8 @@ data:{"type":"completed"}
 |---|---|---|
 | `WAHA_AUTHKEY` | なし（必須） | `startsession` の `authkey` と照合する。server-local の `WAHA_AUTHKEY` と同じ値にする |
 | `EXECUTE_WAIT_FOR_COMPLETION` | `true` | `true`: execute はジョブの完了まで応答しない。`false`: すぐ応答する。server-local の同期 API・学習は execute の後に「間隔 × 回数」（既定 2 秒 × 10 回）しか結果を待たないため、`false` で LLM が遅いと失敗する |
-| `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する |
+| `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する。未設定だと、セッションを開ければ（authkey を知っていれば）任意の既存ファイルに追記できるため、ホストで動かすときも設定する |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | `3600` | この時間使われていないセッション（実行中のジョブがないもの）を、次の `startsession` で破棄する。server-local は失敗時に `endsession` を呼ばない経路がある（学習データの同期など）ため |
 | `LLM_PROVIDER` | `echo` | `echo` / `azure_openai` |
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の `model` に渡す |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | backend と同じ既定値 |
@@ -71,11 +72,14 @@ Docker Compose では、ほかに `WAHA_EMULATOR_PORT`（既定 8091）・`WAHA_
 ## Docker で起動する
 
 ```bash
+mkdir -p server-local/data/stream-output   # マウントするディレクトリを先に作る（下記）
 cd waha-emulator
 cp .env.example .env          # WAHA_AUTHKEY を設定する（azure_openai を使うなら接続先も）
 docker compose up -d --build
 curl "http://localhost:8091/WahaServer/servicerun/api/startsession?authkey=<WAHA_AUTHKEY>"   # → セッション ID
 ```
+
+ストリームファイルのディレクトリ（`WAHA_EMULATOR_STREAM_DIR`、既定 `../server-local/data/stream-output`）は、**起動前に自分のユーザーで作っておく**。ないまま起動すると Docker が root 所有で作り、Linux では uid 1000 の server-local が書き込めなくなるため、compose はディレクトリを作らずに起動エラー（`bind source path does not exist`）にしている。
 
 停止・削除は `docker compose down`。
 
@@ -88,13 +92,16 @@ server-local の `WAHA_URL` をエミュレーターに向け、`WAHA_AUTHKEY` �
 server-local のコンテナはストリームファイルを `/app/data/stream-output` に作る（ホストの `server-local/data/stream-output`）。エミュレーターの compose は既定で同じホストのディレクトリを同じパスにマウントするため、パスの読み替え（server-local の `STREAM_WAHA_OUTPUT_DIR`）は要らない。
 
 ```bash
+# 0. 共有するディレクトリを先に作る（root 所有で作られないように）
+mkdir -p server-local/data/stream-output
+
 # 1. エミュレーター（waha-emulator/.env の WAHA_AUTHKEY=任意の値）
 cd waha-emulator && docker compose up -d --build
 
 # 2. server-local（server-local/.env）
 #    WAHA_URL=http://host.docker.internal:8091/
 #    WAHA_AUTHKEY=エミュレーターと同じ値
-cd ../server-local && mkdir -p data/stream-output && docker compose up -d --build
+cd ../server-local && docker compose up -d --build
 
 # 3. 確かめる（SECURITY_SERVER_AUTH_KEY は server-local/.env の値）
 curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \
@@ -108,13 +115,15 @@ curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \
 
 ### 両方ともホストで動かす
 
-同じファイルシステムなので、server-local が渡すパスをそのまま使える。
+同じファイルシステムなので、server-local が渡すパスをそのまま使える。`STREAM_ALLOWED_DIR` は server-local のストリームファイルの出力先（既定 `server-local/data/stream-output`）にする。
 
 ```bash
 # エミュレーター
+mkdir -p server-local/data/stream-output
 cd waha-emulator
 uv sync
-WAHA_AUTHKEY=local-key uv run uvicorn waha_emulator.main:app_factory --factory --port 8091 --no-access-log
+WAHA_AUTHKEY=local-key STREAM_ALLOWED_DIR=../server-local/data/stream-output \
+  uv run uvicorn waha_emulator.main:app_factory --factory --port 8091 --no-access-log
 
 # server-local（別のターミナル。server-local/.env で WAHA_URL=http://localhost:8091/、WAHA_AUTHKEY=local-key）
 cd server-local

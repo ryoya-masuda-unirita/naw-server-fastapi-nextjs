@@ -8,9 +8,16 @@ import asyncio
 import logging
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
-from waha_emulator.sessions import SLOT_OUTPUT, Job, Session, SlotFile
-from waha_emulator.stream_file import StreamFile
+from waha_emulator.sessions import (
+    CANCELLED_MESSAGE,
+    SLOT_OUTPUT,
+    Job,
+    Session,
+    SlotFile,
+)
+from waha_emulator.stream_file import StreamFile, StreamFileError
 from waha_emulator.workflows.base import Workflow, WorkflowError, WorkflowRequest
 
 logger = logging.getLogger(__name__)
@@ -18,7 +25,6 @@ logger = logging.getLogger(__name__)
 STREAM_FILE_PARAM = "streamfilepath"
 OUTPUT_FILENAME = "output.json"
 OUTPUT_CONTENT_TYPE = "application/json"
-CANCELLED_MESSAGE = "ジョブが中断されました"
 
 
 def start_job(
@@ -63,14 +69,16 @@ async def _run(
         session.slots[SLOT_OUTPUT] = SlotFile(
             OUTPUT_FILENAME, OUTPUT_CONTENT_TYPE, output.encode("utf-8")
         )
-        if stream is not None:
-            stream.write_event({"type": "completed"})
+        # 終端は途中経過の区切りにすぎず、回答は outputfile で返せるため、
+        # 書けなくても成功にする
+        _write_event_quietly(stream, {"type": "completed"})
         job.succeed()
         logger.info("Job succeeded: sessionId=%s, serviceId=%s", session.id, service_id)
     except asyncio.CancelledError:
         job.fail(CANCELLED_MESSAGE)
+        _write_event_quietly(stream, {"type": "error", "message": CANCELLED_MESSAGE})
         raise
-    except WorkflowError as e:
+    except (WorkflowError, StreamFileError) as e:
         _fail(session, job, stream, str(e))
     except Exception as e:
         logger.exception(
@@ -81,15 +89,25 @@ async def _run(
         _fail(session, job, stream, f"{type(e).__name__}: {e}")
     finally:
         if stream is not None:
-            stream.close()
+            try:
+                stream.close()
+            except OSError:
+                logger.warning("Failed to close stream file", exc_info=True)
 
 
 def _fail(session: Session, job: Job, stream: StreamFile | None, reason: str) -> None:
     logger.warning("Job failed: sessionId=%s, reason=%s", session.id, reason)
-    if stream is not None:
-        try:
-            stream.write_event({"type": "error", "message": reason})
-        except OSError:
-            # 失敗は result で伝わるため、ストリームに書けなくても続ける
-            logger.warning("Failed to write error event to stream file", exc_info=True)
+    _write_event_quietly(stream, {"type": "error", "message": reason})
     job.fail(reason)
+
+
+def _write_event_quietly(stream: StreamFile | None, event: dict[str, Any]) -> None:
+    """ストリームに終端を書く。結果は result で伝わるため、書けなくても続ける。"""
+    if stream is None:
+        return
+    try:
+        stream.write_event(event)
+    except OSError:
+        logger.warning(
+            "Failed to write %s event to stream file", event["type"], exc_info=True
+        )

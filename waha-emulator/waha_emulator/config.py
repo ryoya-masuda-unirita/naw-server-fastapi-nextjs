@@ -1,13 +1,16 @@
+import logging
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend の AZURE_OPENAI_API_VERSION の既定値と揃える
 DEFAULT_AZURE_OPENAI_API_VERSION = "2024-10-21"
+# server-local の SSE のタイムアウト（既定 10 分）より十分長くする
+DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 3600.0
 
 
 class LlmProvider(StrEnum):
@@ -31,6 +34,12 @@ class Settings(BaseSettings):
     )
     # 設定すると、streamfilepath をこのディレクトリの中だけに制限する
     stream_allowed_dir: Path | None = Field(default=None, alias="STREAM_ALLOWED_DIR")
+    # server-local が endsession を呼ばずに終わったセッションを破棄するまでの時間
+    session_idle_timeout_seconds: float = Field(
+        default=DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS,
+        alias="SESSION_IDLE_TIMEOUT_SECONDS",
+        gt=0,
+    )
 
     llm_provider: LlmProvider = Field(default=LlmProvider.ECHO, alias="LLM_PROVIDER")
     azure_openai_endpoint: str = Field(default="", alias="AZURE_OPENAI_ENDPOINT")
@@ -41,6 +50,15 @@ class Settings(BaseSettings):
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """logging にないレベル名は、起動時に分かりやすいメッセージで失敗させる。"""
+        level = v.strip().upper()
+        if level not in logging.getLevelNamesMapping():
+            raise ValueError(f"LOG_LEVEL が不正です: {v}")
+        return level
 
     @model_validator(mode="after")
     def require_azure_openai_settings(self) -> Self:

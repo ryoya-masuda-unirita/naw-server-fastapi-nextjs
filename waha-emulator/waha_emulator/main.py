@@ -26,7 +26,7 @@ def create_app(
     """アプリを組み立てる。テストでは LLM・ワークフローを差し替えて使う。"""
     settings = settings or get_settings()
     logging.basicConfig(
-        level=settings.log_level.upper(),
+        level=settings.log_level,
         format="%(asctime)s [%(name)s] %(levelname)s - %(message)s",
     )
     logging.getLogger("httpx").setLevel(HTTPX_LOG_LEVEL)
@@ -34,7 +34,9 @@ def create_app(
     if registry is None:
         llm = llm_client or create_llm_client(settings)
         registry = WorkflowRegistry(default=ChatWorkflow(llm))
-    session_store = SessionStore()
+    session_store = SessionStore(
+        idle_timeout_seconds=settings.session_idle_timeout_seconds
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

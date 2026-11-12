@@ -31,15 +31,18 @@ class StreamFile:
         任意の場所にファイルを作らないためにも、作成はしない。
         """
         target = Path(path)
+        flags = os.O_WRONLY | os.O_APPEND
         if allowed_dir is not None:
-            # 確かめたパスとは別のファイルを開かないよう、解決後のパスで開く
+            # 確かめたパスとは別のファイルを開かないよう、解決後のパスで開く。
+            # 確かめた後にシンボリックリンクへ差し替えられても辿らない
             target = target.resolve()
+            flags |= os.O_NOFOLLOW
             if not target.is_relative_to(allowed_dir.resolve()):
                 raise StreamFileError(
                     f"streamfilepath が許可されたディレクトリの外です: {path}"
                 )
         try:
-            fd = os.open(target, os.O_WRONLY | os.O_APPEND)
+            fd = os.open(target, flags)
         except FileNotFoundError as e:
             raise StreamFileError(
                 f"streamfilepath のファイルがありません: {path}"

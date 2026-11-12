@@ -174,6 +174,24 @@ async def test_waha_client_chat_roundtrip(tmp_path: Path) -> None:
     assert read.terminal_type == TerminalType.COMPLETED
 
 
+async def test_waha_client_execute_with_empty_service_id(tmp_path: Path) -> None:
+    """アシスタント ID 未指定（空のサービス ID）でも WahaClient の execute が通ること"""
+    async with connected(tmp_path) as env:
+        session_id = await env.waha.start_session()
+        await env.waha.upload_file(
+            filename="question.txt",
+            content=QUESTION.encode(),
+            slot="question",
+            session_id=session_id,
+        )
+        await env.waha.execute(session_id, "")
+        await env.waha.get_results(session_id)
+        output = await env.waha.download_file(session_id, "outputfile")
+        await env.waha.end_session(session_id)
+
+    assert json.loads(output)["answer"] == QUESTION
+
+
 async def test_waha_client_learning_fails(tmp_path: Path) -> None:
     """WahaClient で学習を実行すると、結果待ちで失敗（例外）になること"""
     async with connected(tmp_path) as env:

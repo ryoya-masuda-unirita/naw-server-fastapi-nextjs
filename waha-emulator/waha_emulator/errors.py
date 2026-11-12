@@ -17,11 +17,7 @@ class EmulatorError(Exception):
         self.message = message
 
 
-async def _handle_emulator_error(request: Request, exc: Exception) -> Response:
-    if not isinstance(exc, EmulatorError):
-        raise exc
-    return PlainTextResponse(exc.message, status_code=exc.status)
-
-
 def register_exception_handlers(app: FastAPI) -> None:
-    app.add_exception_handler(EmulatorError, _handle_emulator_error)
+    @app.exception_handler(EmulatorError)
+    async def handle_emulator_error(request: Request, exc: EmulatorError) -> Response:
+        return PlainTextResponse(exc.message, status_code=exc.status)

@@ -24,6 +24,13 @@ def test_authkey_is_required() -> None:
         make_settings(WAHA_AUTHKEY="")
 
 
+def test_log_level_is_validated_and_normalized() -> None:
+    """LOG_LEVEL は大文字にそろえ、logging にない名前はエラーにすること"""
+    assert make_settings(LOG_LEVEL="debug").log_level == "DEBUG"
+    with pytest.raises(ValidationError, match="LOG_LEVEL"):
+        make_settings(LOG_LEVEL="verbose")
+
+
 def test_unknown_provider_is_rejected() -> None:
     """未知の LLM_PROVIDER はエラーにすること"""
     with pytest.raises(ValidationError):

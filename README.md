@@ -50,8 +50,9 @@ Waha! 本体はどちらのリポジトリにもないため、server-local が�
 | ストリームファイル | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする。Docker では、エミュレーターの compose が既定で `server-local/data/stream-output` を server-local と同じ `/app/data/stream-output` にマウントする |
 
 ```bash
+mkdir -p server-local/data/stream-output   # 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
 cd waha-emulator && cp .env.example .env && docker compose up -d --build     # WAHA_AUTHKEY を設定
-cd ../server-local && cp .env.example .env && mkdir -p data/stream-output   # WAHA_URL・WAHA_AUTHKEY を設定
+cd ../server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
 docker compose up -d --build
 ```
 

@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -15,6 +16,7 @@ from tests.conftest import (
     upload,
     wait_for_result,
 )
+from waha_emulator.stream_file import StreamFile
 
 
 async def test_start_session_returns_session_id(client: httpx.AsyncClient) -> None:
@@ -49,15 +51,20 @@ async def test_end_session_discards_session(client: httpx.AsyncClient) -> None:
     assert after.status_code == 404
 
 
-async def test_end_session_cancels_running_job() -> None:
-    """実行中のジョブが endsession で止まり、execute も中断として応答すること"""
+async def test_end_session_cancels_running_job(tmp_path: Path) -> None:
+    """実行中のジョブが endsession で止まり、execute は中断として応答し、ストリームに error が書かれること"""
+    stream_file = tmp_path / "stream.txt"
+    stream_file.touch()
     llm = ScriptedLlmClient(gate=asyncio.Event())
     async with running_emulator(llm_client=llm) as (app, client):
         session_id = await start_session(client)
         await upload(client, session_id, "question", "質問".encode())
         session = app.state.session_store.get(session_id)
         execute = asyncio.create_task(
-            client.get(f"{API}/execute/svc", params={"sessionid": session_id})
+            client.get(
+                f"{API}/execute/svc",
+                params={"sessionid": session_id, "streamfilepath": str(stream_file)},
+            )
         )
         while not llm.received:
             await asyncio.sleep(0.01)
@@ -68,7 +75,22 @@ async def test_end_session_cancels_running_job() -> None:
 
         assert task.cancelled()
         assert response.status_code == 200
-        assert response.text.startswith("FAILURE")
+        assert response.text == "FAILURE: ジョブが中断されました"
+        assert stream_file.read_text(encoding="utf-8") == (
+            'data:{"type":"error","message":"ジョブが中断されました"}\n'
+        )
+
+
+async def test_execute_with_empty_service_id_uses_default_workflow(
+    client: httpx.AsyncClient,
+) -> None:
+    """サービス ID が空（`/execute/`）でも、既定のワークフローで実行されること"""
+    session_id = await start_session(client)
+    await upload(client, session_id, "question", b"q")
+
+    response = await client.get(f"{API}/execute/", params={"sessionid": session_id})
+
+    assert response.text == "SUCCESS"
 
 
 @pytest.mark.parametrize(
@@ -312,7 +334,7 @@ async def test_stream_file_receives_deltas_and_completed(
 async def test_missing_stream_file_fails_job_without_creating_it(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:
-    """ストリームファイルがなければ作らずにジョブを失敗させること"""
+    """ストリームファイルがなければ作らずに、想定内の失敗（理由のみ）にすること"""
     stream_file = tmp_path / "missing.txt"
     session_id = await start_session(client)
     await upload(client, session_id, "question", b"q")
@@ -322,8 +344,39 @@ async def test_missing_stream_file_fails_job_without_creating_it(
         params={"sessionid": session_id, "streamfilepath": str(stream_file)},
     )
 
-    assert response.text.startswith("FAILURE")
+    assert response.text == (
+        f"FAILURE: streamfilepath のファイルがありません: {stream_file}"
+    )
     assert not stream_file.exists()
+
+
+async def test_completed_write_failure_keeps_success(
+    client: httpx.AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """回答を保存した後に終端（completed）を書けなくても、ジョブは成功にすること"""
+    original = StreamFile.write_event
+
+    def failing_completed(self: StreamFile, event: dict[str, Any]) -> None:
+        if event["type"] == "completed":
+            raise OSError("No space left on device")
+        original(self, event)
+
+    monkeypatch.setattr(StreamFile, "write_event", failing_completed)
+    stream_file = tmp_path / "stream.txt"
+    stream_file.touch()
+    session_id = await start_session(client)
+    await upload(client, session_id, "question", b"q")
+
+    response = await client.get(
+        f"{API}/execute/svc",
+        params={"sessionid": session_id, "streamfilepath": str(stream_file)},
+    )
+    output = await client.get(
+        f"{API}/download/outputfile", params={"sessionid": session_id}
+    )
+
+    assert response.text == "SUCCESS"
+    assert json.loads(output.text)["answer"] == "こんにちは、世界"
 
 
 async def test_stream_file_outside_allowed_dir_fails_job(tmp_path: Path) -> None:

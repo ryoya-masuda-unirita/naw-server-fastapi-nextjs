@@ -100,6 +100,24 @@ async def upload(
 async def execute(
     request: Request, service_id: str, session_id: SessionIdQuery
 ) -> PlainTextResponse:
+    return await _execute(request, service_id, session_id)
+
+
+@router.get("/execute/")
+async def execute_without_service_id(
+    request: Request, session_id: SessionIdQuery
+) -> PlainTextResponse:
+    """サービス ID が空の execute。
+
+    server-local はアシスタント ID・サービス名が未指定だと空文字列で呼ぶ
+    （`/execute/`）。パスの引数には空文字列がマッチしないため、別に受ける。
+    """
+    return await _execute(request, "", session_id)
+
+
+async def _execute(
+    request: Request, service_id: str, session_id: str
+) -> PlainTextResponse:
     session = _store(request).get(session_id)
     if session.job_running:
         raise EmulatorError(HTTPStatus.CONFLICT, "ジョブを実行中です")
@@ -120,7 +138,7 @@ async def execute(
         params=params,
         stream_allowed_dir=settings.stream_allowed_dir,
     )
-    if not settings.execute_wait_for_completion or job.task is None:
+    if not settings.execute_wait_for_completion:
         return PlainTextResponse(OK_TEXT)
     try:
         # 呼び出し元が切断して、このリクエストがキャンセルされてもジョブは続ける

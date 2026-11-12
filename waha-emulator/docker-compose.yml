@@ -23,6 +23,12 @@ services:
     volumes:
       # server-local のストリームファイルの出力先（server-local のコンテナでは
       # /app/data/stream-output）を同じパスでマウントする。server-local が渡すパスを
-      # そのまま使えるため、server-local の STREAM_WAHA_OUTPUT_DIR は設定しなくてよい
-      - ${WAHA_EMULATOR_STREAM_DIR:-../server-local/data/stream-output}:/app/data/stream-output
+      # そのまま使えるため、server-local の STREAM_WAHA_OUTPUT_DIR は設定しなくてよい。
+      # ディレクトリがないと Docker が root 所有で作り、uid 1000 の server-local が
+      # 書けなくなるため、作らずに起動エラーにする（先に mkdir しておく）
+      - type: bind
+        source: ${WAHA_EMULATOR_STREAM_DIR:-../server-local/data/stream-output}
+        target: /app/data/stream-output
+        bind:
+          create_host_path: false
     restart: unless-stopped

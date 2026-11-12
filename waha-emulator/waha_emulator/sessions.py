@@ -5,12 +5,17 @@ server-local は 1 回の処理の中で startsession から endsession まで�
 """
 
 import asyncio
+import logging
+import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from http import HTTPStatus
 
 from waha_emulator.errors import EmulatorError
+
+logger = logging.getLogger(__name__)
 
 # server-local の waha_client.py のスロット名
 SLOT_FILE = "file"
@@ -22,6 +27,7 @@ SLOT_OUTPUT = "outputfile"
 INPUT_SLOTS = frozenset(
     {SLOT_FILE, SLOT_QUESTION, SLOT_ATTACHMENT, SLOT_HISTORY, SLOT_TEXTDATA}
 )
+CANCELLED_MESSAGE = "ジョブが中断されました"
 
 
 class JobStatus(StrEnum):
@@ -39,9 +45,10 @@ class SlotFile:
 
 @dataclass
 class Job:
-    task: "asyncio.Task[None] | None" = None
     status: JobStatus = JobStatus.RUNNING
     error: str | None = None
+    # ジョブの中身（コルーチン）が Job を参照するため、作成後に設定する
+    task: "asyncio.Task[None]" = field(init=False, repr=False)
 
     def succeed(self) -> None:
         self.status = JobStatus.SUCCESS
@@ -51,10 +58,21 @@ class Job:
         self.status = JobStatus.FAILURE
         self.error = reason
 
+    def cancel(self) -> None:
+        """ジョブを止め、失敗（中断）にする。
+
+        タスクが一度も動かないうちに止めた場合はジョブの中身の例外処理を
+        通らないため、ここで状態を変える（RUNNING のまま残さない）。
+        """
+        self.task.cancel()
+        if self.status == JobStatus.RUNNING:
+            self.fail(CANCELLED_MESSAGE)
+
 
 @dataclass
 class Session:
     id: str
+    last_used: float
     slots: dict[str, SlotFile] = field(default_factory=dict)
     job: Job | None = None
 
@@ -76,11 +94,25 @@ class Session:
 
 
 class SessionStore:
-    def __init__(self) -> None:
+    """セッションの置き場。
+
+    server-local は失敗時に endsession を呼ばない経路がある（学習データの同期など）
+    ため、一定時間使われていないセッションは startsession のたびに破棄する。
+    """
+
+    def __init__(
+        self,
+        *,
+        idle_timeout_seconds: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._sessions: dict[str, Session] = {}
+        self._idle_timeout = idle_timeout_seconds
+        self._clock = clock
 
     def create(self) -> Session:
-        session = Session(id=uuid.uuid4().hex)
+        self._discard_idle_sessions()
+        session = Session(id=uuid.uuid4().hex, last_used=self._clock())
         self._sessions[session.id] = session
         return session
 
@@ -88,29 +120,34 @@ class SessionStore:
         session = self._sessions.get(session_id)
         if session is None:
             raise EmulatorError(HTTPStatus.NOT_FOUND, "セッションがありません")
+        session.last_used = self._clock()
         return session
 
     def end(self, session_id: str) -> None:
         session = self.get(session_id)
         del self._sessions[session_id]
-        _cancel_job(session)
+        if session.job is not None:
+            session.job.cancel()
 
     async def close(self) -> None:
         """アプリの終了時に、実行中のジョブを止めて終わるのを待つ。"""
-        tasks = [
-            s.job.task
-            for s in self._sessions.values()
-            if s.job is not None and s.job.task is not None
-        ]
-        for session in self._sessions.values():
-            _cancel_job(session)
+        jobs = [s.job for s in self._sessions.values() if s.job is not None]
         self._sessions.clear()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        for job in jobs:
+            job.cancel()
+        await asyncio.gather(*(job.task for job in jobs), return_exceptions=True)
+
+    def _discard_idle_sessions(self) -> None:
+        # 実行中のジョブは、使われていなくても終わるまで残す
+        deadline = self._clock() - self._idle_timeout
+        idle = [
+            s.id
+            for s in self._sessions.values()
+            if s.last_used < deadline and not s.job_running
+        ]
+        for session_id in idle:
+            del self._sessions[session_id]
+            logger.info("Idle session discarded: sessionId=%s", session_id)
 
     def __len__(self) -> int:
         return len(self._sessions)
-
-
-def _cancel_job(session: Session) -> None:
-    if session.job is not None and session.job.task is not None:
-        session.job.task.cancel()
