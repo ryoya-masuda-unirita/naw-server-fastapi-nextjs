@@ -1,4 +1,4 @@
-name: Deploy Frontend Angular
+name: Deploy Frontend
 
 on:
   workflow_call:
@@ -17,22 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend-angular
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
+      # Node 20は2026-04でEOLのため24を使う(Vite 8の要件 ^20.19.0 || >=22.12.0 も満たす)
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: "npm"
-          cache-dependency-path: frontend-angular/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
-      # --configuration未指定だとAngularのデフォルト(production)が使われ、environment.production.ts
-      # (本家secuaigent/clientの実際の本番APIドメインがそのまま入っている)でビルドされてしまう。
-      # このプロジェクトはCloudFrontが/api・/authをbackendへプロキシする構成のため、
-      # 相対パスを使うdev configuration(environment.development.ts)でビルドする必要がある
-      - run: npm run build -- --configuration dev
+      # vite build は mode=production で動き、git管理の frontend/.env(VITE_API_URL=http://localhost:8000)を
+      # frontend/.env.production(VITE_API_URL=空)で上書きする。CloudFrontが/api・/authをbackendへ
+      # プロキシする構成のため、APIは配信元と同じオリジンの相対パスで呼ぶ(ローカルURLや本家のドメインを含めない)
+      - run: npm run build
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る
       - name: Configure AWS credentials
@@ -42,7 +42,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync to S3
-        run: aws s3 sync dist/example/browser s3://${{ vars.FRONTEND_BUCKET_NAME }}/ --delete
+        run: aws s3 sync dist s3://${{ vars.FRONTEND_BUCKET_NAME }}/ --delete
 
       - name: Invalidate CloudFront cache
         run: |

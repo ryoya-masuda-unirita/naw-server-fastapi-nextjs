@@ -91,6 +91,14 @@ resource "aws_cloudfront_distribution" "main" {
     response_code      = 200
     response_page_path = "/index.html"
   }
+  // React(frontend/)のログイン画面 /auth/login は、backendのログインAPI(POST /auth/login)と同じパスで
+  // 上の /auth/* ビヘイビアによりALBへ転送される。画面としてGETするとbackendが405を返すため
+  // (ログアウト時の全画面遷移・再読み込み)、403/404と同様にindex.htmlを返してSPA側でルーティングさせる
+  custom_error_response {
+    error_code         = 405
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
 
   restrictions {
     geo_restriction {

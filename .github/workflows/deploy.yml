@@ -31,7 +31,7 @@ jobs:
             backend:
               - "backend/**"
             frontend:
-              - "frontend-angular/**"
+              - "frontend/**"
 
   # infra/**が変更されていれば deploy-infra.yml を呼び出す(secrets: inherit で
   # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)
@@ -53,7 +53,7 @@ jobs:
     uses: ./.github/workflows/deploy-backend.yml
     secrets: inherit
 
-  # frontend-angular/**が変更されていれば実行。frontendが使うS3バケット/CloudFrontが
+  # frontend/**(React)が変更されていれば実行。frontendが使うS3バケット/CloudFrontが
   # 同じPRのinfra変更で作り直される可能性があるため、backendと同様にinfraジョブの完了を待つ
   frontend:
     needs: [changes, infra]
@@ -61,5 +61,5 @@ jobs:
       always() &&
       needs.changes.outputs.frontend == 'true' &&
       (needs.infra.result == 'success' || needs.infra.result == 'skipped')
-    uses: ./.github/workflows/deploy-frontend-angular.yml
+    uses: ./.github/workflows/deploy-frontend.yml
     secrets: inherit
