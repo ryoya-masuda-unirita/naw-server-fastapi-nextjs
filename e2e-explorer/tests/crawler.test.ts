@@ -7,7 +7,7 @@ import { expandShards, type ExplorerConfig } from '../src/config.ts';
 import { crawlShard } from '../src/crawler.ts';
 import { SharedRegistry } from '../src/shared-registry.ts';
 import type { ShardReport } from '../src/types.ts';
-import { installTestSite, newSiteLog, onlyShard, testConfig, type SiteLog } from './fixtures/test-site.ts';
+import { installTestSite, newSiteLog, testConfig, type SiteLog } from './fixtures/test-site.ts';
 
 /** 巡回役の単体テスト。テスト用サイトを実際に巡回し、たどり方と記録を確かめる。 */
 
@@ -157,9 +157,4 @@ test('stops the shard with an error when the start page cannot be opened', async
   expect(report.stats.stoppedBy).toBe('error');
   expect(report.error).toContain('起点 / を開けません');
   expect(report.stats.states).toBe(0);
-});
-
-test('uses the only shard helper', async () => {
-  /** テスト用の設定から担当範囲が 1 つ作れること */
-  expect(onlyShard(testConfig()).id).toBe('site-anonymous');
 });

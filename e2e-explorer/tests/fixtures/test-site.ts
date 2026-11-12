@@ -1,5 +1,5 @@
 import type { BrowserContext } from '@playwright/test';
-import { applyOverrides, DEFAULT_CONFIG_PATH, expandShards, type ExplorerConfig, type GroupConfig, type Shard } from '../../src/config.ts';
+import { applyOverrides, DEFAULT_CONFIG_PATH, type ExplorerConfig, type GroupConfig } from '../../src/config.ts';
 import { readFileSync } from 'node:fs';
 
 /**
@@ -203,8 +203,4 @@ export function testConfig(options: TestConfigOptions = {}): ExplorerConfig {
     { id: 'site', description: 'テスト用サイト', startPath: '/', include: ['^/(?!outside)'], roles: ['anonymous'] },
   ];
   return applyOverrides(base, {});
-}
-
-export function onlyShard(config: ExplorerConfig): Shard {
-  return expandShards(config)[0];
 }
