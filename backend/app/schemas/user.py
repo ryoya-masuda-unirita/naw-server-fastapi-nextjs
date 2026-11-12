@@ -1,14 +1,22 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel
 
+from app.core.validation_messages import (
+    NOT_BLANK_DEFAULT_MESSAGE,
+    NOT_NULL_DEFAULT_MESSAGE,
+    RequestModel,
+    ValidationMessages,
+)
 from app.models.user import User, UserRole
 
 
-class UserCreateRequest(BaseModel):
-    loginId: str
-    name: str
-    role: UserRole
+class UserCreateRequest(RequestModel):
+    # 移植元は`@NotBlank`・`@NotNull`（メッセージ指定なし）のため既定文言を返す。
+    loginId: Annotated[str, ValidationMessages(not_blank=NOT_BLANK_DEFAULT_MESSAGE)]
+    name: Annotated[str, ValidationMessages(not_blank=NOT_BLANK_DEFAULT_MESSAGE)]
+    role: Annotated[UserRole, ValidationMessages(not_null=NOT_NULL_DEFAULT_MESSAGE)]
     loginKey: str | None = None
 
 

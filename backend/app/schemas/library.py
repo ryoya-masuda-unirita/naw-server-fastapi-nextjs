@@ -1,18 +1,29 @@
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.validation_messages import RequestModel, ValidationMessages
+
 NAME_MAX_LENGTH = 255
+_NAME_REQUIRED_MESSAGE = "ライブラリ名は必須です"
 
 
-class LibraryUpdateRequest(BaseModel):
+class LibraryUpdateRequest(RequestModel):
     """ライブラリ更新リクエスト。
 
     リクエストに含まれた内容で既存ライブラリを上書きする（完全置換）。
     `groups`・`tags`は空配列またはNoneで全解除する。
     """
 
-    name: str = Field(max_length=NAME_MAX_LENGTH)
+    name: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(
+            not_blank=_NAME_REQUIRED_MESSAGE,
+            size="ライブラリ名は255文字以内で入力してください",
+        ),
+    ]
     groups: list[str] | None = Field(default=None)
     tags: list[str] | None = Field(default=None)
 
@@ -31,7 +42,7 @@ class LibraryUpdateRequest(BaseModel):
             ValueError: 空白のみの場合。
         """
         if not value.strip():
-            raise ValueError("ライブラリ名は必須です")
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
         return value
 
 

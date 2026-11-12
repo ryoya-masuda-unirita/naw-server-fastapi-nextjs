@@ -324,6 +324,19 @@ class TestLlmChat:
 
         assert response.status_code == 400
 
+    async def test_rejects_text_data_without_deploy_name(
+        self, client, headers, chat_models
+    ):
+        """textDataにdeployNameが無いと400になり、移植元と同じ文言が返ること"""
+        response = await client.post(
+            "/api/llm/chat",
+            headers=headers,
+            files=_form({"messages": [{"role": "user", "content": "こんにちは"}]}),
+        )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "deployName は必須です"
+
     async def test_rejects_invalid_text_data_json(self, client, headers, chat_models):
         """textDataがJSONとして解釈できない場合は400になること"""
         response = await client.post(

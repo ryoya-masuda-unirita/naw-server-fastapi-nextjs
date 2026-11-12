@@ -253,6 +253,18 @@ class TestCreateLibraryTag:
         assert response.status_code == 400
         assert response.json()["message"] == "タグ名は必須です"
 
+    async def test_create_with_name_256_chars_returns_400(self, client, admin_headers):
+        """名前が256文字だと400になり、移植元と同じ文言が返ること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/library-tags",
+                json={"name": "a" * 256},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "タグ名は255文字以内で入力してください"
+
     async def test_create_with_duplicate_name_returns_400(
         self, client, admin_headers, tag
     ):

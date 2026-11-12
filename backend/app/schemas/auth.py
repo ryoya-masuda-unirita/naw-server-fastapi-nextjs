@@ -1,4 +1,8 @@
+from typing import Annotated
+
 from pydantic import AliasChoices, BaseModel, Field
+
+from app.core.validation_messages import RequestModel, ValidationMessages
 
 
 class LoginRequest(BaseModel):
@@ -14,17 +18,25 @@ class LoginKeyRequest(BaseModel):
     loginKey: str
 
 
-class PasswordResetRequest(BaseModel):
+class PasswordResetRequest(RequestModel):
     """パスワードリセットリクエスト"""
 
     # 移植元は @JsonAlias("username") で username キーも受け付ける。
     # 移植元クライアント(secuaigent/client) は username で送信するため、両方を許容する。
-    loginId: str = Field(
-        validation_alias=AliasChoices("loginId", "username"),
-        description="ログインID (username も許容)",
-    )
-    oldPassword: str
-    newPassword: str
+    loginId: Annotated[
+        str,
+        Field(
+            validation_alias=AliasChoices("loginId", "username"),
+            description="ログインID (username も許容)",
+        ),
+        ValidationMessages(not_blank="ログインIDの入力は必須です。"),
+    ]
+    oldPassword: Annotated[
+        str, ValidationMessages(not_blank="旧パスワードの入力は必須です。")
+    ]
+    newPassword: Annotated[
+        str, ValidationMessages(not_blank="新パスワードの入力は必須です。")
+    ]
 
 
 class AuthGroupResponse(BaseModel):

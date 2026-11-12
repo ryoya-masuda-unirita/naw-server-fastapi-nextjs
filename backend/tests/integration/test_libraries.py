@@ -411,6 +411,26 @@ class TestListLibraries:
         assert body["totalElements"] == 1
         assert [item["id"] for item in body["content"]] == [str(library.id)]
 
+    @pytest.mark.parametrize(
+        ("params", "expected"),
+        [
+            ({"page": -1}, "ページ番号は0以上である必要があります"),
+            ({"size": 0}, "ページサイズは1以上である必要があります"),
+            ({"size": 101}, "ページサイズは100以下である必要があります"),
+        ],
+    )
+    async def test_list_with_invalid_page_returns_400(
+        self, client, owner_headers, params, expected
+    ):
+        """ページ番号・件数が範囲外だと400になり、移植元と同じ文言が返ること"""
+        async with client as c:
+            response = await c.get(
+                "/api/libraries", params=params, headers=owner_headers
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == expected
+
     async def test_list_with_invalid_tag_id_returns_400(self, client, owner_headers):
         """UUIDとして不正なtagIdsは400になること"""
         async with client as c:

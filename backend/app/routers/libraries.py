@@ -1,10 +1,12 @@
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.security import get_current_user, get_verified_tenant_id
+from app.core.validation_messages import ValidationMessages
 from app.models.user import User
 from app.schemas.library import (
     LibraryGetResponse,
@@ -20,8 +22,19 @@ library_router = APIRouter(prefix="/api/libraries", tags=["libraries"])
 
 @library_router.get("")
 async def get_libraries(
-    page: int = Query(0, ge=0),
-    size: int = Query(20, ge=1, le=100),
+    page: Annotated[
+        int,
+        Query(ge=0),
+        ValidationMessages(min_value="ページ番号は0以上である必要があります"),
+    ] = 0,
+    size: Annotated[
+        int,
+        Query(ge=1, le=100),
+        ValidationMessages(
+            min_value="ページサイズは1以上である必要があります",
+            max_value="ページサイズは100以下である必要があります",
+        ),
+    ] = 20,
     title: str | None = Query(default=None),
     createdBy: str | None = Query(default=None),
     excludeCreatedBy: str | None = Query(default=None),
