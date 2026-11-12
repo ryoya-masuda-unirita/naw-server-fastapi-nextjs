@@ -73,8 +73,8 @@ export const useAuthStore = create<AuthStore>((set) => {
             );
             const user = mapToUser(session);
             setUser(user);
+            // backend の GET /api/auth は tenant_id を返さないため、ログイン時に保存した入力値をそのまま使う
             sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-            persistTenantId(session.tenant_id);
           } catch {
             // パスワードリセット画面へのフルページ遷移後もリセット API に X-Tenant-ID が必要なため、
             // 未ログイン（セッション確認失敗）ではテナントIDを消さない
@@ -96,7 +96,8 @@ export const useAuthStore = create<AuthStore>((set) => {
           password,
         });
       } catch (e) {
-        // 誤ったテナントIDを残さない（frontend-angular の errorInterceptor と同じ扱い）
+        // 誤ったテナントIDを残さない。frontend-angular は 401 のときだけ消すが、
+        // 次回のログイン送信で入力値が保存し直されるため、失敗理由を問わず消してよい
         clearTenantId();
         throw e;
       }

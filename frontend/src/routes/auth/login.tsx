@@ -18,13 +18,15 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantId || !username || !password) return;
+    // 空白だけの入力を弾き、前後の空白がヘッダ値に混ざらないようにする
+    const trimmedTenantId = tenantId.trim();
+    if (!trimmedTenantId || !username || !password) return;
 
     setError('');
     setIsLoading(true);
 
     try {
-      await login({ tenantId, username, password });
+      await login({ tenantId: trimmedTenantId, username, password });
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.includes('429')) {

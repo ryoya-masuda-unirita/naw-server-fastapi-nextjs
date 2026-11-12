@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -86,7 +86,10 @@ describe('LoginPage', () => {
       });
     });
 
-    test('テナントIDを入力しないとログインリクエストが送られないこと', async () => {
+    test.each([
+      ['未入力', ''],
+      ['空白のみ', '   '],
+    ])('テナントIDが%sだとログインリクエストが送られないこと', async (_label, tenantIdValue) => {
       let loginCalled = false;
       server.use(
         http.post(`${BASE_URL}/auth/login`, () => {
@@ -96,16 +99,41 @@ describe('LoginPage', () => {
       );
       renderLogin();
       const user = userEvent.setup();
-      const { usernameInput, passwordInput, submitButton } = getInputs();
+      const { tenantIdInput, usernameInput, passwordInput, submitButton } = getInputs();
 
+      if (tenantIdValue) await user.type(tenantIdInput, tenantIdValue);
+      await user.type(usernameInput, 'user');
+      await user.type(passwordInput, 'pass');
+      // required 属性によるブラウザ側の検証を通さず、handleSubmit 内のガードを直接確かめる
+      await act(async () => {
+        fireEvent.submit(submitButton.closest('form')!);
+      });
+
+      // 送信処理に進めば同期的にローディング状態（disabled）になる
+      expect(submitButton).not.toBeDisabled();
+      expect(loginCalled).toBe(false);
+    });
+
+    test('前後の空白を除いたテナントIDが X-Tenant-ID ヘッダで送られること', async () => {
+      let tenantHeader: string | null = null;
+      server.use(
+        http.post(`${BASE_URL}/auth/login`, ({ request }) => {
+          tenantHeader = request.headers.get('X-Tenant-ID');
+          return HttpResponse.json({ message: 'Invalid credentials' }, { status: 401 });
+        })
+      );
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, usernameInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, `  ${FIXTURE_TENANT_ID}  `);
       await user.type(usernameInput, 'user');
       await user.type(passwordInput, 'pass');
       await user.click(submitButton);
 
-      // 送信されていれば非同期でハンドラが呼ばれるため、ボタンが操作可能なままであることも合わせて確認する
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(loginCalled).toBe(false);
-      expect(submitButton).not.toBeDisabled();
+      await waitFor(() => {
+        expect(tenantHeader).toBe(FIXTURE_TENANT_ID);
+      });
     });
   });
 

@@ -50,7 +50,6 @@ export interface BackendAuthResponse {
   id: string;
   name: string;
   role: 'ADMIN' | 'USER';
-  tenant_id: string;
 }
 
 export interface GroupDTO {

@@ -142,7 +142,6 @@ describe('useAuthStore', () => {
             id: 'user1',
             name: 'Test User',
             role: 'USER',
-            tenant_id: FIXTURE_TENANT_ID,
           });
         })
       );
@@ -154,6 +153,8 @@ describe('useAuthStore', () => {
 
       expect(tenantHeader).toBe(FIXTURE_TENANT_ID);
       expect(useAuthStore.getState().user?.id).toBe('user1');
+      // GET /api/auth は tenant_id を返さないため、保存済みのテナントIDが上書きされないこと
+      expect(sessionStorage.getItem('TENANT_ID')).toBe(FIXTURE_TENANT_ID);
     });
   });
 
