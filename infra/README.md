@@ -153,7 +153,10 @@ npm ci
 npm run build
 # 出力先: dist/
 # frontend/.env.production で VITE_API_URL を空にしているため、APIは配信元(CloudFront)と同じオリジンの
-# 相対パス(/api/*・/auth/*)で呼ばれ、CloudFrontがbackend(ALB)へ転送する
+# 相対パスで呼ばれ、CloudFrontがbackend(ALB)へ転送する。認証API(/auth/*)はReactの画面(/auth/login 等)と
+# 同じパスのため VITE_AUTH_API_URL=/backend を付けて /backend/auth/* で呼び、CloudFront Functionで
+# /backend を外してbackendへ渡す(#240)。それ以外のパスはS3から配信し、画面パス(拡張子なし)は
+# CloudFront Functionでindex.htmlに書き換える(APIの403/404等はindex.htmlに置き換えない)
 
 aws s3 sync dist/ s3://<frontend_bucket名>/ --delete --profile naw-fastapi-issue158
 aws cloudfront create-invalidation --distribution-id <cloudfront配信ID> --paths "/*" --profile naw-fastapi-issue158

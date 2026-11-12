@@ -21,6 +21,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CloudFront Functionの書き換えロジックを、AWSへ反映する前に単体テストする(#240)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: CloudFront Functions Test
+        run: node --test cloudfront_functions/functions.test.mjs
+
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のterraformコマンドはこの認証情報を使う
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

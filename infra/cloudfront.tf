@@ -38,6 +38,13 @@ resource "aws_cloudfront_distribution" "main" {
         forward = "none"
       }
     }
+
+    // SPAのため、画面パス(拡張子なし)はindex.htmlに書き換えてからS3へ取りに行く。
+    // custom_error_responseはディストリビューション全体(ALBのAPI応答を含む)に効くため使わない(#240)
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_fallback.arn
+    }
   }
 
   // /api/* はALB(backend)へ
@@ -60,9 +67,11 @@ resource "aws_cloudfront_distribution" "main" {
     max_ttl     = 0
   }
 
-  // /auth/* もALB(backend)へ
+  // 認証API(/auth/*)はReactの画面(/auth/login 等)と同じパスのため、フロントは /backend を付けて呼ぶ
+  // (frontend/.env.production の VITE_AUTH_API_URL)。ここでALB(backend)へ転送し、関数で /backend を外す(#240)。
+  // /auth/* 自体はS3(デフォルトビヘイビア)で画面として配信する
   ordered_cache_behavior {
-    path_pattern           = "/auth/*"
+    path_pattern           = "/backend/auth/*"
     target_origin_id       = "alb-backend"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
@@ -78,26 +87,11 @@ resource "aws_cloudfront_distribution" "main" {
     min_ttl     = 0
     default_ttl = 0
     max_ttl     = 0
-  }
 
-  // SPAのため、S3で404/403になったらindex.htmlを返す
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-  // React(frontend/)のログイン画面 /auth/login は、backendのログインAPI(POST /auth/login)と同じパスで
-  // 上の /auth/* ビヘイビアによりALBへ転送される。画面としてGETするとbackendが405を返すため
-  // (ログアウト時の全画面遷移・再読み込み)、403/404と同様にindex.htmlを返してSPA側でルーティングさせる
-  custom_error_response {
-    error_code         = 405
-    response_code      = 200
-    response_page_path = "/index.html"
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.strip_backend_prefix.arn
+    }
   }
 
   restrictions {
@@ -116,4 +110,23 @@ resource "aws_cloudfront_distribution" "main" {
     Name    = "${var.project_name}-cf"
     Project = var.project_name
   }
+}
+
+// S3(フロントエンド)ビヘイビア用: 画面パス(拡張子なし)をindex.htmlに書き換える(SPAフォールバック)。
+// コードは単体テスト(cloudfront_functions/functions.test.mjs)から同じファイルを読むため、別ファイルにしている
+resource "aws_cloudfront_function" "spa_fallback" {
+  name    = "${var.project_name}-spa-fallback"
+  runtime = "cloudfront-js-2.0"
+  comment = "SPA fallback: rewrite extensionless paths to /index.html"
+  publish = true
+  code    = file("${path.module}/cloudfront_functions/spa_fallback.js")
+}
+
+// /backend/auth/* ビヘイビア用: /backend を外してbackendへ /auth/... で渡す
+resource "aws_cloudfront_function" "strip_backend_prefix" {
+  name    = "${var.project_name}-strip-backend-prefix"
+  runtime = "cloudfront-js-2.0"
+  comment = "Strip /backend prefix before forwarding auth API requests to ALB"
+  publish = true
+  code    = file("${path.module}/cloudfront_functions/strip_backend_prefix.js")
 }
