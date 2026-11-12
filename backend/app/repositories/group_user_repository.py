@@ -133,7 +133,7 @@ class GroupUserRepository:
         search_text: str | None,
         role: str | None,
         sort_col_name: str,
-        sort_dir: str,
+        is_desc: bool,
         page: int,
         size: int,
         session: AsyncSession,
@@ -148,7 +148,8 @@ class GroupUserRepository:
             search_text: ユーザー名・loginIdの部分一致検索文字列。
             role: グループ内ロール（"ADMIN"はis_admin=true、"USER"はis_admin=false）。
             sort_col_name: ソート対象列名（"name"、"role"、"updatedAt"、"totalCredits"）。
-            sort_dir: ソート方向（"asc" または "desc"）。
+                それ以外の値はユーザー表示名順として扱う。
+            is_desc: Trueの場合は降順、Falseの場合は昇順。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -187,21 +188,26 @@ class GroupUserRepository:
             credits_subq = total_credits_correlated_subquery(
                 tenant_id, period_from, period_to, GroupUser.user_id
             )
-            order_col = (
-                credits_subq.desc() if sort_dir == "desc" else credits_subq.asc()
-            )
+            order_col = credits_subq.desc() if is_desc else credits_subq.asc()
             # 利用クレジットが同値のケースを名前順で安定化させる（移植元同様の副次ソート）。
             stmt = stmt.order_by(order_col, cast(Any, User.name).asc())
         else:
+            sort_col: Any
             if sort_col_name == "role":
                 sort_col = GroupUser.is_admin
             elif sort_col_name == "updatedAt":
                 sort_col = GroupUser.updated_at
             else:
-                sort_col = User.name
-            stmt = stmt.order_by(
-                sort_col.desc() if sort_dir == "desc" else sort_col.asc()
-            )
+                # 移植元(GroupService.remapGroupMemberUserSort)は name を ignoreCase 指定で
+                # user.name に読み替え、lower(user.name) で並べる。
+                sort_col = func.lower(User.name)
+            stmt = stmt.order_by(sort_col.desc() if is_desc else sort_col.asc())
+        # ソートキーが同値の行（シード投入で同時刻になる追加日時、大半が同じ権限、
+        # 同名ユーザーなど）は ORDER BY だけでは順序が定まらず、昇順・降順を切り替えても
+        # 同値グループ内の並びが反転しない。一意な user_id を最終キーに主キーと同じ方向で
+        # 加え、並びを決定的にする。
+        tie_breaker = cast(Any, GroupUser.user_id)
+        stmt = stmt.order_by(tie_breaker.desc() if is_desc else tie_breaker.asc())
         stmt = stmt.offset(page * size).limit(size)
 
         rows = (await session.execute(stmt)).all()
