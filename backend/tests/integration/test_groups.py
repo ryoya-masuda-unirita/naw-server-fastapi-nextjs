@@ -737,6 +737,8 @@ class TestGroupUsersSort:
                 params={"sort": "role,desc"},
             )
 
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
         asc_content = asc_res.json()["content"]
         desc_content = desc_res.json()["content"]
         assert asc_content[-1]["groupAdmin"] is True
