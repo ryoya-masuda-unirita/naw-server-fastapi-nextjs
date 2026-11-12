@@ -5,7 +5,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from app.clients.waha_client import SLOT_FILE, SLOT_OUTPUT, WahaClient
 from app.core.errors import BadRequestError, EntityNotFoundError
@@ -114,22 +116,19 @@ def _parse_create_result(tsv_content: str | None) -> tuple[str, list[str]]:
     return file_id, part_ids
 
 
-async def _run_waha_create(
-    session: AsyncSession,
+async def _run_waha_create_job(
     waha: WahaClient,
     *,
     service_name: str | None,
-    file_name: str | None,
-    display_name: str | None,
-    reference: str | None,
-    user_id: str | None,
-    index_id: str,
     upload: UploadedFile | None,
     split_length: str | None,
-    tenant_id: str,
-    feedback_id: str | None,
-    room_id: str | None,
-) -> dict[str, Any]:
+    reference: str | None,
+) -> tuple[str, list[str]]:
+    """Waha! の学習ジョブを実行し、登録されたファイル ID とパート ID を返す。
+
+    学習ジョブは数分かかることがある。SQLite は書き込みが 1 本しかできないため、
+    DB の書き込み（トランザクション）を始める前に呼ぶこと（#251）。
+    """
     # 移植元は未添付だと NullPointerException（500）になるが、入力不備なので 400 で返す。
     # Waha! のセッションを無駄に作らないよう、開始前に確認する
     if upload is None:
@@ -150,21 +149,7 @@ async def _run_waha_create(
         tsv_content = await waha.download_file(session_id, SLOT_OUTPUT)
     finally:
         await waha.end_session(session_id)
-
-    file_id, part_ids = _parse_create_result(tsv_content)
-    return await _save(
-        session,
-        file_id=file_id,
-        file_name=file_name,
-        display_name=display_name,
-        reference=reference,
-        user_id=user_id,
-        index_id=index_id,
-        part_ids=part_ids,
-        tenant_id=tenant_id,
-        feedback_id=feedback_id,
-        room_id=room_id,
-    )
+    return _parse_create_result(tsv_content)
 
 
 async def _save(
@@ -225,28 +210,21 @@ async def _upsert_part(
     existing.updated_at = utcnow()
 
 
-async def _run_waha_delete(
-    session: AsyncSession,
-    waha: WahaClient,
-    *,
-    service_name: str | None,
-    file_id: str,
-    index_id: str,
-    physical_delete: bool,
-    commit: bool = True,
-) -> None:
-    """Waha! の削除ジョブを実行し、DB から物理削除または論理削除する。
-
-    ファイル差し替え（update_file）では、再登録に失敗したときに削除も取り消せるよう
-    commit=False で呼び、再登録と同じトランザクションで確定する（移植元の
-    @Transactional と同じ範囲）。
-    """
+async def _find_file_with_parts(
+    session: AsyncSession, file_id: str, index_id: str
+) -> tuple[File, list[FilePart]]:
     file = await file_repository.find_by_id_and_index_id(session, file_id, index_id)
     if file is None:
         raise EntityNotFoundError("ファイルが存在しません。")
     parts = (await file_repository.find_parts_by_file_ids(session, [file.id]))[file.id]
-    ids_text = "".join(f"{p.id}\n" for p in parts)
+    return file, parts
 
+
+async def _run_waha_delete_job(
+    waha: WahaClient, *, service_name: str | None, parts: list[FilePart]
+) -> None:
+    """Waha! の削除ジョブを実行する。DB の書き込みを始める前に呼ぶこと（#251）。"""
+    ids_text = "".join(f"{p.id}\n" for p in parts)
     session_id = await waha.start_session()
     try:
         await waha.upload_file(
@@ -260,22 +238,28 @@ async def _run_waha_delete(
         )
         await waha.execute(session_id, service_name or "")
         await waha.get_results(session_id)
-        if physical_delete:
-            # SQL の一括 DELETE だとセッション内に削除済みのパートが残り、同じ ID で
-            # 再登録するときに既存扱いされて INSERT されないため、ORM 経由で削除する
-            # モデル間に relationship がなく削除順が保証されないため、パートを先に消す
-            for part in parts:
-                await session.delete(part)
-            await session.flush()
-            await session.delete(file)
-        else:
-            file.status = int(FileStatus.DELETED)
-            file.touch()
-        await session.flush()
-        if commit:
-            await session.commit()
     finally:
         await waha.end_session(session_id)
+
+
+async def _delete_from_db(
+    session: AsyncSession, file: File, parts: list[FilePart], *, physical_delete: bool
+) -> None:
+    """DB から物理削除または論理削除する（コミットは呼び出し側で行う）。"""
+    if physical_delete:
+        # 読み込んでから Waha! の処理を待つ間に、別のリクエストが同じファイルを
+        # 削除していることがある。ORM の削除だと 0 件で StaleDataError になるため、
+        # ID 条件の DELETE で消す。セッションに残った旧オブジェクトが同じ ID の
+        # 再登録で既存扱いされないよう、先にセッションから外す
+        for part in parts:
+            session.expunge(part)
+        session.expunge(file)
+        await session.execute(delete(FilePart).where(col(FilePart.file_id) == file.id))
+        await session.execute(delete(File).where(col(File.id) == file.id))
+    else:
+        file.status = int(FileStatus.DELETED)
+        file.touch()
+    await session.flush()
 
 
 async def create_file(
@@ -292,17 +276,22 @@ async def create_file(
     split_length: str | None,
     tenant_id: str,
 ) -> dict[str, Any]:
-    return await _run_waha_create(
-        session,
+    file_id, part_ids = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
+        upload=upload,
+        split_length=split_length,
+        reference=reference,
+    )
+    return await _save(
+        session,
+        file_id=file_id,
         file_name=name,
         display_name=display_name,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        upload=upload,
-        split_length=split_length,
+        part_ids=part_ids,
         tenant_id=tenant_id,
         feedback_id=None,
         room_id=None,
@@ -338,27 +327,32 @@ async def update_file(
         await session.commit()
         return (await _with_parts(session, [file]))[0]
 
-    # ファイルを差し替える場合は、Waha! 側の旧データを削除してから登録し直す
-    await _run_waha_delete(
-        session,
-        waha,
-        service_name=deletion_service_name,
-        file_id=file_id,
-        index_id=index_id,
-        physical_delete=True,
-        commit=False,
+    # ファイルを差し替える場合は、Waha! 側の旧データを削除してから登録し直す。
+    # 移植元は 1 つのトランザクションで Waha! の削除・登録を待つが、SQLite では
+    # その間ほかの書き込みがすべて止まる（#251）。Waha! の処理を先に済ませ、
+    # DB の削除・保存は最後に 1 回のトランザクションで行う。Waha! が途中で
+    # 失敗した場合は DB を変更しない（移植元がロールバックした後と同じ状態）
+    old_file, old_parts = await _find_file_with_parts(session, file_id, index_id)
+    await _run_waha_delete_job(
+        waha, service_name=deletion_service_name, parts=old_parts
     )
-    return await _run_waha_create(
-        session,
+    new_file_id, new_part_ids = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
+        upload=upload,
+        split_length=split_length,
+        reference=reference,
+    )
+    await _delete_from_db(session, old_file, old_parts, physical_delete=True)
+    return await _save(
+        session,
+        file_id=new_file_id,
         file_name=name,
         display_name=display_name,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        upload=upload,
-        split_length=split_length,
+        part_ids=new_part_ids,
         tenant_id=tenant_id,
         feedback_id=None,
         room_id=None,
@@ -374,14 +368,12 @@ async def delete_file(
     index_id: str,
     physical_delete: bool,
 ) -> None:
-    await _run_waha_delete(
-        session,
-        waha,
-        service_name=deletion_service_name,
-        file_id=file_id,
-        index_id=index_id,
-        physical_delete=physical_delete,
-    )
+    file, parts = await _find_file_with_parts(session, file_id, index_id)
+    # 移植元は end_session の失敗でもロールバックするため、DB は Waha! の処理を
+    # すべて終えてから更新する
+    await _run_waha_delete_job(waha, service_name=deletion_service_name, parts=parts)
+    await _delete_from_db(session, file, parts, physical_delete=physical_delete)
+    await session.commit()
 
 
 def _build_synced_file(
@@ -472,17 +464,22 @@ async def additional_learning(
     else:
         file_name = f"追加学習_ルーム_{room_id}.md"
         reference = f"フィードバック_{room_id}"
-    await _run_waha_create(
-        session,
+    file_id, part_ids = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
+        upload=content,
+        split_length=ADDITIONAL_LEARNING_SPLIT_LENGTH,
+        reference=reference,
+    )
+    await _save(
+        session,
+        file_id=file_id,
         file_name=file_name,
         display_name=ADDITIONAL_LEARNING_DISPLAY_NAME,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        upload=content,
-        split_length=ADDITIONAL_LEARNING_SPLIT_LENGTH,
+        part_ids=part_ids,
         tenant_id=tenant_id,
         feedback_id=feedback_id,
         room_id=room_id,
