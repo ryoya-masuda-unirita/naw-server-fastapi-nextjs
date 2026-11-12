@@ -1,0 +1,33 @@
+/* 移植元 filter/period-filter/period-filter.component.scss（.app-period-filter でスコープ） */
+.app-period-filter .trigger-wrapper::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  transition: box-shadow 0.2s ease;
+}
+
+.app-period-filter .trigger-wrapper.has-value::before {
+  box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+}
+
+.app-period-filter .trigger-wrapper.is-open::before {
+  box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+}
+
+@keyframes app-period-filter-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-period-filter .animate-fade-in {
+  animation: app-period-filter-fade-in 0.15s ease-out;
+}
