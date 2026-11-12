@@ -588,6 +588,24 @@ class TestGetAdminPromptTemplatesSort:
 
         assert names == ["Delta", "Alpha", "Bravo", "Charlie"]
 
+    async def test_empty_sort_falls_back_to_default(
+        self, client, admin_headers, sortable_templates
+    ):
+        """sort= （空文字）の場合は未指定と同じく更新日時の降順になること"""
+        names = await _get_admin_template_names(client, admin_headers, {"sort": ""})
+
+        assert names == ["Charlie", "Bravo", "Alpha", "Delta"]
+
+    async def test_sort_ignores_surrounding_spaces(
+        self, client, admin_headers, sortable_templates
+    ):
+        """項目・向きの前後に空白があっても指定どおりに並ぶこと"""
+        names = await _get_admin_template_names(
+            client, admin_headers, {"sort": "name, desc"}
+        )
+
+        assert names == ["Delta", "Charlie", "Bravo", "Alpha"]
+
     async def test_ties_are_ordered_by_id(self, client, admin_headers, session, tenant):
         """同名のテンプレートはIDの昇順で並ぶこと（ページ境界で順序が揺れないように）"""
         later_id = "b" * 32

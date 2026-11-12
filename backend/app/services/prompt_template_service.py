@@ -135,7 +135,7 @@ class PromptTemplateService:
             )
 
         # 移植元（Spring Data）に合わせ、向きは大文字・小文字を区別せず、省略時は昇順とする
-        sort_parts = sort.split(",")
+        sort_parts = [part.strip() for part in sort.split(",")]
         sort_col_name = sort_parts[0]
         sort_dir = sort_parts[1].lower() if len(sort_parts) > 1 else "asc"
 

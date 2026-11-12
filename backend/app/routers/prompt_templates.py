@@ -20,6 +20,8 @@ admin_prompt_template_router = APIRouter(
 
 
 DEFAULT_PAGE_SIZE = 20
+# 画面の初期表示（更新日時・降順）と、sort 対応前の固定の並び順に合わせる
+DEFAULT_ADMIN_SORT = "updatedAt,desc"
 
 
 @prompt_template_router.get("", response_model=PagedPromptTemplateResponse)
@@ -47,7 +49,7 @@ async def get_admin_prompt_templates(
     search: str | None = Query(None),
     team: str | None = Query(None),
     exclude_group_id: str | None = Query(None, alias="excludeGroupId"),
-    sort: str = Query("updatedAt,desc"),
+    sort: str = Query(DEFAULT_ADMIN_SORT),
     page: int = Query(0, ge=0),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=1000),
     x_tenant_id: str = Depends(get_verified_tenant_id),
@@ -57,6 +59,7 @@ async def get_admin_prompt_templates(
     """プロンプトテンプレート一覧取得（管理者向け、検索・チームフィルタ・除外グループフィルタ・並べ替え対応）
 
     `sort` は移植元（Spring Data `Pageable`）と同じ `<項目>,<asc|desc>` 形式で受け取る。
+    `sort=`（空文字）は FastAPI では既定値にならず空文字で届くため、既定の並び順に戻す。
     """
     return await PromptTemplateService.get_admin_prompt_templates(
         x_tenant_id,
@@ -64,7 +67,7 @@ async def get_admin_prompt_templates(
         search,
         team,
         exclude_group_id,
-        sort,
+        sort.strip() or DEFAULT_ADMIN_SORT,
         page,
         size or DEFAULT_PAGE_SIZE,
         session,
