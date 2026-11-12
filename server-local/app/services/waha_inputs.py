@@ -32,9 +32,10 @@ async def upload_question_history_and_attachment(
     )
 
     if command.history_messages:
-        # 移植元 MessageHistoryContent（role / content）の配列
+        # 移植元 MessageHistoryContent（role / content）の配列。type の省略は
+        # 移植元と同じく role を null にする
         histories = [
-            {"role": m.type.value, "content": m.content}
+            {"role": m.type.value if m.type is not None else None, "content": m.content}
             for m in command.history_messages
         ]
         json_data = to_compact_json(histories)

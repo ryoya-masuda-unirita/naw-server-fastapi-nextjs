@@ -18,7 +18,8 @@ class HistoryMessageContentType(StrEnum):
 class HistoryMessageContent(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    type: HistoryMessageContentType
+    # 移植元（Jackson の record）は省略を null として受け付ける
+    type: HistoryMessageContentType | None = None
     content: str | None = None
     attachmentsCount: int = 0
 

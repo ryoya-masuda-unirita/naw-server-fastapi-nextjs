@@ -236,6 +236,10 @@ async def test_sync_invalid_text_data_returns_400(client: httpx.AsyncClient) -> 
 
 
 async def test_sync_requires_multipart(client: httpx.AsyncClient) -> None:
-    """multipart 以外は受け付けないこと"""
+    """multipart 以外は移植元（consumes 指定）と同じく 415 で受け付けないこと"""
     res = await client.post(SYNC_URL, json={"assistantId": "s", "messageId": "m"})
-    assert res.status_code == 400
+    assert res.status_code == 415
+    body = res.json()
+    assert body["status"] == 415
+    assert body["error"] == "Unsupported Media Type"
+    assert body["path"] == SYNC_URL
