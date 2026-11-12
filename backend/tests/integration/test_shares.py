@@ -216,7 +216,7 @@ class TestShareRouter:
 
             assert response.status_code == 400
 
-        async def test_create_share_with_empty_team_ids_returns_422(
+        async def test_create_share_with_empty_team_ids_returns_400(
             self, client, owner_headers, owned_room
         ):
             """teamIdsが空だとバリデーションエラーになること"""
@@ -227,7 +227,7 @@ class TestShareRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_upsert_share_replaces_groups_without_creating_new_share(
             self,

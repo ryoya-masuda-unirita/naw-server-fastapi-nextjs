@@ -417,7 +417,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 400
-            assert response.json()["detail"] == (
+            assert response.json()["message"] == (
                 "削除済みのファイルはダウンロードできません。"
             )
 
@@ -448,7 +448,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 404
-            assert response.json()["detail"] == "ファイルが存在しません。"
+            assert response.json()["message"] == "ファイルが存在しません。"
 
     class TestUpdate:
         async def test_update_deleted_file_status_to_enable_returns_400(
@@ -469,7 +469,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 400
-            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert response.json()["message"] == "削除済みのファイルは更新できません。"
             assert [f["id"] for f in deleted] == [file_id]
 
         async def test_update_deleted_file_status_to_disable_returns_400(
@@ -490,7 +490,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 400
-            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert response.json()["message"] == "削除済みのファイルは更新できません。"
             assert [f["id"] for f in deleted] == [file_id]
 
         async def test_update_deleted_file_metadata_returns_400(
@@ -511,7 +511,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 400
-            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert response.json()["message"] == "削除済みのファイルは更新できません。"
             assert len(deleted) == 1
             assert deleted[0]["displayName"] == "サンプル"
             assert deleted[0]["reference"] == "old-ref"
@@ -536,7 +536,7 @@ class TestFilesRouter:
                 active = await _list_files(ac, files_index.id, files_admin_headers)
 
             assert response.status_code == 400
-            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert response.json()["message"] == "削除済みのファイルは更新できません。"
             assert [f["id"] for f in deleted] == [file_id]
             assert active == []
 
@@ -556,7 +556,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 400
-            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert response.json()["message"] == "削除済みのファイルは更新できません。"
 
         async def test_replace_missing_file_without_name_returns_404(
             self, client, files_index, files_admin_headers, override_file_storage
@@ -571,7 +571,7 @@ class TestFilesRouter:
                 )
 
             assert response.status_code == 404
-            assert response.json()["detail"] == "ファイルが存在しません。"
+            assert response.json()["message"] == "ファイルが存在しません。"
 
         async def test_update_metadata_only(
             self, client, files_index, files_admin_headers, override_file_storage

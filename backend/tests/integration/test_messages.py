@@ -859,7 +859,7 @@ class TestMessageRouter:
 
             assert response.status_code == 403
 
-        async def test_returns_422_when_neither_message_id_nor_content_id_given(
+        async def test_returns_400_when_neither_message_id_nor_content_id_given(
             self, client, owner_headers
         ):
             """messageId・messageContentIdのいずれも指定しないとバリデーションエラーになること"""
@@ -870,7 +870,7 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_persists_attachment_files_and_returns_them_in_message_content_event(
             self,
@@ -963,10 +963,10 @@ class TestMessageRouter:
                 for content in contents_response.json()
             ] == [("質問A", "フォーム値の回答")]
 
-        async def test_returns_422_when_text_data_is_not_json(
+        async def test_returns_400_when_text_data_is_not_json(
             self, client, owner_headers
         ):
-            """textDataがJSONとして解釈できない場合は422になること"""
+            """textDataがJSONとして解釈できない場合は400になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
@@ -974,12 +974,12 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
-        async def test_returns_422_when_text_data_is_not_object(
+        async def test_returns_400_when_text_data_is_not_object(
             self, client, owner_headers
         ):
-            """textDataがJSONオブジェクトでない場合は422になること"""
+            """textDataがJSONオブジェクトでない場合は400になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
@@ -987,13 +987,13 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
-            assert response.json()["detail"][0]["loc"] == ["body", "textData"]
+            assert response.status_code == 400
+            assert response.json()["message"] == "Input should be an object"
 
-        async def test_returns_422_when_text_data_is_not_utf8(
+        async def test_returns_400_when_text_data_is_not_utf8(
             self, client, owner_headers, owned_message
         ):
-            """textDataがUTF-8でない場合は文字化けしたまま受け付けず422になること"""
+            """textDataがUTF-8でない場合は文字化けしたまま受け付けず400になること"""
             text_data = json.dumps(
                 {"messageId": owned_message.id, "userInput": "こんにちは"},
                 ensure_ascii=False,
@@ -1005,7 +1005,7 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_returns_401_before_parsing_text_data_when_unauthenticated(
             self, client, messages_tenant
@@ -1020,10 +1020,10 @@ class TestMessageRouter:
 
             assert response.status_code == 401
 
-        async def test_returns_422_when_text_data_is_missing(
+        async def test_returns_400_when_text_data_is_missing(
             self, client, owner_headers
         ):
-            """textDataパートがない場合は422になること"""
+            """textDataパートがない場合は400になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
@@ -1031,12 +1031,12 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
-        async def test_returns_422_when_history_attachment_count_mismatches(
+        async def test_returns_400_when_history_attachment_count_mismatches(
             self, client, owner_headers, owned_message
         ):
-            """historyAttachmentFilesの件数が履歴のattachmentsCount合計と一致しない場合は422になること"""
+            """historyAttachmentFilesの件数が履歴のattachmentsCount合計と一致しない場合は400になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
@@ -1056,7 +1056,7 @@ class TestMessageRouter:
                     headers=owner_headers,
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_next_message_chains_to_previous_after_reloading_room(
             self,

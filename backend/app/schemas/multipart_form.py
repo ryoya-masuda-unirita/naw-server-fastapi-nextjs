@@ -21,18 +21,18 @@ _TEXT_DATA_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
 
 
 def _to_request_validation_error(error: ValidationError) -> RequestValidationError:
-    """`textData`の検証エラーを、ボディの入力エラー(422)へ変換する。
+    """`textData`の検証エラーを、ボディの入力エラー(400)へ変換する。
 
-    依存関数内で発生したValidationErrorはFastAPIが422へ変換しないため明示的に
-    変換する。locは`("body", "textData", ...)`に揃え、`input`は含めない
-    （モデル単位のエラーでは添付ファイルを含むリクエスト全体が入り、応答が
-    肥大化するため）。
+    依存関数内で発生したValidationErrorはFastAPIが入力エラーとして扱わず500に
+    なるため明示的に変換する。locはログで原因箇所を特定できるよう
+    `("body", "textData", ...)`に揃え、`input`は含めない（モデル単位のエラーでは
+    添付ファイルを含むリクエスト全体が入り、例外が肥大化するため）。
 
     Args:
         error: `textData`の解釈・検証で発生したエラー。
 
     Returns:
-        FastAPIが422として返す入力エラー。
+        共通の例外ハンドラ（`app.core.errors`）が400として返す入力エラー。
     """
     return RequestValidationError(
         [
@@ -86,7 +86,7 @@ async def parse_text_data_form[ModelT: BaseModel](
 
     Raises:
         RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
-            場合、または項目の検証に失敗した場合（いずれも422）。
+            場合、または項目の検証に失敗した場合（いずれも400）。
     """
     raw_text_data = (
         text_data.encode("utf-8")

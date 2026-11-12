@@ -98,7 +98,7 @@ class TenantService:
 
         if "tenantName" in fields_set:
             # model_validator（TenantAdminPatchRequest）が、キー送信時に値がnullなら
-            # 事前に422で弾いているため、ここに到達する時点でtenantNameはstr確定。
+            # 事前に400で弾いているため、ここに到達する時点でtenantNameはstr確定。
             assert request.tenantName is not None
             tenant.name = request.tenantName
 

@@ -9,7 +9,7 @@ class PromptTemplateCreateRequest(BaseModel):
     """作成・更新で共用するリクエスト。
 
     移植元は検証がなく、DBカラム長（32文字）を超える名前は保存時に500になる。
-    保存前に422で返すため、テンプレート名にDBカラムと同じ上限を設定する（Issue #171）。
+    保存前に400で返すため、テンプレート名にDBカラムと同じ上限を設定する（Issue #171）。
     """
 
     name: str = Field(max_length=NAME_MAX_LENGTH)

@@ -40,7 +40,7 @@ class TestAuthAPI:
                 },
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_post_auth_login_key_success(
         self, client, test_tenant, test_user_with_login_key
@@ -92,7 +92,7 @@ class TestAuthAPI:
                 json={"loginKey": test_user_with_login_key.login_key},
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_post_auth_login_key_sets_session_cookie_and_creates_session(
         self, client, fake_redis, test_tenant, test_user_with_login_key
@@ -178,7 +178,7 @@ class TestAuthAPI:
     async def test_post_auth_password_reset_with_username_key_and_invalid_old_password(
         self, client, test_tenant, test_user_with_password
     ):
-        """POST /auth/password/reset username キーで旧パスワード誤りなら 422 ではなく 403 になること"""
+        """POST /auth/password/reset username キーで旧パスワード誤りなら 400 ではなく 403 になること"""
         async with client as c:
             response = await c.post(
                 "/auth/password/reset",
@@ -192,10 +192,10 @@ class TestAuthAPI:
 
         assert response.status_code == 403
         # "User not found" ではなく旧パスワード照合まで到達したことを確認する
-        assert response.json()["detail"] == "Invalid old password"
+        assert response.json()["message"] == "Invalid old password"
 
     async def test_post_auth_password_reset_without_login_id(self, client, test_tenant):
-        """POST /auth/password/reset loginId・username のどちらもなければ 422 になること"""
+        """POST /auth/password/reset loginId・username のどちらもなければ 400 になること"""
         async with client as c:
             response = await c.post(
                 "/auth/password/reset",
@@ -206,7 +206,7 @@ class TestAuthAPI:
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_post_auth_password_reset_rejects_password_violating_policy(
         self, client, test_tenant, test_user_with_password
@@ -236,7 +236,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 400
-        assert response.json()["detail"] == "新パスワードには大文字を含めてください。"
+        assert response.json()["message"] == "新パスワードには大文字を含めてください。"
         assert retry_response.status_code == 200
 
     async def test_post_auth_password_reset_rejects_password_without_valid_symbol(
@@ -255,7 +255,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 400
-        assert response.json()["detail"] == (
+        assert response.json()["message"] == (
             "新パスワードには次の記号のいずれかを含めてください: "
             f"{test_tenant.pw_policy_valid_symbols}"
         )

@@ -312,7 +312,7 @@ class TestLlmChat:
         assert _sse_events(response.text)[-1]["type"] == "message_stop"
 
     async def test_rejects_json_body(self, client, headers, chat_models):
-        """移植元と異なるJSONボディでの送信は422になること"""
+        """移植元と異なるJSONボディでの送信は400になること"""
         response = await client.post(
             "/api/llm/chat",
             headers=headers,
@@ -322,18 +322,18 @@ class TestLlmChat:
             },
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_rejects_invalid_text_data_json(self, client, headers, chat_models):
-        """textDataがJSONとして解釈できない場合は422になること"""
+        """textDataがJSONとして解釈できない場合は400になること"""
         response = await client.post(
             "/api/llm/chat",
             headers=headers,
             files=[("textData", ("blob", "{invalid", "application/json"))],
         )
 
-        assert response.status_code == 422
-        assert response.json()["detail"][0]["loc"][:2] == ["body", "textData"]
+        assert response.status_code == 400
+        assert response.json()["message"].startswith("Invalid JSON")
 
     async def test_returns_400_when_attachment_not_uploaded(
         self, client, headers, chat_models
@@ -352,14 +352,14 @@ class TestLlmChat:
         )
 
         assert response.status_code == 400
-        assert response.json()["detail"] == (
+        assert response.json()["message"] == (
             "messages 内の添付ファイル名に一致するファイルがありません: missing.png"
         )
 
     async def test_rejects_duplicate_attachment_file_names(
         self, client, headers, chat_models
     ):
-        """同じファイル名の添付ファイルが複数ある場合は422になること"""
+        """同じファイル名の添付ファイルが複数ある場合は400になること"""
         text_data = {
             "deployName": _AZURE_MODEL,
             "messages": [{"role": "user", "content": "質問", "attachments": ["a.png"]}],
@@ -373,7 +373,7 @@ class TestLlmChat:
             ),
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
     async def test_streams_error_event_when_llm_fails(
         self, client, engine, headers, chat_models

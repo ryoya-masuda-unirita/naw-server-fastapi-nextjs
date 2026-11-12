@@ -198,7 +198,7 @@ class TestCreditUsageRouter:
                     headers={"Authorization": f"Bearer {token}"},
                 )
 
-            assert response.status_code == 422
+            assert response.status_code == 400
 
         async def test_get_my_credit_usage_without_authentication(
             self, client, credit_usage_tenant
