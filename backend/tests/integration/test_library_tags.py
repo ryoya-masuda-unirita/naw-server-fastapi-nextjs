@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -355,6 +355,90 @@ class TestUpdateLibraryTag:
             )
 
         assert response.status_code == 403
+
+    async def test_update_with_hyphenated_id(self, client, admin_headers, tag):
+        """ハイフン付き（UUID標準形式）のIDでも更新できること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{UUID(tag.id)}",
+                json={"name": "updated", "description": "updated desc"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == tag.id
+        assert body["name"] == "updated"
+        assert body["description"] == "updated desc"
+
+    async def test_update_with_uppercase_hyphenated_id(
+        self, client, admin_headers, tag
+    ):
+        """大文字のハイフン付きIDでも同じタグを更新できること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{str(UUID(tag.id)).upper()}",
+                json={"description": "changed"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == tag.id
+
+    async def test_update_with_hyphenated_id_keeping_same_name(
+        self, client, admin_headers, tag
+    ):
+        """ハイフン付きIDで今と同じ名前を指定しても、自分自身と重複扱いにならないこと"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{UUID(tag.id)}",
+                json={"name": tag.name, "description": "changed"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == tag.name
+
+    async def test_update_with_hyphenated_id_and_duplicate_name_returns_400(
+        self, client, admin_headers, tag, second_tag
+    ):
+        """ハイフン付きIDでも、別タグと同じ名前への更新は400になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{UUID(tag.id)}",
+                json={"name": second_tag.name},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 400
+
+    @pytest.mark.parametrize("id_format", ["urn:uuid:{uuid}", "{{{uuid}}}"])
+    async def test_update_with_non_standard_id_format_returns_404(
+        self, client, admin_headers, tag, id_format
+    ):
+        """ハイフン付き・32桁以外の表記（urn・波括弧）は同じタグを指していても404になること"""
+        tag_id = id_format.format(uuid=UUID(tag.id))
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{tag_id}",
+                json={"name": "updated"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+
+    async def test_update_other_tenant_tag_with_hyphenated_id_returns_404(
+        self, client, admin_headers, other_tenant_tag
+    ):
+        """他テナントのタグはハイフン付きIDで指定しても404になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/library-tags/{UUID(other_tenant_tag.id)}",
+                json={"name": "updated"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
 
 
 class TestDeleteLibraryTags:
