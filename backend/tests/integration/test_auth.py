@@ -2,10 +2,14 @@ import json
 
 import pytest
 
+from app.core import password_mismatch_store
+from app.core.password_mismatch_store import LOGIN_FAILURE_THRESHOLD
 from app.core.session_store import SESSION_COOKIE_NAME
 from app.core.config import get_password_reset_settings
 from app.services.auth_service import (
     INVALID_CREDENTIALS_MESSAGE,
+    LOGIN_FAILED_MESSAGE,
+    LOGIN_LOCKED_MESSAGE,
     PASSWORD_RESET_LOCKED_MESSAGE,
 )
 
@@ -626,3 +630,198 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 401
+
+
+def _login_body(username: str, password: str) -> dict[str, str]:
+    """ログインのリクエストボディを作る。"""
+    return {"username": username, "password": password}
+
+
+@pytest.mark.asyncio
+class TestAuthLoginLockout:
+    """POST /auth/login の失敗回数ロック（移植元 LoginAttemptService）のテスト"""
+
+    async def test_post_auth_login_unknown_user_and_wrong_password_return_same_response(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """存在しないログインIDとパスワード誤りが同じ 403・同じ文言になること"""
+        headers = {"X-Tenant-ID": test_tenant.id}
+        async with client as c:
+            unknown_response = await c.post(
+                "/auth/login",
+                json=_login_body("nonexistent", "WrongPassword999!"),
+                headers=headers,
+            )
+            wrong_response = await c.post(
+                "/auth/login",
+                json=_login_body(
+                    test_user_with_password["user"].login_id, "WrongPassword999!"
+                ),
+                headers=headers,
+            )
+
+        assert unknown_response.status_code == wrong_response.status_code == 403
+        assert (
+            unknown_response.json()["message"]
+            == wrong_response.json()["message"]
+            == LOGIN_FAILED_MESSAGE
+        )
+
+    async def test_post_auth_login_does_not_lock_unknown_user(
+        self, client, test_tenant
+    ):
+        """存在しないログインIDの失敗は数えずロックしないこと"""
+        async with client as c:
+            responses = [
+                await c.post(
+                    "/auth/login",
+                    json=_login_body("nonexistent", "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(LOGIN_FAILURE_THRESHOLD + 1)
+            ]
+
+        assert [r.status_code for r in responses] == [403] * (
+            LOGIN_FAILURE_THRESHOLD + 1
+        )
+
+    async def test_post_auth_login_locks_on_sixth_failed_attempt(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """パスワードを続けて誤ると、上限回目で 429 になること"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            responses = [
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(LOGIN_FAILURE_THRESHOLD)
+            ]
+
+        assert [r.status_code for r in responses] == [403] * (
+            LOGIN_FAILURE_THRESHOLD - 1
+        ) + [429]
+        assert responses[-1].json()["message"] == LOGIN_LOCKED_MESSAGE
+
+    async def test_post_auth_login_rejects_correct_password_while_locked(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """ロック中は正しいパスワードでも 429 になりセッションが発行されないこと"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            for _ in range(LOGIN_FAILURE_THRESHOLD):
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            response = await c.post(
+                "/auth/login",
+                json=_login_body(login_id, test_user_with_password["plain_password"]),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 429
+        assert response.json()["message"] == LOGIN_LOCKED_MESSAGE
+        assert SESSION_COOKIE_NAME not in response.cookies
+
+    async def test_post_auth_login_success_resets_failure_count(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """ログインに成功すると失敗回数がリセットされること"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            for _ in range(LOGIN_FAILURE_THRESHOLD - 1):
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            success_response = await c.post(
+                "/auth/login",
+                json=_login_body(login_id, test_user_with_password["plain_password"]),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            # 成功前の失敗が残っていれば、ここで上限に達して 429 になる
+            responses_after_success = [
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(LOGIN_FAILURE_THRESHOLD - 1)
+            ]
+
+        assert success_response.status_code == 200
+        assert [r.status_code for r in responses_after_success] == [403] * (
+            LOGIN_FAILURE_THRESHOLD - 1
+        )
+
+    async def test_post_auth_password_reset_counts_login_failures(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """ログインの失敗もパスワード再設定のロックに数えること"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            for _ in range(MAX_FAILURE_ATTEMPTS - 1):
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            response = await c.post(
+                "/auth/password/reset",
+                json=_reset_body(login_id, "WrongPassword999!"),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 429
+        assert response.json()["message"] == PASSWORD_RESET_LOCKED_MESSAGE
+
+    async def test_post_auth_login_counts_password_reset_failures(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """パスワード再設定の失敗もログインのロックに数えること"""
+        login_id = test_user_with_password["user"].login_id
+        reset_failures = min(MAX_FAILURE_ATTEMPTS, LOGIN_FAILURE_THRESHOLD) - 1
+        async with client as c:
+            for _ in range(reset_failures):
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            login_responses = [
+                await c.post(
+                    "/auth/login",
+                    json=_login_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(LOGIN_FAILURE_THRESHOLD - reset_failures)
+            ]
+
+        # 通算で上限回目の失敗になったログインだけが 429 になる
+        assert [r.status_code for r in login_responses] == [403] * (
+            LOGIN_FAILURE_THRESHOLD - reset_failures - 1
+        ) + [429]
+
+    async def test_post_auth_login_key_not_locked_by_login_failures(
+        self, client, fake_redis, test_tenant, test_user_with_login_key
+    ):
+        """移植元どおり、ログインキーでのログインは失敗回数ロックの対象外であること"""
+        for _ in range(LOGIN_FAILURE_THRESHOLD):
+            await password_mismatch_store.record_login_failure_and_check_lockout(
+                test_user_with_login_key.id, test_tenant.id, fake_redis
+            )
+
+        async with client as c:
+            response = await c.post(
+                "/auth/login-key",
+                json={"loginKey": test_user_with_login_key.login_key},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["loginStatus"] == "SUCCESS"
