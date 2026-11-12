@@ -35,6 +35,18 @@ for _flags in FLAG_COMBINATIONS:
             MISSING_TYPE_CASES.append((_flags, _char_type))
 
 
+def _flags_id(flags: dict[str, bool]) -> str:
+    """parametrize の ID 用に、有効な文字種を "+" でつないだ文字列を返す。
+
+    Args:
+        flags: 文字種ごとの有効/無効。
+
+    Returns:
+        例: "uppercase+digits"。すべて無効なら "none"。
+    """
+    return "+".join(t for t, on in flags.items() if on) or "none"
+
+
 def _make_tenant(
     *,
     uppercase: bool = True,
@@ -152,14 +164,18 @@ class TestVerifyPasswordStrength:
 
         verify_password_strength("12345678", tenant)
 
-    @pytest.mark.parametrize("flags", FLAG_COMBINATIONS)
+    @pytest.mark.parametrize("flags", FLAG_COMBINATIONS, ids=_flags_id)
     def test_accepts_password_with_enabled_char_types(self, flags):
         """16 通りの組み合わせで、有効な文字種をすべて含むパスワードは受け付けること"""
         enabled = [t for t, on in flags.items() if on]
 
         verify_password_strength(_build_password(enabled), _make_tenant(**flags))
 
-    @pytest.mark.parametrize(("flags", "missing"), MISSING_TYPE_CASES)
+    @pytest.mark.parametrize(
+        ("flags", "missing"),
+        MISSING_TYPE_CASES,
+        ids=[f"{_flags_id(f)}-missing-{m}" for f, m in MISSING_TYPE_CASES],
+    )
     def test_rejects_password_missing_enabled_char_type(self, flags, missing):
         """16 通りの組み合わせで、有効な文字種を 1 つ欠いたパスワードはその文字種のエラーになること"""
         others = [t for t, on in flags.items() if on and t != missing]
