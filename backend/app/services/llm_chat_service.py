@@ -360,10 +360,12 @@ class LlmChatService:
                 yield sse_event("error", {"message": str(e)})
             finally:
                 # 移植元(`LlmChatService.streamAndPersist`)はmessage_stop/errorを送って
-                # ストリームを閉じた後に永続化するため、永続化の失敗はクライアントへ
-                # 通知しない。ここで例外を伝播させると、送信済みのイベントの後で
-                # 接続が異常終了してしまうため、ログに残してストリームを正常に閉じる。
-                # トークン使用量はライブラリの永続化に失敗しても記録する。
+                # ストリームを閉じた後にトークン使用量を永続化するため、その失敗は
+                # クライアントへ通知しない。ここで例外を伝播させると、送信済みのイベントの
+                # 後で接続が異常終了してしまうため、ログに残してストリームを正常に閉じる。
+                # なお移植元の最新版はこのAPIでライブラリを永続化しない(local-server側で
+                # 登録する)ため、ライブラリの永続化失敗の扱いに移植元の根拠はない。
+                # トークン使用量と同じくログのみとし、トークン使用量の記録は続ける。
                 if library_title is not None and library_content is not None:
                     try:
                         await LlmChatService._persist_library(
