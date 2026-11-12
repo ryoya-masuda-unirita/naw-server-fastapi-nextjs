@@ -21,6 +21,10 @@ from app.schemas.file import (
 
 _VALID_STATUS_NAMES = {s.name for s in FileStatus}
 
+# 移植元`FileService.DELETED_FILE_UPDATE_MESSAGE`（NAW-1375）と同じ文言。
+DELETED_FILE_UPDATE_MESSAGE = "削除済みのファイルは更新できません。"
+DELETED_FILE_DOWNLOAD_MESSAGE = "削除済みのファイルはダウンロードできません。"
+
 
 class FileService:
     @staticmethod
@@ -307,7 +311,8 @@ class FileService:
             (ファイルのメタデータ, ファイルの内容) のタプル。
 
         Raises:
-            HTTPException: ファイルが存在しない、または保存先の実体が見つからない場合404を返す。
+            HTTPException: ファイルが存在しない、または保存先の実体が見つからない場合404、
+                削除済みの場合400を返す。
         """
         file = await FileRepository.find_by_id_and_tenant_id(
             file_id, tenant_id, session
@@ -316,7 +321,22 @@ class FileService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="ファイルが存在しません。"
             )
-        content = await storage.download(file.storage_url)
+        # 論理削除でストレージ上の実体は消しているため、読みに行くと500になる。移植元は
+        # 判定が無く同じく失敗するが、更新API（NAW-1375）と同じく削除済みは400で拒否する。
+        # 404判定より後に置き、別インデックスのファイルIDで削除済みかどうかを漏らさない。
+        if file.status == FileStatus.DELETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=DELETED_FILE_DOWNLOAD_MESSAGE,
+            )
+        try:
+            content = await storage.download(file.storage_url)
+        except FileNotFoundError:
+            # 削除と同時に届いた場合や実体が手作業で消された場合も500にせず、
+            # 実体が無いファイルとして404を返す。
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ファイルが存在しません。"
+            ) from None
         return file, content
 
     @staticmethod
@@ -350,18 +370,28 @@ class FileService:
             更新後のファイルのレスポンス。
 
         Raises:
-            HTTPException: ファイルが存在しない場合404、`status=DELETED`をPATCHで指定した
-                場合400、ファイル添付時に当月クレジット上限を超過している場合429を返す。
+            HTTPException: ファイルが存在しない場合404、削除済みのファイルの場合・
+                `status=DELETED`をPATCHで指定した場合400、ファイル添付時に当月クレジット
+                上限を超過している場合429を返す。
         """
-        if upload is None or not upload.filename:
-            file = await FileRepository.find_by_id_and_tenant_id(
-                file_id, tenant_id, session
+        file = await FileRepository.find_by_id_and_tenant_id(
+            file_id, tenant_id, session
+        )
+        if file is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ファイルが存在しません。",
             )
-            if file is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="ファイルが存在しません。",
-                )
+        # 論理削除ではストレージ上の実体を消している。更新を受け付けると、実体の無い
+        # ファイルが学習中に戻ったり、差し替えで作り直されたりするため、移植元NAW-1375と
+        # 同じく他の入力の検証より前に、どの更新経路でも拒否する。
+        if file.status == FileStatus.DELETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=DELETED_FILE_UPDATE_MESSAGE,
+            )
+
+        if upload is None or not upload.filename:
             if form.display_name is not None:
                 file.display_name = form.display_name
             if form.reference is not None:

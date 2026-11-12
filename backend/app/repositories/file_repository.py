@@ -38,13 +38,18 @@ class FileRepository:
         return result.scalars().first()
 
     @staticmethod
-    async def find_by_ids_and_tenant_id(
+    async def find_not_deleted_by_ids_and_tenant_id(
         file_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[File]:
-        """ファイルID一覧とテナントIDでファイルをまとめて取得する。
+        """ファイルID一覧とテナントIDで、論理削除済み以外のファイルをまとめて取得する。
 
         RAGのベクトル検索結果に対応するファイルを解決する際、結果件数分の
         個別クエリ（N+1）を発行しないよう、対象ファイルID一覧を1クエリでまとめて取得する。
+
+        移植元は論理削除時にベクトルストアからチャンクを消すため削除済みのファイルが
+        検索結果に出ないが、本リポジトリはベクトルストアへの登録・削除が未移植でチャンクが
+        残る。解決できなかった検索結果は呼び出し側で捨てるため、ここで削除済みを除けば
+        移植元と同じく削除済みのファイルが回答の文脈・参照先に使われなくなる。
 
         Args:
             file_ids: 取得対象のファイルID一覧。
@@ -52,11 +57,15 @@ class FileRepository:
             session: 非同期DBセッション。
 
         Returns:
-            該当するファイル一覧。
+            該当するファイルのうち、論理削除済み（DELETED）以外の一覧。
         """
         if not file_ids:
             return []
-        stmt = select(File).where(File.id.in_(file_ids), File.tenant_id == tenant_id)
+        stmt = select(File).where(
+            File.id.in_(file_ids),
+            File.tenant_id == tenant_id,
+            File.status != FileStatus.DELETED,
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 

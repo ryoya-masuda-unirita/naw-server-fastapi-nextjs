@@ -165,6 +165,35 @@ def _upload_payload(
     return files, data
 
 
+async def _upload_and_soft_delete(ac, index_id: str, headers: dict[str, str]) -> str:
+    """ファイルをアップロードして論理削除し、そのファイルIDを返す。"""
+    files, data = _upload_payload(reference="old-ref")
+    upload_response = await ac.post(
+        f"/api/admin/indexes/{index_id}/files",
+        files=files,
+        data=data,
+        headers=headers,
+    )
+    file_id = upload_response.json()["id"]
+    delete_response = await ac.delete(
+        f"/api/admin/indexes/{index_id}/files/{file_id}", headers=headers
+    )
+    assert delete_response.status_code == 204
+    return file_id
+
+
+async def _list_files(
+    ac, index_id: str, headers: dict[str, str], status: str | None = None
+) -> list[dict]:
+    """ファイル一覧の`content`を返す（`status`指定時はそのステータスで絞り込む）。"""
+    params = {"status": status} if status is not None else {}
+    response = await ac.get(
+        f"/api/admin/indexes/{index_id}/files", params=params, headers=headers
+    )
+    assert response.status_code == 200
+    return response.json()["content"]
+
+
 class TestFilesRouter:
     class TestUpload:
         async def test_upload_file(
@@ -374,7 +403,176 @@ class TestFilesRouter:
 
             assert response.status_code == 404
 
+        async def test_download_deleted_file_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みのファイルのダウンロードは500ではなく400になること"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == (
+                "削除済みのファイルはダウンロードできません。"
+            )
+
+        async def test_download_file_without_stored_content_returns_404(
+            self,
+            client,
+            files_index,
+            files_admin_headers,
+            override_file_storage,
+            file_storage_root,
+        ):
+            """保存先の実体が無いファイルのダウンロードは500ではなく404になること"""
+            files, data = _upload_payload()
+            async with client as ac:
+                upload_response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    headers=files_admin_headers,
+                )
+                file_id = upload_response.json()["id"]
+                for stored in file_storage_root.rglob(f"{file_id}_*"):
+                    stored.unlink()
+
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "ファイルが存在しません。"
+
     class TestUpdate:
+        async def test_update_deleted_file_status_to_enable_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みのファイルを学習中に戻そうとすると400になり、削除済みのままであること"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    data={"status": "ENABLE"},
+                    headers=files_admin_headers,
+                )
+                deleted = await _list_files(
+                    ac, files_index.id, files_admin_headers, "DELETED"
+                )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert [f["id"] for f in deleted] == [file_id]
+
+        async def test_update_deleted_file_status_to_disable_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みのファイルを停止中に変えようとすると400になり、削除済みのままであること"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    params={"status": "DISABLE"},
+                    headers=files_admin_headers,
+                )
+                deleted = await _list_files(
+                    ac, files_index.id, files_admin_headers, "DELETED"
+                )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert [f["id"] for f in deleted] == [file_id]
+
+        async def test_update_deleted_file_metadata_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みのファイルの表示名・参照先の変更は400になり、保存されないこと"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    data={"displayName": "新しい表示名", "reference": "new-ref"},
+                    headers=files_admin_headers,
+                )
+                deleted = await _list_files(
+                    ac, files_index.id, files_admin_headers, "DELETED"
+                )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert len(deleted) == 1
+            assert deleted[0]["displayName"] == "サンプル"
+            assert deleted[0]["reference"] == "old-ref"
+
+        async def test_replace_deleted_file_returns_400(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みのファイルの差し替えは400になり、作り直されないこと"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    files={"file": ("new.txt", b"new content", "text/plain")},
+                    data={"name": "new.txt"},
+                    headers=files_admin_headers,
+                )
+                deleted = await _list_files(
+                    ac, files_index.id, files_admin_headers, "DELETED"
+                )
+                active = await _list_files(ac, files_index.id, files_admin_headers)
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+            assert [f["id"] for f in deleted] == [file_id]
+            assert active == []
+
+        async def test_replace_deleted_file_without_name_returns_deleted_error(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """削除済みの判定はnameの必須チェックより先に行われること"""
+            async with client as ac:
+                file_id = await _upload_and_soft_delete(
+                    ac, files_index.id, files_admin_headers
+                )
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    files={"file": ("new.txt", b"new content", "text/plain")},
+                    data={},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 400
+            assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+
+        async def test_replace_missing_file_without_name_returns_404(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """存在しないファイルの差し替えは、nameの必須チェックより先に404になること"""
+            async with client as ac:
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/no-such-file",
+                    files={"file": ("new.txt", b"new content", "text/plain")},
+                    data={},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "ファイルが存在しません。"
+
         async def test_update_metadata_only(
             self, client, files_index, files_admin_headers, override_file_storage
         ):

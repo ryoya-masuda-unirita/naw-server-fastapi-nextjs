@@ -1174,7 +1174,7 @@ class MessageService:
             if result.file_unique_id and result.file_unique_id not in seen_file_ids:
                 seen_file_ids.add(result.file_unique_id)
                 file_ids.append(result.file_unique_id)
-        files = await FileRepository.find_by_ids_and_tenant_id(
+        files = await FileRepository.find_not_deleted_by_ids_and_tenant_id(
             file_ids, tenant_id, session
         )
         files_by_id = {file.id: file for file in files}
