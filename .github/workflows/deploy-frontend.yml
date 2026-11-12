@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
-      # frontend/ のテストを実行するCIワークフローは他にないため、配信前にlint・単体テストを通す
+      # PRの段階では frontend-tests.yml で検証しているが、壊れたものを配信しないよう配信直前にもlint・単体テストを通す
       - run: npm run lint
       - run: npx vitest run
       # vite build は mode=production で動き、git管理の frontend/.env(VITE_API_URL=http://localhost:8000)を
