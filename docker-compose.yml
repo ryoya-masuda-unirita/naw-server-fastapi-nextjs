@@ -1,56 +1,29 @@
-# ローカル開発用の Docker Compose（backend とその依存サービス）
-#
-# 起動するもの:
-#   postgres   … backend の DB（PostgreSQL）
-#   redis      … ログインセッションの保存先
-#   localstack … AWS（S3・SQS）の偽物。ユーザーの一括登録（CSV）で使う
-#   backend    … FastAPI（backend/）。コードを書き換えると自動で再起動する
-#
-# 含まないもの:
-#   frontend（React）    … `cd frontend && npm run dev` で別に起動する（README の「ローカル疎通確認」）
-#   server-local         … server-local/docker-compose.yml で別に起動する
-#
-# 使い方:
-#   docker compose up -d            # 全部起動（DB だけなら `docker compose up -d postgres redis`）
-#   docker compose down             # 停止（データは volumes に残る）
-#   docker compose down -v          # 停止してデータも消す（DB を作り直したいとき）
-#
-# ポートは、ほかのプロジェクトの PostgreSQL（5432）・Redis（6379）と衝突しないよう、
-# ホスト側をずらしている（5433・6380・8001）。
-
 services:
-  # backend の DB。ホストから接続するときは localhost:5433（backend/.env の DATABASE_URL）
+  # backend の DB（PostgreSQL）
   postgres:
     image: postgres:18
-    # docker ps で見える名前。README・CLAUDE.md の手順（docker exec など）はこの名前を使う
     container_name: naw-fastapi-postgres
     environment:
-      # DB名・ユーザー・パスワード（ローカル専用なので固定値）
       POSTGRES_DB: postgres
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       TZ: Asia/Tokyo
-      # PostgreSQL 18 のイメージはデータの置き場所がバージョン付きのディレクトリになるため明示する
       PGDATA: /var/lib/postgresql/18/data
     ports:
-      # ホストの 5433 → コンテナの 5432
       - "5433:5432"
     volumes:
-      # DB のデータを名前付きボリュームに保存し、コンテナを作り直しても消えないようにする
       - naw_fastapi_pgdata:/var/lib/postgresql
-    # 起動完了（接続を受け付けられる状態）の判定。backend はこれが通ってから起動する
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U root -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  # ログインセッションの保存先。ホストからは localhost:6380（backend/.env の REDIS_URL）
+  # ログインセッションの保存先
   redis:
     image: redis:7
     container_name: naw-fastapi-redis
     ports:
-      # ホストの 6380 → コンテナの 6379
       - "6380:6379"
     volumes:
       - naw_fastapi_redisdata:/data
@@ -60,23 +33,17 @@ services:
       timeout: 5s
       retries: 20
 
-  # AWS の S3・SQS をローカルで真似するツール（LocalStack）。
-  # 本番（AWS）ではユーザーの一括登録の CSV を S3 に置き、SQS のキューで処理を流す。
-  # ローカルではこれを代わりに使い、本物の AWS には接続しない
+  # AWS（S3・SQS）の偽物。ユーザーの一括登録で使う
   localstack:
     image: localstack/localstack:3
     container_name: naw-fastapi-localstack
     environment:
-      # 起動する AWS のサービス（S3 と SQS だけ）
       SERVICES: s3,sqs
       DEFAULT_REGION: ap-northeast-1
     ports:
-      # AWS の API の窓口（http://localhost:4566）
       - "4566:4566"
     volumes:
       - naw_fastapi_localstack_data:/var/lib/localstack
-      # 起動時に実行する初期化スクリプト。S3 のバケットと SQS のキューを作る
-      # （docker-compose/localstack-init/init-aws.sh）
       - ./docker-compose/localstack-init:/etc/localstack/init/ready.d
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
@@ -84,37 +51,26 @@ services:
       timeout: 5s
       retries: 20
 
-  # FastAPI の backend。ホストからは http://localhost:8001
-  # （手元で `uv run uvicorn ...` を直接動かす場合は、このサービスは起動しなくてよい）
+  # FastAPI の backend
   backend:
     build:
       context: ./backend
-      # 開発用のイメージ（依存をインストールし、--reload 付きで uvicorn を起動する）
       dockerfile: Dockerfile.dev
     container_name: naw-fastapi-backend
     environment:
-      # コンテナどうしはサービス名（postgres・redis・localstack）とコンテナ内のポートで接続する。
-      # ホストから接続するとき（localhost:5433 など）とはホスト名・ポートが違う点に注意
       DATABASE_URL: postgresql+asyncpg://root:root@postgres:5432/postgres
       REDIS_URL: redis://redis:6379/0
-      # AWS の接続先を LocalStack に向ける。キー・シークレットは LocalStack 用のダミー値
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: ap-northeast-1
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
-      # init-aws.sh で作るバケットとキューの名前
       AWS_S3_BUCKET_NAME: secuaigent-user-import-jobs-dev-local
       AWS_SQS_QUEUE_URL: http://localstack:4566/000000000000/secuaigent-user-import-jobs-queue-dev-local
     ports:
-      # ホストの 8001 → コンテナの 8000
       - "8001:8000"
     volumes:
-      # ソースコードをコンテナに見せる。ホストで書き換えると --reload で自動的に反映される
       - ./backend:/app
-      # 仮想環境（.venv）はコンテナ専用のボリュームに置く。
-      # ホストの backend/.venv（macOS 用）をコンテナ（Linux）が上書きしないようにするため
       - naw_fastapi_backend_venv:/app/.venv
-    # DB・Redis・LocalStack の healthcheck が通ってから起動する
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,7 +79,6 @@ services:
       localstack:
         condition: service_healthy
 
-# データを保存する名前付きボリューム。`docker compose down -v` で消える
 volumes:
   naw_fastapi_pgdata:
   naw_fastapi_redisdata:
