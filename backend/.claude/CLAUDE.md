@@ -51,8 +51,21 @@ Spring Boot 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/server`
 
 **バリデーション**: リクエストのバリデーションは`schemas/`のPydanticモデルに書く（ルーターには書かない）。
 
-- 単純な制約（文字数上限など）で、移植元Java（`@Size(message=...)`等）のような日本語のカスタムエラーメッセージが不要な場合は、`Field(min_length=..., max_length=...)`のように宣言的に書く
-- 移植元同様に日本語のカスタムエラーメッセージが必要な場合（このプロジェクトはUI・メッセージが日本語のため頻出する）や、単純な制約で表現できないロジック（空白のみ拒否、複数フィールドにまたがる相関チェック等）は、Pydantic v2の`@field_validator` + `@classmethod`のデコレータ構文をモデルクラスの中に直接書く
+- 単純な制約（文字数上限・必須・数値の範囲など）は、`Field(min_length=..., max_length=..., ge=..., le=...)`のように宣言的に書く
+- 移植元のRequestクラスの注釈に`message`がある場合（`@Size(message=...)`・`@NotBlank(message=...)`等）は、項目の型注釈に`ValidationMessages`（`app/core/validation_messages.py`）を添えて同じ文言を返す。引数名は移植元の注釈に対応する（`not_blank`・`not_null`・`not_empty`・`size`・`min_value`・`max_value`・`iso8601_instant`）。文言を添えたモデルは`RequestModel`を継承する（項目の欠落はモデル単位でしか置き換えられないため）。移植元に`message`の指定が無い制約は、既定文言の定数（`NOT_BLANK_DEFAULT_MESSAGE`等）を使う（Issue #239）
+- 単純な制約で表現できないロジック（空白のみ拒否、複数フィールドにまたがる相関チェック等）は、Pydantic v2の`@field_validator` + `@classmethod`のデコレータ構文をモデルクラスの中に直接書き、例外に移植元と同じ文言を入れる
+
+```python
+# Good（制約は宣言的に書き、文言は移植元の注釈の message を添える）
+class FooRequest(RequestModel):
+    name: Annotated[
+        str,
+        Field(max_length=32),
+        ValidationMessages(
+            not_blank="名前は必須です", size="名前は32文字以内で入力してください"
+        ),
+    ]
+```
 
 ```python
 # Good（Pydantic v2のデコレータ構文をそのまま使う）
