@@ -58,6 +58,9 @@ export function SelectWithSearch<T = string>({
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
+  // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useModelState<T | null>(valueProp, onValueChange);
   const [isOpen, setIsOpen] = useState(false);
@@ -88,6 +91,8 @@ export function SelectWithSearch<T = string>({
   }, [isMobile, isOpen]);
 
   const open = () => {
+
+    clearTimeout(hideTimerRef.current);
     if (disabled || !hostRef.current) return;
     const rect = hostRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN_PX;
@@ -106,7 +111,8 @@ export function SelectWithSearch<T = string>({
     setIsOpen(false);
     setSearchQuery('');
     setIsMobileSearchActive(false);
-    setTimeout(() => setIsVisible(false), CLOSE_DELAY_MS);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setIsVisible(false), CLOSE_DELAY_MS);
   };
 
   const toggle = () => {

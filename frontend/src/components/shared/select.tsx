@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './select.css';
@@ -66,6 +66,9 @@ export function Select<T = string>({
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
+  // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
   const [value, setValue] = useModelState<T | null>(valueProp, onValueChange);
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -80,6 +83,8 @@ export function Select<T = string>({
   const displayLabel = selectedOption?.label ?? placeholder;
 
   const open = () => {
+
+    clearTimeout(hideTimerRef.current);
     if (disabled || !hostRef.current) return;
     const rect = hostRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN_PX;
@@ -98,7 +103,8 @@ export function Select<T = string>({
   const close = () => {
     setIsOpen(false);
     const delay = isMobile ? MOBILE_CLOSE_DELAY_MS : 0;
-    setTimeout(() => setIsVisible(false), delay);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setIsVisible(false), delay);
   };
 
   const toggle = () => {

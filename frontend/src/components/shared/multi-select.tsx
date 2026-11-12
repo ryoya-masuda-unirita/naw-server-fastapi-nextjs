@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './multi-select.css';
@@ -61,6 +61,9 @@ export function MultiSelect<T = string>({
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
+  // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
   /** 開いたときの値。キャンセルで戻すため */
   const snapshotRef = useRef<T[] | null>(null);
   const [value, setValue] = useModelState<T[]>(valueProp, onValueChange);
@@ -97,6 +100,8 @@ export function MultiSelect<T = string>({
   };
 
   const open = () => {
+
+    clearTimeout(hideTimerRef.current);
     if (disabled) return;
     snapshotRef.current = [...value];
     setIsVisible(true);
@@ -109,7 +114,8 @@ export function MultiSelect<T = string>({
   const finishClose = () => {
     setIsOpen(false);
     const delay = isMobile ? MOBILE_CLOSE_DELAY_MS : 0;
-    setTimeout(() => setIsVisible(false), delay);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setIsVisible(false), delay);
   };
 
   const confirm = () => {

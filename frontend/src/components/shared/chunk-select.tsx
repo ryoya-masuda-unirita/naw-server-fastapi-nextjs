@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './chunk-select.css';
@@ -59,6 +59,9 @@ export function ChunkSelect({
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
+  // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
   const [value, setValue] = useModelState<string | null>(valueProp, onValueChange);
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -104,6 +107,8 @@ export function ChunkSelect({
   };
 
   const open = () => {
+
+    clearTimeout(hideTimerRef.current);
     if (disabled) return;
     setView('list');
     setIsVisible(true);
@@ -114,7 +119,8 @@ export function ChunkSelect({
   const close = () => {
     setIsOpen(false);
     const delay = isMobile ? MOBILE_CLOSE_DELAY_MS : 0;
-    setTimeout(() => setIsVisible(false), delay);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setIsVisible(false), delay);
   };
 
   const toggle = () => {

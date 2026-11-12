@@ -70,6 +70,29 @@ export interface DialogProps {
   disableClose?: boolean;
 }
 
+/**
+ * 開いているダイアログの数。重ねて開いたダイアログを開いた順と違う順で閉じても、
+ * 最後の 1 つが閉じたときにだけ元のスクロール設定へ戻すために数える。
+ */
+let scrollLockCount = 0;
+let overflowBeforeLock = '';
+
+/** 背面のスクロールを止め、解除する関数を返す */
+function lockPageScroll(): () => void {
+  const root = document.documentElement;
+  if (scrollLockCount === 0) {
+    overflowBeforeLock = root.style.overflow;
+    root.style.overflow = 'hidden';
+  }
+  scrollLockCount += 1;
+  return () => {
+    scrollLockCount -= 1;
+    if (scrollLockCount === 0) {
+      root.style.overflow = overflowBeforeLock;
+    }
+  };
+}
+
 function justifyClass(hasLeft: boolean, buttonAlign: DialogProps['buttonAlign']): string {
   if (hasLeft) return '';
   if (buttonAlign === 'right') return 'justify-end';
@@ -136,14 +159,7 @@ function DialogOverlay({
   }, []);
 
   // MatDialog の既定のスクロール抑止（block）に合わせ、開いている間は背面をスクロールさせない
-  useEffect(() => {
-    const root = document.documentElement;
-    const prevOverflow = root.style.overflow;
-    root.style.overflow = 'hidden';
-    return () => {
-      root.style.overflow = prevOverflow;
-    };
-  }, []);
+  useEffect(() => lockPageScroll(), []);
 
   const close = (result?: unknown) => onClose?.(result);
 

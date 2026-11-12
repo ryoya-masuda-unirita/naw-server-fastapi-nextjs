@@ -28,6 +28,18 @@ interface TableProps<T extends object> {
   onRowClick?: (row: T) => void;
 }
 
+/**
+ * 行の並びが同じか（要素の同一性で比べる）。
+ * `data={query.data ?? []}` のように親が毎回新しい配列を渡しても、中身が同じなら選択を保ち、
+ * 選択クリアの通知 → 親の再レンダー → 新しい配列 … の無限ループにならないようにする。
+ * 移植元は signal の値の参照で判定しているが、React では配列が毎回作り直されやすいため中身で比べる。
+ */
+function sameRows<T>(a: T[] | null, b: T[]): boolean {
+  return a !== null && a.length === b.length && a.every((row, i) => row === b[i]);
+}
+
+const EMPTY_ROWS: never[] = [];
+
 function getRowKey(row: object, index: number): string | number {
   const id = (row as { id?: unknown }).id;
   return typeof id === 'string' || typeof id === 'number' ? id : index;
@@ -58,7 +70,7 @@ const ALIGN_CLASS: Record<NonNullable<TableColumn['align']>, string> = {
 
 /** 移植元 `<app-table>`（shared/components/table） */
 export function Table<T extends object>({
-  data = [],
+  data = EMPTY_ROWS,
   columns = [],
   selectable = false,
   sortable = false,
@@ -78,15 +90,18 @@ export function Table<T extends object>({
   const { t } = useTranslation();
   // 選択はデータに紐づけて持ち、データが入れ替わったら空として扱う（移植元はデータ変更時に選択をクリアする）
   const [selection, setSelection] = useState<{ data: T[]; selected: T[] }>({ data, selected: [] });
-  const selected = selection.data === data ? selection.selected : [];
+  const selected = sameRows(selection.data, data) ? selection.selected : EMPTY_ROWS;
   const [currentSort, setCurrentSort] = useState<SortEvent>({ field: '', direction: '' });
 
   const onSelectionChangeRef = useRef(onSelectionChange);
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   });
-  // 移植元はデータが変わるたびに空の選択を通知する
+  // 移植元はデータが変わるたびに空の選択を通知する（初回表示も含む）
+  const notifiedDataRef = useRef<T[] | null>(null);
   useEffect(() => {
+    if (sameRows(notifiedDataRef.current, data)) return;
+    notifiedDataRef.current = data;
     onSelectionChangeRef.current?.([]);
   }, [data]);
 

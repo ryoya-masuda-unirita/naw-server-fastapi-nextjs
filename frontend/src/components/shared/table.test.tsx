@@ -1,4 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
+import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Table } from './table';
@@ -123,11 +124,47 @@ describe('Table', () => {
         <Table data={FIXTURE_ROWS} columns={FIXTURE_COLUMNS} selectable onSelectionChange={onSelectionChange} />,
       );
       await userEvent.click(desktop().getAllByRole('checkbox')[1]);
+      const nextRows: Row[] = [{ id: '3', name: '鈴木', group: { name: '総務' } }, ...FIXTURE_ROWS];
+      rerender(
+        <Table data={nextRows} columns={FIXTURE_COLUMNS} selectable onSelectionChange={onSelectionChange} />,
+      );
+      expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+      expect(desktop().getAllByRole('checkbox')[2]).toHaveAttribute('aria-checked', 'false');
+    });
+
+    test('中身が同じ新しい配列を渡しても選択を保ち、クリアを通知しないこと', async () => {
+      const onSelectionChange = vi.fn();
+      const { rerender } = render(
+        <Table data={FIXTURE_ROWS} columns={FIXTURE_COLUMNS} selectable onSelectionChange={onSelectionChange} />,
+      );
+      await userEvent.click(desktop().getAllByRole('checkbox')[1]);
+      onSelectionChange.mockClear();
       rerender(
         <Table data={[...FIXTURE_ROWS]} columns={FIXTURE_COLUMNS} selectable onSelectionChange={onSelectionChange} />,
       );
-      expect(onSelectionChange).toHaveBeenLastCalledWith([]);
-      expect(desktop().getAllByRole('checkbox')[1]).toHaveAttribute('aria-checked', 'false');
+      expect(onSelectionChange).not.toHaveBeenCalled();
+      expect(desktop().getAllByRole('checkbox')[1]).toHaveAttribute('aria-checked', 'true');
+    });
+
+    test('親が選択の通知で再レンダーし毎回新しい空配列を渡しても、通知が繰り返されないこと', () => {
+      const onSelectionChange = vi.fn();
+      function Parent() {
+        const [, setSelected] = useState<Row[]>([]);
+        const empty: Row[] = [];
+        return (
+          <Table
+            data={empty}
+            columns={FIXTURE_COLUMNS}
+            selectable
+            onSelectionChange={(rows) => {
+              onSelectionChange(rows);
+              setSelected(rows);
+            }}
+          />
+        );
+      }
+      render(<Parent />);
+      expect(onSelectionChange).toHaveBeenCalledTimes(1);
     });
 
     test('選択した行に selectedClass が付くこと', async () => {

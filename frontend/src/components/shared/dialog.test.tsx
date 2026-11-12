@@ -124,6 +124,34 @@ describe('Dialog', () => {
     });
   });
 
+  describe('背面のスクロール', () => {
+    test('重ねて開いたダイアログを開いた順に閉じても、すべて閉じるまでスクロールを止めておくこと', () => {
+      const root = document.documentElement;
+      root.style.overflow = '';
+      const { rerender } = render(
+        <>
+          <Dialog open title="A" />
+          <Dialog open title="B" />
+        </>,
+      );
+      expect(root.style.overflow).toBe('hidden');
+      rerender(
+        <>
+          <Dialog open={false} title="A" />
+          <Dialog open title="B" />
+        </>,
+      );
+      expect(root.style.overflow).toBe('hidden');
+      rerender(
+        <>
+          <Dialog open={false} title="A" />
+          <Dialog open={false} title="B" />
+        </>,
+      );
+      expect(root.style.overflow).toBe('');
+    });
+  });
+
   describe('フォーカス', () => {
     test('開いたら最初の操作可能な要素にフォーカスすること', () => {
       render(

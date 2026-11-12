@@ -172,5 +172,22 @@ describe('Select', () => {
       await user.click(container.querySelector('.bg-bg-overlay') as HTMLElement);
       await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     });
+
+    test('選んで閉じた直後に開き直しても、ドロワーが表示されたままであること', async () => {
+      setViewportWidth(MOBILE_WIDTH);
+      const user = userEvent.setup();
+      const { container } = render(<Select options={FIXTURE_OPTIONS} />);
+      const trigger = getTrigger(container);
+      await user.click(trigger);
+      // requestAnimationFrame で開き切るのを待ってから選ぶ
+      await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+      await user.click(screen.getByRole('option', { name: 'りんご' }));
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      // 閉じる遅延（300ms）が終わる前に開き直す
+      await user.click(trigger);
+      await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
   });
 });
