@@ -2,7 +2,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ROUTES } from '@core/constants/routes.config';
 import { STORAGE_KEYS } from '@core/constants';
-import { resolveTenantId } from '@core/utils/tenant.helpers';
+import { persistTenantId, resolveTenantId } from '@core/utils/tenant.helpers';
 import { AuthApiService } from '@features/auth/services/auth-api.service';
 import {
   AuthSessionResponse,
@@ -63,6 +63,9 @@ export class AuthStore {
   }
 
   async login(credentials: LoginRequest): Promise<LoginStatus> {
+    // ログインリクエスト自体にも X-Tenant-ID ヘッダが必要なため、
+    // authInterceptor が参照できるよう API 呼び出し前にセッションへ保存する。
+    persistTenantId(credentials.tenantId);
     const response = await this.authService.loginMutation.mutateAsync(credentials);
 
     if (response.loginStatus === 'REQUIRES_PASSWORD_RESET') {

@@ -439,7 +439,7 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            content = response.json()["content"]
+            content = response.json()["feedbacks"]["content"]
             responded_item = next(
                 item
                 for item in content
@@ -467,7 +467,7 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            content = response.json()["content"]
+            content = response.json()["feedbacks"]["content"]
             unresponded_item = next(
                 item
                 for item in content
@@ -496,7 +496,10 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            login_ids = {item["user"]["userId"] for item in response.json()["content"]}
+            login_ids = {
+                item["user"]["userId"]
+                for item in response.json()["feedbacks"]["content"]
+            }
             assert login_ids == {
                 feedback_dataset["responded_user"].login_id,
                 feedback_dataset["heavy_response_user"].login_id,
@@ -513,7 +516,10 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            login_ids = {item["user"]["userId"] for item in response.json()["content"]}
+            login_ids = {
+                item["user"]["userId"]
+                for item in response.json()["feedbacks"]["content"]
+            }
             assert feedback_dataset["responded_user"].login_id not in login_ids
             assert feedback_dataset["heavy_response_user"].login_id not in login_ids
             assert feedback_dataset["unresponded_user"].login_id in login_ids
@@ -529,7 +535,7 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            content = response.json()["content"]
+            content = response.json()["feedbacks"]["content"]
             assert [item["user"]["userId"] for item in content] == [
                 feedback_dataset["responded_user"].login_id
             ]
@@ -545,16 +551,15 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            counts = [
-                item["feedbackMessageCount"] for item in response.json()["content"]
-            ]
+            content = response.json()["feedbacks"]["content"]
+            counts = [item["feedbackMessageCount"] for item in content]
             assert counts == sorted(counts)
-            assert response.json()["content"][-1]["user"]["userId"] == (
+            assert content[-1]["user"]["userId"] == (
                 feedback_dataset["heavy_response_user"].login_id
             )
 
         async def test_paginates_results(self, client, admin_headers, feedback_dataset):
-            """page/sizeでページングされ、totalElementsが全体件数を示すこと"""
+            """page/sizeでページングされ、totalElements・totalPages・numberOfElementsが正しいこと"""
             async with client as c:
                 response = await c.get(
                     "/api/admin/feedbackUser?page=0&size=1",
@@ -562,11 +567,13 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            body = response.json()
+            body = response.json()["feedbacks"]
             assert len(body["content"]) == 1
             assert body["totalElements"] == 6
             assert body["number"] == 0
             assert body["size"] == 1
+            assert body["totalPages"] == 6
+            assert body["numberOfElements"] == 1
 
     class TestGetFeedbackUsersPermission:
         async def test_general_user_returns_403(
@@ -605,7 +612,10 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            login_ids = {item["user"]["userId"] for item in response.json()["content"]}
+            login_ids = {
+                item["user"]["userId"]
+                for item in response.json()["feedbacks"]["content"]
+            }
             assert feedback_dataset["other_tenant_user"].login_id not in login_ids
 
     class TestGetFeedbackMessages:
@@ -734,7 +744,7 @@ class TestFeedbackRouter:
         async def test_paginates_feedback_messages(
             self, client, admin_headers, feedback_dataset
         ):
-            """page/size でページングされること"""
+            """page/size でページングされ、totalPages・numberOfElementsも正しいこと"""
             async with client as c:
                 response = await c.get(
                     "/api/admin/feedbackMessage?page=0&size=1",
@@ -747,6 +757,8 @@ class TestFeedbackRouter:
             assert body["totalElements"] == 3
             assert body["number"] == 0
             assert body["size"] == 1
+            assert body["totalPages"] == 3
+            assert body["numberOfElements"] == 1
 
     class TestGetFeedbackMessagesPermission:
         async def test_general_user_returns_403(
@@ -858,7 +870,7 @@ class TestFeedbackRouter:
         async def test_paginates_feedback_rooms(
             self, client, admin_headers, feedback_dataset
         ):
-            """page/sizeでページングされ、totalElementsが全体件数を示すこと"""
+            """page/sizeでページングされ、totalPages・numberOfElementsも正しいこと"""
             async with client as c:
                 response = await c.get(
                     "/api/admin/feedbackRoom?page=0&size=1",
@@ -871,6 +883,8 @@ class TestFeedbackRouter:
             assert body["totalElements"] == 2
             assert body["number"] == 0
             assert body["size"] == 1
+            assert body["totalPages"] == 2
+            assert body["numberOfElements"] == 1
 
         async def test_excludes_other_tenant_rooms(
             self, client, admin_headers, feedback_dataset

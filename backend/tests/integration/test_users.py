@@ -558,3 +558,21 @@ class TestProfile:
         assert login_response.status_code == 200
         assert response.status_code == 200
         assert response.json()["loginId"] == normal_user.login_id
+
+
+class TestGetUsersPageSize:
+    """GET /api/admin/users のページサイズ上限（issue-154）"""
+
+    async def test_size_1000_is_accepted(self, client, admin_headers, admin_user):
+        """size=1000（frontendが送る全件取得サイズ）が200で受理されること"""
+        async with client as c:
+            response = await c.get("/api/admin/users?size=1000", headers=admin_headers)
+
+        assert response.status_code == 200
+
+    async def test_size_over_limit_returns_422(self, client, admin_headers, admin_user):
+        """上限（1000）を超えるsize=1001は422になること"""
+        async with client as c:
+            response = await c.get("/api/admin/users?size=1001", headers=admin_headers)
+
+        assert response.status_code == 422

@@ -90,7 +90,11 @@ export class ChatInputComponent {
   readonly isDragging = signal<boolean>(false);
   readonly isSending = signal<boolean>(false);
   readonly isAddMenuOpen = signal<boolean>(false);
-  readonly addMenuStyle = signal<{ bottom: string; left: string }>({ bottom: '0px', left: '0px' });
+  readonly addMenuStyle = signal<{ bottom: string; left: string; maxHeight: string }>({
+    bottom: '0px',
+    left: '0px',
+    maxHeight: '320px',
+  });
   readonly selectedAssistant = signal<Assistant | null>(null);
   readonly isClaude = signal<boolean>(false);
 
@@ -110,6 +114,13 @@ export class ChatInputComponent {
   private justFinishedComposing = false;
   private syncedRoomKey: string | null = null;
 
+  private static readonly ADD_MENU_WIDTH = 280;
+  private static readonly TEMPLATE_MENU_WIDTH = 280;
+  private static readonly MENU_GAP = 8;
+  private static readonly MENU_PAD = 8;
+  private static readonly MENU_MAX_HEIGHT = 400;
+  private static readonly MENU_MIN_HEIGHT = 120;
+
   // Active feature state
   readonly webSearchActive = signal<boolean>(false);
   readonly templateActive = signal<Template | null>(null);
@@ -124,9 +135,10 @@ export class ChatInputComponent {
   // Template submenu
   readonly menuSection = signal<'main' | 'templates'>('main');
   readonly isTemplateMenuOpen = signal<boolean>(false);
-  readonly templateMenuStyle = signal<{ bottom: string; left: string }>({
+  readonly templateMenuStyle = signal<{ bottom: string; left: string; maxHeight: string }>({
     bottom: '0px',
     left: '0px',
+    maxHeight: '320px',
   });
   readonly isMentionDismissed = signal<boolean>(false);
   readonly mentionActiveIndex = signal<number>(0);
@@ -433,11 +445,11 @@ export class ChatInputComponent {
     const btn = this.addMenuTrigger()?.nativeElement;
     if (btn) {
       const rect = btn.getBoundingClientRect();
-      const menuWidth = 280;
-      const pad = 8;
+      const menuWidth = ChatInputComponent.ADD_MENU_WIDTH;
       this.addMenuStyle.set({
         bottom: `${window.innerHeight - rect.top + 4}px`,
-        left: `${Math.max(pad, rect.right - menuWidth)}px`,
+        left: `${this.clampMenuLeft(rect.right - menuWidth, menuWidth)}px`,
+        maxHeight: `${this.computeMenuMaxHeight(rect.top)}px`,
       });
     }
     this.isAddMenuOpen.set(true);
@@ -483,11 +495,30 @@ export class ChatInputComponent {
       }
       // Position template menu to the right of add menu
       const addMenuLeft = parseFloat(this.addMenuStyle().left) || 0;
-      const addMenuWidth = 280; // w-70 = 280px
-      const gap = 8;
+      const addMenuWidth = ChatInputComponent.ADD_MENU_WIDTH;
+      const gap = ChatInputComponent.MENU_GAP;
+      const templateMenuWidth = ChatInputComponent.TEMPLATE_MENU_WIDTH;
+      let templateLeft = addMenuLeft + addMenuWidth + gap;
+
+      if (templateLeft + templateMenuWidth > window.innerWidth - ChatInputComponent.MENU_PAD) {
+        const shiftedAddLeft = this.clampMenuLeft(
+          templateLeft - addMenuWidth - gap,
+          addMenuWidth + gap + templateMenuWidth,
+        );
+        if (shiftedAddLeft !== addMenuLeft) {
+          this.addMenuStyle.set({
+            ...this.addMenuStyle(),
+            left: `${shiftedAddLeft}px`,
+          });
+          templateLeft = shiftedAddLeft + addMenuWidth + gap;
+        }
+      }
+
+      const triggerTop = this.addMenuTrigger()?.nativeElement.getBoundingClientRect().top ?? 0;
       this.templateMenuStyle.set({
         bottom: this.addMenuStyle().bottom,
-        left: `${addMenuLeft + addMenuWidth + gap}px`,
+        left: `${this.clampMenuLeft(templateLeft, templateMenuWidth)}px`,
+        maxHeight: `${this.computeMenuMaxHeight(triggerTop)}px`,
       });
       this.isTemplateMenuOpen.set(true);
     }
@@ -533,5 +564,18 @@ export class ChatInputComponent {
         this.closeAddMenu();
       }
     }
+  }
+
+  private clampMenuLeft(left: number, width: number): number {
+    const pad = ChatInputComponent.MENU_PAD;
+    return Math.min(Math.max(pad, left), window.innerWidth - width - pad);
+  }
+
+  private computeMenuMaxHeight(triggerTop: number): number {
+    const available = triggerTop - ChatInputComponent.MENU_PAD;
+    return Math.max(
+      Math.min(available, ChatInputComponent.MENU_MAX_HEIGHT),
+      ChatInputComponent.MENU_MIN_HEIGHT,
+    );
   }
 }

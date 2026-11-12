@@ -1,7 +1,13 @@
+import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_cors_settings
+from app.core.database import get_session_maker
+from app.services.user_import_listener import start_listener_task
 from app.routers import (
     assistant_categories,
     assistants,
@@ -26,7 +32,26 @@ from app.routers import (
 )
 from app.routers.users import admin_router, user_router
 
-app = FastAPI(title="naw-server FastAPI", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+    """アプリ起動時にユーザーインポートのSQSリスナーをバックグラウンドタスクとして起動する。
+
+    移植元（Spring Boot）の`@SqsListener`が同一プロセス内で常駐ポーリングするのに
+    合わせ、FastAPIアプリと同一プロセス内のasyncioタスクとしてリスナーを起動する。
+    `AWS_SQS_LISTENER_ENABLED=false`の場合はタスクを起動しない。
+    """
+    listener_task = start_listener_task(get_session_maker())
+    yield
+    if listener_task is not None:
+        listener_task.cancel()
+        try:
+            await listener_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="naw-server FastAPI", version="0.1.0", lifespan=lifespan)
 
 cors_settings = get_cors_settings()
 app.add_middleware(

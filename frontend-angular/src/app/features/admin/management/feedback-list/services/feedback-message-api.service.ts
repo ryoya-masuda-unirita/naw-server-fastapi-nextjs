@@ -4,10 +4,6 @@ import { ApiClientService } from '@core/services/api-client';
 import { API_PATHS } from '@core/constants/api-paths.config';
 import type { GetMessageFeedbackViewModel } from '@app-types/admin/feedback.types';
 import type {
-  AdditionalLearningRequest,
-  AdditionalLearningResponse,
-  BulkAdditionalLearningRequest,
-  BulkAdditionalLearningResponse,
   LearningFolderItem,
   LearningFoldersResponse,
 } from '@core/constants/mock-data/feedback.mock';
@@ -49,37 +45,16 @@ export class FeedbackMessageApiService {
   }));
 
   readonly isAddingLearning = signal<boolean>(false);
-  readonly isAddingBulkLearning = signal<boolean>(false);
 
-  async addAdditionalLearning(
-    indexId: string,
-    folderId: string,
-  ): Promise<AdditionalLearningResponse> {
+  async addAdditionalLearning(indexId: string, feedbackId: string, content: File): Promise<void> {
     this.isAddingLearning.set(true);
     try {
-      const body: AdditionalLearningRequest = { folderId };
-      return await this.api.post<AdditionalLearningResponse>(
-        API_PATHS.INDEXES.ADDITIONAL_LEARNING(indexId),
-        body,
-      );
+      const body = new FormData();
+      body.append('feedbackId', feedbackId);
+      body.append('content', content);
+      await this.api.post<void>(API_PATHS.INDEXES.ADDITIONAL_LEARNING(indexId), body);
     } finally {
       this.isAddingLearning.set(false);
-    }
-  }
-
-  async addBulkAdditionalLearning(
-    ids: string[],
-    folderId: string,
-  ): Promise<BulkAdditionalLearningResponse> {
-    this.isAddingBulkLearning.set(true);
-    try {
-      const body: BulkAdditionalLearningRequest = { ids, folderId };
-      return await this.api.post<BulkAdditionalLearningResponse>(
-        API_PATHS.INDEXES.BULK_ADDITIONAL_LEARNING,
-        body,
-      );
-    } finally {
-      this.isAddingBulkLearning.set(false);
     }
   }
 }

@@ -1,32 +1,6 @@
-<!-- Description + Selection Action Bar -->
+<!-- Description -->
 <div>
-  @if (!hasSelection()) {
-    <p class="text-body">{{ 'FEEDBACK.ACCURACY_DESCRIPTION' | translate }}</p>
-  }
-  @if (hasSelection()) {
-    <div class="sp-fixed-btn">
-      <div class="flex flex-col-reverse md:flex-row gap-3">
-        <app-button
-          variant="outline"
-          [intent]="'cancel'"
-          size="lg"
-          (buttonClick)="onDeselectAll()"
-          [classProps]="'w-full'"
-        >
-          {{ 'FEEDBACK.DESELECT_ALL' | translate }}
-        </app-button>
-        <app-button
-          variant="solid"
-          size="lg"
-          (buttonClick)="openBulkFolderModal()"
-          [classProps]="'w-full'"
-        >
-          <app-svg-icon name="school" class="w-5 h-5" />
-          {{ 'FEEDBACK.SPECIFY_FOLDER' | translate }}
-        </app-button>
-      </div>
-    </div>
-  }
+  <p class="text-body">{{ 'FEEDBACK.ACCURACY_DESCRIPTION' | translate }}</p>
 </div>
 
 <!-- 検索・フィルター・並べ替え -->
@@ -95,14 +69,7 @@
 
 <!-- テーブル -->
 <app-table-list>
-  <app-table-list-item
-    [isHeader]="true"
-    [showCheckbox]="true"
-    [checked]="allPageSelected()"
-    [indeterminate]="!allPageSelected() && someSelected()"
-    (checkedChange)="toggleSelectAll($event)"
-    class="hidden md:flex"
-  >
+  <app-table-list-item [isHeader]="true" class="hidden md:flex">
     <span class="table-list-col-content table-list-label">{{
       'FEEDBACK.ASSISTANT_DISPLAY_NAME' | translate
     }}</span>
@@ -121,32 +88,11 @@
     <span class="table-list-row-date md:justify-start table-list-label md:w-40">{{
       'FEEDBACK.LEARNING_FOLDER' | translate
     }}</span>
-    <div slot="right" class="hidden md:flex items-center gap-2 pointer-events-none invisible">
-      <span class="inline-block w-9 h-9"></span>
-      <span class="inline-block w-9 h-9"></span>
-    </div>
+    <span slot="right" class="hidden md:inline-block w-9 h-9 invisible"></span>
   </app-table-list-item>
 
-  <!-- Header (Mobile only) -->
-  @if (items().length > 0) {
-    <app-table-list-item
-      [isHeader]="true"
-      [showCheckbox]="true"
-      [checked]="allPageSelected()"
-      [indeterminate]="someSelected()"
-      class="flex md:hidden"
-      (checkedChange)="toggleSelectAll($event)"
-    >
-      <span class="table-list-label">{{ 'COMMON.SELECT_ALL' | translate }}</span>
-    </app-table-list-item>
-  }
-
   @for (item of paginatedItems(); track item.id) {
-    <app-table-list-item
-      [showCheckbox]="true"
-      [checked]="isSelected(item.id)"
-      (checkedChange)="toggleItem(item.id, $event)"
-    >
+    <app-table-list-item>
       <div class="table-list-col-content table-list-start-label">
         <span class="table-list-title text-label-large md:text-label-x-large">{{
           item.assistantName
@@ -195,7 +141,7 @@
           >{{ item.learningFolder }}</span
         >
       </div>
-      <div slot="right" class="flex items-center gap-2 justify-center flex-col md:flex-row">
+      <div slot="right">
         <ng-template #settingsTpl>
           <div class="flex flex-col gap-1">
             <button
@@ -215,9 +161,6 @@
           [menuTpl]="settingsTpl"
           [panelClass]="'dropdown-menu dropdown-menu--bordered w-[280px]'"
         />
-        <app-icon-button variant="tertiary-gray" size="largePc" [ariaLabel]="item.assistantName">
-          <app-svg-icon name="arrowRight" class="w-5 h-5" />
-        </app-icon-button>
       </div>
     </app-table-list-item>
   }

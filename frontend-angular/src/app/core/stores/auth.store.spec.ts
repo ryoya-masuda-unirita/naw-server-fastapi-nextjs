@@ -47,7 +47,11 @@ const FIXTURE_AUTH_SESSION: AuthSessionResponse = {
   groups: [{ groupId: 'group-1', groupAdmin: false }],
 };
 
-const FIXTURE_CREDENTIALS: LoginRequest = { username: 'alice', password: 'secret' };
+const FIXTURE_CREDENTIALS: LoginRequest = {
+  tenantId: 'tenant-form',
+  username: 'alice',
+  password: 'secret',
+};
 
 describe('AuthStore（認証ストア）', () => {
   let store: AuthStore;
@@ -120,8 +124,18 @@ describe('AuthStore（認証ストア）', () => {
   });
 
   describe('login メソッド', () => {
+    it('ログインAPI呼び出し前にセッションへテナントIDを保存する', async () => {
+      mutateAsync.mockImplementation(async () => {
+        expect(sessionStorage.getItem(STORAGE_KEYS.TENANT_ID)).toBe('tenant-form');
+        return FIXTURE_LOGIN_RESPONSE;
+      });
+
+      await store.login(FIXTURE_CREDENTIALS);
+
+      expect(mutateAsync).toHaveBeenCalledWith(FIXTURE_CREDENTIALS);
+    });
+
     it('ログイン成功後、ユーザー情報を保存してダッシュボードへ進む', async () => {
-      sessionStorage.setItem(STORAGE_KEYS.TENANT_ID, 'tenant-spy');
       mutateAsync.mockResolvedValue(FIXTURE_LOGIN_RESPONSE);
 
       const status = await store.login(FIXTURE_CREDENTIALS);
@@ -134,12 +148,11 @@ describe('AuthStore（認証ストア）', () => {
       };
       expect(status).toBe('SUCCESS');
       expect(store.user()).toEqual(expectedUser);
-      expect(sessionStorage.getItem(STORAGE_KEYS.TENANT_ID)).toBe('tenant-spy');
+      expect(sessionStorage.getItem(STORAGE_KEYS.TENANT_ID)).toBe('tenant-form');
       expect(navigate).toHaveBeenCalledWith([ROUTES.APP.DASHBOARD]);
     });
 
     it('REQUIRES_PASSWORD_RESET のとき、storageを保存せずパスワード再設定画面へ進む', async () => {
-      sessionStorage.setItem(STORAGE_KEYS.TENANT_ID, 'tenant-spy');
       mutateAsync.mockResolvedValue({
         loginStatus: 'REQUIRES_PASSWORD_RESET',
         id: 'alice',
@@ -165,13 +178,14 @@ describe('AuthStore（認証ストア）', () => {
       });
     });
 
-    it('ログインに失敗したとき、sessionStorageにuserIdとtenantIdを保存せずダッシュボードへ進まない', async () => {
+    it('ログインに失敗したとき、sessionStorageにuserIdを保存せずダッシュボードへ進まない', async () => {
       mutateAsync.mockRejectedValue(new Error('invalid credentials'));
 
       await expect(store.login(FIXTURE_CREDENTIALS)).rejects.toThrow('invalid credentials');
       expect(store.user()).toBeNull();
       expect(sessionStorage.getItem(STORAGE_KEYS.USER)).toBeNull();
-      expect(sessionStorage.getItem(STORAGE_KEYS.TENANT_ID)).toBeNull();
+      // テナントIDはAPI呼び出し前（フォーム送信時点）で保存されるため、ログイン失敗後も残る
+      expect(sessionStorage.getItem(STORAGE_KEYS.TENANT_ID)).toBe('tenant-form');
       expect(navigate).not.toHaveBeenCalled();
     });
   });

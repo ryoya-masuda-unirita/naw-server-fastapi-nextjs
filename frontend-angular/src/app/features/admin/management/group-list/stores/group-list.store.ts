@@ -37,15 +37,21 @@ export function toViewModel(
   item: GroupApiItem,
   resolveNames: (kind: 'user' | 'admin' | 'assistant' | 'template', ids: string[]) => string[],
 ): GroupListItem {
+  const adminUserNames = preferNonEmpty(item.adminUserNames);
+  const userNames = preferNonEmpty(item.userNames);
   return {
     id: item.id,
     name: item.name,
-    adminUserNames: item.adminUserNames ?? resolveNames('admin', item.adminUserIds ?? []),
-    userNames: item.userNames ?? resolveNames('user', item.users ?? []),
-    assistants: resolveNames('assistant', item.assistants ?? []),
-    templates: resolveNames('template', item.promptTemplates ?? []),
+    adminUserNames: adminUserNames ?? resolveNames('admin', item.adminUserIds ?? []),
+    userNames: userNames ?? resolveNames('user', item.users ?? []),
+    assistants: resolveNames('assistant', item.assistantIds ?? item.assistants ?? []),
+    templates: resolveNames('template', item.promptTemplateIds ?? item.promptTemplates ?? []),
     updatedAt: item.updatedAt,
   };
+}
+
+function preferNonEmpty(values: string[] | undefined): string[] | undefined {
+  return values != null && values.length > 0 ? values : undefined;
 }
 
 export const GroupListStore = signalStore(

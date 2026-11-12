@@ -1,0 +1,6 @@
+// terraform.tfvarsに定義するにはまず､variables.tfに定義しないといけない
+db_password         = "changeme"
+allowed_ssh_cidrs   = ["xxx.xxx.xxx.xx/32"]
+allowed_admin_cidrs = ["xxx.xxx.xxx.xx/32"]
+key_pair_name       = "your-key-pair-name"
+secret_key          = "changeme"

@@ -14,9 +14,7 @@ import {
   FormSortInputComponent,
   SortOption,
 } from '@shared/components/form/form-sort-input/form-sort-input.component';
-import { IconButtonComponent } from '@shared/components/icon-button/icon-button.component';
 import { SvgIconComponent } from '@shared/components/icons/svg-icon.component';
-import { ButtonComponent } from '@shared/components/button/button.component';
 import { ContextMenuComponent } from '@shared/components/context-menu/context-menu.component';
 import { CircularLoadingComponent } from '@shared/components/circular-loading/circular-loading.component';
 import { SelectOption } from '@app-types/common';
@@ -26,6 +24,11 @@ import { FeedbackRoomService } from '../../services/feedback-room-api.service';
 import { FeedbackListOptionsService } from '../../services/feedback-list-options.service';
 import { DialogComponent, DialogData } from '@shared/components/dialog/dialog.component';
 import { FolderModalComponent } from '../folder-modal/folder-modal.component';
+import { buildSatisfactionAdditionalLearningContent } from '../../utils/additional-learning-content';
+import {
+  resolveAssistantName,
+  UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY,
+} from '../../utils/assistant-name.util';
 
 @Component({
   selector: 'app-satisfaction-tab',
@@ -39,9 +42,7 @@ import { FolderModalComponent } from '../folder-modal/folder-modal.component';
     TableListComponent,
     TableListItemComponent,
     FormSortInputComponent,
-    IconButtonComponent,
     SvgIconComponent,
-    ButtonComponent,
     ContextMenuComponent,
     CircularLoadingComponent,
   ],
@@ -69,14 +70,9 @@ export class SatisfactionTabComponent {
   readonly currentPage = signal(1);
   readonly pageSize = signal(5);
 
-  // Selection state
-  readonly selectedIds = signal<Set<string>>(new Set());
-
   readonly folders = this.feedbackListOptionsService.folders;
   readonly folderOptions = this.feedbackListOptionsService.folderOptions;
   readonly satisfactionOptions = this.feedbackListOptionsService.satisfactionOptions;
-
-  private readonly assistantNameMap = this.feedbackListOptionsService.assistantNameMap;
 
   readonly satisfactionQuery = this.feedbackRoomService.createRoomFeedbackQuery(() => {
     const assistantId = toFilterParam(this.selectedAssistant());
@@ -91,18 +87,19 @@ export class SatisfactionTabComponent {
   });
 
   readonly items = computed<SatisfactionFeedbackItem[]>(() => {
+    this.currentLang();
+    const unknownAssistantLabel = this.translate.instant(UNKNOWN_FEEDBACK_ASSISTANT_I18N_KEY);
     const data = this.satisfactionQuery.data();
     if (!data) return [];
     const folders = this.folders();
-    const nameMap = this.assistantNameMap();
     return data.feedbacks.content.map((fb) => {
-      const assistantId = fb.room.defaultAssistantId ?? '';
       return {
         id: fb.id,
         userName: fb.userName ?? fb.userId,
         satisfaction: toSatisfactionValue(fb.rating),
         roomName: fb.room.name,
-        assistantName: nameMap.get(assistantId) ?? assistantId,
+        roomId: fb.roomId,
+        assistantName: resolveAssistantName(fb.room.defaultAssistantName, unknownAssistantLabel),
         indexId: fb.indexId,
         learningFolder: folders.find((f) => f.id === fb.indexId)?.name ?? '-',
         addLearning: fb.indexId ? 'ON' : 'OFF',
@@ -158,18 +155,6 @@ export class SatisfactionTabComponent {
     return this.translate.instant('FEEDBACK.PAGE_COUNT', r);
   });
 
-  readonly allPageSelected = computed(() => {
-    const paginated = this.paginatedItems();
-    return paginated.length > 0 && paginated.every((item) => this.selectedIds().has(item.id));
-  });
-
-  readonly someSelected = computed(() => {
-    const paginated = this.paginatedItems();
-    return paginated.some((item) => this.selectedIds().has(item.id)) && !this.allPageSelected();
-  });
-
-  readonly hasSelection = computed(() => this.selectedIds().size > 0);
-
   // Event handlers
   onAssistantChange(value: string | null) {
     this.selectedAssistant.set(value);
@@ -200,30 +185,6 @@ export class SatisfactionTabComponent {
     this.currentPage.set(page);
   }
 
-  toggleSelectAll(checked: boolean) {
-    this.selectedIds.update((ids) => {
-      const newIds = new Set(ids);
-      this.paginatedItems().forEach((item) => {
-        if (checked) newIds.add(item.id);
-        else newIds.delete(item.id);
-      });
-      return newIds;
-    });
-  }
-
-  toggleItem(id: string, checked: boolean) {
-    this.selectedIds.update((ids) => {
-      const newIds = new Set(ids);
-      if (checked) newIds.add(id);
-      else newIds.delete(id);
-      return newIds;
-    });
-  }
-
-  isSelected(id: string): boolean {
-    return this.selectedIds().has(id);
-  }
-
   getSatisfactionLabel(satisfaction: string): string {
     const map: Record<string, string> = {
       star5: '★★★★★',
@@ -236,44 +197,8 @@ export class SatisfactionTabComponent {
     return map[satisfaction] ?? '-';
   }
 
-  onDeselectAll() {
-    this.selectedIds.set(new Set());
-  }
-
   readonly folderModalSelected = signal<string | null>(null);
   readonly folderModalDisabled = computed(() => !this.folderModalSelected());
-
-  openBulkFolderModal(): void {
-    this.folderModalSelected.set(null);
-    const selectedIds = [...this.selectedIds()];
-    const dialogRef = this.dialog.open(DialogComponent, {
-      width: '800px',
-      maxWidth: '90vw',
-      data: {
-        title: this.translate.instant('FEEDBACK.SPECIFY_FOLDER'),
-        contentComponent: FolderModalComponent,
-        contentComponentInputs: { selectedFolderSignal: this.folderModalSelected },
-        showCancel: true,
-        cancelText: this.translate.instant('COMMON.CANCEL'),
-        showConfirm: true,
-        confirmText: this.translate.instant('FEEDBACK.ADD_LEARNING'),
-        confirmDisabledSignal: this.folderModalDisabled,
-        confirmLoadingSignal: this.feedbackRoomService.isAddingBulkLearning,
-        buttonAlign: 'right',
-        confirmAction: () => {
-          const folderId = this.folderModalSelected();
-          if (!folderId) return;
-          void this.feedbackRoomService
-            .addBulkAdditionalLearning(selectedIds, folderId)
-            .then(() => {
-              void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'satisfaction'] });
-              this.selectedIds.set(new Set());
-              dialogRef.close(true);
-            });
-        },
-      } as DialogData,
-    });
-  }
 
   openFolderModal(item: SatisfactionFeedbackItem): void {
     this.folderModalSelected.set(item.indexId ?? null);
@@ -294,10 +219,15 @@ export class SatisfactionTabComponent {
         confirmAction: () => {
           const folderId = this.folderModalSelected();
           if (!folderId) return;
-          void this.feedbackRoomService.addAdditionalLearning(item.id, folderId).then(() => {
-            void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'satisfaction'] });
-            dialogRef.close(true);
-          });
+          const roomId = item.roomId;
+          if (!roomId) return;
+          const content = buildSatisfactionAdditionalLearningContent(item);
+          void this.feedbackRoomService
+            .addAdditionalLearning(folderId, roomId, content)
+            .then(() => {
+              void this.queryClient.invalidateQueries({ queryKey: ['feedback', 'satisfaction'] });
+              dialogRef.close(true);
+            });
         },
       } as DialogData,
     });

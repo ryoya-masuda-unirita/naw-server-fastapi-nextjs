@@ -23,6 +23,12 @@ describe('passwordFieldValidators', () => {
     const control = new FormControl('あAbcd1234!', passwordFieldValidators());
     expect(control.hasError('passwordAscii')).toBe(true);
   });
+
+  it('テナントの最小文字数ポリシーより短くてもminlengthエラーにならないこと', () => {
+    const control = new FormControl('ab12', passwordFieldValidators());
+    expect(control.hasError('minlength')).toBe(false);
+    expect(control.valid).toBe(true);
+  });
 });
 
 describe('passwordAsciiValidator', () => {

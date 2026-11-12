@@ -1,11 +1,11 @@
 ---
 name: naw-frontend-issue-workflow
-description: Use when working on a frontend porting GitHub Issue (Angular secuaigent-client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
+description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
 ---
 
 # NAW Frontend Issue Workflow
 
-この skill は、このリポジトリで**フロントエンド移植**（Angular `secuaigent-client` → React `frontend/`）のIssue対応を進めるときに使う。
+この skill は、このリポジトリで**フロントエンド移植**（Angular `secuaigent/client` → React `frontend/`）のIssue対応を進めるときに使う。
 
 バックエンド（Spring Boot `naw-server` → FastAPI `backend/`）のIssue対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名・ドキュメント構成・承認フロー・コミット規約は共通のためそちらを踏襲し、本skillでは**移植元・移植先・調査エージェント・動作確認方法が異なる点のみ**を上書きする。
 
@@ -20,7 +20,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 | 項目 | naw-issue-workflow（バックエンド） | naw-frontend-issue-workflow（本skill） |
 |---|---|---|
-| 移植元 | `~/Documents/naw-server`（Spring Boot） | `~/Documents/secuaigent-client`（Angular） |
+| 移植元 | `~/Documents/secuaigent/server`（Spring Boot） | `~/Documents/secuaigent/client`（Angular） |
 | 移植先 | `backend/`（FastAPI） | `frontend/`（React） |
 | 調査エージェント | `naw-explore` | `naw-frontend-explore` |
 | Issueラベル | なし | 必ず `frontend-port` を付与する |
@@ -32,7 +32,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 ## 最初の流れ
 
-1. 参照リポジトリ（`secuaigent-client`）を確認する
+1. 参照リポジトリ（`secuaigent/client`）を確認する
 2. `gh pr list` で依存 PR の有無を確認する
 3. `develop` を最新化する
 4. 適切なブランチを切る
@@ -44,7 +44,7 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 
 ### 参照リポジトリ調査はサブエージェントに委譲する
 
-「1. 参照リポジトリを確認する」（`secuaigent-client` の最新画面・コンポーネント実装の読み込み、対応するReact側実装の有無確認、既存Issueとの突き合わせ等）は読み取り専用のリサーチであり、メインの会話コンテキストを圧迫しやすい。原則として `Agent(subagent_type: naw-frontend-explore)` に委譲すること（バックエンド用の `naw-explore` ではなく、フロントエンド移植前提を組み込んだ `naw-frontend-explore` を使う）。
+「1. 参照リポジトリを確認する」（`secuaigent/client` の最新画面・コンポーネント実装の読み込み、対応するReact側実装の有無確認、既存Issueとの突き合わせ等）は読み取り専用のリサーチであり、メインの会話コンテキストを圧迫しやすい。原則として `Agent(subagent_type: naw-frontend-explore)` に委譲すること（バックエンド用の `naw-explore` ではなく、フロントエンド移植前提を組み込んだ `naw-frontend-explore` を使う）。
 
 - プロンプトには、対象の移植元ファイルパス（分かっていれば、Angular側の `*.component.ts`）、確認したい範囲、返してほしい情報（対象画面・コンポーネントの仕様、参照元ファイルパス、React側の対応実装有無、依存するバックエンドAPIの実装状況）を自己完結で書く
 - `naw-frontend-explore` は読み取り専用のため、`gh issue create` 等の書き込み操作は必ずメインの会話側で実行する
@@ -93,7 +93,7 @@ git push -u origin feature/issue-{番号}
 〇〇画面（Angular）を React に移植する。
 
 ## 参照
-- 移植元（フロントエンド）: `~/Documents/secuaigent-client/src/app/...`
+- 移植元（フロントエンド）: `~/Documents/secuaigent/client/src/app/...`
 - 移植先: `frontend/src/...`
 - 依存するバックエンドAPI: `GET /api/...`（backend側の実装状況を明記）
 ```

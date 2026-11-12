@@ -1,6 +1,5 @@
 import { ValidatorFn, Validators } from '@angular/forms';
 import { PASSWORD_ASCII_PATTERN, PASSWORD_MAX_LENGTH } from '@core/constants/validation.config';
-import { environment } from '@env/environment';
 
 export function passwordAsciiValidator(): ValidatorFn {
   return (control) => {
@@ -12,9 +11,10 @@ export function passwordAsciiValidator(): ValidatorFn {
   };
 }
 
+// パスワード文字数の下限はテナントごとの設定でありAPIサーバ側で検証するため、
+// クライアント側ではminLengthを課さない (NAW-1113 / NAW-1205)
 export function passwordFieldValidators(required = true): ValidatorFn[] {
   const validators: ValidatorFn[] = [
-    Validators.minLength(environment.minPasswordLength),
     Validators.maxLength(PASSWORD_MAX_LENGTH),
     passwordAsciiValidator(),
   ];

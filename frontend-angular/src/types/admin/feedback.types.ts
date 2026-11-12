@@ -38,6 +38,7 @@ export interface MessageContentEntity {
  */
 export interface MessageEntity {
   assistantId: string;
+  assistantName: string | null;
   content: MessageContentEntity | null;
   id?: string;
   tenantId?: string;
@@ -180,6 +181,7 @@ export interface SatisfactionFeedbackItem {
   userName: string;
   satisfaction: 'star5' | 'star4' | 'star3' | 'star2' | 'star1' | 'unrated';
   roomName: string;
+  roomId?: string;
   learningFolder: string;
   indexId?: string;
   assistantName?: string;

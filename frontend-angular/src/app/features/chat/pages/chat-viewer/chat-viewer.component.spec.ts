@@ -22,11 +22,16 @@ const mockViewers = signal<ViewerListItem[]>([]);
 const mockViewerService = {
   viewers: mockViewers,
   loadList: vi.fn().mockResolvedValue(undefined),
+  selectLibrary: vi.fn(),
+  showLibrary: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockActivatedRoute = {
   snapshot: {
     paramMap: {
+      get: vi.fn().mockReturnValue(null),
+    },
+    queryParamMap: {
       get: vi.fn().mockReturnValue(null),
     },
   },
@@ -39,6 +44,7 @@ describe('ChatViewerComponent', () => {
   beforeEach(async () => {
     mockViewers.set([]);
     mockActivatedRoute.snapshot.paramMap.get.mockReturnValue(null);
+    mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue(null);
     mockViewerService.loadList.mockResolvedValue(undefined);
 
     await TestBed.configureTestingModule({
@@ -85,14 +91,14 @@ describe('ChatViewerComponent', () => {
       mockActivatedRoute.snapshot.paramMap.get.mockReturnValue(null);
       await component.ngOnInit();
 
-      expect(mockViewerService.loadList).toHaveBeenCalledWith('');
+      expect(mockViewerService.loadList).toHaveBeenCalledWith('', {});
     });
 
     test('chatIdが存在する場合、そのIDでloadListを呼び出すこと', async () => {
       mockActivatedRoute.snapshot.paramMap.get.mockReturnValue('chat-456');
       await component.ngOnInit();
 
-      expect(mockViewerService.loadList).toHaveBeenCalledWith('chat-456');
+      expect(mockViewerService.loadList).toHaveBeenCalledWith('chat-456', {});
     });
 
     test('headerOptions が viewerService.viewers() をリアクティブに反映すること', async () => {
@@ -111,6 +117,38 @@ describe('ChatViewerComponent', () => {
       const extended = [...mockList, { id: '3', title: 'ドキュメント3' }];
       mockViewers.set(extended);
       expect(component.headerOptions()).toEqual(extended);
+    });
+
+    test('libraryIdクエリがある場合、一覧取得後にselectLibraryを呼び出すこと', async () => {
+      const mockList: ViewerListItem[] = [
+        { id: 'lib-1', title: 'ドキュメント1' },
+        { id: 'lib-2', title: 'ドキュメント2' },
+      ];
+      mockViewers.set(mockList);
+      mockActivatedRoute.snapshot.paramMap.get.mockReturnValue('chat-456');
+      mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue('lib-2');
+
+      await component.ngOnInit();
+
+      expect(mockViewerService.loadList).toHaveBeenCalledWith('chat-456', { autoSelect: false });
+      expect(mockViewerService.selectLibrary).toHaveBeenCalledWith({
+        id: 'lib-2',
+        title: 'ドキュメント2',
+      });
+    });
+
+    test('libraryIdが一覧に存在しない場合、showLibraryで直接読み込むこと', async () => {
+      mockViewers.set([{ id: 'lib-1', title: 'ドキュメント1' }]);
+      mockActivatedRoute.snapshot.paramMap.get.mockReturnValue('chat-456');
+      mockActivatedRoute.snapshot.queryParamMap.get.mockReturnValue('missing-lib');
+
+      await component.ngOnInit();
+
+      expect(mockViewerService.selectLibrary).not.toHaveBeenCalled();
+      expect(mockViewerService.showLibrary).toHaveBeenCalledWith({
+        id: 'missing-lib',
+        title: '',
+      });
     });
   });
 

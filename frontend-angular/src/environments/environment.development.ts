@@ -1,4 +1,5 @@
-// 用途: npm run dev (proxy.conf.dev.js 経由で FastAPI localhost:8001 に接続)
+// 用途: npm run dev (開発環境・実バックエンド接続)
+// 開発サーバーに接続するとき。
 export const environment = {
   production: false,
   apiBaseUrl: '/api',

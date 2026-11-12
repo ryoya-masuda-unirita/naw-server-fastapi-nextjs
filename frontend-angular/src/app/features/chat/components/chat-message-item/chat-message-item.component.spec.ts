@@ -72,6 +72,7 @@ class ChatMessageFooterStub {
   readonly isUser = input<boolean>(false);
   readonly isReadOnly = input<boolean>(false);
   readonly assistantName = input<string | null>(null);
+  readonly assistantUnresolved = input<boolean>(false);
   readonly thumbsUpActive = input<boolean>(false);
   readonly thumbsDownActive = input<boolean>(false);
   readonly copy = output<void>();
@@ -108,6 +109,7 @@ const userMessage: Message = {
   answer: '',
   context: '',
   isRated: false,
+  assistantId: 'asst-1',
 };
 
 const assistantMessage: Message = {
@@ -119,6 +121,7 @@ const assistantMessage: Message = {
   answer: '<p>Test answer</p>',
   context: '',
   isRated: false,
+  assistantId: 'asst-1',
 };
 
 const pendingAssistantMessage: Message = {
@@ -222,10 +225,10 @@ describe('ChatMessageItemComponent', () => {
       expect(component.thumbsDownActive()).toBe(false);
     });
 
-    test('isRated が true の場合: thumbsUpActive がtrueであること', () => {
+    test('isRated のみ true で rating 未設定の場合: どちらも active にならないこと', () => {
       fixture.componentRef.setInput('message', { ...assistantMessage, isRated: true });
       fixture.detectChanges();
-      expect(component.thumbsUpActive()).toBe(true);
+      expect(component.thumbsUpActive()).toBe(false);
       expect(component.thumbsDownActive()).toBe(false);
     });
 
@@ -319,7 +322,7 @@ describe('ChatMessageItemComponent', () => {
     });
 
     test('assistantId なし: assistantName が空文字であること', () => {
-      fixture.componentRef.setInput('message', assistantMessage);
+      fixture.componentRef.setInput('message', { ...assistantMessage, assistantId: undefined });
       fixture.detectChanges();
       expect(component.assistantName()).toBe('');
     });
@@ -346,6 +349,36 @@ describe('ChatMessageItemComponent', () => {
       fixture.componentRef.setInput('message', msgWithAssistant);
       fixture.detectChanges();
       expect(component.assistantNamePending()).toBe(false);
+      mockAssistantsService.assistantsQuery.isPending.set(false);
+    });
+
+    test('assistantId が null（アシスタント削除済み）: isAssistantUnresolved が true であること', () => {
+      const msgWithDeletedAssistant: Message = { ...assistantMessage, assistantId: undefined };
+      fixture.componentRef.setInput('message', msgWithDeletedAssistant);
+      fixture.detectChanges();
+      expect(component.isAssistantUnresolved()).toBe(true);
+    });
+
+    test('assistantId が一覧に存在しない場合: isAssistantUnresolved が true であること', () => {
+      const msgWithUnknownAssistant: Message = { ...assistantMessage, assistantId: 'unknown' };
+      fixture.componentRef.setInput('message', msgWithUnknownAssistant);
+      fixture.detectChanges();
+      expect(component.isAssistantUnresolved()).toBe(true);
+    });
+
+    test('assistantId が解決できる場合: isAssistantUnresolved が false であること', () => {
+      const msgWithAssistant: Message = { ...assistantMessage, assistantId: 'asst-1' };
+      fixture.componentRef.setInput('message', msgWithAssistant);
+      fixture.detectChanges();
+      expect(component.isAssistantUnresolved()).toBe(false);
+    });
+
+    test('一覧読込中で未解決の場合: isAssistantUnresolved が false であること（誤って無効化しない）', () => {
+      mockAssistantsService.assistantsQuery.isPending.set(true);
+      const msgWithUnknownAssistant: Message = { ...assistantMessage, assistantId: 'loading-id' };
+      fixture.componentRef.setInput('message', msgWithUnknownAssistant);
+      fixture.detectChanges();
+      expect(component.isAssistantUnresolved()).toBe(false);
       mockAssistantsService.assistantsQuery.isPending.set(false);
     });
   });
@@ -450,6 +483,13 @@ describe('ChatMessageItemComponent', () => {
       expect(component.editText()).toBe(userMessage.question);
     });
 
+    test('openEdit: アシスタントが未解決の場合は isEditing が変化しないこと', () => {
+      fixture.componentRef.setInput('message', { ...userMessage, assistantId: 'unknown' });
+      fixture.detectChanges();
+      component.openEdit();
+      expect(component.isEditing()).toBe(false);
+    });
+
     test('cancelEdit: isEditing がfalseになりeditText がリセットされること', () => {
       component.openEdit();
       component.cancelEdit();
@@ -475,6 +515,15 @@ describe('ChatMessageItemComponent', () => {
     test('submitEdit: テキストが空の場合は発火しないこと', () => {
       const spy = vi.spyOn(component.handleSend, 'emit');
       component.editText.set('   ');
+      component.submitEdit();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('submitEdit: アシスタントが未解決の場合は発火しないこと', () => {
+      fixture.componentRef.setInput('message', { ...userMessage, assistantId: 'unknown' });
+      fixture.detectChanges();
+      const spy = vi.spyOn(component.handleSend, 'emit');
+      component.editText.set('New text');
       component.submitEdit();
       expect(spy).not.toHaveBeenCalled();
     });
@@ -580,7 +629,11 @@ describe('ChatMessageItemComponent', () => {
     });
 
     test('GOOD評価済み: handleThumbsUp では rate が発火しないこと', () => {
-      fixture.componentRef.setInput('message', { ...assistantMessage, isRated: true });
+      fixture.componentRef.setInput('message', {
+        ...assistantMessage,
+        isRated: true,
+        rating: 'GOOD',
+      });
       fixture.detectChanges();
       const spy = vi.spyOn(component.rate, 'emit');
       component.handleThumbsUp();
@@ -588,7 +641,11 @@ describe('ChatMessageItemComponent', () => {
     });
 
     test('GOOD評価済み: handleThumbsDown では rate が発火すること', () => {
-      fixture.componentRef.setInput('message', { ...assistantMessage, isRated: true });
+      fixture.componentRef.setInput('message', {
+        ...assistantMessage,
+        isRated: true,
+        rating: 'GOOD',
+      });
       fixture.detectChanges();
       const spy = vi.spyOn(component.rate, 'emit');
       component.handleThumbsDown();
@@ -631,6 +688,22 @@ describe('ChatMessageItemComponent', () => {
       const spy = vi.spyOn(component.retry, 'emit');
       component.handleRetry();
       expect(spy).toHaveBeenCalledWith('msg-1');
+    });
+
+    test('handleRegenerate: アシスタントが未解決の場合は regenerate が発火しないこと', () => {
+      fixture.componentRef.setInput('message', { ...assistantMessage, assistantId: 'unknown' });
+      fixture.detectChanges();
+      const spy = vi.spyOn(component.regenerate, 'emit');
+      component.handleRegenerate();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('handleRetry: アシスタントが未解決の場合は retry が発火しないこと', () => {
+      fixture.componentRef.setInput('message', { ...assistantMessage, assistantId: 'unknown' });
+      fixture.detectChanges();
+      const spy = vi.spyOn(component.retry, 'emit');
+      component.handleRetry();
+      expect(spy).not.toHaveBeenCalled();
     });
 
     test('toggleMoreMenu: isMoreMenuOpen がtrueになること', () => {

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# secuaigent-client (Angular) を frontend-angular/ に丸ごと同期し、
+# secuaigent/client (Angular) を frontend-angular/ に丸ごと同期し、
 # モノレポ向けの設定差分を再適用する。
 #
 # Usage:
-#   bash .codex/skills/frontend-angular-sync/scripts/sync.sh [secuaigent-client のパス] [--force]
+#   bash .codex/skills/frontend-angular-sync/scripts/sync.sh [secuaigent/client のパス] [--force]
 #
-# デフォルトの参照元: ~/Documents/secuaigent-client
+# デフォルトの参照元: ~/Documents/secuaigent/client
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TARGET_DIR="$REPO_ROOT/frontend-angular"
 
-SRC_DIR="${1:-$HOME/Documents/secuaigent-client}"
+SRC_DIR="${1:-$HOME/Documents/secuaigent/client}"
 FORCE=""
 for arg in "$@"; do
   if [[ "$arg" == "--force" ]]; then
@@ -38,7 +38,7 @@ if [[ -z "$FORCE" ]]; then
   fi
 fi
 
-echo "== 0. secuaigent-client の develop ブランチを最新化 =="
+echo "== 0. secuaigent/client の develop ブランチを最新化 =="
 
 if ! git -C "$SRC_DIR" diff --quiet || ! git -C "$SRC_DIR" diff --cached --quiet; then
   echo "$SRC_DIR の追跡済みファイルに未コミットの変更があります。先にコミット/stashしてから実行してください。" >&2
@@ -49,7 +49,7 @@ git -C "$SRC_DIR" fetch origin
 git -C "$SRC_DIR" checkout develop
 git -C "$SRC_DIR" pull --ff-only origin develop
 
-echo "== 1. secuaigent-client を frontend-angular/ に同期 =="
+echo "== 1. secuaigent/client を frontend-angular/ に同期 =="
 echo "  参照元: $SRC_DIR"
 echo "  同期先: $TARGET_DIR"
 
@@ -59,16 +59,18 @@ rsync -a --delete \
   --exclude ".angular/" \
   --exclude "dist/" \
   --exclude "coverage/" \
+  --exclude ".gitlab-ci.yml" \
+  --exclude "Dockerfile.dev" \
+  --exclude "proxy.conf.local.js" \
   "$SRC_DIR/" "$TARGET_DIR/"
 
 echo "== 2. モノレポ向け設定を再適用 =="
 
-# proxy.conf.local.js: バックエンド接続先を FastAPI (8001) に向ける
-PROXY_LOCAL="$TARGET_DIR/proxy.conf.local.js"
-if [[ -f "$PROXY_LOCAL" ]]; then
-  sed -i '' "s#http://localhost:8080#http://localhost:8001#g" "$PROXY_LOCAL"
-  echo "  proxy.conf.local.js: localhost:8080 -> localhost:8001"
-fi
+# proxy.conf.local.js は同期対象から除外している（Dockerfile.devと同じ扱い）。
+# BACKEND_PROXY_TARGET環境変数によるdocker-compose対応がモノレポ固有の実装であり、
+# upstream側の形式変化に追従する必要がない。sedによる部分置換・上書きコピーのどちらも
+# 「一度syncしてから書き換える」という余分な手順を生み、過去に実際に取りこぼして
+# docker-compose環境が壊れた（接続不能）ことがあるため、最初から同期対象に含めない。
 
 # proxy.conf.dev.js: 開発サーバーURLを FastAPI (8001) に向ける
 PROXY_DEV="$TARGET_DIR/proxy.conf.dev.js"

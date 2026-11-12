@@ -20,6 +20,7 @@ export class ChatMessageFooterComponent {
   readonly canNextVersion = input<boolean>(false);
   readonly isUser = input<boolean>(false);
   readonly isReadOnly = input<boolean>(false);
+  readonly assistantUnresolved = input<boolean>(false);
   readonly thumbsUpActive = input<boolean>(false);
   readonly thumbsDownActive = input<boolean>(false);
 
@@ -51,10 +52,12 @@ export class ChatMessageFooterComponent {
   }
 
   handleRegenerate(): void {
+    if (this.assistantUnresolved()) return;
     this.regenerate.emit();
   }
 
   handleOpenEdit(): void {
+    if (this.assistantUnresolved()) return;
     this.openEdit.emit();
   }
 

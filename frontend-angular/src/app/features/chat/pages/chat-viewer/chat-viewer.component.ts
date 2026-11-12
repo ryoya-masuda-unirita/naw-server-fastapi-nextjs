@@ -27,6 +27,18 @@ export class ChatViewerComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     const chatIdParam = this.route.snapshot.paramMap.get('chatId');
     this.chatId.set(chatIdParam);
-    await this.viewerService.loadList(chatIdParam ?? '');
+
+    const libraryId = this.route.snapshot.queryParamMap.get('libraryId');
+    await this.viewerService.loadList(chatIdParam ?? '', libraryId ? { autoSelect: false } : {});
+
+    if (!libraryId) return;
+
+    const item = this.viewerService.viewers().find((viewer) => viewer.id === libraryId);
+    if (item) {
+      this.viewerService.selectLibrary(item);
+      return;
+    }
+
+    await this.viewerService.showLibrary({ id: libraryId, title: '' });
   }
 }

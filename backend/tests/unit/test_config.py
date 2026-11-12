@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.config import AzureOpenAISettings, CorsSettings, Settings
+from app.core.config import AwsSettings, AzureOpenAISettings, CorsSettings, Settings
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
@@ -33,6 +33,11 @@ def _build_settings(**env_overrides: str) -> Settings:
 def _build_azure_openai_settings(**env_overrides: str) -> AzureOpenAISettings:
     """テスト用に `.env` を読み込まずに `AzureOpenAISettings` を組み立てる。"""
     return AzureOpenAISettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
+
+
+def _build_aws_settings(**env_overrides: str) -> AwsSettings:
+    """テスト用に `.env` を読み込まずに `AwsSettings` を組み立てる。"""
+    return AwsSettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
 
 
 class TestCorsAllowedOrigins:
@@ -148,6 +153,37 @@ class TestAzureOpenAISettings:
 
         assert settings.api_version == "2026-01-01"
         assert settings.responses_api_version == "2026-02-01-preview"
+
+
+class TestAwsSettings:
+    def test_constructs_without_env_when_s3_and_sqs_unset(self):
+        """AWS_S3_BUCKET_NAME/AWS_SQS_QUEUE_URLが未設定でも生成自体は失敗しないこと
+
+        回帰防止: これらを必須フィールドにすると、S3/SQSを使わない環境
+        （AWS_SQS_LISTENER_ENABLED=false等）でもapp起動時にAwsSettings()の
+        生成自体がValidationErrorで失敗してしまう。
+        """
+        settings = _build_aws_settings()
+
+        assert settings.aws_s3_bucket_name == ""
+        assert settings.aws_sqs_queue_url == ""
+        assert settings.aws_region == "ap-northeast-1"
+        assert settings.aws_sqs_listener_enabled is True
+
+    def test_reflects_env_overrides(self):
+        """環境変数を設定した場合その値が反映されること"""
+        settings = _build_aws_settings(
+            AWS_S3_BUCKET_NAME="test-bucket",
+            AWS_SQS_QUEUE_URL="http://localstack:4566/000000000000/test-queue",
+            AWS_SQS_LISTENER_ENABLED="false",
+        )
+
+        assert settings.aws_s3_bucket_name == "test-bucket"
+        assert (
+            settings.aws_sqs_queue_url
+            == "http://localstack:4566/000000000000/test-queue"
+        )
+        assert settings.aws_sqs_listener_enabled is False
 
 
 class TestSettingsImportIndependence:

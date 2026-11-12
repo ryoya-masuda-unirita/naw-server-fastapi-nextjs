@@ -1,8 +1,8 @@
 /**
- * NAW-965: `authInterceptor` の単体テスト。
+ * `authInterceptor` の単体テスト。
  *
  * 全リクエストに `withCredentials: true` を付け、`resolveTenantId()` が空でないときだけ
- * `X-Tenant-ID` ヘッダーを付与する。テナント値は sessionStorage + hostname で制御する。
+ * `X-Tenant-ID` ヘッダーを付与する。テナント値は sessionStorage のみで制御する。
  */
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -11,46 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { STORAGE_KEYS } from '@core/constants';
 import { authInterceptor } from '@core/interceptors/auth.interceptor';
 
-const ORIGINAL_WINDOW_LOCATION: Location = window.location;
-
-function stubLocationHostname(hostname: string): void {
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    writable: true,
-    value: {
-      ancestorOrigins: {} as DOMStringList,
-      assign: () => undefined,
-      hash: '',
-      host: hostname,
-      hostname,
-      href: `http://${hostname}/`,
-      origin: `http://${hostname}`,
-      pathname: '/',
-      port: '',
-      protocol: 'http:',
-      reload: () => undefined,
-      replace: () => undefined,
-      search: '',
-      toString: () => `http://${hostname}/`,
-    } as unknown as Location,
-  });
-}
-
-function restoreWindowLocation(): void {
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    writable: true,
-    value: ORIGINAL_WINDOW_LOCATION,
-  });
-}
-
 describe('authInterceptor（認証付加ヘッダー）', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
 
-  // 各 it の直前: location を戻し、session と TestBed をリセットして HttpClient を組み立てる
   beforeEach(() => {
-    restoreWindowLocation();
     sessionStorage.clear();
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -72,7 +37,6 @@ describe('authInterceptor（認証付加ヘッダー）', () => {
   it('テナントが分かるとき、APIリクエストにテナント情報を付ける', () => {
     // Arrange
     sessionStorage.setItem(STORAGE_KEYS.TENANT_ID, 't-1');
-    stubLocationHostname('app.example.com');
 
     // Act
     http.get('/api/dummy').subscribe();
@@ -88,7 +52,6 @@ describe('authInterceptor（認証付加ヘッダー）', () => {
   it('テナントが不明なとき、テナント用のヘッダーは付けない', () => {
     // Arrange
     sessionStorage.removeItem(STORAGE_KEYS.TENANT_ID);
-    stubLocationHostname('localhost');
 
     // Act
     http.get('/api/dummy').subscribe();
@@ -104,7 +67,6 @@ describe('authInterceptor（認証付加ヘッダー）', () => {
   it('すべてのAPI通信でログイン用Cookieを送る', () => {
     // Arrange
     sessionStorage.setItem(STORAGE_KEYS.TENANT_ID, 'any');
-    stubLocationHostname('tenant.example.com');
 
     // Act
     http.get('/api/dummy').subscribe();

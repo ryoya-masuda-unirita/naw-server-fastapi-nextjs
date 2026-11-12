@@ -45,16 +45,7 @@ export const environment = {
 
 ### 2. バックエンドサーバーを起動する
 
-モノレポルートで PostgreSQL を起動し、`backend/` で FastAPI を起動してください。
-
-```bash
-# プロジェクトルート
-docker compose up -d
-
-# FastAPI（ポート 8001）
-cd backend
-uv run uvicorn app.main:app --reload --port 8001
-```
+バックエンド（`naw-server`）を事前に起動しておいてください。詳細は `naw-server` の README を参照してください。
 
 ### 3. フロントエンドサーバーを起動する
 
@@ -64,14 +55,9 @@ npm run start:local
 ng serve --configuration=local
 ```
 
-サーバーが起動したら、ブラウザで以下のURLを開いてください。ソースファイルを変更するたびにアプリケーションが自動的にリロードされます。
+サーバーが起動したら、ブラウザで `http://localhost:4201/` を開いてください。ソースファイルを変更するたびにアプリケーションが自動的にリロードされます。
 
-| 用途 | URL |
-|---|---|
-| 通常アクセス | `http://localhost:4201/` |
-| バックエンドと接続して動作確認 | `http://test-tenant.localhost:4201/` |
-
-> バックエンドと接続する場合はサブドメイン形式のURLを使用してください。テナントIDがホスト名から自動的に取得されます。
+> テナントIDはログイン画面で入力します。URL（サブドメイン）からは取得しません。
 
 ## コードの雛形生成
 
@@ -137,3 +123,6 @@ Angular CLI にはデフォルトでE2Eテストフレームワークが含ま�
 ## 参考リソース
 
 Angular CLI の使い方（詳細なコマンドリファレンスを含む）については、[Angular CLI 概要とコマンドリファレンス](https://angular.dev/tools/cli) を参照してください。
+
+<!-- Issue #197: CI/CDのfrontendデプロイジョブ実機確認用のダミー変更 -->
+<!-- Issue #197: --configuration dev修正の再デプロイ確認用ダミー変更 -->

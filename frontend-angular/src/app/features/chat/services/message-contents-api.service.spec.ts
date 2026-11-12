@@ -214,6 +214,74 @@ describe('MessageContentsApiService', () => {
     expect(result.contents).toEqual([buildErrorPlaceholder('msg-secure-1')]);
   });
 
+  it('assistantId が null（アシスタント削除済み）のメッセージも NAW contents API の対象に含めること', async () => {
+    const listData: MessagesListApiResponse = {
+      assistants: [],
+      messages: [
+        {
+          id: 'msg-deleted-assistant',
+          roomId: 'room-1',
+          assistantId: null,
+          parentId: null,
+          isRated: false,
+        },
+      ],
+    };
+    const contents: MessageContentApiItem[] = [
+      {
+        id: 'content-1',
+        messageId: 'msg-deleted-assistant',
+        status: 'OK',
+        question: '質問',
+        answer: '回答',
+        context: null,
+        attachmentFiles: [],
+        referencePaths: null,
+        isRated: false,
+      },
+    ];
+    api.post.mockResolvedValue(contents);
+
+    const result = await service.fetchContents(listData);
+
+    expect(api.post).toHaveBeenCalledWith(API_PATHS.MESSAGES.CONTENTS, {
+      messageIds: ['msg-deleted-assistant'],
+    });
+    expect(result.failures).toHaveLength(0);
+    expect(result.contents).toEqual(contents);
+  });
+
+  it('assistantId が null のメッセージと存在するアシスタントのメッセージが混在する場合、両方まとめて NAW contents API を呼ぶこと', async () => {
+    const listData: MessagesListApiResponse = {
+      assistants: [saasAssistant],
+      messages: [
+        {
+          id: 'msg-saas',
+          roomId: 'room-1',
+          assistantId: 'asst-saas',
+          parentId: null,
+          isRated: false,
+        },
+        {
+          id: 'msg-deleted-assistant',
+          roomId: 'room-1',
+          assistantId: null,
+          parentId: 'msg-saas',
+          isRated: false,
+        },
+      ],
+    };
+    api.post.mockResolvedValue([]);
+
+    await service.fetchContents(listData);
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    const [url, body] = api.post.mock.calls[0];
+    expect(url).toBe(API_PATHS.MESSAGES.CONTENTS);
+    expect(body.messageIds.sort()).toEqual(['msg-deleted-assistant', 'msg-saas'].sort());
+    expect(api.postFromCustomUrl).not.toHaveBeenCalled();
+  });
+
   it('endpoint 不正の SECURE アシスタントは fetch せず ERROR を返すこと', async () => {
     const listData: MessagesListApiResponse = {
       assistants: [

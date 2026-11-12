@@ -92,6 +92,12 @@ class PagedFeedbackUserResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+    totalPages: int
+    numberOfElements: int
+
+
+class FeedbackUserListResponse(BaseModel):
+    feedbacks: PagedFeedbackUserResponse
 
 
 class FeedbackMessageListRequest(BaseModel):
@@ -150,6 +156,8 @@ class PagedFeedbackMessageResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+    totalPages: int
+    numberOfElements: int
 
 
 class ExternalServerInfoResponse(BaseModel):
@@ -212,6 +220,8 @@ class PagedFeedbackRoomResponse(BaseModel):
     totalElements: int
     number: int
     size: int
+    totalPages: int
+    numberOfElements: int
 
 
 class FeedbackRoomListResponse(BaseModel):

@@ -1,3 +1,4 @@
+import { STORAGE_KEYS } from '@core/constants';
 import { MOCK_ACCOUNTS } from '@features/auth/data/mock-accounts';
 import type { MockRoute } from '../api-mock';
 
@@ -69,8 +70,8 @@ export const authMockRoutes: MockRoute[] = [
     method: 'GET',
     match: '/auth',
     handler: () => {
-      const userJson = sessionStorage.getItem('user');
-      const tenantId = sessionStorage.getItem('tenantId') ?? 'mock-tenant';
+      const userJson = sessionStorage.getItem(STORAGE_KEYS.USER);
+      const tenantId = sessionStorage.getItem(STORAGE_KEYS.TENANT_ID) ?? 'mock-tenant';
       if (!userJson) return [401, { error: 'No valid session' }];
       const user = JSON.parse(userJson) as {
         id?: string;

@@ -32,12 +32,6 @@ export class FeedbackListOptionsService {
     },
   }));
 
-  readonly assistantNameMap = computed<Map<string, string>>(() => {
-    const map = new Map<string, string>();
-    (this.adminAssistantsQuery.data() ?? []).forEach((a) => map.set(a.id, a.name));
-    return map;
-  });
-
   readonly assistantOptions = computed<SelectOption[]>(() => {
     this.currentLang();
     const allOption: SelectOption = {

@@ -129,7 +129,11 @@ describe('LoginComponent', () => {
 
   describe('初期値・ゲッター', () => {
     test('フォームの初期値が空文字列であること', () => {
-      expect(component.form.value).toEqual({ username: '', password: '' });
+      expect(component.form.value).toEqual({ tenantId: '', username: '', password: '' });
+    });
+
+    test('初期状態ではtenantIdErrorが空文字列であること', () => {
+      expect(component.tenantIdError()).toBe('');
     });
 
     test('初期状態ではusernameErrorが空文字列であること', () => {
@@ -158,9 +162,9 @@ describe('LoginComponent', () => {
       expect(form).toBeTruthy();
     });
 
-    test('ユーザーIDとパスワードのFormInputが2つ表示されること', () => {
+    test('テナントID・ユーザーID・パスワードのFormInputが3つ表示されること', () => {
       const inputs = fixture.debugElement.queryAll(By.css('app-form-input'));
-      expect(inputs.length).toBe(2);
+      expect(inputs.length).toBe(3);
     });
 
     test('ログインボタンが1つ表示されること', () => {
@@ -189,28 +193,54 @@ describe('LoginComponent', () => {
       expect(mockLogin).not.toHaveBeenCalled();
     });
 
-    test('フォームが有効なときonSubmitはauthStore.loginを呼ぶこと', async () => {
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+    test('テナントIDが未入力のときonSubmitはauthStore.loginを呼ばないこと', async () => {
+      component.form.setValue({ tenantId: '', username: 'testuser', password: 'password123' });
       await component.onSubmit();
-      expect(mockLogin).toHaveBeenCalledWith({ username: 'testuser', password: 'password123' });
+      expect(mockLogin).not.toHaveBeenCalled();
+    });
+
+    test('フォームが有効なときonSubmitはauthStore.loginを呼ぶこと', async () => {
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
+      await component.onSubmit();
+      expect(mockLogin).toHaveBeenCalledWith({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
     });
 
     test('パスワードが8文字未満でもonSubmitはauthStore.loginを呼ぶこと', async () => {
-      component.form.setValue({ username: 'testuser', password: 'ab12' });
+      component.form.setValue({ tenantId: 'test-tenant', username: 'testuser', password: 'ab12' });
       await component.onSubmit();
-      expect(mockLogin).toHaveBeenCalledWith({ username: 'testuser', password: 'ab12' });
+      expect(mockLogin).toHaveBeenCalledWith({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'ab12',
+      });
     });
 
     test('ログイン成功時にtoastService.successが呼ばれること', async () => {
       mockLogin.mockResolvedValue('SUCCESS');
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
       await component.onSubmit();
       expect(mockToastSuccess).toHaveBeenCalled();
     });
 
     test('REQUIRES_PASSWORD_RESET時にtoastService.successが呼ばれないこと', async () => {
       mockLogin.mockResolvedValue('REQUIRES_PASSWORD_RESET');
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
       await component.onSubmit();
       expect(mockToastSuccess).not.toHaveBeenCalled();
     });
@@ -221,7 +251,11 @@ describe('LoginComponent', () => {
         statusText: 'Too Many Requests',
       });
       mockLogin.mockRejectedValue(errorResponse);
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
 
       await component.onSubmit();
 
@@ -234,7 +268,11 @@ describe('LoginComponent', () => {
         status: 401,
       });
       mockLogin.mockRejectedValue(errorResponse);
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
 
       await component.onSubmit();
 
@@ -248,7 +286,11 @@ describe('LoginComponent', () => {
         status: 403,
       });
       mockLogin.mockRejectedValue(errorResponse);
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
 
       await component.onSubmit();
 
@@ -258,7 +300,11 @@ describe('LoginComponent', () => {
 
     test('ログイン失敗時にtoastService.successが呼ばれないこと', async () => {
       mockLogin.mockRejectedValue(new Error('login failed'));
-      component.form.setValue({ username: 'testuser', password: 'password123' });
+      component.form.setValue({
+        tenantId: 'test-tenant',
+        username: 'testuser',
+        password: 'password123',
+      });
       await component.onSubmit();
       expect(mockToastSuccess).not.toHaveBeenCalled();
     });

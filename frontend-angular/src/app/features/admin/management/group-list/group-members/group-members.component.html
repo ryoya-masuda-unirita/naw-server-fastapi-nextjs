@@ -38,7 +38,7 @@
 
         <!-- Search Input -->
         <app-search-input
-          [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+          [placeholder]="'ADMIN_CONSOLE.SEARCH_PLACEHOLDER' | translate"
           [(value)]="searchTerm"
           class="md:w-60 w-full"
           size="small"
@@ -115,7 +115,7 @@
       type="text"
       [ngModel]="groupFormData().groupName"
       (ngModelChange)="groupFormData.set({ groupName: $event })"
-      [placeholder]="'ADMIN_CONSOLE.PLACEHOLDER' | translate"
+      [placeholder]="'ADMIN_CONSOLE.GROUP_NAME_PLACEHOLDER' | translate"
       class="w-full px-4 py-2.5 border border-border rounded-lg text-sm text-text-default placeholder:text-text-muted focus:outline-none"
     />
   </div>

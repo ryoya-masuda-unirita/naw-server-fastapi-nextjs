@@ -32,6 +32,7 @@ import { GroupUsersApiService } from './services/group-users-api.service';
 import { GroupAssistantsApiService } from './services/group-assistants-api.service';
 import { GroupTemplatesApiService } from './services/group-templates-api.service';
 import { AuthStore } from '@core/stores/auth.store';
+import { GroupListItem } from '@app-types/admin/group-management.types';
 
 @Component({
   selector: 'app-group-list',
@@ -97,7 +98,8 @@ export class GroupListComponent implements OnInit {
 
   private async loadAndDisplay(): Promise<void> {
     await this.loadNameResolverMaps();
-    void this.store.loadItems();
+    await this.store.loadItems();
+    await this.hydrateMissingMembershipInfo();
   }
 
   private async loadNameResolverMaps(): Promise<void> {
@@ -138,6 +140,66 @@ export class GroupListComponent implements OnInit {
           ? this.templateIdToName
           : this.userIdToName;
     return ids.map((id) => map.get(id) ?? id);
+  }
+
+  private async hydrateMissingMembershipInfo(): Promise<void> {
+    const items = this.store.items().filter((item) => this.hasMissingMembershipInfo(item));
+    await Promise.all(items.map((item) => this.hydrateGroupMembershipInfo(item)));
+  }
+
+  private hasMissingMembershipInfo(item: GroupListItem): boolean {
+    return (
+      item.adminUserNames.length === 0 ||
+      item.userNames.length === 0 ||
+      item.assistants.length === 0 ||
+      item.templates.length === 0
+    );
+  }
+
+  private async hydrateGroupMembershipInfo(item: GroupListItem): Promise<void> {
+    try {
+      const [usersRes, assistantsRes, templatesRes] = await Promise.all([
+        this.usersApi.listByGroup(item.id, {
+          pageSize: 1000,
+          pageIndex: 1,
+          sortField: 'updatedAt',
+          sortOrder: 'desc',
+        }),
+        this.assistantsApi.listByGroup(item.id, {
+          pageSize: 1000,
+          pageIndex: 1,
+          sortField: 'name',
+          sortOrder: 'asc',
+        }),
+        this.templatesApi.listByGroup(item.id, {
+          pageSize: 1000,
+          pageIndex: 1,
+          sortField: 'name',
+          sortOrder: 'asc',
+        }),
+      ]);
+
+      const userRows = usersRes.content;
+      this.store.updateOne({
+        ...item,
+        adminUserNames:
+          item.adminUserNames.length > 0
+            ? item.adminUserNames
+            : userRows.filter((user) => user.groupAdmin).map((user) => user.displayName),
+        userNames:
+          item.userNames.length > 0 ? item.userNames : userRows.map((user) => user.displayName),
+        assistants:
+          item.assistants.length > 0
+            ? item.assistants
+            : assistantsRes.content.map((assistant) => assistant.name),
+        templates:
+          item.templates.length > 0
+            ? item.templates
+            : templatesRes.content.map((template) => template.name),
+      });
+    } catch {
+      // Keep the list item as-is when group-scoped hydration fails.
+    }
   }
 
   onFilterChange(event: GroupListFilterChange) {

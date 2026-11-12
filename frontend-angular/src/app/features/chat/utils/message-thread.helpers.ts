@@ -51,13 +51,18 @@ export function applyMessageMetadataToMessages(
 
   return messages.map((message) => {
     const record = recordByMessageId.get(message.messageId);
+    if (!record) {
+      return message;
+    }
     return {
       ...message,
-      parentId: record?.parentId ?? message.parentId ?? null,
+      parentId: record.parentId ?? message.parentId ?? null,
       // 編集・再生成で再利用するメタデータを user/assistant 両メッセージに伝播する
-      tools: record?.tools ?? message.tools,
-      promptTemplateContent: record?.promptTemplateContent ?? message.promptTemplateContent,
-      isCreateLibrary: record?.isCreateLibrary ?? message.isCreateLibrary,
+      tools: record.tools ?? message.tools,
+      promptTemplateContent: record.promptTemplateContent ?? message.promptTemplateContent,
+      isCreateLibrary: record.isCreateLibrary ?? message.isCreateLibrary,
+      isRated: record.isRated,
+      rating: record.rating ?? null,
     };
   });
 }

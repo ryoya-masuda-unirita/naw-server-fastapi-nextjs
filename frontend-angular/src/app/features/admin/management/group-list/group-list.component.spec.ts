@@ -11,6 +11,7 @@ import { GroupAssistantsApiService } from './services/group-assistants-api.servi
 import { GroupTemplatesApiService } from './services/group-templates-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { AuthStore } from '@core/stores/auth.store';
+import { GroupListItem } from '@app-types/admin/group-management.types';
 
 const mockAuthStore = {
   isGroupAdminOnly: vi.fn(() => false),
@@ -35,7 +36,7 @@ function buildStoreSpy() {
     filter: signal<{ pageIndex: number; pageSize: number }>({ pageIndex: 1, pageSize: 12 }),
     totalPages: signal(1),
     isLoading: signal(false),
-    items: signal([]),
+    items: signal<GroupListItem[]>([]),
     totalItems: signal(0),
     pageRange: signal<{ from: number; to: number; total: number }>({ from: 0, to: 0, total: 0 }),
     setNameResolver: vi.fn(),
@@ -43,6 +44,7 @@ function buildStoreSpy() {
     updateFilter: vi.fn(),
     updatePageIndex: vi.fn(),
     addOne: vi.fn(),
+    updateOne: vi.fn(),
   };
 }
 
@@ -77,6 +79,39 @@ function buildSetup() {
       page: 0,
       size: 1000,
     }),
+    listByGroup: vi.fn().mockResolvedValue({
+      content: [
+        {
+          id: 'u1',
+          userId: 'u1',
+          name: 'User 1',
+          displayName: 'User 1',
+          role: 'user',
+          groupAdmin: false,
+          usedTokens: 0,
+          loginKey: '',
+          accountType: 'none',
+          email: '',
+          updatedAt: new Date(),
+        },
+        {
+          id: 'u2',
+          userId: 'u2',
+          name: 'Admin 1',
+          displayName: 'Admin 1',
+          role: 'admin',
+          groupAdmin: true,
+          usedTokens: 0,
+          loginKey: '',
+          accountType: 'none',
+          email: '',
+          updatedAt: new Date(),
+        },
+      ],
+      totalElements: 2,
+      number: 0,
+      size: 1000,
+    }),
   };
   const assistantsApi = {
     list: vi.fn().mockResolvedValue({
@@ -97,9 +132,33 @@ function buildSetup() {
       number: 0,
       size: 1000,
     }),
+    listByGroup: vi.fn().mockResolvedValue({
+      content: [
+        {
+          id: 'a1',
+          name: 'Assist 1',
+          description: '',
+          type: 'SECURE',
+          includeHistory: false,
+          iconColor: '',
+          groups: [],
+          category: null,
+          endpoints: [],
+        },
+      ],
+      totalElements: 1,
+      number: 0,
+      size: 1000,
+    }),
   };
   const templatesApi = {
     list: vi.fn().mockResolvedValue({
+      content: [{ id: 't1', name: 'Tmpl 1', description: '', systemPrompt: '' }],
+      totalElements: 1,
+      number: 0,
+      size: 1000,
+    }),
+    listByGroup: vi.fn().mockResolvedValue({
       content: [{ id: 't1', name: 'Tmpl 1', description: '', systemPrompt: '' }],
       totalElements: 1,
       number: 0,
@@ -244,6 +303,45 @@ describe('GroupListComponent', () => {
       component.ngOnInit();
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       expect(storeSpy.loadItems).toHaveBeenCalled();
+    });
+
+    it('一覧の所属情報が空のときグループ別APIでカード表示を補完すること', async () => {
+      storeSpy.items.set([
+        {
+          id: 'g1',
+          name: 'Team A',
+          adminUserNames: [],
+          userNames: [],
+          assistants: [],
+          templates: [],
+          updatedAt: '2026-07-01T21:55:00',
+        },
+      ]);
+
+      component.ngOnInit();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(usersApi.listByGroup).toHaveBeenCalledWith(
+        'g1',
+        expect.objectContaining({ pageSize: 1000, pageIndex: 1 }),
+      );
+      expect(assistantsApi.listByGroup).toHaveBeenCalledWith(
+        'g1',
+        expect.objectContaining({ pageSize: 1000, pageIndex: 1 }),
+      );
+      expect(templatesApi.listByGroup).toHaveBeenCalledWith(
+        'g1',
+        expect.objectContaining({ pageSize: 1000, pageIndex: 1 }),
+      );
+      expect(storeSpy.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'g1',
+          adminUserNames: ['Admin 1'],
+          userNames: ['User 1', 'Admin 1'],
+          assistants: ['Assist 1'],
+          templates: ['Tmpl 1'],
+        }),
+      );
     });
   });
 

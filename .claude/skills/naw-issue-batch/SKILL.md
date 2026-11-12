@@ -1,22 +1,22 @@
 ---
 name: naw-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/naw-server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
+description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/secuaigent/server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
 ---
 
 # NAW Issue Batch
 
-`~/Documents/naw-server`（移植元）にある未移植のバックエンド機能を検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。
+`~/Documents/secuaigent/server`（移植元）にある未移植のバックエンド機能を検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。
 
 **ユーザーが明示的に `/naw-issue-batch` を叩いたとき、またはこのフローの続行を明示的に指示したときのみ使うこと。** 特定のIssueに着手して実装する場合は `naw-issue-workflow` を使う。
 
 ## 前提（合意済みの仕様）
 
-- **毎サイクル、必ず `~/Documents/naw-server` の `develop` を最新化してから候補検出を行う**（`naw-explore`任せにせず、メインループ側でも明示的に最新化する。詳細は「1. 移植元の最新化」参照）
-- **候補検出・粒度判断は常に、最新化した `~/Documents/naw-server` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
+- **毎サイクル、必ず `~/Documents/secuaigent/server` の `develop` を最新化してから候補検出を行う**（`naw-explore`任せにせず、メインループ側でも明示的に最新化する。詳細は「1. 移植元の最新化」参照）
+- **候補検出・粒度判断は常に、最新化した `~/Documents/secuaigent/server` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
 - 対象: バックエンド（FastAPI）優先
 - **粒度はAIの判断**: 1エンドポイント単位にするか、関連する複数エンドポイントをまとめて1コントローラー単位にするかは、依存関係の強さ・レスポンス/リクエストの共有度合いを見てそのつど判断する。判断基準に迷う場合は1エンドポイント単位をデフォルトにする
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。`naw-explore`に以下を必ず突き合わせさせる
-  1. 最新化済みの `~/Documents/naw-server` の `develop`
+  1. 最新化済みの `~/Documents/secuaigent/server` の `develop`
   2. `backend/app/routers/` の既存実装
   3. `gh issue list --state all`
   4. `gh pr list --state open`
@@ -43,10 +43,10 @@ Skill(skill="loop", args="/naw-issue-batch")
 
 ### 1. 移植元の最新化
 
-候補検出に入る**前に必ず**、メインループ側で以下を実行し、`~/Documents/naw-server` の `develop` を最新化する。
+候補検出に入る**前に必ず**、メインループ側で以下を実行し、`~/Documents/secuaigent/server` の `develop` を最新化する。
 
 ```bash
-cd ~/Documents/naw-server
+cd ~/Documents/secuaigent/server
 git fetch
 git checkout develop
 git pull
@@ -60,7 +60,7 @@ git pull
 この調査ステップは読み取り専用のリサーチであり、メインループのコンテキストを毎サイクル圧迫しないよう `naw-explore` エージェント（汎用の `Explore` ではなくこちらを使う）に委譲する。
 
 - `Agent(subagent_type: naw-explore)` を呼び、以下を自己完結のプロンプトで依頼する（会話の前提を知らない前提で、必要な情報をすべてプロンプトに含めること）
-  - `~/Documents/naw-server` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、Controller群のエンドポイント一覧を洗い出すこと
+  - `~/Documents/secuaigent/server` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、Controller群のエンドポイント一覧を洗い出すこと
   - `backend/app/routers/` の既存実装、`gh issue list --state all` の一覧、`gh pr list --state open` の一覧と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていないエンドポイントを検出すること
   - 見つかった未対応エンドポイントについて、関連するエンドポイント同士（同一Controller内で密結合、同じDTO/レスポンスを共有する等）であれば1つの単位としてまとめてよいこと、そうでなければエンドポイント単位で個別に扱うことを伝え、まとめる場合・分ける場合それぞれの判断理由も返すよう指示する
   - 複数の独立した候補単位がある場合は、依存関係が少なく粒度が小さいものを1件だけ選ぶこと

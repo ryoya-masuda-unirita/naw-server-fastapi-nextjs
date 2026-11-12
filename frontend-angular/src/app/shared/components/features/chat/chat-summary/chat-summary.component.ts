@@ -73,6 +73,8 @@ export class ChatSummaryComponent {
   });
 
   readonly isCollapsed = signal<boolean>(false);
+  /** 自動折りたたみによる状態か（手動操作と区別する） */
+  private readonly autoCollapsed = signal<boolean>(false);
 
   readonly collapseChange = output<boolean>();
   readonly openNewTab = output<void>();
@@ -115,6 +117,20 @@ export class ChatSummaryComponent {
       !this.isStreamingForThisViewer(),
   );
 
+  /** 一覧取得完了後にのみ自動折りたたみを評価する */
+  private readonly shouldAutoCollapse = computed(() => {
+    if (this.isDetailPage() || this.isStreamingForThisViewer()) {
+      return false;
+    }
+
+    const chatId = this.chatId();
+    if (chatId && !this.viewerService.hasListLoadedFor(chatId)) {
+      return false;
+    }
+
+    return this.isViewerEmpty();
+  });
+
   constructor() {
     // ライブラリのストリーミング開始時は本文を表示できるよう自動展開する
     // （collapseChange の伝播で chat-data-panel 側の折りたたみも解除される）
@@ -125,25 +141,32 @@ export class ChatSummaryComponent {
       }
     });
 
-    // ライブラリが1件も存在しないルームでは、デフォルトでビューワーを閉じる
-    // （ストリーミング中は上の自動展開を優先するため除外する）
+    // ライブラリが1件も存在しないルームでは、一覧取得完了後にビューワーを閉じる
     effect(() => {
-      const isEmpty = this.viewerService.viewers().length === 0;
-      if (isEmpty && !this.isStreamingForThisViewer() && !this.isCollapsed()) {
-        this.isCollapsed.set(true);
-        this.collapseChange.emit(true);
+      if (this.shouldAutoCollapse()) {
+        if (!this.isCollapsed()) {
+          this.isCollapsed.set(true);
+          this.autoCollapsed.set(true);
+          this.collapseChange.emit(true);
+        }
+        return;
+      }
+
+      if (this.autoCollapsed() && this.isCollapsed() && !this.isViewerEmpty()) {
+        this.isCollapsed.set(false);
+        this.autoCollapsed.set(false);
+        this.collapseChange.emit(false);
       }
     });
   }
 
-  get markdownData(): string {
-    return this.viewerService.markdownContent();
-  }
+  readonly markdownData = computed(() => this.viewerService.markdownContent());
 
   toggleCollapse(): void {
     this.isTitleMenuOpen.set(false);
     this.isMoreMenuOpen.set(false);
     this.dropdownService.notifyClosed();
+    this.autoCollapsed.set(false);
     this.isCollapsed.update((v) => !v);
     this.collapseChange.emit(this.isCollapsed());
   }
@@ -204,10 +227,12 @@ export class ChatSummaryComponent {
     this.isMoreMenuOpen.set(false);
     this.dropdownService.notifyClosed();
 
-    // Open /chat/viewer/{chatId} in a new tab
     const chatId = this.chatId();
     if (!chatId) return;
-    const url = `/chat/viewer/${chatId}`;
+    const libraryId = this.activeDoc().id;
+    const url = libraryId
+      ? `/chat/viewer/${chatId}?libraryId=${libraryId}`
+      : `/chat/viewer/${chatId}`;
     window.open(url, '_blank');
   }
 

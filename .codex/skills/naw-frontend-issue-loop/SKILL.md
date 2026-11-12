@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-issue-loop
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-loop or explicitly asks to work through open frontend porting Issues (Angular secuaigent-client → React frontend/) one by one end-to-end (branch → docs → implementation → tests → PR) for naw-server-fastapi-nextjs. Repeatedly picks the lowest-numbered GitHub Projects Todo issue labeled frontend-port, runs naw-frontend-issue-workflow in full-auto mode, then naw-pr-workflow to open a PR with code-review.md.
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-loop or explicitly asks to work through open frontend porting Issues (Angular secuaigent/client → React frontend/) one by one end-to-end (branch → docs → implementation → tests → PR) for naw-server-fastapi-nextjs. Repeatedly picks the lowest-numbered GitHub Projects Todo issue labeled frontend-port, runs naw-frontend-issue-workflow in full-auto mode, then naw-pr-workflow to open a PR with code-review.md.
 ---
 
 # NAW Frontend Issue Loop

@@ -141,7 +141,6 @@ export const API_PATHS = {
     FILES_BULK_DELETE: (id: string) => `/admin/indexes/${id}/files/bulk-delete`,
     FILE: (id: string, fileId: string) => `/admin/indexes/${id}/files/${fileId}`,
     ADDITIONAL_LEARNING: (indexId: string) => `/admin/indexes/${indexId}/additionalLearning`,
-    BULK_ADDITIONAL_LEARNING: '/admin/indexes/additionalLearning/bulk',
   },
   // ─── User: Glossary ───────────────────────────────────────
   USER_GLOSSARY: {

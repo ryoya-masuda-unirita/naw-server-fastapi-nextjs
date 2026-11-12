@@ -7,6 +7,7 @@ export interface ResetPasswordRequest {
 export interface LoginRequest {
   username: string;
   password: string;
+  tenantId: string;
 }
 
 export interface LoginKeyRequest {
