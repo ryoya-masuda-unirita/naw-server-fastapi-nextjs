@@ -3,6 +3,11 @@ export interface LoginRequest {
   password: string;
 }
 
+// テナントIDはリクエストボディではなく X-Tenant-ID ヘッダで送るため、API ボディの LoginRequest とは分ける
+export interface LoginCredentials extends LoginRequest {
+  tenantId: string;
+}
+
 export interface ResetPasswordRequest {
   username: string;
   oldPassword: string;

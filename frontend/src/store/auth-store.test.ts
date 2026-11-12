@@ -1,6 +1,12 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { server } from '@/test/setup';
+import { persistTenantId } from '@/lib/api-client';
 import { useAuthStore } from './auth-store';
+
+const BASE_URL = import.meta.env.VITE_API_URL;
+const FIXTURE_TENANT_ID = 'tenant-1';
 
 beforeEach(() => {
   // store をリセット
@@ -30,7 +36,7 @@ describe('useAuthStore', () => {
   describe('login', () => {
     test('ログイン成功時に user がセットされること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
       });
 
       expect(useAuthStore.getState().user?.id).toBe('user1');
@@ -39,7 +45,7 @@ describe('useAuthStore', () => {
 
     test('ログイン成功時に isAuthenticated が true になること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
       });
 
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
@@ -47,7 +53,7 @@ describe('useAuthStore', () => {
 
     test('ADMIN ログイン時に isAdmin が true になること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'admin', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'admin', password: 'pass' });
       });
 
       expect(useAuthStore.getState().isAdmin).toBe(true);
@@ -55,7 +61,7 @@ describe('useAuthStore', () => {
 
     test('ログイン成功時に sessionStorage に user が保存されること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
       });
 
       const stored = sessionStorage.getItem('AUTH_USER');
@@ -65,15 +71,96 @@ describe('useAuthStore', () => {
 
     test('ログイン失敗時にエラーがスローされること', async () => {
       await expect(
-        useAuthStore.getState().login({ username: 'invalid', password: 'wrong' })
+        useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'invalid', password: 'wrong' })
       ).rejects.toThrow();
+    });
+  });
+
+  describe('テナントID', () => {
+    test('ログインリクエストに入力したテナントIDが X-Tenant-ID ヘッダで送られること', async () => {
+      let tenantHeader: string | null = null;
+      let body: Record<string, unknown> = {};
+      server.use(
+        http.post(`${BASE_URL}/auth/login`, async ({ request }) => {
+          tenantHeader = request.headers.get('X-Tenant-ID');
+          body = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({
+            loginStatus: 'SUCCESS',
+            id: 'user1',
+            name: 'Test User',
+            role: 'USER',
+            token: 'mock-token',
+            groups: [],
+          });
+        })
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
+      });
+
+      expect(tenantHeader).toBe(FIXTURE_TENANT_ID);
+      // backend のログイン API はボディにテナントIDを持たないため送らない
+      expect(body).toEqual({ username: 'user', password: 'pass' });
+    });
+
+    test('ログイン成功後もテナントIDが保存されていること', async () => {
+      await act(async () => {
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
+      });
+
+      expect(sessionStorage.getItem('TENANT_ID')).toBe(FIXTURE_TENANT_ID);
+    });
+
+    test('ログイン失敗時にテナントIDが削除されること', async () => {
+      await expect(
+        useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'invalid', password: 'wrong' })
+      ).rejects.toThrow();
+
+      expect(sessionStorage.getItem('TENANT_ID')).toBeNull();
+    });
+
+    test('パスワードリセットが必要な場合はテナントIDを保持すること', async () => {
+      await act(async () => {
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'reset_user', password: 'pass' });
+      });
+
+      expect(sessionStorage.getItem('TENANT_ID')).toBe(FIXTURE_TENANT_ID);
+      expect(sessionStorage.getItem('AUTH_USER')).toBeNull();
+    });
+
+    test('セッション確認リクエストに保存済みのテナントIDが X-Tenant-ID ヘッダで送られること', async () => {
+      // initPromise はストアのクロージャ内に残るため、logout でリセットしてから確認する
+      await act(async () => {
+        await useAuthStore.getState().logout();
+      });
+      let tenantHeader: string | null = null;
+      server.use(
+        http.get(`${BASE_URL}/api/auth`, ({ request }) => {
+          tenantHeader = request.headers.get('X-Tenant-ID');
+          return HttpResponse.json({
+            id: 'user1',
+            name: 'Test User',
+            role: 'USER',
+            tenant_id: FIXTURE_TENANT_ID,
+          });
+        })
+      );
+      persistTenantId(FIXTURE_TENANT_ID);
+
+      await act(async () => {
+        await useAuthStore.getState().ensureInitialized();
+      });
+
+      expect(tenantHeader).toBe(FIXTURE_TENANT_ID);
+      expect(useAuthStore.getState().user?.id).toBe('user1');
     });
   });
 
   describe('logout', () => {
     test('ログアウト後に user が null になること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
       });
       expect(useAuthStore.getState().user).not.toBeNull();
 
@@ -86,7 +173,7 @@ describe('useAuthStore', () => {
 
     test('ログアウト後に sessionStorage がクリアされること', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
         await useAuthStore.getState().logout();
       });
 
@@ -115,7 +202,7 @@ describe('useAuthStore', () => {
   describe('computed 値', () => {
     test('userName が user.name を返すこと', async () => {
       await act(async () => {
-        await useAuthStore.getState().login({ username: 'user', password: 'pass' });
+        await useAuthStore.getState().login({ tenantId: FIXTURE_TENANT_ID, username: 'user', password: 'pass' });
       });
 
       expect(useAuthStore.getState().userName).toBe('Test User');

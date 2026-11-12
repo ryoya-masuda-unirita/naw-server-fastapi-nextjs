@@ -10,6 +10,7 @@ export function LoginPage() {
   const { t } = useTranslation();
   const { login } = useAuthStore();
 
+  const [tenantId, setTenantId] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,13 +18,13 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (!tenantId || !username || !password) return;
 
     setError('');
     setIsLoading(true);
 
     try {
-      await login({ username, password });
+      await login({ tenantId, username, password });
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.includes('429')) {
@@ -50,6 +51,17 @@ export function LoginPage() {
             {error}
           </div>
         )}
+
+        <FormInput
+          id="tenantId"
+          label={t('AUTH.LOGIN.TENANT_ID_LABEL')}
+          placeholder={t('AUTH.LOGIN.TENANT_ID_PLACEHOLDER')}
+          value={tenantId}
+          onChange={(v) => { setTenantId(v); setError(''); }}
+          disabled={isLoading}
+          required
+          autoComplete="organization"
+        />
 
         <FormInput
           id="username"
