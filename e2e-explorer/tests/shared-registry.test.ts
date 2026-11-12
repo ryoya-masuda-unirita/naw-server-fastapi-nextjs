@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, utimes } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -34,7 +34,40 @@ test('removes a stale lock', async () => {
   const file = path.join(dir, 'shared-explored.json');
   const lockDir = `${file}.lock`;
   await mkdir(lockDir);
+  await writeFile(path.join(lockDir, 'owner'), 'crashed-worker');
   const old = new Date(Date.now() - 60_000);
   await utimes(lockDir, old, old);
   expect(await new SharedRegistry(file).claim('k', 'w')).toBe(true);
+  // 壊したロックの残骸や一時ディレクトリを残さない
+  expect((await readdir(dir)).sort()).toEqual(['shared-explored.json']);
+});
+
+test('waits for a fresh lock instead of breaking it', async () => {
+  /** 新しいロックは壊さず、持ち主が外すまで待つこと */
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'e2e-registry-'));
+  const file = path.join(dir, 'shared-explored.json');
+  const lockDir = `${file}.lock`;
+  await mkdir(lockDir);
+  await writeFile(path.join(lockDir, 'owner'), 'busy-worker');
+  const claiming = new SharedRegistry(file).claim('k', 'w');
+  await new Promise((r) => setTimeout(r, 200));
+  expect(await readFile(path.join(lockDir, 'owner'), 'utf-8')).toBe('busy-worker');
+  await rm(lockDir, { recursive: true });
+  expect(await claiming).toBe(true);
+});
+
+test('releases keys so that a rerun of the same shard explores them again', async () => {
+  /** 自分が取ったキーを手放すと、同じ担当範囲を流し直したときに再び取れること。他の担当範囲のキーは残ること */
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'e2e-registry-'));
+  const registry = new SharedRegistry(path.join(dir, 'shared-explored.json'));
+  await registry.claim('a', 'dashboard-admin');
+  await registry.claim('b', 'dashboard-admin');
+  await registry.claim('c', 'dashboard-user');
+  expect(await registry.releaseOwner('dashboard-admin')).toBe(2);
+  expect(await registry.claim('a', 'dashboard-admin')).toBe(true);
+  expect(await registry.claim('c', 'dashboard-admin')).toBe(false);
+  await registry.release('a', 'dashboard-user');
+  expect(await registry.claim('a', 'dashboard-user')).toBe(false);
+  await registry.release('a', 'dashboard-admin');
+  expect(await registry.claim('a', 'dashboard-user')).toBe(true);
 });

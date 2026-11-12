@@ -88,6 +88,16 @@ document.getElementById('f').addEventListener('submit', (e) => {
 <input name="q" aria-label="検索" onfocus="this.className='focused'" onblur="this.className='blurred'">
 <button type="submit">検索する</button></form>`
   ),
+  '/break-form': page(
+    '入力で壊れるフォーム',
+    `<form aria-label="壊れる"><input name="q" aria-label="入力"
+oninput="fetch('/api/boom'); this.form.remove()"><button type="submit">送る</button></form>`
+  ),
+  '/polling': page(
+    '定期的な問い合わせ',
+    `<p id="t">待機中</p><button type="button" onclick="document.getElementById('t').textContent='押しました'">押す</button>
+<script>setInterval(() => fetch('/api/ok'), 100);</script>`
+  ),
   '/blank': page('真っ白', `<button type="button" onclick="document.body.innerHTML=''">消す</button>`),
   '/slow': page('遅い', `<button type="button" onclick="fetch('/api/slow')">遅い API</button>`),
   '/a11y': page('アクセシビリティ', `<input type="text"><img src="/missing.png">`),
@@ -106,6 +116,7 @@ document.querySelector('form').addEventListener('submit', (e) => {
   e.preventDefault();
   if (document.getElementById('password').value !== 'secret') return;
   sessionStorage.setItem('TENANT_ID', document.getElementById('tenantId').value);
+  document.cookie = 'sid=1; path=/';
   location.href = '/home';
 });
 </script>`,
@@ -114,8 +125,12 @@ document.querySelector('form').addEventListener('submit', (e) => {
   '/home': page(
     'ホーム',
     `<p id="who"></p><button type="button" id="who-btn">テナント表示</button>
+<button type="button" onclick="document.getElementById('more').hidden = !document.getElementById('more').hidden">詳細</button>
+<div id="more" hidden><button type="button">詳細の中のボタン</button></div>
+<button type="button" onclick="document.cookie = 'sid=; path=/; max-age=0'; location.href = '/login'">ログアウト</button>
 <script>
-if (!sessionStorage.getItem('TENANT_ID')) location.href = '/login';
+// Cookie（サーバーのセッションの代わり）が消えていたら、sessionStorage があってもログイン画面へ戻す
+if (!sessionStorage.getItem('TENANT_ID') || !document.cookie.includes('sid=1')) location.href = '/login';
 document.getElementById('who-btn').addEventListener('click', async () => {
   const res = await fetch('/api/whoami', { headers: { 'X-Tenant-ID': sessionStorage.getItem('TENANT_ID') ?? '' } });
   document.getElementById('who').textContent = await res.text();

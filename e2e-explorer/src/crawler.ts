@@ -5,15 +5,9 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { LoginError, loginThroughUi, restoreSessionOnNewPage, type SessionSnapshot } from './auth.ts';
 import { isInScope, type ExplorerConfig, type Shard } from './config.ts';
 import { INPUT_KIND_LABELS, isInputKind, valueFor, type InputKind } from './inputs.ts';
-import { installOracleHooks, Oracle, type AfterActionInfo, type RawFinding } from './oracle.ts';
-import {
-  ELEMENT_ID_ATTR,
-  enumerateElements,
-  isFormNativelyInvalid,
-  requestSubmit,
-  type Enumeration,
-  type PageElement,
-} from './page-scripts.ts';
+import { errorMessage, warnOnFailure } from './errors.ts';
+import { enumeratePage, installOracleHooks, Oracle, type AfterActionInfo, type RawFinding } from './oracle.ts';
+import { ELEMENT_ID_ATTR, isFormNativelyInvalid, requestSubmit, type Enumeration, type PageElement } from './page-scripts.ts';
 import { fingerprintOf, writeShardReport } from './report.ts';
 import { deriveRng, shuffle } from './rng.ts';
 import type { SharedRegistry } from './shared-registry.ts';
@@ -29,7 +23,10 @@ import type { ActionDescriptor, ElementRef, FieldValue, Finding, ShardReport, Sh
 const ACTION_TIMEOUT_MS = 5_000;
 /** 時間の上限を過ぎても終わらない担当範囲を打ち切るまでの猶予。応答のない待ちで止まり続けないようにする。 */
 const WATCHDOG_GRACE_MS = 60_000;
-const MAX_RELOGINS = 5;
+/** 続けてログインし直してもセッションが切れたままになる回数の上限（ログアウトの操作のたびの再ログインは数えない）。 */
+const MAX_CONSECUTIVE_RELOGINS = 3;
+/** 設定に画面幅がないときの既定（Playwright の Desktop Chrome と同じ）。 */
+const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
 const STATE_HASH_LENGTH = 12;
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -78,6 +75,12 @@ function refOf(item: { signature: string; occurrence: number }): ElementRef {
   return { signature: item.signature, occurrence: item.occurrence };
 }
 
+function findId(items: { id: number; signature: string; occurrence: number }[], ref: ElementRef): number {
+  const found = items.find((i) => i.signature === ref.signature && i.occurrence === ref.occurrence);
+  if (!found) throw new ReplayError(`要素が見つかりません: ${ref.signature} #${ref.occurrence}`);
+  return found.id;
+}
+
 function describeValue(value: string): string {
   const preview = value.length > 20 ? `${value.slice(0, 20)}…（${value.length} 文字）` : value;
   return JSON.stringify(preview);
@@ -98,6 +101,10 @@ export class ShardCrawler {
   private readonly seenFingerprints = new Set<string>();
   private artifactCounter = 0;
   private traceCounter = 0;
+  private consecutiveRelogins = 0;
+  private pendingTrace: string | null = null;
+  /** 開いているタブで新しく見つかった疑い。trace を保存できなかったら trace のパスを外す。 */
+  private pendingTraceFindings: Finding[] = [];
   private readonly report: ShardReport;
   private readonly stats: ShardStats = {
     states: 0,
@@ -148,20 +155,27 @@ export class ShardCrawler {
   }
 
   async run(): Promise<ShardReport> {
-    await mkdir(this.artifactsDir, { recursive: true });
-    this.context = await this.browser.newContext({
-      viewport: { width: this.config.oracle.viewports[0]?.width ?? 1280, height: this.config.oracle.viewports[0]?.height ?? 800 },
-      locale: 'ja-JP',
-      timezoneId: 'Asia/Tokyo',
-    });
+    let context: BrowserContext | undefined;
     let watchdogFired = false;
     const watchdog = setTimeout(() => {
       watchdogFired = true;
       this.log('時間の上限を過ぎても終わらないため打ち切ります');
       // 待ち続けている操作は、コンテキストを閉じると例外で抜ける
-      void this.context.close().catch(() => undefined);
+      if (context) void warnOnFailure('打ち切りのためのコンテキストの終了', context.close(), (m) => this.log(m));
     }, this.config.limits.maxMinutes * 60_000 + WATCHDOG_GRACE_MS);
     try {
+      // 準備（出力先・コンテキストの作成）の失敗も、この担当範囲のエラーとして記録する。
+      // 外に投げると並列実行の Promise.all が失敗し、他のワーカーが使っているブラウザまで閉じられるため
+      await mkdir(this.artifactsDir, { recursive: true });
+      const viewport = this.config.oracle.viewports[0] ?? DEFAULT_VIEWPORT;
+      context = await this.browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        locale: 'ja-JP',
+        timezoneId: 'Asia/Tokyo',
+      });
+      this.context = context;
+      // 同じ出力先で流し直したとき、前回の自分の記録で共通の領域を飛ばさないよう手放す
+      if (this.options.registry) await this.options.registry.releaseOwner(this.shard.id);
       await this.options.prepareContext?.(this.context);
       await installOracleHooks(this.context);
       if (!this.isAnonymous) await this.login();
@@ -169,13 +183,15 @@ export class ShardCrawler {
       await this.explore();
     } catch (e) {
       this.stats.stoppedBy = 'error';
-      const message = e instanceof Error ? e.message.split('\n')[0] : String(e);
+      const message = errorMessage(e);
       this.report.error = watchdogFired ? `時間の上限を過ぎても終わらないため打ち切りました（${message}）` : message;
       this.log(`中断: ${this.report.error}`);
     } finally {
       clearTimeout(watchdog);
-      await this.context.tracing.stop().catch(() => undefined);
-      await this.context.close().catch(() => undefined);
+      if (context && !watchdogFired) {
+        await warnOnFailure('trace の終了', context.tracing.stop(), (m) => this.log(m));
+        await warnOnFailure('コンテキストの終了', context.close(), (m) => this.log(m));
+      }
     }
     this.report.finishedAt = new Date().toISOString();
     this.report.durationMs = Date.now() - this.startedAt;
@@ -262,8 +278,12 @@ export class ShardCrawler {
         break;
       }
       if (action.region && !(await this.claimShared(action))) continue;
-      const child = await this.tryAction(node, action, stateKey);
-      if (child) children.push(child);
+      const outcome = await this.tryAction(node, action, stateKey);
+      if (outcome.child) children.push(outcome.child);
+      // 操作できなかった共通の領域は、他の担当範囲が調べられるよう手放す
+      if (outcome.failed && action.region && this.options.registry) {
+        await this.options.registry.release(this.sharedKey(action), this.shard.id);
+      }
     }
     return children;
   }
@@ -282,10 +302,14 @@ export class ShardCrawler {
     return claimed;
   }
 
-  /** 1 つの操作を試す。担当範囲内の新しい状態に進んだら、その状態を返す。 */
-  private async tryAction(node: QueueNode, action: ActionDescriptor, stateKey: string): Promise<QueueNode | null> {
+  /** 1 つの操作を試す。担当範囲内の新しい状態に進んだら child にその状態を返す。 */
+  private async tryAction(
+    node: QueueNode,
+    action: ActionDescriptor,
+    stateKey: string
+  ): Promise<{ child: QueueNode | null; failed: boolean }> {
     const opened = await this.openAt(node.path, false);
-    if (!opened) return null;
+    if (!opened) return { child: null, failed: true };
     const { page, oracle } = opened;
     const path = [...node.path, action];
     this.stats.actions++;
@@ -298,15 +322,18 @@ export class ShardCrawler {
       try {
         nativeInvalid = await this.perform(page, oracle, action);
       } catch (e) {
-        // 要素が隠れた・押せないなどで操作できなかった。疑いではなく再生失敗として残す
+        // 要素が隠れた・押せないなどで操作をやり切れなかった。再生失敗として残すが、
+        // 途中で起きた症状（入力で呼ばれた API の 500、フォームを消した例外など）は失敗の原因かもしれないので記録する
         this.stats.replayFailures++;
-        this.report.replayFailures.push({ path: path.map((a) => a.label), reason: e instanceof Error ? e.message.split('\n')[0] : String(e) });
-        await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore }, 0);
-        return null;
+        this.report.replayFailures.push({ path: path.map((a) => a.label), reason: errorMessage(e) });
+        await oracle.waitForSettle();
+        const { findings } = await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore }, null);
+        await this.recordFindings(page, findings, path);
+        return { child: null, failed: true };
       }
-      await oracle.waitForSettle();
+      const settle = await oracle.waitForSettle();
       // 落ち着いたと判断するまでの無通信の時間は、操作にかかった時間に含めない
-      const elapsed = Math.max(0, Date.now() - started - this.config.timing.settleQuietMs);
+      const elapsed = settle.settled ? Math.max(0, Date.now() - started - this.config.timing.settleQuietMs) : null;
       const info: AfterActionInfo = { actionKind: action.kind, nativeInvalid, urlBefore };
       const { findings, enumeration: after } = await oracle.end(info, elapsed);
       await this.recordFindings(page, findings, path);
@@ -314,13 +341,13 @@ export class ShardCrawler {
       const url = new URL(page.url());
       if (url.origin !== new URL(this.config.target.baseUrl).origin || !isInScope(this.shard, url.pathname)) {
         this.report.outOfScope.push({ fromPath: normalizePath(new URL(urlBefore).pathname), toUrl: page.url(), action: action.label });
-        return null;
+        return { child: null, failed: false };
       }
-      if (!after || node.depth + 1 > this.config.limits.maxDepth) return null;
+      if (!after || node.depth + 1 > this.config.limits.maxDepth) return { child: null, failed: false };
       const key = stateKeyOf(after);
-      if (this.visited.has(key) || this.queuedKeys.has(key)) return null;
+      if (this.visited.has(key) || this.queuedKeys.has(key)) return { child: null, failed: false };
       this.queuedKeys.add(key);
-      return { path, depth: node.depth + 1 };
+      return { child: { path, depth: node.depth + 1 }, failed: false };
     } finally {
       await this.closePage(page);
     }
@@ -329,7 +356,7 @@ export class ShardCrawler {
   /** 新しいタブで起点を開き、path の操作を再生する。observeLoad なら起点の読み込みを判定する。 */
   private async openAt(path: ActionDescriptor[], observeLoad: boolean): Promise<{ page: Page; oracle: Oracle } | null> {
     this.stats.replays++;
-    await this.context.tracing.startChunk().catch(() => undefined);
+    await warnOnFailure('trace の記録の開始', this.context.tracing.startChunk(), (m) => this.log(m));
     const page = await this.context.newPage();
     page.setDefaultTimeout(ACTION_TIMEOUT_MS);
     if (this.session) await restoreSessionOnNewPage(page, this.session);
@@ -341,14 +368,15 @@ export class ShardCrawler {
 
       if (!this.isAnonymous && new URL(page.url()).pathname === this.config.target.login.path) {
         // ログアウトの操作の後などでセッションが切れている。ログインし直してから開き直す
-        if (observeLoad) await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore: page.url() }, 0);
+        if (observeLoad) await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore: page.url() }, null);
         await this.closePage(page);
         await this.relogin();
         return this.openAt(path, observeLoad);
       }
+      this.consecutiveRelogins = 0;
 
       if (observeLoad) {
-        const { findings } = await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore: page.url() }, 0);
+        const { findings } = await oracle.end({ actionKind: 'load', nativeInvalid: false, urlBefore: page.url() }, null);
         await this.recordFindings(page, findings, []);
       }
 
@@ -358,7 +386,7 @@ export class ShardCrawler {
       }
       return { page, oracle };
     } catch (e) {
-      const reason = e instanceof Error ? e.message.split('\n')[0] : String(e);
+      const reason = errorMessage(e);
       if (e instanceof LoginError) throw e;
       this.stats.replayFailures++;
       this.report.replayFailures.push({ path: path.map((a) => a.label), reason });
@@ -368,30 +396,37 @@ export class ShardCrawler {
     }
   }
 
+  /**
+   * ログインし直す。ログアウトの操作のたびに呼ばれるため回数の合計には上限を付けず、
+   * ログインし直しても起点がログイン画面のまま（セッションを保てない）状態が続いたときだけ止める。
+   */
   private async relogin(): Promise<void> {
-    if (this.stats.relogins >= MAX_RELOGINS) {
-      throw new LoginError(`ログインし直しが上限（${MAX_RELOGINS} 回）に達しました`);
+    if (this.consecutiveRelogins >= MAX_CONSECUTIVE_RELOGINS) {
+      throw new LoginError(`ログインし直してもセッションが保てません（${MAX_CONSECUTIVE_RELOGINS} 回続けて失敗）`);
     }
+    this.consecutiveRelogins++;
     this.stats.relogins++;
     await this.context.clearCookies();
     await this.login();
   }
 
   private async closePage(page: Page): Promise<void> {
-    if (!page.isClosed()) await page.close().catch(() => undefined);
+    if (!page.isClosed()) await warnOnFailure('タブの終了', page.close(), (m) => this.log(m));
     const tracePath = this.pendingTrace;
+    const findings = this.pendingTraceFindings;
     this.pendingTrace = null;
-    await this.context.tracing.stopChunk(tracePath ? { path: path.join(this.options.outDir, tracePath) } : undefined).catch(() => undefined);
+    this.pendingTraceFindings = [];
+    const saved = await warnOnFailure(
+      'trace の保存',
+      this.context.tracing.stopChunk(tracePath ? { path: path.join(this.options.outDir, tracePath) } : undefined),
+      (m) => this.log(m)
+    );
+    // 保存できなかった trace をレポートが指さないようにする
+    if (!saved) for (const finding of findings) delete finding.trace;
   }
 
-  private pendingTrace: string | null = null;
-
   private async enumerate(page: Page): Promise<Enumeration> {
-    return page.evaluate(enumerateElements, {
-      attr: ELEMENT_ID_ATTR,
-      excludeSelectors: this.config.crawl.excludeSelectors,
-      sharedRegions: this.config.crawl.sharedRegions,
-    });
+    return enumeratePage(page, this.config);
   }
 
   /** 状態の要素から、試す操作の一覧を作る。順番は種と状態のキーから決める。 */
@@ -465,12 +500,8 @@ export class ShardCrawler {
     return ordered.slice(0, this.config.limits.maxActionsPerState);
   }
 
-  private async locate(page: Page, ref: ElementRef, forms = false): Promise<number> {
-    const enumeration = await this.enumerate(page);
-    const items: { id: number; signature: string; occurrence: number }[] = forms ? enumeration.forms : enumeration.elements;
-    const found = items.find((i) => i.signature === ref.signature && i.occurrence === ref.occurrence);
-    if (!found) throw new ReplayError(`要素が見つかりません: ${ref.signature} #${ref.occurrence}`);
-    return found.id;
+  private async locate(page: Page, ref: ElementRef): Promise<number> {
+    return findId((await this.enumerate(page)).elements, ref);
   }
 
   private locator(page: Page, id: number) {
@@ -505,16 +536,22 @@ export class ShardCrawler {
         return false;
       }
       case 'fill-submit': {
-        for (const value of action.values ?? []) {
-          const id = await this.locate(page, value.target);
+        // 欄を全部 1 回の列挙で探す（列挙のたびに要素の番号が振り直されるため、番号は同じ列挙の中でだけ使う）
+        const before = await this.enumerate(page);
+        const fieldIds = (action.values ?? []).map((value) => ({ value, id: findId(before.elements, value.target) }));
+        for (const { value, id } of fieldIds) {
           if (value.inputType === 'select') await this.locator(page, id).selectOption(value.value, { timeout: ACTION_TIMEOUT_MS });
           else await this.locator(page, id).fill(value.value, { timeout: ACTION_TIMEOUT_MS });
         }
-        const formId = await this.locate(page, action.target, true);
+        // 入力で画面が変わる（別のフォームが出るなど）ことがあるため、送信の前に探し直し、その列挙の番号だけを使う
+        const filled = await this.enumerate(page);
+        const formIndex = filled.forms.findIndex(
+          (f) => f.signature === action.target.signature && f.occurrence === action.target.occurrence
+        );
+        if (formIndex < 0) throw new ReplayError(`フォームが見つかりません: ${action.target.signature} #${action.target.occurrence}`);
+        const formId = filled.forms[formIndex].id;
         const invalid = await page.evaluate(isFormNativelyInvalid, { attr: ELEMENT_ID_ATTR, id: formId });
-        const enumeration = await this.enumerate(page);
-        const formIndex = enumeration.forms.findIndex((f) => f.id === formId);
-        const submit = enumeration.elements.find((e) => e.formIndex === formIndex && e.isSubmit);
+        const submit = filled.elements.find((e) => e.formIndex === formIndex && e.isSubmit);
         await oracle.armChangeWatcher();
         if (submit) await this.locator(page, submit.id).click({ timeout: ACTION_TIMEOUT_MS });
         else await page.evaluate(requestSubmit, { attr: ELEMENT_ID_ATTR, id: formId });
@@ -545,6 +582,7 @@ export class ShardCrawler {
         finding.screenshot = screenshot;
         if (!this.pendingTrace) this.pendingTrace = this.artifactPath(`trace-${++this.traceCounter}.zip`);
         finding.trace = this.pendingTrace;
+        this.pendingTraceFindings.push(finding);
       }
       this.report.findings.push(finding);
     }
@@ -560,7 +598,7 @@ export class ShardCrawler {
       await page.screenshot({ path: path.join(this.options.outDir, relative) });
       return relative;
     } catch (e) {
-      this.log(`スクリーンショットを撮れませんでした: ${String(e)}`);
+      this.log(`スクリーンショットを撮れませんでした: ${errorMessage(e)}`);
       return undefined;
     }
   }

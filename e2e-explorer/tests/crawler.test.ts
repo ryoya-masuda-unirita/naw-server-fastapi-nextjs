@@ -119,6 +119,43 @@ test('logs in through the login page and stays logged in on new tabs', async ({ 
   expect(report.findings[0]?.steps[0].description ?? report.actionLog[0]).toBeTruthy();
 });
 
+test('logs in again after a logout action and keeps crawling', async ({ browser }) => {
+  /** ログアウトの操作でセッションが切れても、ログインし直して巡回を続けられること（再ログインの回数で止まらないこと） */
+  const config = testConfig({
+    groups: [{ id: 'home', startPath: '/home', include: ['^/home$'], roles: ['tester'] }],
+  });
+  const { report } = await crawl(browser, config);
+  expect(report.error).toBeUndefined();
+  expect(report.stats.stoppedBy).toBe('queue-empty');
+  // 詳細を開いた状態と閉じた状態のそれぞれでログアウトを押す。最後の操作だった場合を除き、押すたびにログインし直す
+  const logouts = report.outOfScope.filter((o) => o.action.includes('ログアウト')).length;
+  expect(logouts).toBeGreaterThanOrEqual(2);
+  expect(report.stats.relogins).toBeGreaterThanOrEqual(logouts - 1);
+  expect(report.stats.relogins).toBeGreaterThanOrEqual(1);
+});
+
+test('keeps findings that happened before an action failed', async ({ browser }) => {
+  /** 入力で呼ばれた API の 500 でフォームが消えて送信できなかったとき、再生失敗と一緒に 500 も記録すること */
+  const config = testConfig({
+    maxDepth: 0,
+    groups: [{ id: 'break', startPath: '/break-form', include: ['^/break-form$'], roles: ['anonymous'] }],
+  });
+  const { report } = await crawl(browser, config);
+  expect(report.stats.replayFailures).toBeGreaterThan(0);
+  expect(report.findings.some((f) => f.kind === 'http-5xx' && f.location === 'GET /api/boom')).toBe(true);
+});
+
+test('does not report every action as slow on a polling page', async ({ browser }) => {
+  /** 定期的な問い合わせで通信が落ち着かない画面でも、すべての操作を「遅い操作」にしないこと */
+  const config = testConfig({
+    maxDepth: 0,
+    groups: [{ id: 'polling', startPath: '/polling', include: ['^/polling$'], roles: ['anonymous'] }],
+  });
+  const { report } = await crawl(browser, config);
+  expect(report.stats.actions).toBeGreaterThan(0);
+  expect(report.findings.filter((f) => f.kind === 'slow-action')).toEqual([]);
+});
+
 test('skips external links and excluded elements', async ({ browser }) => {
   /** 別オリジンへのリンクと除外指定の要素は操作しないこと */
   const { report, log } = await crawl(browser, testConfig({ maxDepth: 0 }));

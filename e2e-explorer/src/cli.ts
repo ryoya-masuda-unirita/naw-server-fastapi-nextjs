@@ -82,9 +82,9 @@ async function explore(config: ExplorerConfig, shards: Shard[], outDir: string, 
   log(`レポート: ${result.files.markdown}`);
   log(`         ${result.files.html}`);
   log(`         ${result.files.json}`);
-  const failed = result.reports.filter((r) => r.error);
+  const failed = [...result.reports.filter((r) => r.error).map((r) => `${r.shardId}（${r.error}）`), ...result.failures];
   if (failed.length > 0) {
-    throw new EnvironmentError(`途中で止まった担当範囲があります: ${failed.map((r) => `${r.shardId}（${r.error}）`).join(', ')}`);
+    throw new EnvironmentError(`途中で止まった担当範囲があります: ${failed.join(', ')}`);
   }
 }
 

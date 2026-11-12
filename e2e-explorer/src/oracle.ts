@@ -66,6 +66,21 @@ const SEVERITY_OF: Record<FindingKind, Severity> = {
 const MESSAGE_MAX_LENGTH = 500;
 const LAYOUT_REPORT_LIMIT = 5;
 const ABORTED_ERROR = 'net::ERR_ABORTED';
+const SETTLE_POLL_MS = 50;
+
+export interface SettleResult {
+  elapsedMs: number;
+  settled: boolean;
+}
+
+/** 操作できる要素を列挙する（巡回役と判定役で同じ条件を使う）。 */
+export async function enumeratePage(page: Page, config: ExplorerConfig): Promise<Enumeration> {
+  return page.evaluate(enumerateElements, {
+    attr: ELEMENT_ID_ATTR,
+    excludeSelectors: config.crawl.excludeSelectors,
+    sharedRegions: config.crawl.sharedRegions,
+  });
+}
 
 export function rawFinding(
   kind: FindingKind,
@@ -261,16 +276,20 @@ export class Oracle {
     this.record(rawFinding('network-failure', this.requestLocation(request), errorText, { url: request.url() }));
   }
 
-  /** 通信が settleQuietMs のあいだ途切れるまで待つ（上限 settleTimeoutMs）。経過ミリ秒を返す。 */
-  async waitForSettle(): Promise<number> {
+  /**
+   * 通信が settleQuietMs のあいだ途切れるまで待つ（上限 settleTimeoutMs）。
+   * 上限まで待っても落ち着かなかった（定期的な問い合わせ・開きっぱなしの通信がある）ときは settled が false。
+   */
+  async waitForSettle(): Promise<SettleResult> {
     const { settleQuietMs, settleTimeoutMs } = this.config.timing;
     const started = Date.now();
-    const pollMs = 50;
     while (Date.now() - started < settleTimeoutMs) {
-      if (this.inflight === 0 && Date.now() - this.lastActivity >= settleQuietMs) break;
-      await new Promise((r) => setTimeout(r, pollMs));
+      if (this.inflight === 0 && Date.now() - this.lastActivity >= settleQuietMs) {
+        return { elapsedMs: Date.now() - started, settled: true };
+      }
+      await new Promise((r) => setTimeout(r, SETTLE_POLL_MS));
     }
-    return Date.now() - started;
+    return { elapsedMs: Date.now() - started, settled: false };
   }
 
   async begin(options: ObservationOptions): Promise<void> {
@@ -308,12 +327,15 @@ export class Oracle {
   /**
    * 操作の後の判定。操作が終わって通信が落ち着いた後に呼ぶ。
    * 真っ白・何も起きない・戻れない・遅い操作を判定し、観測中の疑いと合わせて返す。
+   * elapsedMs が null（通信が落ち着かないまま待つのをやめた）なら、遅い操作の判定はしない。
+   * 定期的な問い合わせのある画面で、すべての操作が「遅い」になるのを避けるため。
    */
-  async end(info: AfterActionInfo, elapsedMs: number): Promise<ObservationResult> {
+  async end(info: AfterActionInfo, elapsedMs: number | null): Promise<ObservationResult> {
     const observation = this.observation;
     if (!observation) return { findings: [], enumeration: null };
     const location = this.pagePath();
     // 要素の列挙は目印の属性を書き換えて DOM の変化に数えられてしまうため、変化を読んでから行う
+    // 評価できない＝画面ごと遷移して見張りが消えた。遷移は「何かが起きた」なので変化ありとみなす
     const changes = info.actionKind === 'load' ? 0 : await this.page.evaluate(readChangeWatcher).catch(() => -1);
     const enumeration = await this.enumerate();
 
@@ -323,6 +345,7 @@ export class Oracle {
       this.record(rawFinding('unhandled-rejection', location, message));
     }
 
+    // 遷移の途中で評価できないときは、真っ白かどうかを判定しない（次の状態で判定される）
     const blank = await this.page.evaluate(inspectBlank).catch(() => null);
     if (blank && blank.textLength === 0 && blank.mediaCount === 0) {
       this.record(rawFinding('blank-screen', location, '本文の文字も画像もない'));
@@ -348,7 +371,7 @@ export class Oracle {
       );
     }
 
-    if (elapsedMs > this.config.oracle.slowActionMs) {
+    if (elapsedMs !== null && elapsedMs > this.config.oracle.slowActionMs) {
       this.record(
         rawFinding('slow-action', location, `${elapsedMs}ms`, {
           elapsedMs,
@@ -363,11 +386,7 @@ export class Oracle {
 
   async enumerate(): Promise<Enumeration | null> {
     try {
-      return await this.page.evaluate(enumerateElements, {
-        attr: ELEMENT_ID_ATTR,
-        excludeSelectors: this.config.crawl.excludeSelectors,
-        sharedRegions: this.config.crawl.sharedRegions,
-      });
+      return await enumeratePage(this.page, this.config);
     } catch {
       // 遷移の途中などで評価できないときは、次の状態を作らない
       return null;

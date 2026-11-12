@@ -11,6 +11,11 @@ import type { ExplorerConfig, Shard } from './config.ts';
 
 export class LoginError extends Error {}
 
+/** ログインに失敗したとき、画面のエラー表示を読むのに待つ時間。 */
+const ERROR_TEXT_TIMEOUT_MS = 1_000;
+const CAPTURE_RETRIES = 10;
+const CAPTURE_RETRY_INTERVAL_MS = 200;
+
 export type SessionSnapshot = Record<string, string>;
 
 export async function loginThroughUi(page: Page, config: ExplorerConfig, shard: Shard): Promise<SessionSnapshot> {
@@ -33,7 +38,8 @@ export async function loginThroughUi(page: Page, config: ExplorerConfig, shard: 
     const message = await page
       .locator('[role=alert], .text-status-error')
       .first()
-      .textContent({ timeout: 1000 })
+      .textContent({ timeout: ERROR_TEXT_TIMEOUT_MS })
+      // エラー表示がない画面もある。そのときは表示なしとして、確かめる手がかりの文に切り替える
       .catch(() => null);
     throw new LoginError(
       `ログインできません（担当範囲 ${shard.id}・テナント ${shard.tenantId}・ユーザー ${role.loginId}）` +
@@ -42,8 +48,6 @@ export async function loginThroughUi(page: Page, config: ExplorerConfig, shard: 
   }
   return captureSessionStorageAfterNavigation(page);
 }
-
-const CAPTURE_RETRIES = 10;
 
 /**
  * ログイン後、アプリは window.location.href で画面ごと遷移し直す（さらに認証の確認で
@@ -58,7 +62,7 @@ async function captureSessionStorageAfterNavigation(page: Page): Promise<Session
       return await captureSessionStorage(page);
     } catch (e) {
       lastError = e;
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(CAPTURE_RETRY_INTERVAL_MS);
     }
   }
   throw new LoginError(`ログイン後の sessionStorage を読めません: ${String(lastError)}`);

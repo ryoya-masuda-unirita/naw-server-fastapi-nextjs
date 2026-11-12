@@ -4,6 +4,7 @@ import type { ExplorerConfig, Shard } from './config.ts';
 import { crawlShard } from './crawler.ts';
 import { mergeReports, readShardReports, writeMergedReport, type WrittenReport } from './report.ts';
 import { SharedRegistry } from './shared-registry.ts';
+import { errorMessage } from './errors.ts';
 import type { MergedReport, ShardReport } from './types.ts';
 
 /**
@@ -27,6 +28,8 @@ export interface RunOptions {
 
 export interface RunResult {
   reports: ShardReport[];
+  /** 結果（shard-report.json）すら残せなかった担当範囲。 */
+  failures: string[];
   merged: MergedReport;
   files: WrittenReport;
 }
@@ -36,6 +39,7 @@ export async function runShards(config: ExplorerConfig, shards: Shard[], options
   const registry = options.noSharedRegistry ? undefined : new SharedRegistry(path.join(options.outDir, SHARED_REGISTRY_FILE));
   const queue = [...shards];
   const reports: ShardReport[] = [];
+  const failures: string[] = [];
   const workerCount = Math.max(1, Math.min(options.workers, shards.length));
 
   const worker = async (workerNo: number): Promise<void> => {
@@ -43,12 +47,21 @@ export async function runShards(config: ExplorerConfig, shards: Shard[], options
       const shard = queue.shift();
       if (!shard) return;
       options.log?.(`ワーカー ${workerNo}: ${shard.id} を開始`);
-      const report = await crawlShard(browser, config, shard, {
-        outDir: options.outDir,
-        registry,
-        prepareContext: options.prepareContext,
-        log: options.log,
-      });
+      let report: ShardReport;
+      try {
+        report = await crawlShard(browser, config, shard, {
+          outDir: options.outDir,
+          registry,
+          prepareContext: options.prepareContext,
+          log: options.log,
+        });
+      } catch (e) {
+        // crawlShard は自分のエラーをレポートに書いて返すが、レポートの書き出し自体の失敗などで
+        // 投げられても、他のワーカーを止めない（Promise.all が失敗するとブラウザを閉じてしまうため）
+        options.log?.(`ワーカー ${workerNo}: ${shard.id} の結果を残せませんでした: ${errorMessage(e)}`);
+        failures.push(`${shard.id}（${errorMessage(e)}）`);
+        continue;
+      }
       reports.push(report);
       options.log?.(
         `ワーカー ${workerNo}: ${shard.id} を終了（状態 ${report.stats.states}・操作 ${report.stats.actions}・疑い ${report.findings.length}）`
@@ -66,5 +79,5 @@ export async function runShards(config: ExplorerConfig, shards: Shard[], options
   const allReports = await readShardReports(options.outDir);
   const merged = mergeReports(allReports, config.seed);
   const files = await writeMergedReport(options.outDir, merged);
-  return { reports, merged, files };
+  return { reports, merged, files, failures };
 }
