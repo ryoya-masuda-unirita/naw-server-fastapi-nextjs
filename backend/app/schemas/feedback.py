@@ -18,6 +18,8 @@ _SORT_FIELD_VALUES = {
     "review5",
 }
 _SORT_ORDER_VALUES = {"asc", "desc"}
+# 移植元の3つのフィードバック一覧のRequestで共通の`@Pattern`の文言。
+_SORT_ORDER_MESSAGE = "ソート順は asc または desc を指定してください"
 _FEEDBACK_MESSAGE_SORT_FIELD_VALUES = {"updatedAt", "name", "accuracy", "add", "folder"}
 _FEEDBACK_ROOM_SORT_FIELD_VALUES = {"updatedAt", "chat", "name", "level"}
 
@@ -62,7 +64,7 @@ class FeedbackUserListRequest(BaseModel):
     def _validate_sort_order(cls, value: str) -> str:
         """sortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("ソート順は asc または desc を指定してください")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 
@@ -126,7 +128,7 @@ class FeedbackMessageListRequest(BaseModel):
     def _validate_feedback_message_sort_order(cls, value: str) -> str:
         """feedbackMessage用のsortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("ソート順は asc または desc を指定してください")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 
@@ -195,7 +197,7 @@ class FeedbackRoomListRequest(BaseModel):
     def _validate_feedback_room_sort_order(cls, value: str) -> str:
         """feedbackRoom用のsortOrderがasc/descのいずれかであることを検証する。"""
         if value not in _SORT_ORDER_VALUES:
-            raise ValueError("ソート順は asc または desc を指定してください")
+            raise ValueError(_SORT_ORDER_MESSAGE)
         return value
 
 

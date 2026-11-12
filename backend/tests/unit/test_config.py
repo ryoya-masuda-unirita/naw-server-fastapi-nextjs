@@ -1,6 +1,13 @@
 import pytest
+from pydantic import ValidationError
 
-from app.core.config import AwsSettings, AzureOpenAISettings, CorsSettings, Settings
+from app.core.config import (
+    AwsSettings,
+    AzureOpenAISettings,
+    CorsSettings,
+    PasswordResetSettings,
+    Settings,
+)
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
@@ -134,6 +141,40 @@ class TestCookieSameSite:
         """
         with pytest.raises(ValueError, match="COOKIE_SECURE=true"):
             _build_settings(COOKIE_SAME_SITE="none", COOKIE_SECURE="false")
+
+
+def _build_password_reset_settings(**env_overrides: str) -> PasswordResetSettings:
+    """テスト用に `.env` を読み込まずに `PasswordResetSettings` を組み立てる。"""
+    return PasswordResetSettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
+
+
+class TestPasswordResetSettings:
+    def test_defaults_to_reference_values(self):
+        """未設定時は移植元 application.yml と同じ 5 回・15 分になること"""
+        settings = _build_password_reset_settings()
+
+        assert settings.max_failure_attempts == 5
+        assert settings.lockout_minutes == 15
+
+    def test_reflects_env_overrides(self):
+        """回数・ロック時間を環境変数相当の値で上書きできること"""
+        settings = _build_password_reset_settings(
+            PASSWORD_RESET_MAX_FAILURE_ATTEMPTS="3",
+            PASSWORD_RESET_LOCKOUT_MINUTES="30",
+        )
+
+        assert settings.max_failure_attempts == 3
+        assert settings.lockout_minutes == 30
+
+    @pytest.mark.parametrize(
+        "env_name",
+        ["PASSWORD_RESET_MAX_FAILURE_ATTEMPTS", "PASSWORD_RESET_LOCKOUT_MINUTES"],
+    )
+    @pytest.mark.parametrize("value", ["0", "-1"])
+    def test_rejects_non_positive_values(self, env_name, value):
+        """回数・ロック時間が 0 以下ならロックが正しく働かないため起動時にエラーになること"""
+        with pytest.raises(ValidationError):
+            _build_password_reset_settings(**{env_name: value})
 
 
 class TestAzureOpenAISettings:

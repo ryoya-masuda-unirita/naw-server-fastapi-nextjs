@@ -7,8 +7,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from typing import Any, cast
 
-from sqlalchemy import String, select, func, or_
-from sqlalchemy import cast as sa_cast
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.credit_quota import (
@@ -17,7 +16,7 @@ from app.core.credit_quota import (
     total_credits_correlated_subquery,
     validate_total_credits_sort,
 )
-from app.core.sort import SortOrder, build_order_by, find_order
+from app.core.sort import SortOrder, build_order_by, enum_as_string, find_order
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
 from app.models.tenant import Tenant
@@ -48,9 +47,9 @@ class UserService:
         "loginId": User.login_id,
         "name": User.name,
         # 移植元は users.role を varchar(32) で保持するため権限順は文字列順
-        # (ADMIN < SYSTEM < USER) になる。こちらは PostgreSQL のネイティブ enum で
-        # 宣言順 (USER < ADMIN < SYSTEM) に並んでしまうため、文字列にキャストして揃える。
-        "role": sa_cast(User.role, String),
+        # (ADMIN < SYSTEM < USER) になる。こちらはネイティブ enum の宣言順
+        # (USER < ADMIN < SYSTEM) に並んでしまうため、文字列にして揃える。
+        "role": enum_as_string(User.role),
         "updated_at": User.updated_at,
         "updatedAt": User.updated_at,
     }

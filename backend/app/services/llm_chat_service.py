@@ -359,26 +359,39 @@ class LlmChatService:
                 logger.exception("LLMチャット呼び出し中にエラーが発生しました")
                 yield sse_event("error", {"message": str(e)})
             finally:
+                # 移植元(`LlmChatService.streamAndPersist`)はmessage_stop/errorを送って
+                # ストリームを閉じた後にトークン使用量を永続化するため、その失敗は
+                # クライアントへ通知しない。ここで例外を伝播させると、送信済みのイベントの
+                # 後で接続が異常終了してしまうため、ログに残してストリームを正常に閉じる。
+                # なお移植元の最新版はこのAPIでライブラリを永続化しない(local-server側で
+                # 登録する)ため、ライブラリの永続化失敗の扱いに移植元の根拠はない。
+                # トークン使用量と同じくログのみとし、トークン使用量の記録は続ける。
                 if library_title is not None and library_content is not None:
-                    await LlmChatService._persist_library(
-                        tenant_id=library_tenant_id,
-                        message_id=library_message_id,
+                    try:
+                        await LlmChatService._persist_library(
+                            tenant_id=library_tenant_id,
+                            message_id=library_message_id,
+                            user_id=user_id,
+                            title=library_title,
+                            content=library_content,
+                        )
+                    except Exception:
+                        logger.exception("ライブラリの永続化に失敗しました")
+                try:
+                    await LlmChatService._persist_token_usage(
+                        tenant_id=tenant_id,
                         user_id=user_id,
-                        title=library_title,
-                        content=library_content,
+                        room_id=room_id,
+                        message_id=message_id_for_usage,
+                        model_name=model_name,
+                        endpoint_type=model_endpoint_type,
+                        token_weight=token_weight,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        credit_settings=credit_settings,
                     )
-                await LlmChatService._persist_token_usage(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    room_id=room_id,
-                    message_id=message_id_for_usage,
-                    model_name=model_name,
-                    endpoint_type=model_endpoint_type,
-                    token_weight=token_weight,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    credit_settings=credit_settings,
-                )
+                except Exception:
+                    logger.exception("トークン使用量の永続化に失敗しました")
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 

@@ -3,6 +3,25 @@ import json
 import pytest
 
 from app.core.session_store import SESSION_COOKIE_NAME
+from app.core.config import get_password_reset_settings
+from app.services.auth_service import (
+    INVALID_CREDENTIALS_MESSAGE,
+    PASSWORD_RESET_LOCKED_MESSAGE,
+)
+
+# サービスと同じ設定から取り、.env で上限を変えてもテストが実装とずれないようにする
+MAX_FAILURE_ATTEMPTS = get_password_reset_settings().max_failure_attempts
+
+
+def _reset_body(
+    login_id: str, old_password: str, new_password: str = "NewPassword123!"
+) -> dict[str, str]:
+    """パスワード再設定のリクエストボディを作る。"""
+    return {
+        "loginId": login_id,
+        "oldPassword": old_password,
+        "newPassword": new_password,
+    }
 
 
 @pytest.mark.asyncio
@@ -191,8 +210,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 403
-        # "User not found" ではなく旧パスワード照合まで到達したことを確認する
-        assert response.json()["message"] == "Invalid old password"
+        assert response.json()["message"] == INVALID_CREDENTIALS_MESSAGE
 
     async def test_post_auth_password_reset_without_login_id(self, client, test_tenant):
         """POST /auth/password/reset loginId・username のどちらもなければ 400 になること"""
@@ -208,6 +226,142 @@ class TestAuthAPI:
 
         assert response.status_code == 400
         assert response.json()["message"] == "ログインIDの入力は必須です。"
+
+    async def test_post_auth_password_reset_with_blank_login_id(
+        self, client, test_tenant
+    ):
+        """POST /auth/password/reset 空のログインIDは 400 と移植元の必須メッセージになること"""
+        async with client as c:
+            response = await c.post(
+                "/auth/password/reset",
+                json={
+                    "loginId": "",
+                    "oldPassword": "OldPassword123!",
+                    "newPassword": "NewPassword123!",
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == "ログインIDの入力は必須です。"
+
+    async def test_post_auth_password_reset_same_response_for_unknown_user_and_wrong_password(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset 存在しないログインIDと旧パスワード誤りで同じ応答になること"""
+        async with client as c:
+            unknown_response = await c.post(
+                "/auth/password/reset",
+                json=_reset_body("nonexistent", "WrongPassword999!"),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            wrong_response = await c.post(
+                "/auth/password/reset",
+                json=_reset_body(
+                    test_user_with_password["user"].login_id, "WrongPassword999!"
+                ),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert unknown_response.status_code == wrong_response.status_code == 403
+        assert (
+            unknown_response.json()["message"]
+            == wrong_response.json()["message"]
+            == INVALID_CREDENTIALS_MESSAGE
+        )
+
+    async def test_post_auth_password_reset_does_not_lock_unknown_user(
+        self, client, test_tenant
+    ):
+        """POST /auth/password/reset 存在しないログインIDの失敗は数えずロックしないこと"""
+        async with client as c:
+            responses = [
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body("nonexistent", "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(MAX_FAILURE_ATTEMPTS + 1)
+            ]
+
+        assert [r.status_code for r in responses] == [403] * (MAX_FAILURE_ATTEMPTS + 1)
+
+    async def test_post_auth_password_reset_locks_after_max_failed_attempts(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset 旧パスワードを上限回数誤ると、上限回目で 429 になること"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            responses = [
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(MAX_FAILURE_ATTEMPTS)
+            ]
+
+        assert [r.status_code for r in responses] == [403] * (
+            MAX_FAILURE_ATTEMPTS - 1
+        ) + [429]
+        assert responses[-1].json()["message"] == PASSWORD_RESET_LOCKED_MESSAGE
+
+    async def test_post_auth_password_reset_rejects_correct_password_while_locked(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset ロック中は正しい旧パスワードでも 429 で再設定されないこと"""
+        login_id = test_user_with_password["user"].login_id
+        async with client as c:
+            for _ in range(MAX_FAILURE_ATTEMPTS):
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            response = await c.post(
+                "/auth/password/reset",
+                json=_reset_body(login_id, test_user_with_password["plain_password"]),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 429
+        assert response.json()["message"] == PASSWORD_RESET_LOCKED_MESSAGE
+        assert SESSION_COOKIE_NAME not in response.cookies
+
+    async def test_post_auth_password_reset_success_resets_failure_count(
+        self, client, test_tenant, test_user_with_password
+    ):
+        """POST /auth/password/reset 成功すると失敗回数がリセットされること"""
+        login_id = test_user_with_password["user"].login_id
+        new_password = "NewPassword123!"
+        async with client as c:
+            for _ in range(MAX_FAILURE_ATTEMPTS - 1):
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+            success_response = await c.post(
+                "/auth/password/reset",
+                json=_reset_body(
+                    login_id, test_user_with_password["plain_password"], new_password
+                ),
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            # 成功前の失敗が残っていれば、ここで上限に達して 429 になる
+            responses_after_success = [
+                await c.post(
+                    "/auth/password/reset",
+                    json=_reset_body(login_id, "WrongPassword999!"),
+                    headers={"X-Tenant-ID": test_tenant.id},
+                )
+                for _ in range(MAX_FAILURE_ATTEMPTS - 1)
+            ]
+
+        assert success_response.status_code == 200
+        assert [r.status_code for r in responses_after_success] == [403] * (
+            MAX_FAILURE_ATTEMPTS - 1
+        )
 
     async def test_post_auth_password_reset_rejects_password_violating_policy(
         self, client, test_tenant, test_user_with_password

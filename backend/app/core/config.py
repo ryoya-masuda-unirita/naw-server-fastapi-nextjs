@@ -123,6 +123,31 @@ class LlmCreditSettings(BaseSettings):
     input_credit_weight: float = Field(default=1 / 3, alias="INPUT_CREDIT_WEIGHT")
 
 
+class PasswordResetSettings(BaseSettings):
+    """パスワード再設定の失敗回数ロックの設定。
+
+    `Settings` とは別クラスにする。理由は`CorsSettings`と同様（単体テスト等で
+    `app.main`をインポートするだけで必須値エラーになるのを防ぐため）。
+    移植元Java版の`password-reset.*`（`PasswordResetProperties`）に対応し、
+    デフォルト値は移植元の`application.yml`の値を踏襲する。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    # ロック時間内の失敗がこの回数に達したらロックする
+    # 0 以下だと全員が常にロック中になる、またはロックが掛からなくなるため 1 以上に限る
+    max_failure_attempts: int = Field(
+        default=5, ge=1, alias="PASSWORD_RESET_MAX_FAILURE_ATTEMPTS"
+    )
+    # 失敗を数える期間（分）。この期間を過ぎた失敗は数えない。
+    # 0 以下だと記録の有効期限（EXPIRE）が即時またはエラーになるため 1 以上に限る
+    lockout_minutes: int = Field(
+        default=15, ge=1, alias="PASSWORD_RESET_LOCKOUT_MINUTES"
+    )
+
+
 class RedisSettings(BaseSettings):
     """Redis接続設定。
 
@@ -211,6 +236,11 @@ def get_llm_credit_settings() -> LlmCreditSettings:
 @lru_cache
 def get_azure_openai_settings() -> AzureOpenAISettings:
     return AzureOpenAISettings()
+
+
+@lru_cache
+def get_password_reset_settings() -> PasswordResetSettings:
+    return PasswordResetSettings()
 
 
 @lru_cache

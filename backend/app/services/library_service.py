@@ -3,6 +3,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.library_tag_id import normalize_library_tag_ids
 from app.core.room_access import (
     can_view_room,
     require_owned_room,
@@ -281,7 +282,8 @@ class LibraryService:
 
         Raises:
             HTTPException: ライブラリ・紐づくルームが存在しない場合404、所有者で
-                ない場合403、指定グループ・タグの一部が存在しない場合400。
+                ない場合403、指定グループ・タグの一部が存在しない場合、またはタグIDが
+                ハイフンなし32桁・UUID標準形式のどちらでもない場合400。
         """
         library = await LibraryService._get_library_or_404(
             library_id, tenant_id, session
@@ -303,7 +305,9 @@ class LibraryService:
                     detail="指定されたグループが存在しません",
                 )
 
-        tag_ids = list(dict.fromkeys(req.tags)) if req.tags else []
+        # 移植元と同じく共有グループの確認の後にタグIDの形式を確認する（不正なら400）。
+        # 保存形式に揃えてから重複を除き、表記違いの同じタグを1件として扱う。
+        tag_ids = list(dict.fromkeys(normalize_library_tag_ids(req.tags or [])))
         if tag_ids:
             found_tags = await LibraryTagRepository.find_by_tenant_id_and_ids(
                 tenant_id, tag_ids, session

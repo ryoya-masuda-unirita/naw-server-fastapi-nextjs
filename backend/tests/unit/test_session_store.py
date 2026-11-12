@@ -1,6 +1,3 @@
-import fakeredis.aioredis
-import pytest
-
 from app.core.session_store import (
     SESSION_TTL_SECONDS,
     create_session,
@@ -8,14 +5,6 @@ from app.core.session_store import (
     get_session,
     touch_session,
 )
-
-
-@pytest.fixture
-async def fake_redis():
-    """fakeredis によるインメモリ Redis（テスト用）"""
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    yield redis
-    await redis.aclose()
 
 
 class TestCreateAndGetSession:

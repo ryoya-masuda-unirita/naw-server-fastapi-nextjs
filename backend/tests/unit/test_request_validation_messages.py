@@ -341,6 +341,12 @@ CASES: list[tuple[str, type[BaseModel], dict[str, Any], str]] = [
         "旧パスワードの入力は必須です。",
     ),
     (
+        "password_reset_old_password_blank",
+        PasswordResetRequest,
+        {**_PASSWORD_RESET, "oldPassword": "   "},
+        "旧パスワードの入力は必須です。",
+    ),
+    (
         "password_reset_new_password_missing",
         PasswordResetRequest,
         _without(_PASSWORD_RESET, "newPassword"),
@@ -471,6 +477,14 @@ class TestBackendOnlyConstraints:
 
 
 class TestConstraintsUnchanged:
+    def test_message_content_empty_user_input_is_accepted(self):
+        """回答の生成のuserInputは移植元と同じく空文字を受け付けること（issue-245）"""
+        request = MessageContentCreateRequest.model_validate(
+            {"messageId": "message-1", "userInput": ""}
+        )
+
+        assert request.userInput == ""
+
     def test_category_name_at_max_length_is_accepted(self):
         """カテゴリ名16文字ちょうどは受け付けること"""
         request = AssistantCategoryCreateRequest.model_validate({"name": "あ" * 16})

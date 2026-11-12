@@ -9,6 +9,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import fakeredis.aioredis
 import jwt
 
 from app.core.security import hash_password, create_access_token, SECRET_KEY, ALGORITHM
@@ -88,3 +89,12 @@ def invalid_jwt_token():
         "iat": int(now.timestamp()),
     }
     return jwt.encode(payload, "wrong-secret-key", algorithm=ALGORITHM)
+
+
+@pytest.fixture
+async def fake_redis():
+    """fakeredis によるインメモリ Redis（テスト用）"""
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    yield redis
+    await redis.flushall()
+    await redis.aclose()

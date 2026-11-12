@@ -207,16 +207,19 @@ class MessageContentCreateRequest(RequestModel):
 
     messageId: str | None = Field(default=None, min_length=1)
     messageContentId: str | None = Field(default=None, min_length=1)
-    # 移植元は`@NotNull`（メッセージ指定なし）のため、欠落・nullは既定文言を返す。
-    # 空文字の拒否（`min_length=1`）はbackend独自の制約のため文言を置き換えない。
-    userInput: Annotated[
-        str,
-        Field(min_length=1),
-        ValidationMessages(not_null=NOT_NULL_DEFAULT_MESSAGE),
-    ]
+    # 移植元は`@NotNull`（メッセージ指定なし）だけで空文字を許す（クライアントは本文が
+    # 空でも添付ファイルがあれば送信できる）。項目の必須だけを残して長さは制約せず
+    # （issue-245）、欠落・nullは移植元の既定文言を返す（issue-239）。
+    userInput: Annotated[str, ValidationMessages(not_null=NOT_NULL_DEFAULT_MESSAGE)]
     additionalPrompt: str | None = None
     historyMessages: list[MessageContentHistoryTurn] = []
     attachmentFiles: list[AttachmentFile] = []
+    # 移植元`MessageController`も受け取るパートのため受け付けるが、移植元同様LLMには
+    # 送らない。移植元`CreateMessageContentViewModel.isHistoryAttachmentCountCorrect`
+    # （件数が`attachmentsCount`合計と一致すること）は`javax.validation`の`@AssertTrue`で、
+    # 実行時のバリデータ（jakarta）が評価しないため移植しない。移植元のクライアントは
+    # `attachmentsCount`を送るが本パートは送らないため、件数を検証すると添付のある
+    # ルームで続けて送れなくなる（issue-245）。
     historyAttachmentFiles: list[AttachmentFile] = []
     tools: list[ToolConfig] | None = None
     # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
@@ -226,21 +229,6 @@ class MessageContentCreateRequest(RequestModel):
     responseFormat: ResponseFormatRequest | None = Field(
         default=None, validation_alias="response_format"
     )
-
-    @model_validator(mode="after")
-    def _validate_history_attachment_count(self) -> "MessageContentCreateRequest":
-        """historyAttachmentFilesの件数がhistoryMessagesのattachmentsCount合計と一致することを検証する。
-
-        移植元(Spring Boot)の`CreateMessageContentViewModel.isHistoryAttachmentCountCorrect`
-        に対応する。過去ターンの添付ファイル内容自体はLLMに再送しない設計
-        （`docs/issue-97/01_要件定義.md`参照）のため、ここでは件数の整合性のみを検証する。
-        """
-        expected = sum(turn.attachmentsCount for turn in self.historyMessages)
-        if len(self.historyAttachmentFiles) != expected:
-            raise ValueError(
-                "historyAttachmentFilesの件数がhistoryMessagesのattachmentsCount合計と一致しません"
-            )
-        return self
 
     @model_validator(mode="after")
     def _validate_target_specified(self) -> "MessageContentCreateRequest":

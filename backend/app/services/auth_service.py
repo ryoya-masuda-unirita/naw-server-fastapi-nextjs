@@ -1,14 +1,26 @@
 from datetime import datetime, timedelta, timezone
 
+import redis.asyncio as redis
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import password_mismatch_store
+from app.core.config import get_password_reset_settings
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import create_access_token, hash_password, verify_password_async
 from app.repositories.password_history_repository import PasswordHistoryRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import AuthResponse
+
+# 移植元`PasswordResetService.INVALID_CREDENTIALS_MESSAGE`。ユーザーの有無で応答を
+# 変えるとログインIDの存在が分かってしまうため、ユーザー不在・旧パスワード誤りで共通にする。
+INVALID_CREDENTIALS_MESSAGE = "ログインIDまたは旧パスワードが正しくありません。"
+# 移植元`PasswordResetLockedException.MESSAGE`
+PASSWORD_RESET_LOCKED_MESSAGE = (
+    "連続でパスワード更新に失敗したため、一定期間更新はできません。"
+    "しばらく時間を空けて再度お試しください"
+)
 
 
 class AuthService:
@@ -129,8 +141,12 @@ class AuthService:
         new_password: str,
         tenant_id: str,
         session: AsyncSession,
+        redis_client: redis.Redis,
     ) -> AuthResponse:
         """初回ログイン時のパスワードリセット処理を行い認証レスポンスを返す。
+
+        移植元`PasswordResetService.resetPassword`と同じく、旧パスワードの誤りを
+        失敗として記録し、ロック時間内の失敗が上限に達したら再設定をロックする。
 
         Args:
             login_id: ログインID。
@@ -138,24 +154,59 @@ class AuthService:
             new_password: 新パスワード。
             tenant_id: テナントID。
             session: 非同期DBセッション。
+            redis_client: 失敗記録を保存するRedis非同期クライアント。
 
         Returns:
             認証成功レスポンス（新パスワードで発行したJWTを含む）。
 
         Raises:
-            HTTPException: ユーザーが存在しない場合は 403、旧パスワード不一致は 403、
+            HTTPException: ユーザーが存在しない・パスワード履歴がない・旧パスワード
+                不一致の場合は 403、ロック中または今回の失敗で上限に達した場合は 429、
                 テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
+            # 移植元どおり、ユーザーが存在しない場合は失敗として数えない
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="User not found"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=INVALID_CREDENTIALS_MESSAGE,
+            )
+
+        settings = get_password_reset_settings()
+        if await password_mismatch_store.is_locked_out(
+            user.id,
+            tenant_id,
+            settings.max_failure_attempts,
+            settings.lockout_minutes,
+            redis_client,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=PASSWORD_RESET_LOCKED_MESSAGE,
             )
 
         latest = await PasswordHistoryRepository.get_latest(user.id, session)
-        if not latest or not await verify_password_async(old_password, latest.password):
+        if not latest:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid old password"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=INVALID_CREDENTIALS_MESSAGE,
+            )
+
+        if not await verify_password_async(old_password, latest.password):
+            if await password_mismatch_store.record_failure_and_check_lockout(
+                user.id,
+                tenant_id,
+                settings.max_failure_attempts,
+                settings.lockout_minutes,
+                redis_client,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=PASSWORD_RESET_LOCKED_MESSAGE,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=INVALID_CREDENTIALS_MESSAGE,
             )
 
         tenant = await TenantRepository.find_by_id(tenant_id, session)
@@ -179,6 +230,11 @@ class AuthService:
         user.is_required_password_reset = False
         session.add(user)
         await session.flush()
+        # 移植元は再設定と同じトランザクションの最後で失敗記録を消し、消せなければ
+        # 再設定ごと取り消す。コミット後に消すと、Redisの障害時にパスワードは
+        # 変わったのにエラー応答になるため、コミット前に消す（ここに来た時点で
+        # 旧パスワードは正しいので、コミットが失敗して記録だけ消えても害はない）
+        await password_mismatch_store.clear_failures(user.id, tenant_id, redis_client)
         await session.commit()
 
         token = create_access_token(user.login_id, tenant_id)

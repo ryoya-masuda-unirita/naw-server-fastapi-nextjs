@@ -107,6 +107,7 @@ async def reset_password(
         request.newPassword,
         x_tenant_id,
         session,
+        redis_client,
     )
     await _issue_session(response, auth_response, x_tenant_id, redis_client)
     return auth_response
