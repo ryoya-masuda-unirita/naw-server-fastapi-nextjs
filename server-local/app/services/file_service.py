@@ -27,6 +27,7 @@ ADDITIONAL_LEARNING_SPLIT_LENGTH = "3000"
 ADDITIONAL_LEARNING_DISPLAY_NAME = "フィードバック学習"
 ADD_FILE_FAILED_MESSAGE = "ファイルの追加に失敗しました。"
 DOWNLOAD_FAILED_MESSAGE = "ファイルをダウンロードできません"
+FILE_NOT_SPECIFIED_MESSAGE = "ファイルが指定されていません"
 DELETE_IDS_FILENAME_PREFIX = "ids"
 DELETE_IDS_FILENAME_SUFFIX = ".txt"
 UPLOAD_FALLBACK_FILENAME = "file"
@@ -129,10 +130,12 @@ async def _run_waha_create(
     feedback_id: str | None,
     room_id: str | None,
 ) -> dict[str, Any]:
+    # 移植元は未添付だと NullPointerException（500）になるが、入力不備なので 400 で返す。
+    # Waha! のセッションを無駄に作らないよう、開始前に確認する
+    if upload is None:
+        raise BadRequestError(FILE_NOT_SPECIFIED_MESSAGE)
     session_id = await waha.start_session()
     try:
-        if upload is None:
-            raise BadRequestError("ファイルが指定されていません")
         await waha.upload_file(
             filename=upload.filename or UPLOAD_FALLBACK_FILENAME,
             content=upload.data,

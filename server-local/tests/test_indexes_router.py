@@ -253,6 +253,17 @@ class TestUploadFile:
         assert res.status_code == 500
         assert fake_waha.call_names()[-1] == "end_session"
 
+    async def test_upload_file_without_file_returns_400(
+        self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
+    ) -> None:
+        """ファイル未添付なら Waha! を呼ばずに 400 を返すこと"""
+        res = await client.post(
+            f"{BASE}/files", headers=TENANT, data={"name": "a.txt", "userId": "u"}
+        )
+        assert res.status_code == 400
+        assert res.json()["message"] == "ファイルが指定されていません"
+        assert fake_waha.calls == []
+
     async def test_upload_file_job_failure_returns_500(
         self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
     ) -> None:
