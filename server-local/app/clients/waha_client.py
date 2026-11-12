@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import mimetypes
+import re
 from enum import StrEnum
+from typing import Any
 
 import httpx
 
@@ -27,11 +29,47 @@ SLOT_TEXTDATA = "textdata"
 
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
+# 移植元 RestTemplate（Spring 6.1 の DefaultResponseErrorHandler・LogFormatUtils）の
+# HTTP エラーメッセージの書式
+NO_BODY_TEXT = "[no body]"
+NEWLINE_PATTERN = re.compile(r"[\n\r]")
+NEWLINE_REPLACEMENT = "<EOL>"
+CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+CONTROL_CHARACTER_REPLACEMENT = "?"
+
 
 class ResultStatus(StrEnum):
     SUCCESS = "SUCCESS"
     RUNNING = "RUNNING"
     FAILURE = "FAILURE"
+
+
+def status_error_message(response: httpx.Response) -> str:
+    """HTTP エラー応答を、移植元の HttpStatusCodeException と同じ書式のメッセージにする。
+
+    例: `503 Service Unavailable: [no body]` / `500 Internal Server Error: "本文"`。
+    移植元と同じく URL を含めないため、クエリの authkey が応答・ログに出ない（#252）。
+    理由句は応答のものをそのまま使う。理由句を返さないサーバーでは空になり
+    `503 : [no body]` となるが、移植元（HttpURLConnection）も同じ。
+    """
+    preface = f"{response.status_code} {response.reason_phrase}: "
+    body = response.text
+    if not body:
+        return f"{preface}{NO_BODY_TEXT}"
+    body = NEWLINE_PATTERN.sub(NEWLINE_REPLACEMENT, body)
+    body = CONTROL_CHARACTER_PATTERN.sub(CONTROL_CHARACTER_REPLACEMENT, body)
+    return f'{preface}"{body}"'
+
+
+def io_error_message(method: str, url: str, error: httpx.RequestError) -> str:
+    """通信エラーを、移植元の ResourceAccessException と同じ書式のメッセージにする。
+
+    移植元は URL のクエリ（authkey など）を除いて出すため、同じく除く。
+    httpx の通信エラーは本文が空のことがあるため、そのときは例外の型名を出す。
+    """
+    resource = str(httpx.URL(url).copy_with(query=None))
+    reason = str(error) or type(error).__name__
+    return f'I/O error on {method} request for "{resource}": {reason}'
 
 
 def parse_result_status(response: str | None) -> ResultStatus:
@@ -61,9 +99,24 @@ class WahaClient:
         self._retry_interval = result_retry_interval_seconds
         self._max_retries = result_max_retries
 
+    async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Waha! を呼び、失敗したら URL を含まない ExternalServiceError にする。
+
+        httpx の HTTPStatusError は authkey 付きの URL をメッセージに含むため、
+        raise_for_status() は使わず、応答から直接メッセージを作る。通信エラー
+        （RequestError）のメッセージは URL を含まないため、原因を追えるよう連鎖は残す。
+        """
+        url = f"{self._api_base}{path}"
+        try:
+            response = await self._http.request(method, url, **kwargs)
+        except httpx.RequestError as e:
+            raise ExternalServiceError(io_error_message(method, url, e)) from e
+        if not response.is_success:
+            raise ExternalServiceError(status_error_message(response))
+        return response
+
     async def _get_text(self, path: str, params: dict[str, str | int]) -> str:
-        response = await self._http.get(f"{self._api_base}{path}", params=params)
-        response.raise_for_status()
+        response = await self._send("GET", path, params=params)
         return response.text
 
     async def start_session(self) -> str:
@@ -84,12 +137,12 @@ class WahaClient:
         media_type = (
             content_type or mimetypes.guess_type(filename)[0] or DEFAULT_CONTENT_TYPE
         )
-        response = await self._http.post(
-            f"{self._api_base}{FILE_UPLOAD_PATH}/{slot}",
+        response = await self._send(
+            "POST",
+            f"{FILE_UPLOAD_PATH}/{slot}",
             params={"sessionid": session_id},
             files={"file": (filename, content, media_type)},
         )
-        response.raise_for_status()
         logger.info(
             "Waha file uploaded: sessionId=%s, slot=%s, filename=%s, response=%s",
             session_id,

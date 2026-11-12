@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from typing import Any
 
-import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -70,17 +69,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         logger.error(exc.message)
         return JSONResponse(
             status_code=int(exc.status_code), content=error_response_body(exc.message)
-        )
-
-    @app.exception_handler(httpx.HTTPError)
-    async def _handle_http_error(
-        _request: Request, exc: httpx.HTTPError
-    ) -> JSONResponse:
-        # RestTemplate の失敗（RestClientException）は移植元で 500 + ErrorResponse
-        logger.error(str(exc))
-        return JSONResponse(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            content=error_response_body(str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)
