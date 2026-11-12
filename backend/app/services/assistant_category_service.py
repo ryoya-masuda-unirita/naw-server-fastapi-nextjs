@@ -18,9 +18,39 @@ _NOT_FOUND_MESSAGE = "AssistantCategory not found with id:{category_id}"
 _NOT_FOUND_MESSAGE_ON_UPDATE = "AssistantCategory not found with id: {category_id}"
 
 
+def _is_not_blank(value: str | None) -> bool:
+    """移植元 `StringUtils.isNotBlank` と同じく、空白以外の文字を含むかを判定する。
+
+    Parameters
+    ----------
+    value : str | None
+        判定する文字列。
+
+    Returns
+    -------
+    bool
+        None・空文字・空白だけでない場合True。
+    """
+    return value is not None and value.strip() != ""
+
+
 class AssistantCategoryService:
+    """アシスタントカテゴリの作成・取得・更新・削除を行うサービス。"""
+
     @staticmethod
     def _to_response(category: AssistantCategory) -> AssistantCategoryResponse:
+        """アシスタントカテゴリを応答の形に変換する。
+
+        Parameters
+        ----------
+        category : AssistantCategory
+            変換するアシスタントカテゴリ。
+
+        Returns
+        -------
+        AssistantCategoryResponse
+            応答用のアシスタントカテゴリ。
+        """
         return AssistantCategoryResponse(
             id=category.id,
             name=category.name,
@@ -38,17 +68,26 @@ class AssistantCategoryService:
     ) -> AssistantCategory:
         """IDとテナントIDでアシスタントカテゴリを取得し、存在しなければ404を送出する。
 
-        Args:
-            category_id: アシスタントカテゴリID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-            not_found_message: 存在しない場合の文言の雛形（`{category_id}` を埋める）。
+        Parameters
+        ----------
+        category_id : str
+            アシスタントカテゴリID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        not_found_message : str
+            存在しない場合の文言の雛形（`{category_id}` を埋める）。
 
-        Returns:
+        Returns
+        -------
+        AssistantCategory
             該当するアシスタントカテゴリ。
 
-        Raises:
-            HTTPException: 存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
         """
         category = await AssistantCategoryRepository.find_by_id_and_tenant_id(
             category_id, tenant_id, session
@@ -69,26 +108,30 @@ class AssistantCategoryService:
     ) -> AssistantCategoryResponse:
         """アシスタントカテゴリを新規作成する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        移植元と同じく同名の事前チェックはしない。同一テナント内に同名のカテゴリが
+        あると一意制約の違反になり、移植元と同じく500になる。
 
-        Returns:
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : AssistantCategoryCreateRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        AssistantCategoryResponse
             作成したアシスタントカテゴリ。
 
-        Raises:
-            HTTPException: 同一テナント内に同名のカテゴリが既に存在する場合400を返す。
+        Raises
+        ------
+        sqlalchemy.exc.IntegrityError
+            同一テナント内に同名のカテゴリが既に存在する場合。
         """
-        if await AssistantCategoryRepository.exists_by_tenant_id_and_name(
-            tenant_id, req.name, session
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Assistant category with name {req.name} already exists",
-            )
-
         category = AssistantCategory(
             tenant_id=tenant_id,
             name=req.name,
@@ -104,11 +147,16 @@ class AssistantCategoryService:
     ) -> list[AssistantCategoryResponse]:
         """テナント内の全アシスタントカテゴリを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AssistantCategoryResponse]
             アシスタントカテゴリ一覧。
         """
         categories = await AssistantCategoryRepository.find_by_tenant_id(
@@ -122,16 +170,24 @@ class AssistantCategoryService:
     ) -> AssistantCategoryResponse:
         """IDを指定してアシスタントカテゴリを取得する。
 
-        Args:
-            category_id: アシスタントカテゴリID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category_id : str
+            アシスタントカテゴリID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantCategoryResponse
             該当するアシスタントカテゴリ。
 
-        Raises:
-            HTTPException: 存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
         """
         category = await AssistantCategoryService._get_category_or_404(
             category_id, tenant_id, session
@@ -148,19 +204,34 @@ class AssistantCategoryService:
     ) -> AssistantCategoryResponse:
         """アシスタントカテゴリを更新する。
 
-        Args:
-            category_id: 更新対象のアシスタントカテゴリID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: 更新リクエスト。
-            session: 非同期DBセッション。
+        移植元と同じく、説明は空白でない値が来たときだけ上書きし、省略・空白なら
+        元の説明を残す。名前は入力チェックで空白を弾いているため常に上書きする。
+        同名の事前チェックはせず、同名の別カテゴリがあれば一意制約の違反で500になる。
 
-        Returns:
+        Parameters
+        ----------
+        category_id : str
+            更新対象のアシスタントカテゴリID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : AssistantCategoryUpdateRequest
+            更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        AssistantCategoryResponse
             更新後のアシスタントカテゴリ。
 
-        Raises:
-            HTTPException: 存在しない場合404、同一テナント内に同名の別カテゴリが
-                既に存在する場合400を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
+        sqlalchemy.exc.IntegrityError
+            同一テナント内に同名の別カテゴリが既に存在する場合。
         """
         category = await AssistantCategoryService._get_category_or_404(
             category_id,
@@ -168,16 +239,10 @@ class AssistantCategoryService:
             session,
             not_found_message=_NOT_FOUND_MESSAGE_ON_UPDATE,
         )
-        if await AssistantCategoryRepository.exists_by_tenant_id_and_name(
-            tenant_id, req.name, session, exclude_id=category_id
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Assistant category with name {req.name} already exists",
-            )
 
         category.name = req.name
-        category.description = req.description
+        if _is_not_blank(req.description):
+            category.description = req.description
         category.updated_user_id = current_user.id
         updated = await AssistantCategoryRepository.update(category, session)
         return AssistantCategoryService._to_response(updated)
@@ -188,13 +253,19 @@ class AssistantCategoryService:
     ) -> None:
         """アシスタントカテゴリを削除する。
 
-        Args:
-            category_id: 削除対象のアシスタントカテゴリID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category_id : str
+            削除対象のアシスタントカテゴリID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
         """
         category = await AssistantCategoryService._get_category_or_404(
             category_id, tenant_id, session
