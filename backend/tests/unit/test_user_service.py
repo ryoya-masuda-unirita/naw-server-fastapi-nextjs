@@ -21,6 +21,7 @@ REPO_PATH = "app.services.user_service.PasswordHistoryRepository"
 
 @pytest.fixture
 def admin_user(test_tenant):
+    """テスト用管理者ユーザー（DB なし）"""
     return User(
         id=uuid4(),
         tenant_id=test_tenant.id,
@@ -32,6 +33,8 @@ def admin_user(test_tenant):
 
 
 class TestGetUsers:
+    """UserService.get_users のテスト"""
+
     async def test_returns_paged_users(self, test_tenant, test_user):
         """テナント内ユーザーを返すこと"""
         session = AsyncMock()
@@ -105,6 +108,8 @@ class TestGetUsers:
 
 
 class TestCreateUser:
+    """UserService.create_user のテスト"""
+
     async def test_creates_user_with_initial_password(self, test_tenant):
         """ユーザーを作成し初期パスワードが返ること"""
         session = AsyncMock()
@@ -125,6 +130,31 @@ class TestCreateUser:
 
         assert result.initialPassword is not None
         assert len(result.initialPassword) >= test_tenant.pw_policy_min_length
+        assert result.loginKey is None
+        assert result.hasLoginKey is False
+
+    async def test_returns_login_key_set_in_request(self, test_tenant):
+        """作成で設定したログインキーを loginKey と hasLoginKey で返すこと"""
+        session = AsyncMock()
+
+        mock_dup = MagicMock()
+        mock_dup.scalars.return_value.first.return_value = None
+        mock_tenant = MagicMock()
+        mock_tenant.scalars.return_value.first.return_value = test_tenant
+        session.execute = AsyncMock(side_effect=[mock_dup, mock_tenant])
+        session.flush = AsyncMock()
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        req = UserCreateRequest(
+            loginId="keyuser", name="Key User", role=UserRole.USER, loginKey="new-key"
+        )
+
+        with patch(f"{REPO_PATH}.save", new=AsyncMock()):
+            result = await UserService.create_user(req, test_tenant.id, session)
+
+        assert result.loginKey == "new-key"
+        assert result.hasLoginKey is True
 
     async def test_raises_400_on_duplicate_login_id(self, test_tenant, test_user):
         """同一 loginId が存在する場合 400 を返すこと"""
@@ -162,6 +192,8 @@ class TestCreateUser:
 
 
 class TestUpdateUser:
+    """UserService.update_user のテスト"""
+
     async def test_updates_name_and_role(self, test_tenant, test_user):
         """name・role・loginKey を更新できること"""
         session = AsyncMock()
@@ -177,6 +209,45 @@ class TestUpdateUser:
 
         assert test_user.name == "Updated Name"
         assert test_user.role == UserRole.ADMIN
+
+    async def test_does_not_return_stored_login_key(self, test_tenant, test_user):
+        """ログインキーを設定しない更新では保存済みのキーを返さず hasLoginKey だけ返すこと"""
+        test_user.login_key = "stored-key"
+        session = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.scalars.return_value.first.return_value = test_user
+        session.execute = AsyncMock(return_value=mock_user)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        result = await UserService.update_user(
+            test_user.login_id, UserUpdateRequest(name="N"), test_tenant.id, session
+        )
+
+        assert result.loginKey is None
+        assert result.hasLoginKey is True
+
+    async def test_returns_login_key_set_in_request(self, test_tenant, test_user):
+        """更新で設定したログインキーを loginKey で返すこと"""
+        session = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.scalars.return_value.first.return_value = test_user
+        session.execute = AsyncMock(return_value=mock_user)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        result = await UserService.update_user(
+            test_user.login_id,
+            UserUpdateRequest(loginKey="changed-key"),
+            test_tenant.id,
+            session,
+        )
+
+        assert test_user.login_key == "changed-key"
+        assert result.loginKey == "changed-key"
+        assert result.hasLoginKey is True
 
     async def test_resets_password_when_flag_is_true(self, test_tenant, test_user):
         """resetPassword=true でパスワードリセットし initialPassword が返ること"""
@@ -218,6 +289,8 @@ class TestUpdateUser:
 
 
 class TestDeleteUser:
+    """UserService.delete_user のテスト"""
+
     async def test_deletes_existing_user(self, test_tenant, test_user):
         """存在するユーザーを削除できること"""
         session = AsyncMock()
@@ -246,6 +319,8 @@ class TestDeleteUser:
 
 
 class TestGetProfile:
+    """UserService.get_profile のテスト"""
+
     async def test_returns_user_profile(self, test_tenant, test_user):
         """自分のプロフィールを取得できること"""
         session = AsyncMock()
@@ -275,6 +350,8 @@ class TestGetProfile:
 
 
 class TestUpdateProfile:
+    """UserService.update_profile のテスト"""
+
     async def test_updates_password_and_clears_reset_flag(self, test_tenant, test_user):
         """パスワード変更後 is_required_password_reset が false になること"""
         session = AsyncMock()
@@ -365,6 +442,8 @@ class TestUpdateProfile:
 
 
 class TestGenerateInitialPassword:
+    """初期パスワード生成のテスト"""
+
     def test_meets_policy_length(self, test_tenant):
         """生成パスワードがポリシーの最小長を満たすこと"""
         password = UserService._generate_initial_password(test_tenant)
@@ -387,6 +466,8 @@ class TestGenerateInitialPassword:
 
 
 class TestEscapeLikePattern:
+    """LIKE パターンのエスケープのテスト"""
+
     def test_escapes_percent(self):
         """%をエスケープすること"""
         result = UserService._escape_like_pattern("100%")
@@ -404,6 +485,8 @@ class TestEscapeLikePattern:
 
 
 class TestSortableColumns:
+    """並べ替えできる列の解決のテスト"""
+
     def test_resolves_snake_case(self):
         """スネークケースの許可列名を解決できること"""
         assert UserService._SORTABLE_COLUMNS["created_at"] is User.created_at
@@ -422,6 +505,8 @@ class TestSortableColumns:
 
 
 class TestParseRole:
+    """ロール文字列の解釈のテスト"""
+
     @pytest.mark.parametrize("role", ["USER", "ADMIN", "SYSTEM"])
     def test_returns_user_role_for_valid_value(self, role):
         """定義済みの権限名はUserRoleに変換されること"""
@@ -443,6 +528,8 @@ class TestParseRole:
 
 
 class TestIssueInitialPassword:
+    """初期パスワード発行のテスト"""
+
     async def test_generates_password_and_saves_history(self, test_tenant, test_user):
         """初期パスワードを生成し、パスワード履歴が1回保存されること"""
         session = AsyncMock()

@@ -41,8 +41,22 @@ from app.services.assistant_service import AssistantService
 
 
 class GroupService:
+    """グループ管理の業務ロジック。"""
+
     @staticmethod
     def _is_tenant_admin(current_user: User) -> bool:
+        """テナント管理者（ADMIN・SYSTEM）かどうかを判定する。
+
+        Parameters
+        ----------
+        current_user : User
+            ログイン中のユーザー。
+
+        Returns
+        -------
+        bool
+            テナント管理者なら True。
+        """
         return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
@@ -51,14 +65,21 @@ class GroupService:
     ) -> None:
         """テナント管理者、またはグループ内管理者であることを確認する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: いずれの権限も持たない場合 403 を返す。
+        Raises
+        ------
+        HTTPException
+            いずれの権限も持たない場合 403 を返す。
         """
         if GroupService._is_tenant_admin(current_user):
             return
@@ -75,16 +96,24 @@ class GroupService:
     ) -> Group:
         """グループIDとテナントIDでグループを取得する。存在しない場合は404を送出する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Group
             Group オブジェクト。
 
-        Raises:
-            HTTPException: グループが存在しない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合 404 を返す。
         """
         group = await GroupRepository.find_by_id_and_tenant_id(
             group_id, tenant_id, session
@@ -99,14 +128,20 @@ class GroupService:
     def _parse_user_uuid(user_id: str) -> UUID:
         """ユーザーIDをUUIDにパースする。不正な形式の場合は404を送出する。
 
-        Args:
-            user_id: パース対象のユーザーID文字列。
+        Parameters
+        ----------
+        user_id : str
+            パース対象のユーザーID文字列。
 
-        Returns:
+        Returns
+        -------
+        UUID
             パースされたUUID。
 
-        Raises:
-            HTTPException: UUID形式でない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            UUID形式でない場合 404 を返す。
         """
         try:
             return UUID(user_id)
@@ -119,12 +154,17 @@ class GroupService:
     def _assert_not_self(target_user_id: UUID, current_user: User) -> None:
         """テナント管理者以外が自分自身を操作しようとしていないか確認する。
 
-        Args:
-            target_user_id: 操作対象のユーザーID。
-            current_user: 認証済みユーザー。
+        Parameters
+        ----------
+        target_user_id : UUID
+            操作対象のユーザーID。
+        current_user : User
+            認証済みユーザー。
 
-        Raises:
-            HTTPException: グループ管理者が自分自身を操作しようとした場合 403 を返す。
+        Raises
+        ------
+        HTTPException
+            グループ管理者が自分自身を操作しようとした場合 403 を返す。
         """
         if (
             not GroupService._is_tenant_admin(current_user)
@@ -143,15 +183,22 @@ class GroupService:
     ) -> GroupListItemResponse:
         """GroupをGroupListItemResponseに変換する（所属ユーザーを結合して取得する）。
 
-        Args:
-            group: 変換対象のGroup。
-            session: 非同期DBセッション。
-            assistant_map: グループIDをキーとした (アシスタントID, アシスタント名) 一覧の辞書
-                （呼び出し側で対象グループID一覧を一括取得したもの）。
-            template_map: グループIDをキーとした (プロンプトテンプレートID, プロンプトテンプレート名) 一覧の辞書
-                （呼び出し側で対象グループID一覧を一括取得したもの）。
+        Parameters
+        ----------
+        group : Group
+            変換対象のGroup。
+        session : AsyncSession
+            非同期DBセッション。
+        assistant_map : dict[str, list[tuple[str, str]]]
+            グループIDをキーとした (アシスタントID, アシスタント名) 一覧の辞書
+            （呼び出し側で対象グループID一覧を一括取得したもの）。
+        template_map : dict[str, list[tuple[str, str]]]
+            グループIDをキーとした (プロンプトテンプレートID, プロンプトテンプレート名) 一覧の辞書
+            （呼び出し側で対象グループID一覧を一括取得したもの）。
 
-        Returns:
+        Returns
+        -------
+        GroupListItemResponse
             グループ一覧の1件分のレスポンス。
         """
         rows = await GroupUserRepository.find_by_group(
@@ -182,12 +229,18 @@ class GroupService:
     ) -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]:
         """グループID一覧に紐づくアシスタント・プロンプトテンプレートのマップをまとめて取得する。
 
-        Args:
-            group_ids: 対象のグループID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_ids : list[str]
+            対象のグループID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]
             (アシスタントマップ, プロンプトテンプレートマップ) のタプル。
             それぞれグループIDをキーとした (ID, 名前) 一覧の辞書。
         """
@@ -205,13 +258,20 @@ class GroupService:
     ) -> list[GroupListItemResponse]:
         """グループ一覧を取得する（一般ユーザー向け）。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            is_belonged: Trueならログインユーザーが所属するグループのみ返す。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        is_belonged : bool
+            Trueならログインユーザーが所属するグループのみ返す。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[GroupListItemResponse]
             グループ一覧。
         """
         groups = await GroupRepository.find_all_by_tenant_ordered_by_name(
@@ -248,19 +308,30 @@ class GroupService:
     ) -> GroupListPageResponse:
         """管理者向けグループ一覧をページネーションで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: グループ名の部分一致検索文字列。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
-            restrict_to_managed: Trueの場合、テナント管理者以外は自分が管理するグループのみに絞り込む
-                （`GET /api/admin/groups` 用）。Falseの場合は絞り込みなし
-                （`GET /api/admin/all-groups` 用、呼び出し側でテナント管理者専用に制限すること）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            グループ名の部分一致検索文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
+        restrict_to_managed : bool
+            Trueの場合、テナント管理者以外は自分が管理するグループのみに絞り込む
+            （`GET /api/admin/groups` 用）。Falseの場合は絞り込みなし
+            （`GET /api/admin/all-groups` 用、呼び出し側でテナント管理者専用に制限すること）。
 
-        Returns:
+        Returns
+        -------
+        GroupListPageResponse
             ページネーション済みグループ一覧。
         """
         allowed_group_ids = None
@@ -300,17 +371,26 @@ class GroupService:
     ) -> GroupDetailResponse:
         """グループ詳細を取得する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        GroupDetailResponse
             グループ詳細。
 
-        Raises:
-            HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合 404、権限がない場合 403 を返す。
         """
         group = await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -329,16 +409,24 @@ class GroupService:
     ) -> GroupDetailResponse:
         """グループを新規作成する（テナント管理者専用、呼び出し側でロールを検証すること）。
 
-        Args:
-            req: グループ作成リクエスト。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        req : GroupCreateRequest
+            グループ作成リクエスト。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        GroupDetailResponse
             作成したグループの詳細。
 
-        Raises:
-            HTTPException: グループ名が空の場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            グループ名が空の場合 400 を返す。
         """
         if not req.name:
             raise HTTPException(
@@ -366,18 +454,28 @@ class GroupService:
     ) -> GroupDetailResponse:
         """グループ名を更新する。
 
-        Args:
-            group_id: グループID。
-            req: グループ更新リクエスト。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        req : GroupUpdateRequest
+            グループ更新リクエスト。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        GroupDetailResponse
             更新後のグループ詳細。
 
-        Raises:
-            HTTPException: グループが存在しない場合 404、権限がない場合 403 を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合 404、権限がない場合 403 を返す。
         """
         group = await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -402,10 +500,14 @@ class GroupService:
     ) -> None:
         """グループを削除する（テナント管理者専用、呼び出し側でロールを検証すること）。存在しない場合は何もしない。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
         """
         group = await GroupRepository.find_by_id_and_tenant_id(
             group_id, tenant_id, session
@@ -434,25 +536,40 @@ class GroupService:
         `include_usage=True`の場合のみ許可され、有効な請求期間が存在する場合に限り
         DBクエリでその合計値によりソートする。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: ユーザー名・loginIdの部分一致検索文字列。
-            role: グループ内ロールでの絞り込み（"ADMIN"または"USER"。大文字小文字を
-                区別しない。未知の値なら0件）。
-            sort: 並べ替え指定の並び（`totalCredits`を含められる）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
-            include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            ユーザー名・loginIdの部分一致検索文字列。
+        role : str | None
+            グループ内ロールでの絞り込み（"ADMIN"または"USER"。大文字小文字を
+            区別しない。未知の値なら0件）。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（`totalCredits`を含められる）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
+        include_usage : bool
+            Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
-        Returns:
+        Returns
+        -------
+        PagedGroupMemberResponse
             ページネーション済み所属ユーザー一覧。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403、
-                `sort=totalCredits`指定時に`include_usage=False`の場合400を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403、
+            `sort=totalCredits`指定時に`include_usage=False`の場合400を返す。
         """
         validate_total_credits_sort(sort, include_usage)
 
@@ -498,7 +615,6 @@ class GroupService:
                 userId=str(u.id),
                 name=u.name,
                 role=u.role.value,
-                loginKey=u.login_key,
                 groupAdmin=gu.is_admin,
                 updatedAt=gu.updated_at,
                 totalCredits=(
@@ -523,16 +639,24 @@ class GroupService:
     ) -> None:
         """グループにユーザーを一括追加する。既存所属はスキップする。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            user_ids: 追加対象のユーザーID一覧。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        user_ids : list[str]
+            追加対象のユーザーID一覧。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: user_idsが空の場合400、グループが存在しない場合404、
-                権限がない場合403、対象ユーザーが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            user_idsが空の場合400、グループが存在しない場合404、
+            権限がない場合403、対象ユーザーが存在しない場合404を返す。
         """
         if not user_ids:
             raise HTTPException(
@@ -574,16 +698,24 @@ class GroupService:
     ) -> None:
         """グループからユーザーを除外する。既に非所属なら何もしない。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            target_user_id: 除外対象のユーザーID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        target_user_id : str
+            除外対象のユーザーID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403、
-                グループ管理者が自分自身を除外しようとした場合403を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403、
+            グループ管理者が自分自身を除外しようとした場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -610,17 +742,26 @@ class GroupService:
     ) -> None:
         """グループ内管理者フラグを更新する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            target_user_id: 対象ユーザーID。
-            group_admin: 更新後のグループ内管理者フラグ。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        target_user_id : str
+            対象ユーザーID。
+        group_admin : bool
+            更新後のグループ内管理者フラグ。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、対象ユーザーが非所属の場合404、
-                権限がない場合403、グループ管理者が自分自身のロールを変更しようとした場合403を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、対象ユーザーが非所属の場合404、
+            権限がない場合403、グループ管理者が自分自身のロールを変更しようとした場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -652,16 +793,24 @@ class GroupService:
     ) -> None:
         """グループにアシスタントを一括追加する。既存紐付けはスキップする。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            assistant_ids: 追加対象のアシスタントID一覧。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        assistant_ids : list[str]
+            追加対象のアシスタントID一覧。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: assistant_idsが空の場合400、グループが存在しない場合404、
-                権限がない場合403、対象アシスタントが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            assistant_idsが空の場合400、グループが存在しない場合404、
+            権限がない場合403、対象アシスタントが存在しない場合404を返す。
         """
         if not assistant_ids:
             raise HTTPException(
@@ -703,16 +852,24 @@ class GroupService:
     ) -> None:
         """グループからアシスタントを除外する。既に非紐付けなら何もしない。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            assistant_id: 除外対象のアシスタントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        assistant_id : str
+            除外対象のアシスタントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403、
-                対象アシスタントが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403、
+            対象アシスタントが存在しない場合404を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -748,23 +905,38 @@ class GroupService:
     ) -> PagedAssistantResponse:
         """グループに紐づくアシスタント一覧をページネーションで取得する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            assistant_type: アシスタント種別での絞り込み。
-            category_id: カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
-            search: アシスタント名・説明の部分一致検索文字列。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        assistant_type : AssistantType | None
+            アシスタント種別での絞り込み。
+        category_id : str | None
+            カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
+        search : str | None
+            アシスタント名・説明の部分一致検索文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedAssistantResponse
             ページネーション済みアシスタント一覧（各要素にaddedAtを含む）。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -804,16 +976,24 @@ class GroupService:
     ) -> None:
         """グループにプロンプトテンプレートを一括追加する。既存所属はスキップする。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            template_ids: 追加対象のプロンプトテンプレートID一覧。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        template_ids : list[str]
+            追加対象のプロンプトテンプレートID一覧。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: template_idsが空の場合400、グループが存在しない場合404、
-                権限がない場合403、対象テンプレートが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            template_idsが空の場合400、グループが存在しない場合404、
+            権限がない場合403、対象テンプレートが存在しない場合404を返す。
         """
         if not template_ids:
             raise HTTPException(
@@ -856,16 +1036,24 @@ class GroupService:
     ) -> None:
         """グループからプロンプトテンプレートを除外する。既に非所属なら何もしない。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            template_id: 除外対象のプロンプトテンプレートID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        template_id : str
+            除外対象のプロンプトテンプレートID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403、
-                対象テンプレートが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403、
+            対象テンプレートが存在しない場合404を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(
@@ -900,21 +1088,34 @@ class GroupService:
     ) -> PagedPromptTemplateResponse:
         """グループに紐づくプロンプトテンプレート一覧をページネーションで取得する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: テンプレート名・説明の部分一致検索文字列。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            テンプレート名・説明の部分一致検索文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedPromptTemplateResponse
             ページネーション済みプロンプトテンプレート一覧（各要素にaddedAtを含む）。
 
-        Raises:
-            HTTPException: グループが存在しない場合404、権限がない場合403を返す。
+        Raises
+        ------
+        HTTPException
+            グループが存在しない場合404、権限がない場合403を返す。
         """
         await GroupService._get_group_or_404(group_id, tenant_id, session)
         await GroupService._assert_can_manage_group(

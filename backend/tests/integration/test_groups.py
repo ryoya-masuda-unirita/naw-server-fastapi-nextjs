@@ -117,27 +117,45 @@ async def group_with_admin_member(session, tenant, group, member_user):
 
 
 def _headers(login_id, tenant_id):
+    """ユーザーの認証ヘッダーを作る。
+
+    Parameters
+    ----------
+    login_id : str
+        ログインID。
+    tenant_id : str
+        テナントID。
+
+    Returns
+    -------
+    dict[str, str]
+        Authorization と X-Tenant-ID のヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 def admin_headers(admin_user, tenant):
+    """テナント管理者の認証ヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def member_headers(member_user, tenant):
+    """グループメンバーの認証ヘッダー"""
     return _headers(member_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def other_headers(other_user, tenant):
+    """グループ外ユーザーの認証ヘッダー"""
     return _headers(other_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -401,6 +419,26 @@ class TestGroupUsers:
         assert len(body["content"]) == 1
         assert body["content"][0]["groupAdmin"] is True
 
+    async def test_get_group_users_does_not_return_login_key(
+        self, client, session, admin_headers, group_with_admin_member, member_user
+    ):
+        """所属ユーザー一覧はログインキーを返さないこと（Issue #309、移植元 NAW-1342）"""
+        member_user.login_key = "member-secret-key"
+        session.add(member_user)
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group_with_admin_member.id}/users",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        row = response.json()["content"][0]
+        assert "loginKey" not in row
+        assert "hasLoginKey" not in row
+        assert "member-secret-key" not in response.text
+
     async def test_add_user_to_group(self, client, admin_headers, group, other_user):
         """ユーザーをグループに追加できること"""
         async with client as c:
@@ -602,6 +640,22 @@ async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> 
 
 
 def _token_usage(tenant_id: str, user_id, input_credits: int = 0) -> TokenUsage:
+    """テスト用のトークン使用量を作る。
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    user_id : UUID
+        使用したユーザーのID。
+    input_credits : int
+        入力のクレジット。
+
+    Returns
+    -------
+    TokenUsage
+        テスト用のトークン使用量。
+    """
     return TokenUsage(
         tenant_id=tenant_id,
         user_id=user_id,
