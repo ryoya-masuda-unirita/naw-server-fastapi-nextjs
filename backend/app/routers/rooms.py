@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
+from app.core.date_parse import iso_instant_query
 from app.core.security import (
     get_current_user,
     get_verified_tenant_id,
@@ -126,8 +129,18 @@ async def get_admin_room_histories(
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
     user_id: str | None = Query(None, alias="userId"),
-    created_at_from: str | None = Query(None, alias="createdAtFrom"),
-    created_at_to: str | None = Query(None, alias="createdAtTo"),
+    created_at_from: datetime | None = Depends(
+        iso_instant_query(
+            "createdAtFrom",
+            "作成日時の開始（この時刻以降）。ISO 8601 の日時（例: 2026-10-08T15:00:00Z）",
+        )
+    ),
+    created_at_to: datetime | None = Depends(
+        iso_instant_query(
+            "createdAtTo",
+            "作成日時の終了（この時刻より前）。ISO 8601 の日時（例: 2026-10-09T15:00:00Z）",
+        )
+    ),
     room_rate: str | None = Query(None, alias="roomRate"),
     name: str | None = Query(None),
     order_by: str = Query("updatedAt", alias="orderBy"),

@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
+from app.core.date_parse import iso_instant_query
 from app.core.file_storage import FileStorage, get_file_storage
 from app.core.security import get_verified_tenant_id, require_admin_or_group_admin
 from app.core.sort import SortOrder, sort_query
@@ -27,8 +28,18 @@ admin_router = APIRouter(
 async def get_files(
     index_id: str,
     userId: str | None = Query(None),
-    updatedAtFrom: datetime | None = Query(None),
-    updatedAtTo: datetime | None = Query(None),
+    updatedAtFrom: datetime | None = Depends(
+        iso_instant_query(
+            "updatedAtFrom",
+            "更新日時の開始（この時刻以降）。ISO 8601 の日時（例: 2026-10-08T15:00:00Z）",
+        )
+    ),
+    updatedAtTo: datetime | None = Depends(
+        iso_instant_query(
+            "updatedAtTo",
+            "更新日時の終了（この時刻より前）。ISO 8601 の日時（例: 2026-10-09T15:00:00Z）",
+        )
+    ),
     displayName: str | None = Query(None),
     fileName: str | None = Query(None),
     status_: str | None = Query(None, alias="status"),

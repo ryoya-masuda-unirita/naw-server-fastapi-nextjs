@@ -196,8 +196,8 @@ class FileService:
             index_id: インデックスID。
             tenant_id: テナントID。
             user_id_filter: 絞り込み対象のユーザー（loginIdまたはUUID）。
-            updated_at_from: 更新日時の範囲開始。
-            updated_at_to: 更新日時の範囲終了。
+            updated_at_from: 更新日時の範囲開始（この値以上）。
+            updated_at_to: 更新日時の範囲終了（この値より前）。
             display_name: 表示名の部分一致検索文字列。
             file_name: ファイル名の部分一致検索文字列。
             status_str: 絞り込み対象のステータス文字列。
