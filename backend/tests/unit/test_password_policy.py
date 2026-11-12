@@ -27,12 +27,22 @@ FLAG_COMBINATIONS: list[dict[str, bool]] = [
     dict(zip(CHAR_TYPES, flags)) for flags in product([True, False], repeat=4)
 ]
 
-# 有効な文字種のうち 1 つを欠いたケース（16 通り × 有効な文字種数 = 32 ケース）
-MISSING_TYPE_CASES: list[tuple[dict[str, bool], str]] = []
-for _flags in FLAG_COMBINATIONS:
-    for _char_type, _enabled in _flags.items():
-        if _enabled:
-            MISSING_TYPE_CASES.append((_flags, _char_type))
+
+def _missing_type_cases() -> list[tuple[dict[str, bool], str]]:
+    """有効な文字種のうち 1 つを欠いたケースを列挙する。
+
+    Returns:
+        (フラグの組み合わせ, 欠く文字種) のリスト（16 通り × 有効な文字種数 = 32 ケース）。
+    """
+    cases: list[tuple[dict[str, bool], str]] = []
+    for flags in FLAG_COMBINATIONS:
+        for char_type, enabled in flags.items():
+            if enabled:
+                cases.append((flags, char_type))
+    return cases
+
+
+MISSING_TYPE_CASES: list[tuple[dict[str, bool], str]] = _missing_type_cases()
 
 
 def _flags_id(flags: dict[str, bool]) -> str:

@@ -80,7 +80,7 @@ async def check_password_not_reused(
     )
     for hashed in recent_hashes:
         if await verify_password_async(new_password, hashed):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Password has been used before",
+            # 移植元 PasswordResetService.SAME_PASSWORD_MESSAGE と同じ文言にする
+            raise _policy_error(
+                "新パスワードは過去のパスワードと異なるものを設定してください。"
             )
