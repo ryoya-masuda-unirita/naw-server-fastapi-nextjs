@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
 
 from app.core.security import create_access_token, hash_password
@@ -559,7 +560,9 @@ class TestGetUsersExcludesSystemRole:
         assert body["totalElements"] == 0
 
 
-async def _create_group(session, tenant_id: str, name: str, members: list) -> Group:
+async def _create_group(
+    session: AsyncSession, tenant_id: str, name: str, members: list[User]
+) -> Group:
     """グループを登録し、指定ユーザーを所属させる。"""
     group = Group(tenant_id=tenant_id, name=name)
     session.add(group)
@@ -648,19 +651,20 @@ class TestGetUsersExcludeGroup:
         """他テナントのグループIDを指定しても、エラーにならず自テナントの誰も除外されないこと"""
         other_tenant = Tenant(id="tenant-users-other", name="Other", owner="admin")
         session.add(other_tenant)
-        other_user = User(
-            id=uuid4(),
-            tenant_id=other_tenant.id,
-            login_id="other-tenant-user",
-            name="Other Tenant User",
-            role=UserRole.USER,
-            is_required_password_reset=False,
-        )
-        session.add(other_user)
         await session.commit()
         other_group = await _create_group(
-            session, other_tenant.id, "Other Tenant Group", [other_user]
+            session, other_tenant.id, "Other Tenant Group", []
         )
+        # 他テナントのグループの所属行で自テナントのユーザーが消えないことを確かめるため、
+        # 本来は起きない「他テナントの所属行に自テナントのユーザーが入った」状態を作る
+        session.add(
+            GroupUser(
+                group_id=other_group.id,
+                tenant_id=other_tenant.id,
+                user_id=normal_user.id,
+            )
+        )
+        await session.commit()
 
         async with client as c:
             response = await c.get(
@@ -673,17 +677,25 @@ class TestGetUsersExcludeGroup:
         login_ids = {u["loginId"] for u in response.json()["content"]}
         assert login_ids == {admin_user.login_id, normal_user.login_id}
 
-    async def test_empty_group_id_excludes_nobody(
-        self, client, admin_headers, session, tenant, admin_user, normal_user
+    @pytest.mark.parametrize("exclude_group_id", ["", "  "])
+    async def test_blank_group_id_excludes_nobody(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        admin_user,
+        normal_user,
+        exclude_group_id,
     ):
-        """excludeGroupIdが空文字の場合は除外しないこと"""
+        """excludeGroupIdが空文字・空白だけの場合は除外しないこと"""
         await _create_group(session, tenant.id, "Group", [normal_user])
 
         async with client as c:
             response = await c.get(
                 "/api/admin/users",
                 headers=admin_headers,
-                params={"excludeGroupId": ""},
+                params={"excludeGroupId": exclude_group_id},
             )
 
         assert response.status_code == 200

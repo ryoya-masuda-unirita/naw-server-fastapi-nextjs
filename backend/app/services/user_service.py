@@ -115,14 +115,18 @@ class UserService:
         if role_filter is not None:
             stmt = stmt.where(User.role == role_filter)
 
-        if exclude_group_id:
+        # 移植元の`isBlank`と同じく、空白だけの値は指定なしとして扱う。
+        if exclude_group_id and exclude_group_id.strip():
             # グループのメンバー追加ダイアログで、所属済みのユーザーを候補から外すための条件。
-            # 移植元と同じくグループの存在・テナントは確かめない（一覧がこのテナントの
-            # ユーザーに絞られているため、他テナントや存在しないIDでは何も除外されない）。
+            # 移植元と同じくグループの存在は確かめず、存在しない・他テナントのIDでは
+            # 何も除外しない。所属行はこのテナントのものだけを見て、他テナントの
+            # グループの所属行で結果が変わらないようにする（アシスタント・プロンプト
+            # テンプレートの除外と同じ）。
             stmt = stmt.where(
                 ~exists().where(
                     GroupUser.user_id == User.id,
                     GroupUser.group_id == exclude_group_id,
+                    GroupUser.tenant_id == tenant_id,
                 )
             )
 
