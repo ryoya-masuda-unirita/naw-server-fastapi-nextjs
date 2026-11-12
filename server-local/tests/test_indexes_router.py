@@ -364,7 +364,7 @@ class TestUpdateFile:
         fake_waha: FakeWahaClient,
         session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """再登録に失敗したら削除も取り消し、元のファイルとパートが残ること"""
+        """Waha! の再登録に失敗したら DB は変更せず、元のファイルとパートが残ること"""
         await insert_file(session_factory, "f1", part_ids=["p1"])
         fake_waha.fail_on = {"execute_learning"}
         res = await client.patch(

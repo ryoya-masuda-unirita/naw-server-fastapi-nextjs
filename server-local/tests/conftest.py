@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -56,6 +56,8 @@ class FakeWahaClient:
     download_content: str | None = '{"answer":"回答です"}'
     fail_on: set[str] = field(default_factory=set)
     on_execute_with_stream_file: Callable[[str], None] | None = None
+    # Waha! のジョブ完了を待っている間に割り込ませる処理（#251 のロック確認用）
+    on_get_results: Callable[[], Awaitable[None]] | None = None
     calls: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
     uploads: list[UploadRecord] = field(default_factory=list)
 
@@ -126,6 +128,8 @@ class FakeWahaClient:
 
     async def get_results(self, session_id: str) -> None:
         self._record("get_results", session_id)
+        if self.on_get_results is not None:
+            await self.on_get_results()
 
     async def download_file(self, session_id: str, slot: str) -> str | None:
         self._record("download_file", session_id, slot)

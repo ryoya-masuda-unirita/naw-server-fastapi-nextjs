@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+# 書き込みが重なったときにロックの解放を待つ時間
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
 
 def _ensure_sqlite_dir(database_url: str) -> None:
     """SQLite ファイルの置き場所がないと接続時に失敗するため、先に作っておく。"""
@@ -34,7 +37,7 @@ def create_engine(database_url: str) -> AsyncEngine:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
             cursor.close()
 
     return engine
