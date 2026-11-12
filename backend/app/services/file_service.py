@@ -329,7 +329,14 @@ class FileService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=DELETED_FILE_DOWNLOAD_MESSAGE,
             )
-        content = await storage.download(file.storage_url)
+        try:
+            content = await storage.download(file.storage_url)
+        except FileNotFoundError:
+            # 削除と同時に届いた場合や実体が手作業で消された場合も500にせず、
+            # 実体が無いファイルとして404を返す。
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ファイルが存在しません。"
+            ) from None
         return file, content
 
     @staticmethod

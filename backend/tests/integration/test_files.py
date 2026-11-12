@@ -421,6 +421,35 @@ class TestFilesRouter:
                 "削除済みのファイルはダウンロードできません。"
             )
 
+        async def test_download_file_without_stored_content_returns_404(
+            self,
+            client,
+            files_index,
+            files_admin_headers,
+            override_file_storage,
+            file_storage_root,
+        ):
+            """保存先の実体が無いファイルのダウンロードは500ではなく404になること"""
+            files, data = _upload_payload()
+            async with client as ac:
+                upload_response = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files,
+                    data=data,
+                    headers=files_admin_headers,
+                )
+                file_id = upload_response.json()["id"]
+                for stored in file_storage_root.rglob(f"{file_id}_*"):
+                    stored.unlink()
+
+                response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files/{file_id}",
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "ファイルが存在しません。"
+
     class TestUpdate:
         async def test_update_deleted_file_status_to_enable_returns_400(
             self, client, files_index, files_admin_headers, override_file_storage
@@ -528,6 +557,21 @@ class TestFilesRouter:
 
             assert response.status_code == 400
             assert response.json()["detail"] == "削除済みのファイルは更新できません。"
+
+        async def test_replace_missing_file_without_name_returns_404(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """存在しないファイルの差し替えは、nameの必須チェックより先に404になること"""
+            async with client as ac:
+                response = await ac.patch(
+                    f"/api/admin/indexes/{files_index.id}/files/no-such-file",
+                    files={"file": ("new.txt", b"new content", "text/plain")},
+                    data={},
+                    headers=files_admin_headers,
+                )
+
+            assert response.status_code == 404
+            assert response.json()["detail"] == "ファイルが存在しません。"
 
         async def test_update_metadata_only(
             self, client, files_index, files_admin_headers, override_file_storage
