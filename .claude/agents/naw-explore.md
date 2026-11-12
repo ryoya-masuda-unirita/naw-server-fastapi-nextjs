@@ -25,7 +25,7 @@ model: sonnet
 
 ## 調査時の手順
 
-1. 依頼された対象領域について、参照専用 worktree の状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）。最新化が必要な場合は `.claude/CLAUDE.md` の手順で worktree を `origin/develop` に合わせる（`git pull` はしない）
+1. 依頼された対象領域について、参照専用 worktree の状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）。最新化が必要な場合は `CLAUDE.md` の手順で worktree を `origin/develop` に合わせる（`git pull` はしない）
 2. 対象領域（Controller/Service/Request/Response など）のエンドポイント・仕様を洗い出す
 3. 移植先の対応実装の有無を `backend/app/routers/`・`backend/app/services/`・`backend/app/schemas/` 等で確認する
 4. 必要なら `gh issue list --state all` で重複する起票済みIssueがないか確認する

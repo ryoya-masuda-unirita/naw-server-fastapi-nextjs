@@ -585,6 +585,40 @@ class TestFilesRouter:
             body = list_response.json()
             assert any(item["id"] == file_id for item in body["content"])
 
+        async def test_soft_deleted_file_is_excluded_from_list(
+            self, client, files_index, files_admin_headers, override_file_storage
+        ):
+            """status未指定の一覧から論理削除済みのファイルが除かれること"""
+            files_a, data_a = _upload_payload(name="a.txt", display_name="A")
+            files_b, data_b = _upload_payload(name="b.txt", display_name="B")
+            async with client as ac:
+                deleted = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files_a,
+                    data=data_a,
+                    headers=files_admin_headers,
+                )
+                remaining = await ac.post(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    files=files_b,
+                    data=data_b,
+                    headers=files_admin_headers,
+                )
+                delete_response = await ac.delete(
+                    f"/api/admin/indexes/{files_index.id}/files/{deleted.json()['id']}",
+                    headers=files_admin_headers,
+                )
+                assert delete_response.status_code == 204
+
+                list_response = await ac.get(
+                    f"/api/admin/indexes/{files_index.id}/files",
+                    headers=files_admin_headers,
+                )
+
+            body = list_response.json()
+            assert body["totalElements"] == 1
+            assert [item["id"] for item in body["content"]] == [remaining.json()["id"]]
+
         async def test_physical_delete_removes_record(
             self, client, files_index, files_admin_headers, override_file_storage
         ):
