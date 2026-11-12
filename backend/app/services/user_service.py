@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from typing import Any, cast
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import exists, select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.credit_quota import (
@@ -19,6 +19,7 @@ from app.core.credit_quota import (
 from app.core.sort import SortOrder, build_order_by, enum_as_string, find_order
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import hash_password
+from app.models.group import GroupUser
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.repositories.password_history_repository import PasswordHistoryRepository
@@ -81,7 +82,7 @@ class UserService:
             sort: 並べ替え指定の並び。
             search_text: loginId・name の部分一致検索文字列。
             role: ロールフィルター（"USER"・"ADMIN"・"SYSTEM"）。
-            exclude_group_id: 除外グループID（グループ機能実装時に対応）。
+            exclude_group_id: 除外グループID。指定したグループに所属するユーザーを除外する。
             session: 非同期DBセッション。
             include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
@@ -114,7 +115,16 @@ class UserService:
         if role_filter is not None:
             stmt = stmt.where(User.role == role_filter)
 
-        # excludeGroupId はグループ機能実装時に対応する
+        if exclude_group_id:
+            # グループのメンバー追加ダイアログで、所属済みのユーザーを候補から外すための条件。
+            # 移植元と同じくグループの存在・テナントは確かめない（一覧がこのテナントの
+            # ユーザーに絞られているため、他テナントや存在しないIDでは何も除外されない）。
+            stmt = stmt.where(
+                ~exists().where(
+                    GroupUser.user_id == User.id,
+                    GroupUser.group_id == exclude_group_id,
+                )
+            )
 
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0

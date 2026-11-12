@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.core.security import create_access_token, hash_password
 from app.main import app
+from app.models.group import Group, GroupUser
 from app.models.plan import Plan
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
@@ -556,6 +557,138 @@ class TestGetUsersExcludesSystemRole:
         body = response.json()
         assert body["content"] == []
         assert body["totalElements"] == 0
+
+
+async def _create_group(session, tenant_id: str, name: str, members: list) -> Group:
+    """グループを登録し、指定ユーザーを所属させる。"""
+    group = Group(tenant_id=tenant_id, name=name)
+    session.add(group)
+    await session.flush()
+    for member in members:
+        session.add(
+            GroupUser(group_id=group.id, tenant_id=tenant_id, user_id=member.id)
+        )
+    await session.commit()
+    return group
+
+
+class TestGetUsersExcludeGroup:
+    async def test_excludes_members_of_group(
+        self, client, admin_headers, session, tenant, admin_user, normal_user
+    ):
+        """excludeGroupIdのグループに所属するユーザーだけが除外され、件数にも反映されること"""
+        excluded_group = await _create_group(
+            session, tenant.id, "Excluded", [normal_user]
+        )
+        # 別のグループにだけ所属するユーザーは除外されない
+        await _create_group(session, tenant.id, "Other", [admin_user])
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"excludeGroupId": excluded_group.id},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [u["loginId"] for u in body["content"]] == [admin_user.login_id]
+        assert body["totalElements"] == 1
+
+    async def test_excludes_members_with_usage_and_credit_sort(
+        self,
+        client,
+        admin_headers,
+        session,
+        tenant,
+        credit_plan,
+        admin_user,
+        normal_user,
+    ):
+        """利用量の付与・利用クレジット順の並べ替えと併用しても所属ユーザーが除外されること"""
+        await _create_active_subscription(session, tenant.id, credit_plan.id)
+        excluded_group = await _create_group(
+            session, tenant.id, "Excluded", [normal_user]
+        )
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={
+                    "excludeGroupId": excluded_group.id,
+                    "includeUsage": "true",
+                    "sort": "totalCredits,desc",
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [u["loginId"] for u in body["content"]] == [admin_user.login_id]
+        assert body["totalElements"] == 1
+
+    async def test_unknown_group_id_excludes_nobody(
+        self, client, admin_headers, admin_user, normal_user
+    ):
+        """存在しないグループIDを指定しても、移植元と同じくエラーにならず誰も除外されないこと"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"excludeGroupId": "nonexistentgroupid"},
+            )
+
+        assert response.status_code == 200
+        login_ids = {u["loginId"] for u in response.json()["content"]}
+        assert login_ids == {admin_user.login_id, normal_user.login_id}
+
+    async def test_other_tenant_group_id_excludes_nobody(
+        self, client, admin_headers, session, admin_user, normal_user
+    ):
+        """他テナントのグループIDを指定しても、エラーにならず自テナントの誰も除外されないこと"""
+        other_tenant = Tenant(id="tenant-users-other", name="Other", owner="admin")
+        session.add(other_tenant)
+        other_user = User(
+            id=uuid4(),
+            tenant_id=other_tenant.id,
+            login_id="other-tenant-user",
+            name="Other Tenant User",
+            role=UserRole.USER,
+            is_required_password_reset=False,
+        )
+        session.add(other_user)
+        await session.commit()
+        other_group = await _create_group(
+            session, other_tenant.id, "Other Tenant Group", [other_user]
+        )
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"excludeGroupId": other_group.id},
+            )
+
+        assert response.status_code == 200
+        login_ids = {u["loginId"] for u in response.json()["content"]}
+        assert login_ids == {admin_user.login_id, normal_user.login_id}
+
+    async def test_empty_group_id_excludes_nobody(
+        self, client, admin_headers, session, tenant, admin_user, normal_user
+    ):
+        """excludeGroupIdが空文字の場合は除外しないこと"""
+        await _create_group(session, tenant.id, "Group", [normal_user])
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={"excludeGroupId": ""},
+            )
+
+        assert response.status_code == 200
+        login_ids = {u["loginId"] for u in response.json()["content"]}
+        assert login_ids == {admin_user.login_id, normal_user.login_id}
 
 
 class TestCreateUser:
