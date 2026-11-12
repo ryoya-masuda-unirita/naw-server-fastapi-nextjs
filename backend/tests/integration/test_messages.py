@@ -1,3 +1,7 @@
+import base64
+import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
@@ -297,6 +301,69 @@ def other_user_headers(other_user_same_tenant, messages_tenant):
 @pytest.fixture
 def client(override_get_session):
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+def _content_form(
+    text_data: dict,
+    attachment_files: list[tuple[str, bytes, str]] | None = None,
+    history_attachment_files: list[tuple[str, bytes, str]] | None = None,
+) -> list[tuple[str, tuple[str, str | bytes, str]]]:
+    """メッセージ送信APIへ送るmultipartパートを組み立てる。
+
+    frontend-angularの`buildMessageContentFormData`と同じく、`textData`を
+    `application/json`のBlob（ファイル名`blob`）として送る。
+    """
+    parts: list[tuple[str, tuple[str, str | bytes, str]]] = [
+        ("textData", ("blob", json.dumps(text_data), "application/json"))
+    ]
+    for name, data, content_type in attachment_files or []:
+        parts.append(("attachmentFiles", (name, data, content_type)))
+    for name, data, content_type in history_attachment_files or []:
+        parts.append(("historyAttachmentFiles", (name, data, content_type)))
+    return parts
+
+
+@contextmanager
+def _patched_llm(engine, answer: str) -> Iterator[None]:
+    """LLM呼び出しを固定回答に差し替え、ストリーミング後の永続化先をテスト用DBにする。"""
+
+    async def _stream_chunks(*args, **kwargs):
+        yield ChatStreamChunk(text_delta=answer)
+        yield ChatStreamChunk(input_tokens=10, output_tokens=5)
+
+    test_session_maker = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    with (
+        patch(
+            "app.services.message_service.AzureLlmChatClient.stream_chat",
+            side_effect=_stream_chunks,
+        ),
+        patch(
+            "app.services.message_service.get_session_maker",
+            return_value=test_session_maker,
+        ),
+    ):
+        yield
+
+
+def _last_visible_message_id(records: list[dict], contents: list[dict]) -> str | None:
+    """読み直した会話から、frontend-angularが次の送信の親にするメッセージIDを求める。
+
+    frontend-angularの`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
+    メッセージから各階層の最後の兄弟を辿り、本文があるメッセージのうち最後のものを返す。
+    """
+    messages_with_content = {content["messageId"] for content in contents}
+    last_visible: str | None = None
+    parent_id: str | None = None
+    while True:
+        siblings = [record for record in records if record["parentId"] == parent_id]
+        if not siblings:
+            return last_visible
+        active = siblings[-1]
+        if active["id"] in messages_with_content:
+            last_visible = active["id"]
+        parent_id = active["id"]
 
 
 @pytest.mark.asyncio
@@ -601,10 +668,17 @@ class TestMessageRouter:
                 async with client as c:
                     response = await c.post(
                         "/api/messages/content",
-                        json={
-                            "messageId": owned_message.id,
-                            "userInput": "こんにちは",
-                        },
+                        files=_content_form(
+                            {
+                                "messageId": owned_message.id,
+                                "userInput": "こんにちは",
+                            }
+                        ),
+                        headers=owner_headers,
+                    )
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [owned_message.id]},
                         headers=owner_headers,
                     )
 
@@ -613,13 +687,20 @@ class TestMessageRouter:
             assert "event: text_delta" in body
             assert "event: message_stop" in body
             assert "event: complete" in body
+            # クライアントと同じmultipart形式の送信で、質問・回答が保存されること(Issue #182)
+            assert [
+                (content["question"], content["answer"])
+                for content in contents_response.json()
+            ] == [("こんにちは", "こんにちは")]
 
         async def test_returns_404_when_message_not_found(self, client, owner_headers):
             """存在しないmessageIdを指定すると404になること"""
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    json={"messageId": "nonexistent", "userInput": "こんにちは"},
+                    files=_content_form(
+                        {"messageId": "nonexistent", "userInput": "こんにちは"}
+                    ),
                     headers=owner_headers,
                 )
 
@@ -632,10 +713,12 @@ class TestMessageRouter:
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    json={
-                        "messageId": other_users_message.id,
-                        "userInput": "こんにちは",
-                    },
+                    files=_content_form(
+                        {
+                            "messageId": other_users_message.id,
+                            "userInput": "こんにちは",
+                        }
+                    ),
                     headers=owner_headers,
                 )
 
@@ -671,10 +754,12 @@ class TestMessageRouter:
                 async with client as c:
                     response = await c.post(
                         "/api/messages/content",
-                        json={
-                            "messageContentId": owned_message_content.id,
-                            "userInput": "もう一度答えて",
-                        },
+                        files=_content_form(
+                            {
+                                "messageContentId": owned_message_content.id,
+                                "userInput": "もう一度答えて",
+                            }
+                        ),
                         headers=owner_headers,
                     )
 
@@ -692,10 +777,12 @@ class TestMessageRouter:
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    json={
-                        "messageContentId": "nonexistent",
-                        "userInput": "もう一度答えて",
-                    },
+                    files=_content_form(
+                        {
+                            "messageContentId": "nonexistent",
+                            "userInput": "もう一度答えて",
+                        }
+                    ),
                     headers=owner_headers,
                 )
 
@@ -708,10 +795,12 @@ class TestMessageRouter:
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    json={
-                        "messageContentId": other_users_message_content.id,
-                        "userInput": "もう一度答えて",
-                    },
+                    files=_content_form(
+                        {
+                            "messageContentId": other_users_message_content.id,
+                            "userInput": "もう一度答えて",
+                        }
+                    ),
                     headers=owner_headers,
                 )
 
@@ -724,7 +813,7 @@ class TestMessageRouter:
             async with client as c:
                 response = await c.post(
                     "/api/messages/content",
-                    json={"userInput": "こんにちは"},
+                    files=_content_form({"userInput": "こんにちは"}),
                     headers=owner_headers,
                 )
 
@@ -738,8 +827,7 @@ class TestMessageRouter:
             message_chat_endpoint,
             engine,
         ):
-            """attachmentFilesを送信した場合、message_filesに永続化されcompleteイベントに反映されること"""
-            import base64
+            """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されcompleteイベントに反映されること"""
 
             async def _stream_chunks(*args, **kwargs):
                 yield ChatStreamChunk(text_delta="こんにちは")
@@ -748,7 +836,6 @@ class TestMessageRouter:
             test_session_maker = sessionmaker(
                 engine, class_=AsyncSession, expire_on_commit=False
             )
-            encoded = base64.b64encode(b"binary-image-data").decode("ascii")
             with (
                 patch(
                     "app.services.message_service.AzureLlmChatClient.stream_chat",
@@ -762,17 +849,15 @@ class TestMessageRouter:
                 async with client as c:
                     response = await c.post(
                         "/api/messages/content",
-                        json={
-                            "messageId": owned_message.id,
-                            "userInput": "こんにちは",
-                            "attachmentFiles": [
-                                {
-                                    "name": "photo.png",
-                                    "type": "image/png",
-                                    "data": encoded,
-                                }
+                        files=_content_form(
+                            {
+                                "messageId": owned_message.id,
+                                "userInput": "こんにちは",
+                            },
+                            attachment_files=[
+                                ("photo.png", b"binary-image-data", "image/png")
                             ],
-                        },
+                        ),
                         headers=owner_headers,
                     )
                     contents_response = await c.post(
@@ -786,12 +871,177 @@ class TestMessageRouter:
             assert "event: complete" in body
             assert "photo.png" in body
 
-            saved_names = [
-                f["name"]
+            saved_files = [
+                f
                 for content in contents_response.json()
                 for f in content["attachmentFiles"]
             ]
-            assert "photo.png" in saved_names
+            assert [(f["name"], f["type"]) for f in saved_files] == [
+                ("photo.png", "image/png")
+            ]
+            assert base64.b64decode(saved_files[0]["data"]) == b"binary-image-data"
+
+        async def test_accepts_text_data_as_plain_form_field(
+            self, client, owner_headers, owned_message, message_chat_endpoint, engine
+        ):
+            """textDataを通常のフォーム値で送っても受け付け、質問・回答が保存されること"""
+            with _patched_llm(engine, "フォーム値の回答"):
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        data={
+                            "textData": json.dumps(
+                                {"messageId": owned_message.id, "userInput": "質問A"}
+                            )
+                        },
+                        headers=owner_headers,
+                    )
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [owned_message.id]},
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 200
+            assert [
+                (content["question"], content["answer"])
+                for content in contents_response.json()
+            ] == [("質問A", "フォーム値の回答")]
+
+        async def test_returns_422_when_text_data_is_not_json(
+            self, client, owner_headers
+        ):
+            """textDataがJSONとして解釈できない場合は422になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=[("textData", ("blob", "not-json", "application/json"))],
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
+
+        async def test_returns_422_when_text_data_is_not_object(
+            self, client, owner_headers
+        ):
+            """textDataがJSONオブジェクトでない場合は422になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=[("textData", ("blob", "[]", "application/json"))],
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
+
+        async def test_returns_422_when_text_data_is_missing(
+            self, client, owner_headers
+        ):
+            """textDataパートがない場合は422になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=[("attachmentFiles", ("a.png", b"data", "image/png"))],
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
+
+        async def test_returns_422_when_history_attachment_count_mismatches(
+            self, client, owner_headers, owned_message
+        ):
+            """historyAttachmentFilesの件数が履歴のattachmentsCount合計と一致しない場合は422になること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=_content_form(
+                        {
+                            "messageId": owned_message.id,
+                            "userInput": "こんにちは",
+                            "historyMessages": [
+                                {
+                                    "type": "USER",
+                                    "content": "過去",
+                                    "attachmentsCount": 1,
+                                }
+                            ],
+                        }
+                    ),
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 422
+
+        async def test_next_message_chains_to_previous_after_reloading_room(
+            self,
+            client,
+            session,
+            owner_headers,
+            owned_room,
+            owned_message,
+            owned_message_content,
+            message_assistant,
+            message_chat_endpoint,
+            engine,
+        ):
+            """送信後に会話を読み直しても末尾が直前のメッセージになり、次の送信の親が直前のメッセージになること(Issue #182)"""
+            with _patched_llm(engine, "Bへの回答"):
+                async with client as c:
+                    create_b = await c.post(
+                        "/api/messages",
+                        json={
+                            "roomId": owned_room.id,
+                            "assistantId": message_assistant.id,
+                            "parentMessageId": owned_message.id,
+                            "messageText": "質問B",
+                        },
+                        headers=owner_headers,
+                    )
+                    message_b_id = create_b.json()["id"]
+                    send_b = await c.post(
+                        "/api/messages/content",
+                        files=_content_form(
+                            {
+                                "assistantId": message_assistant.id,
+                                "messageId": message_b_id,
+                                "userInput": "質問B",
+                            }
+                        ),
+                        headers=owner_headers,
+                    )
+
+                    # ページを開き直したときと同じく、サーバーから会話を読み直す
+                    list_response = await c.get(
+                        "/api/messages",
+                        params={"roomId": owned_room.id},
+                        headers=owner_headers,
+                    )
+                    records = list_response.json()["messages"]
+                    contents_response = await c.post(
+                        "/api/messages/contents",
+                        json={"messageIds": [record["id"] for record in records]},
+                        headers=owner_headers,
+                    )
+                    parent_for_next = _last_visible_message_id(
+                        records, contents_response.json()
+                    )
+
+                    create_c = await c.post(
+                        "/api/messages",
+                        json={
+                            "roomId": owned_room.id,
+                            "assistantId": message_assistant.id,
+                            "parentMessageId": parent_for_next,
+                            "messageText": "質問C",
+                        },
+                        headers=owner_headers,
+                    )
+
+            assert send_b.status_code == 200
+            assert parent_for_next == message_b_id
+            message_c = await session.get(Message, create_c.json()["id"])
+            assert message_c is not None
+            assert message_c.parent_id == message_b_id
 
     class TestDeleteMessage:
         async def test_delete_message_removes_message(

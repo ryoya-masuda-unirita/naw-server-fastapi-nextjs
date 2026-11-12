@@ -1,10 +1,16 @@
 from datetime import datetime
 
 import base64
+import json
+from typing import Annotated
 
+from fastapi import File, Form, UploadFile
+from fastapi.exceptions import RequestValidationError
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
+    ValidationError,
     field_serializer,
     field_validator,
     model_validator,
@@ -134,12 +140,37 @@ class MessageContentResponse(BaseModel):
     isRated: bool
 
 
-class MessageContentHistoryTurn(BaseModel):
-    """メッセージ送信時にクライアントから渡す会話履歴の1発話。"""
+# 移植元`CreateMessageContentRequest.HistoryMessageContentType`(SYSTEM/ASSISTANT/USER)を
+# LLM呼び出しの`ChatMessage.role`として使う小文字表記にしたもの。
+_HISTORY_MESSAGE_ROLES = frozenset({"system", "assistant", "user"})
 
-    role: str = Field(min_length=1)
+
+class MessageContentHistoryTurn(BaseModel):
+    """メッセージ送信時にクライアントから渡す会話履歴の1発話。
+
+    移植元`CreateMessageContentRequest.HistoryMessageContent`に対応し、発話種別は
+    移植元と同じ`type`（`SYSTEM`/`ASSISTANT`/`USER`）で受け取る。サービス層では
+    LLMへそのまま渡せるよう小文字に正規化した`role`として扱う。
+    """
+
+    # サービス層・テストは属性名`role`で生成するため、別名(`type`)に加えて属性名での
+    # 生成も許可する。
+    model_config = ConfigDict(populate_by_name=True)
+
+    role: str = Field(validation_alias="type")
     content: str = Field(min_length=1)
     attachmentsCount: int = Field(default=0, ge=0)
+
+    @field_validator("role")
+    @classmethod
+    def _normalize_role(cls, value: str) -> str:
+        """発話種別を小文字へ正規化し、移植元の列挙値以外を拒否する。"""
+        normalized = value.lower()
+        if normalized not in _HISTORY_MESSAGE_ROLES:
+            raise ValueError(
+                "type は SYSTEM・ASSISTANT・USER のいずれかを指定してください"
+            )
+        return normalized
 
 
 class MessageContentCreateRequest(BaseModel):
@@ -152,7 +183,16 @@ class MessageContentCreateRequest(BaseModel):
     issue-97で、`tools`（web_search/mcp）はissue-98で、ライブラリ生成（createLibrary）は
     issue-99で、response_formatはissue-100で対応済み（`docs/issue-100/01_要件定義.md`
     参照）。
+
+    API上は移植元と同じく`multipart/form-data`で受け取り、`textData`パート(JSON)と
+    添付ファイルパートを`parse_message_content_create_form`で本モデルへ変換する
+    （issue-182）。`textData`のフィールド名は移植元の`@JsonProperty`名
+    （`createLibrary`・`response_format`）で受け取り、サービス層では既存の属性名で扱う。
     """
+
+    # サービス層・テストは属性名(`isCreateLibrary`等)で生成するため、別名に加えて
+    # 属性名での生成も許可する。
+    model_config = ConfigDict(populate_by_name=True)
 
     messageId: str | None = Field(default=None, min_length=1)
     messageContentId: str | None = Field(default=None, min_length=1)
@@ -165,8 +205,10 @@ class MessageContentCreateRequest(BaseModel):
     # trueの場合、チャット回答の代わりにライブラリ（md形式のまとめ）を生成し、
     # タイトル・本文を専用のSSEイベント(library_title_delta/library_content_delta)で
     # ストリーミングする。
-    isCreateLibrary: bool = False
-    responseFormat: ResponseFormatRequest | None = None
+    isCreateLibrary: bool = Field(default=False, validation_alias="createLibrary")
+    responseFormat: ResponseFormatRequest | None = Field(
+        default=None, validation_alias="response_format"
+    )
 
     @model_validator(mode="after")
     def _validate_history_attachment_count(self) -> "MessageContentCreateRequest":
@@ -190,6 +232,109 @@ class MessageContentCreateRequest(BaseModel):
                 "messageId または messageContentId のいずれかを指定してください"
             )
         return self
+
+
+# アップロードされたファイルにContent-Typeが付いていない場合の既定値。
+_DEFAULT_ATTACHMENT_CONTENT_TYPE = "application/octet-stream"
+
+
+def _text_data_error(message: str, raw_text: str) -> RequestValidationError:
+    """`textData`パート自体が不正な場合の入力エラー(422)を組み立てる。
+
+    Args:
+        message: エラーメッセージ。
+        raw_text: 受け取った`textData`の文字列。
+
+    Returns:
+        FastAPIが422として返す入力エラー。
+    """
+    return RequestValidationError(
+        [
+            {
+                "type": "value_error",
+                "loc": ("body", "textData"),
+                "msg": message,
+                "input": raw_text,
+            }
+        ]
+    )
+
+
+async def _to_attachment_payload(upload: UploadFile) -> dict[str, object]:
+    """アップロードファイルを`AttachmentFile`の入力形式へ変換する。
+
+    `AttachmentFile.data`は`Base64Bytes`型で、検証時にBase64をデコードして生の
+    バイト列を保持する。そのため生のバイト列をBase64エンコードして渡す。
+
+    Args:
+        upload: multipartで受け取ったファイル。
+
+    Returns:
+        `AttachmentFile`として検証できる辞書。
+    """
+    data = await upload.read()
+    return {
+        "name": upload.filename or "",
+        "type": upload.content_type or _DEFAULT_ATTACHMENT_CONTENT_TYPE,
+        "data": base64.b64encode(data),
+    }
+
+
+async def parse_message_content_create_form(
+    textData: Annotated[UploadFile | str, Form()],
+    attachmentFiles: Annotated[list[UploadFile] | None, File()] = None,
+    historyAttachmentFiles: Annotated[list[UploadFile] | None, File()] = None,
+) -> MessageContentCreateRequest:
+    """メッセージ送信APIのmultipart/form-dataを`MessageContentCreateRequest`へ変換する。
+
+    移植元`MessageController.createMessageContent`は`@RequestPart("textData")`で
+    リクエスト本体(JSON)を、`attachmentFiles`・`historyAttachmentFiles`で添付
+    ファイルを受け取る。クライアント(frontend-angular)は`textData`を
+    `application/json`のBlobとして送るためファイルパート(`UploadFile`)として届くが、
+    通常のフォーム値として送られた場合も受け付ける。
+
+    Args:
+        textData: リクエスト本体(JSON)。
+        attachmentFiles: 今回の質問に添付するファイル。
+        historyAttachmentFiles: 過去の会話に添付されていたファイル。
+
+    Returns:
+        検証済みのメッセージ送信リクエスト。
+
+    Raises:
+        RequestValidationError: `textData`がJSONオブジェクトとして解釈できない場合、
+            または項目の検証に失敗した場合（いずれも422）。
+    """
+    raw_text = (
+        textData
+        if isinstance(textData, str)
+        else (await textData.read()).decode("utf-8", errors="replace")
+    )
+    try:
+        text_payload = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise _text_data_error("textData はJSON形式で指定してください", raw_text) from e
+    if not isinstance(text_payload, dict):
+        raise _text_data_error(
+            "textData はJSONオブジェクトで指定してください", raw_text
+        )
+
+    payload = {
+        **text_payload,
+        "attachmentFiles": [
+            await _to_attachment_payload(upload) for upload in attachmentFiles or []
+        ],
+        "historyAttachmentFiles": [
+            await _to_attachment_payload(upload)
+            for upload in historyAttachmentFiles or []
+        ],
+    }
+    try:
+        return MessageContentCreateRequest.model_validate(payload)
+    except ValidationError as e:
+        # 依存関数内で発生したValidationErrorはFastAPIが422へ変換しないため、
+        # ボディの検証エラーと同じ扱いになるよう明示的に変換する。
+        raise RequestValidationError(e.errors(include_url=False)) from e
 
 
 class MessageFeedbackCreateRequest(BaseModel):

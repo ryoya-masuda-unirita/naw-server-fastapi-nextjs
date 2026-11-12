@@ -14,6 +14,7 @@ from app.schemas.message import (
     MessageCreateResponse,
     MessageFeedbackCreateRequest,
     MessageFeedbackResponse,
+    parse_message_content_create_form,
 )
 from app.services.message_service import MessageService
 
@@ -59,7 +60,7 @@ async def get_message_contents(
 
 @router.post("/content")
 async def create_message_content(
-    req: MessageContentCreateRequest,
+    req: MessageContentCreateRequest = Depends(parse_message_content_create_form),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
