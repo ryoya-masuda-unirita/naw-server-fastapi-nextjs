@@ -3,8 +3,12 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@/test/setup';
 
 // API_BASE_URL はモジュール読み込み時に決まるため、環境変数を差し替えてから読み込み直す
-const loadApiClient = async (baseUrl: string) => {
+// 認証APIのベースURLは、指定したときだけ差し替える（未指定 = ローカル開発・テストと同じ状態）
+const loadApiClient = async (baseUrl: string, authBaseUrl?: string) => {
   vi.stubEnv('VITE_API_URL', baseUrl);
+  if (authBaseUrl !== undefined) {
+    vi.stubEnv('VITE_AUTH_API_URL', authBaseUrl);
+  }
   vi.resetModules();
   const { apiClient } = await import('./api-client');
   return apiClient;
@@ -64,6 +68,56 @@ describe('apiClient', () => {
       await apiClient.get('/api/auth');
 
       expect(requestedUrl).toBe('http://localhost:8000/api/auth');
+    });
+
+    test('認証APIのベースURLが未指定なら、認証APIも同じベースURLに送られること', async () => {
+      let requestedUrl = '';
+      server.use(
+        http.post('http://localhost:8000/auth/login', ({ request }) => {
+          requestedUrl = request.url;
+          return HttpResponse.json({});
+        })
+      );
+      const apiClient = await loadApiClient('http://localhost:8000');
+
+      await apiClient.post('/auth/login', { username: 'user', password: 'pass' });
+
+      expect(requestedUrl).toBe('http://localhost:8000/auth/login');
+    });
+  });
+
+  // dev環境（CloudFront）では画面 /auth/login と衝突しないよう、認証APIを /backend 付きで呼ぶ（#240）
+  describe('認証APIのベースURLを指定（本番ビルド: .env.production）', () => {
+    const AUTH_BASE_URL = '/backend';
+
+    test('認証APIが認証APIのベースURL付きで配信元と同じオリジンに送られること', async () => {
+      let requestedUrl = '';
+      server.use(
+        http.post(`${window.location.origin}/backend/auth/login`, ({ request }) => {
+          requestedUrl = request.url;
+          return HttpResponse.json({});
+        })
+      );
+      const apiClient = await loadApiClient('', AUTH_BASE_URL);
+
+      await apiClient.post('/auth/login', { username: 'user', password: 'pass' });
+
+      expect(requestedUrl).toBe(`${window.location.origin}/backend/auth/login`);
+    });
+
+    test('/api/ のAPIには認証APIのベースURLが付かないこと', async () => {
+      let requestedUrl = '';
+      server.use(
+        http.get(`${window.location.origin}/api/auth`, ({ request }) => {
+          requestedUrl = request.url;
+          return HttpResponse.json({ ok: true });
+        })
+      );
+      const apiClient = await loadApiClient('', AUTH_BASE_URL);
+
+      await apiClient.get('/api/auth');
+
+      expect(requestedUrl).toBe(`${window.location.origin}/api/auth`);
     });
   });
 });

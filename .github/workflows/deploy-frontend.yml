@@ -33,8 +33,9 @@ jobs:
       - run: npm run lint
       - run: npx vitest run
       # vite build は mode=production で動き、git管理の frontend/.env(VITE_API_URL=http://localhost:8000)を
-      # frontend/.env.production(VITE_API_URL=空)で上書きする。CloudFrontが/api・/authをbackendへ
-      # プロキシする構成のため、APIは配信元と同じオリジンの相対パスで呼ぶ(ローカルURLや本家のドメインを含めない)
+      # frontend/.env.production(VITE_API_URL=空)で上書きする。CloudFrontが/api・/backend/authをbackendへ
+      # プロキシする構成のため、APIは配信元と同じオリジンの相対パスで呼ぶ(ローカルURLや本家のドメインを含めない)。
+      # 認証APIは画面(/auth/login 等)と衝突しないよう VITE_AUTH_API_URL=/backend を付けて呼ぶ(#240)
       - run: npm run build
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る

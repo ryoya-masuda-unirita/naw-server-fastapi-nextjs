@@ -1,12 +1,18 @@
 // 本番ビルド（.env.production）では空文字になり、配信元と同じオリジンの相対パスで呼ぶ
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
+// 認証API（/auth/...）は画面（/auth/login 等）と同じパスのため、dev環境（CloudFront）では
+// 本番ビルドで /backend を付けて呼び分ける（#240）。移植元の authBaseUrl に相当する。
+// 未指定（ローカル開発・テスト）なら他のAPIと同じベースURLを使う。
+const AUTH_API_BASE_URL = import.meta.env.VITE_AUTH_API_URL ?? API_BASE_URL;
+const AUTH_API_PATH_PREFIX = '/auth/';
 
 type QueryParams = Record<string, string | number | boolean>;
 
 // ベースURLが空（相対パス）でも URL を組み立てられるよう、配信元オリジンを基準にする。
 // ベースURLが絶対URLのときは第2引数は無視されるため、ローカル開発の挙動は変わらない。
 function buildUrl(path: string, params?: QueryParams): string {
-  const url = new URL(`${API_BASE_URL}${path}`, window.location.origin);
+  const baseUrl = path.startsWith(AUTH_API_PATH_PREFIX) ? AUTH_API_BASE_URL : API_BASE_URL;
+  const url = new URL(`${baseUrl}${path}`, window.location.origin);
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       url.searchParams.append(k, String(v));

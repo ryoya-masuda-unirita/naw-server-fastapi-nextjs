@@ -1031,7 +1031,14 @@ class MessageService:
                 yield sse_event("error", {"message": str(e)})
                 stream_finished = True
             finally:
-                # ValueError発生時にNoneを代入するため、事前に`| None`を明示しておく
+                # 保存処理（DB障害・再生成対象の競合削除など）が失敗しても、ここで例外を
+                # 伝播させるとfinally節の途中で処理が打ち切られ、後続の永続化やerror
+                # イベント送出が行われないまま接続が切れてしまう。移植元
+                # (`streamAndPersist`の一番外側のcatchで`sendSseError`)に合わせ、
+                # 保存処理ごとに例外を捕捉してログに残し、1つでも失敗したら
+                # message_contentイベントの代わりにerrorイベントを送る（後段）。
+                persist_failed = False
+                # 失敗時にNoneを代入するため、事前に`| None`を明示しておく
                 # （型注釈がないと最初の代入式からMessageContentResponse確定型と
                 # 推論され、後続のNone代入が型エラーになる）。
                 content_response: MessageContentResponse | None
@@ -1048,14 +1055,10 @@ class MessageService:
                         reference_paths=reference_paths,
                         existing_content_id=existing_content_id,
                     )
-                except ValueError:
-                    # 再生成対象がストリーミング中に削除される等の稀な競合。
-                    # ここで例外を伝播させるとfinally節の途中で処理が打ち切られ、
-                    # トークン使用量の永続化やmessage_contentイベント送出が行われない
-                    # ままジェネレータが異常終了してしまうため、ログのみ残して
-                    # message_contentイベントの代わりにerrorイベントを送る（後段）。
+                except Exception:
                     logger.exception("メッセージ内容の永続化に失敗しました")
                     content_response = None
+                    persist_failed = True
 
                 if (
                     content_response is not None
@@ -1063,28 +1066,42 @@ class MessageService:
                     and library_content is not None
                     and content_status == MessageContentStatus.OK
                 ):
-                    await MessageService._persist_library(
+                    try:
+                        await MessageService._persist_library(
+                            tenant_id=tenant_id,
+                            message_id=message_id,
+                            user_id=user_id,
+                            title=library_title,
+                            content=library_content,
+                        )
+                    except Exception:
+                        logger.exception("ライブラリの永続化に失敗しました")
+                        persist_failed = True
+                # メッセージ内容の永続化に失敗しても、Azureで既に消費したトークンは
+                # 記録する。
+                try:
+                    await MessageService._persist_token_usage(
                         tenant_id=tenant_id,
-                        message_id=message_id,
                         user_id=user_id,
-                        title=library_title,
-                        content=library_content,
+                        room_id=room_id,
+                        message_id=message_id,
+                        model_name=model_name,
+                        endpoint_type=model_endpoint_type,
+                        token_weight=token_weight,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        credit_settings=credit_settings,
+                        embedding_tokens=embedding_tokens,
+                        embedding_token_weight=embedding_token_weight,
                     )
-                await MessageService._persist_token_usage(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    room_id=room_id,
-                    message_id=message_id,
-                    model_name=model_name,
-                    endpoint_type=model_endpoint_type,
-                    token_weight=token_weight,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    credit_settings=credit_settings,
-                    embedding_tokens=embedding_tokens,
-                    embedding_token_weight=embedding_token_weight,
-                )
-                if stream_finished and content_response is not None:
+                except Exception:
+                    logger.exception("トークン使用量の永続化に失敗しました")
+                    persist_failed = True
+                if (
+                    stream_finished
+                    and content_response is not None
+                    and not persist_failed
+                ):
                     # attachmentFilesの`data`がbytesの場合、素の.model_dump()では
                     # json.dumpsがシリアライズできないため、mode="json"でBase64
                     # 文字列へ変換してから渡す。
@@ -1095,9 +1112,9 @@ class MessageService:
                         {"data": content_response.model_dump(mode="json")},
                     )
                 elif stream_finished:
-                    # 永続化に失敗した場合も、移植元(`streamAndPersist`の外側のcatchで
-                    # `sendSseError`)と同じくerrorイベントで失敗を通知してから終える。
-                    # 内部の例外内容はログにのみ残し、固定文言で通知する。
+                    # 移植元は保存処理の失敗を一番外側のcatchで受け、message_contentを
+                    # 送らずにerrorイベントだけを送って終える。内部の例外内容はログにのみ
+                    # 残し、固定文言で通知する。
                     yield sse_event("error", {"message": _PERSIST_ERROR_MESSAGE})
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")

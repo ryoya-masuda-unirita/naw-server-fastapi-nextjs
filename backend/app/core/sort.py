@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Query
+from sqlalchemy import String, cast
 
 SORT_DELIMITER = ","
 _DESCENDING_BY_DIRECTION = {"asc": False, "desc": True}
@@ -93,6 +94,23 @@ def find_order(orders: Sequence[SortOrder], property_name: str) -> SortOrder | N
         最初に見つかった並べ替え指定。なければ None。
     """
     return next((o for o in orders if o.property == property_name), None)
+
+
+def enum_as_string(column: Any) -> Any:
+    """ネイティブ ENUM 列を、移植元と同じ文字列順で並べるための列式にする。
+
+    移植元は列挙値を varchar（`@Enumerated(EnumType.STRING)`）で保持するため、並べ替えは
+    文字列順になる。こちらは PostgreSQL のネイティブ ENUM で、そのまま並べると型の宣言順に
+    なってしまうため、文字列にキャストして揃える。SQLite は ENUM を文字列で持つため、
+    テスト DB ではキャストの有無で並びは変わらない。
+
+    Args:
+        column: ネイティブ ENUM の列。
+
+    Returns:
+        `CAST(列 AS VARCHAR)` の列式。
+    """
+    return cast(column, String)
 
 
 def _directed(column: Any, descending: bool) -> Any:
