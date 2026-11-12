@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
@@ -210,21 +210,28 @@ async def _upsert_part(
     existing.updated_at = utcnow()
 
 
-async def _find_file_with_parts(
+async def _find_part_ids(
     session: AsyncSession, file_id: str, index_id: str
-) -> tuple[File, list[FilePart]]:
+) -> list[str]:
+    """対象ファイルのパート ID を読み、Waha! を呼ぶ前に DB 接続を手放す。"""
     file = await file_repository.find_by_id_and_index_id(session, file_id, index_id)
     if file is None:
         raise EntityNotFoundError("ファイルが存在しません。")
     parts = (await file_repository.find_parts_by_file_ids(session, [file.id]))[file.id]
-    return file, parts
+    part_ids = [p.id for p in parts]
+    # Waha! を待つ間（数分）接続プールの接続を持ち続けないよう、読み取りを終える。
+    # 後の DB 更新は ID 条件で行うため、読み込んだオブジェクトは使わない。
+    # 同じ ID で再登録するときに既存扱いされないよう、セッションからも外す
+    await session.rollback()
+    session.expunge_all()
+    return part_ids
 
 
 async def _run_waha_delete_job(
-    waha: WahaClient, *, service_name: str | None, parts: list[FilePart]
+    waha: WahaClient, *, service_name: str | None, part_ids: list[str]
 ) -> None:
     """Waha! の削除ジョブを実行する。DB の書き込みを始める前に呼ぶこと（#251）。"""
-    ids_text = "".join(f"{p.id}\n" for p in parts)
+    ids_text = "".join(f"{part_id}\n" for part_id in part_ids)
     session_id = await waha.start_session()
     try:
         await waha.upload_file(
@@ -243,23 +250,23 @@ async def _run_waha_delete_job(
 
 
 async def _delete_from_db(
-    session: AsyncSession, file: File, parts: list[FilePart], *, physical_delete: bool
+    session: AsyncSession, file_id: str, *, physical_delete: bool
 ) -> None:
-    """DB から物理削除または論理削除する（コミットは呼び出し側で行う）。"""
+    """DB から物理削除または論理削除する（コミットは呼び出し側で行う）。
+
+    読み込んでから Waha! の処理を待つ間に、別のリクエストが同じファイルを削除して
+    いることがある。ORM のオブジェクト経由だと 0 件で StaleDataError（500）になる
+    ため、ID 条件の DELETE / UPDATE で更新する。
+    """
     if physical_delete:
-        # 読み込んでから Waha! の処理を待つ間に、別のリクエストが同じファイルを
-        # 削除していることがある。ORM の削除だと 0 件で StaleDataError になるため、
-        # ID 条件の DELETE で消す。セッションに残った旧オブジェクトが同じ ID の
-        # 再登録で既存扱いされないよう、先にセッションから外す
-        for part in parts:
-            session.expunge(part)
-        session.expunge(file)
-        await session.execute(delete(FilePart).where(col(FilePart.file_id) == file.id))
-        await session.execute(delete(File).where(col(File.id) == file.id))
+        await session.execute(delete(FilePart).where(col(FilePart.file_id) == file_id))
+        await session.execute(delete(File).where(col(File.id) == file_id))
     else:
-        file.status = int(FileStatus.DELETED)
-        file.touch()
-    await session.flush()
+        await session.execute(
+            update(File)
+            .where(col(File.id) == file_id)
+            .values(status=int(FileStatus.DELETED), updated_at=utcnow())
+        )
 
 
 async def create_file(
@@ -332,9 +339,9 @@ async def update_file(
     # その間ほかの書き込みがすべて止まる（#251）。Waha! の処理を先に済ませ、
     # DB の削除・保存は最後に 1 回のトランザクションで行う。Waha! が途中で
     # 失敗した場合は DB を変更しない（移植元がロールバックした後と同じ状態）
-    old_file, old_parts = await _find_file_with_parts(session, file_id, index_id)
+    old_part_ids = await _find_part_ids(session, file_id, index_id)
     await _run_waha_delete_job(
-        waha, service_name=deletion_service_name, parts=old_parts
+        waha, service_name=deletion_service_name, part_ids=old_part_ids
     )
     new_file_id, new_part_ids = await _run_waha_create_job(
         waha,
@@ -343,7 +350,7 @@ async def update_file(
         split_length=split_length,
         reference=reference,
     )
-    await _delete_from_db(session, old_file, old_parts, physical_delete=True)
+    await _delete_from_db(session, file_id, physical_delete=True)
     return await _save(
         session,
         file_id=new_file_id,
@@ -368,11 +375,13 @@ async def delete_file(
     index_id: str,
     physical_delete: bool,
 ) -> None:
-    file, parts = await _find_file_with_parts(session, file_id, index_id)
+    part_ids = await _find_part_ids(session, file_id, index_id)
     # 移植元は end_session の失敗でもロールバックするため、DB は Waha! の処理を
     # すべて終えてから更新する
-    await _run_waha_delete_job(waha, service_name=deletion_service_name, parts=parts)
-    await _delete_from_db(session, file, parts, physical_delete=physical_delete)
+    await _run_waha_delete_job(
+        waha, service_name=deletion_service_name, part_ids=part_ids
+    )
+    await _delete_from_db(session, file_id, physical_delete=physical_delete)
     await session.commit()
 
 

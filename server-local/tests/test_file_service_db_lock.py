@@ -9,7 +9,8 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import MessageContent
+from app.core.database import SQLITE_BUSY_TIMEOUT_MS
+from app.models import FileStatus, MessageContent
 from tests.conftest import FakeWahaClient
 from tests.test_indexes_router import (
     BASE,
@@ -47,7 +48,20 @@ class ConcurrentWriter:
                 await session.rollback()
                 self.results.append(False)
                 raise
+            finally:
+                # 接続はプールに戻って再利用されるため、待ち時間を元に戻す
+                await session.execute(
+                    text(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+                )
             self.results.append(True)
+
+
+async def delete_file_row(
+    session_factory: async_sessionmaker[AsyncSession], file_id: str
+) -> None:
+    async with session_factory() as session:
+        await session.execute(text("DELETE FROM files WHERE id = :id"), {"id": file_id})
+        await session.commit()
 
 
 class TestDbLockWhileWaitingWaha:
@@ -120,9 +134,7 @@ class TestDbLockWhileWaitingWaha:
         await insert_file(session_factory, "f1", part_ids=["p1"])
 
         async def delete_original() -> None:
-            async with session_factory() as session:
-                await session.execute(text("DELETE FROM files WHERE id = 'f1'"))
-                await session.commit()
+            await delete_file_row(session_factory, "f1")
 
         fake_waha.on_get_results = delete_original
         fake_waha.download_content = "f-new\tq1"
@@ -135,3 +147,61 @@ class TestDbLockWhileWaitingWaha:
         assert res.status_code == 200
         assert res.json()["id"] == "f-new"
         assert await get_file(session_factory, "f1") is None
+
+    async def test_logical_delete_does_not_lock_db(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """論理削除で Waha! の削除ジョブを待つ間も、別セッションで書き込めること"""
+        await insert_file(session_factory, "f1", part_ids=["p1"])
+        writer = ConcurrentWriter(session_factory)
+        fake_waha.on_get_results = writer.write
+        res = await client.request(
+            "DELETE", f"{BASE}/files/f1", json={"physicalDelete": False}
+        )
+        assert res.status_code == 204
+        assert writer.results == [True]
+        file = await get_file(session_factory, "f1")
+        assert file is not None
+        assert file.status == FileStatus.DELETED
+
+    async def test_logical_delete_when_file_deleted_while_waiting(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """論理削除で Waha! を待つ間に別リクエストでファイルが消されても、500 にならないこと"""
+        await insert_file(session_factory, "f1", part_ids=["p1"])
+
+        async def delete_original() -> None:
+            await delete_file_row(session_factory, "f1")
+
+        fake_waha.on_get_results = delete_original
+        res = await client.request(
+            "DELETE", f"{BASE}/files/f1", json={"physicalDelete": False}
+        )
+        assert res.status_code == 204
+        assert await get_file(session_factory, "f1") is None
+
+    async def test_additional_learning_does_not_lock_db(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """追加学習で Waha! の学習ジョブを待つ間も、別セッションで書き込めること"""
+        writer = ConcurrentWriter(session_factory)
+        fake_waha.on_get_results = writer.write
+        fake_waha.download_content = "fb-file\tp1"
+        res = await client.post(
+            f"{BASE}/additionalLeaning",
+            headers=TENANT,
+            data={"feedbackId": "fb1", "userId": "u"},
+            files={"content": ("qa.md", b"# Q&A", "text/markdown")},
+        )
+        assert res.status_code == 204
+        assert writer.results == [True]
+        assert await get_file(session_factory, "fb-file") is not None
