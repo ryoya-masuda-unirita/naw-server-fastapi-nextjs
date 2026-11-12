@@ -1,6 +1,9 @@
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from app.core.security import create_access_token
 from app.models.library_tag import LibraryTag
@@ -442,10 +445,28 @@ class TestUpdateLibraryTag:
         assert response.status_code == 404
 
 
+async def _remaining_tag_ids(session: AsyncSession) -> set[str]:
+    """DBに残っているライブラリタグIDを取得する。
+
+    テストとアプリが同じセッションを使うため、エンティティではなく列だけを取得し、
+    セッションに残った削除前のオブジェクトを読まないようにする。
+
+    Args:
+        session: テストとアプリで共有する非同期DBセッション。
+
+    Returns:
+        全テナントのライブラリタグIDの集合。
+    """
+    result = await session.execute(select(col(LibraryTag.id)))
+    return set(result.scalars().all())
+
+
 class TestDeleteLibraryTags:
     """DELETE /api/admin/library-tags"""
 
-    async def test_delete_library_tags(self, client, admin_headers, tag, second_tag):
+    async def test_delete_library_tags(
+        self, session, client, admin_headers, tag, second_tag
+    ):
         """指定したIDが削除され204が返ること"""
         async with client as c:
             response = await c.request(
@@ -456,9 +477,72 @@ class TestDeleteLibraryTags:
             )
 
         assert response.status_code == 204
+        assert await _remaining_tag_ids(session) == set()
 
-    async def test_delete_ignores_nonexistent_ids(self, client, admin_headers, tag):
+    async def test_delete_with_hyphenated_ids(
+        self, session, client, admin_headers, tag, second_tag
+    ):
+        """ハイフン付き（UUID標準形式）のIDでも削除できること"""
+        async with client as c:
+            response = await c.request(
+                "DELETE",
+                "/api/admin/library-tags",
+                json={"ids": [str(UUID(tag.id))]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+        assert await _remaining_tag_ids(session) == {second_tag.id}
+
+    async def test_delete_with_uppercase_hyphenated_id(
+        self, session, client, admin_headers, tag
+    ):
+        """大文字のハイフン付きIDでも削除できること"""
+        async with client as c:
+            response = await c.request(
+                "DELETE",
+                "/api/admin/library-tags",
+                json={"ids": [str(UUID(tag.id)).upper()]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+        assert await _remaining_tag_ids(session) == set()
+
+    async def test_delete_ignores_nonexistent_ids(
+        self, session, client, admin_headers, tag
+    ):
         """存在しないIDを含んでも204が返り、存在するものだけ削除されること"""
+        async with client as c:
+            response = await c.request(
+                "DELETE",
+                "/api/admin/library-tags",
+                json={"ids": [tag.id, uuid4().hex]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+        assert await _remaining_tag_ids(session) == set()
+
+    async def test_delete_ignores_other_tenant_tag(
+        self, session, client, admin_headers, tag, other_tenant_tag
+    ):
+        """他テナントのタグはハイフン付きで指定しても削除されないこと"""
+        async with client as c:
+            response = await c.request(
+                "DELETE",
+                "/api/admin/library-tags",
+                json={"ids": [str(UUID(other_tenant_tag.id))]},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 204
+        assert await _remaining_tag_ids(session) == {tag.id, other_tenant_tag.id}
+
+    async def test_delete_with_invalid_id_format_returns_400(
+        self, session, client, admin_headers, tag
+    ):
+        """不正な形式のIDを含むと400になり、1件も削除されないこと"""
         async with client as c:
             response = await c.request(
                 "DELETE",
@@ -467,7 +551,9 @@ class TestDeleteLibraryTags:
                 headers=admin_headers,
             )
 
-        assert response.status_code == 204
+        assert response.status_code == 400
+        assert response.json()["message"] == "Invalid UUID string: nonexistent"
+        assert await _remaining_tag_ids(session) == {tag.id}
 
     async def test_delete_as_non_admin_returns_403(self, client, member_headers, tag):
         """非管理者は削除できないこと"""
