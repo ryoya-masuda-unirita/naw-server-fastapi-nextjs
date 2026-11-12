@@ -1,0 +1,77 @@
+# frontend/（React）の PR 用 CI。
+# backend-tests.yml の frontend 版で、frontend/ に変更がある PR と develop への push で
+# lint・型チェック・単体テスト（vitest）・ビルドを実行する。
+# deploy-frontend.yml も配信前に lint・テスト・ビルドを行うが、そちらは develop へのマージ後にしか走らないため、
+# マージ前（PR の段階）で壊れた変更に気づけるようにこのワークフローを用意している。
+
+name: フロントエンドテスト
+
+on:
+  pull_request:
+    # PR の向き先は develop（通常の Issue 対応）と main（リリース）に限定する。
+    # フィーチャーブランチ同士の PR でも走らせると、同じ変更に対して何度も実行されるため。
+    branches:
+      - develop
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-tests.yml"
+  push:
+    # PR のマージは develop への push として扱われるため、マージ後の develop の状態も検証する。
+    # 作業ブランチへの push は PR 側（pull_request）で検証するため、ここでは develop に絞る。
+    branches:
+      - develop
+    paths:
+      - "frontend/**" # frontend/配下のファイルが変更された場合
+      - ".github/workflows/frontend-tests.yml" # このワークフロー自身を直した場合（設定ミスにすぐ気づけるように）
+
+# コードの取得だけできればよいので、GITHUB_TOKEN の権限を読み取りに絞る。
+permissions:
+  contents: read
+
+jobs:
+  # lint・型チェック・テスト・ビルドを 1 ジョブにまとめている。
+  # backend のようにジョブを分けると、ジョブごとに npm ci（依存のインストール）が走って時間がかかる。
+  # 各チェックはステップに分けているので、PR画面のログからどこで落ちたかは特定できる。
+  checks:
+    name: lint・型チェック・テスト・ビルド
+    runs-on: ubuntu-latest
+
+    # frontend/ 配下に npm プロジェクトがあるモノレポ構成なので、`run:` ステップのカレントディレクトリを一括指定する。
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # deploy-frontend.yml と同じ Node 24 を使う（Node 20 は 2026-04 で EOL。Vite 8 の要件 ^20.19.0 || >=22.12.0 も満たす）。
+      # cache: "npm" で ~/.npm をキャッシュし、2回目以降の npm ci を速くする。
+      # モノレポのため、キャッシュキーに使う lockfile の場所を cache-dependency-path で明示する。
+      - name: Nodeをセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci: package-lock.json どおりに依存をインストールする。
+      # package.json と package-lock.json がズレている（依存を変えたのに lock を更新し忘れた等）場合はエラーになる
+      #（backend の `uv sync --locked` に相当）。
+      - name: 依存関係をインストール
+        run: npm ci
+
+      # --max-warnings 0 を指定しているため、警告が1件でもあれば失敗する。
+      - name: リンターを実行
+        run: npm run lint
+
+      - name: 型チェックを実行
+        run: npm run type-check
+
+      # package.json の test スクリプトは `vitest`（ウォッチモード）なので、--run を渡して1回だけ実行させる。
+      - name: 単体テストを実行
+        run: npm test -- --run
+
+      # vite build は mode=production で動き、frontend/.env.production の値を使う（シークレットは不要）。
+      - name: ビルドを実行
+        run: npm run build
