@@ -1,9 +1,10 @@
 """日時のクエリパラメータの解釈（移植元`util/DateParseUtil`相当）。"""
 
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Query, status
 
 # 移植元`Instant.parse`が受け付ける形（日付・時刻・オフセットがそろったISO 8601）。
 # `datetime.fromisoformat`は日付だけ・空白区切り・オフセットなしも受け付けるため、
@@ -11,6 +12,24 @@ from fastapi import HTTPException, status
 _ISO_INSTANT_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2}(:\d{2})?)"
 )
+
+
+def _invalid_iso_instant(parameter_name: str) -> HTTPException:
+    """日時として解釈できない値の400を作る（移植元と同じ文言）。
+
+    Args:
+        parameter_name: エラーメッセージに出すパラメータ名。
+
+    Returns:
+        400の`HTTPException`。
+    """
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            f"{parameter_name} は 2026-10-08T15:00:00Z のような"
+            " ISO 8601 の日時で指定してください"
+        ),
+    )
 
 
 def parse_iso_instant(value: str | None, parameter_name: str) -> datetime | None:
@@ -31,19 +50,33 @@ def parse_iso_instant(value: str | None, parameter_name: str) -> datetime | None
     """
     if value is None or not value.strip():
         return None
-    invalid = HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=(
-            f"{parameter_name} は 2026-10-08T15:00:00Z のような"
-            " ISO 8601 の日時で指定してください"
-        ),
-    )
     if _ISO_INSTANT_PATTERN.fullmatch(value) is None:
-        raise invalid
+        raise _invalid_iso_instant(parameter_name)
     try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as e:
-        # 形は合っていても、13月のように存在しない日時は解釈できない
-        raise invalid from e
-    # 移植元は`Instant`（絶対時刻）で比較するため、オフセットの違いをここで吸収する
-    return parsed.astimezone(timezone.utc)
+        # 移植元は`Instant`（絶対時刻）で比較するため、オフセットの違いをここで吸収する
+        return datetime.fromisoformat(value).astimezone(timezone.utc)
+    except (ValueError, OverflowError) as e:
+        # 形は合っていても、13月のように存在しない日時や、UTCに直すと
+        # `datetime`の範囲（1〜9999年）を外れる日時は解釈できない
+        raise _invalid_iso_instant(parameter_name) from e
+
+
+def iso_instant_query(
+    parameter_name: str, description: str
+) -> Callable[..., datetime | None]:
+    """日時のクエリパラメータを`parse_iso_instant`で解釈するFastAPIの依存関数を作る。
+
+    Args:
+        parameter_name: クエリパラメータ名（エラーメッセージにも出す）。
+        description: OpenAPIに載せるパラメータの説明。
+
+    Returns:
+        `Depends`に渡す依存関数。
+    """
+
+    def dependency(
+        value: str | None = Query(None, alias=parameter_name, description=description),
+    ) -> datetime | None:
+        return parse_iso_instant(value, parameter_name)
+
+    return dependency

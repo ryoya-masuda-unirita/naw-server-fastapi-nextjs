@@ -43,6 +43,8 @@ class TestParseIsoInstant:
             "2026-10-09 00:00:00Z",
             "abc",
             "2026-13-01T00:00:00Z",
+            # UTCに直すと`datetime`の範囲（9999年まで）を外れる
+            "9999-12-31T23:59:59-01:00",
         ],
     )
     def test_rejects_invalid_value(self, value):
