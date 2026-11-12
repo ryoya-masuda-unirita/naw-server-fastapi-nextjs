@@ -1,22 +1,22 @@
 ---
 name: naw-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/secuaigent/server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
+description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
 ---
 
 # NAW Issue Batch
 
-`~/Documents/secuaigent/server`（移植元）にある未移植のバックエンド機能を検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。
+`~/Documents/unirita-develop-pj/secuaigent-ref/server`（移植元）にある未移植のバックエンド機能を検出し、**Issueを起票するだけ**を繰り返すスキル。ブランチ作成・ドキュメント生成・実装・PR作成は一切行わない。
 
 **ユーザーが明示的に `/naw-issue-batch` を叩いたとき、またはこのフローの続行を明示的に指示したときのみ使うこと。** 特定のIssueに着手して実装する場合は `naw-issue-workflow` を使う。
 
 ## 前提（合意済みの仕様）
 
-- **毎サイクル、必ず `~/Documents/secuaigent/server` の `develop` を最新化してから候補検出を行う**（詳細は「1. 移植元の最新化」参照）
-- **候補検出・粒度判断は常に、最新化した `~/Documents/secuaigent/server` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
+- **毎サイクル、必ず `~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop` を最新化してから候補検出を行う**（詳細は「1. 移植元の最新化」参照）
+- **候補検出・粒度判断は常に、最新化した `~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
 - 対象: バックエンド（FastAPI）優先
 - **粒度はAIの判断**: 1エンドポイント単位にするか、関連する複数エンドポイントをまとめて1コントローラー単位にするかは、依存関係の強さ・レスポンス/リクエストの共有度合いを見てそのつど判断する。判断基準に迷う場合は1エンドポイント単位をデフォルトにする
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。候補検出では Codex が以下を必ず突き合わせる
-  1. 最新化済みの `~/Documents/secuaigent/server` の `develop`
+  1. 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop`
   2. `backend/app/routers/` の既存実装
   3. `gh issue list --state all`
   4. `gh pr list --state open`
@@ -33,23 +33,22 @@ description: Use ONLY when the user explicitly invokes /naw-issue-batch or expli
 
 ### 1. 移植元の最新化
 
-候補検出に入る**前に必ず**、以下を実行し、`~/Documents/secuaigent/server` の `develop` を最新化する。
+候補検出に入る**前に必ず**、以下を実行し、`~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop` を最新化する。
 
 ```bash
-cd ~/Documents/secuaigent/server
-git fetch
-git checkout develop
-git pull
+git -C ~/Documents/unirita-develop-pj/secuaigent fetch origin develop
+git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/develop
 ```
 
-- 未コミットのローカル変更等で`checkout`/`pull`が失敗する場合は、変更を破棄・上書きせず、状況をユーザーに報告して指示を仰ぐ
+- `~/Documents/unirita-develop-pj/secuaigent` はユーザーが業務で使う作業ツリーのため、そこで `git checkout` / `git pull` はしない。`~/Documents/unirita-develop-pj/secuaigent-ref` は `origin/develop` に detached した参照専用 worktree で、上記で作業ツリーのブランチに影響せず最新化できる（worktree がない場合は `git -C ~/Documents/unirita-develop-pj/secuaigent worktree add --detach ../secuaigent-ref origin/develop` で作る）
+- `checkout` が失敗する場合は、変更を破棄・上書きせず、状況をユーザーに報告して指示を仰ぐ
 - ここで最新化した状態を、以降の候補検出・粒度判断すべての基準とする
 
 ### 2. 候補検出
 
 この調査ステップは読み取り専用のリサーチである。Codex が外部AIの agent に委譲せず、以下を直接確認して、未移植候補を1件だけ選ぶ。
 
-- 最新化済みの `~/Documents/secuaigent/server` の状態を読み取り、Controller群のエンドポイント一覧を洗い出す
+- 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/server` の状態を読み取り、Controller群のエンドポイント一覧を洗い出す
 - `backend/app/routers/` の既存実装、`gh issue list --state all`、`gh pr list --state open` と突き合わせる
 - まだ移植されておらず、起票済みIssueやオープンPRでも対応されていないエンドポイントを検出する
 - **サブドメイン（hostname）ベースのテナント識別に関するエンドポイント・ロジックは候補から除外する**。Issue #193/#195でこのリポジトリ側が意図的に廃止済みのため、参照リポジトリ側に存在しても「未移植の欠落」ではない

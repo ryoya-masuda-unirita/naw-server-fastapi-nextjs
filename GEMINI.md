@@ -4,10 +4,13 @@
 
 企業向け AI チャット管理 SaaS の**移植プロジェクト**。
 
-| 移植元（参照リポジトリ） | 移植先（このリポジトリ） |
+移植元は GitLab のモノレポ `secuaigent`（参照専用 worktree `~/Documents/unirita-develop-pj/secuaigent-ref`）。複数のプロジェクトが入っており、すべて移植対象とする（対応表・移植先の詳細は `.claude/CLAUDE.md` を参照）。
+
+| 移植元（`secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
-| Angular → `~/Documents/secuaigent-client` | React（Vite + React Router） → `frontend/` |
-| Spring Boot → `~/Documents/naw-server` | FastAPI → `backend/` |
+| `client/`（Angular） | React（Vite + React Router） → `frontend/` |
+| `server/`（Spring Boot） | FastAPI → `backend/` |
+| `generative-ai-adapter/`・`secuaigent-server-local/` ほか | `.claude/CLAUDE.md` 参照 |
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
@@ -15,10 +18,12 @@
 
 ### 参照リポジトリの git 管理状況
 
-| リポジトリ | git 管理状況 |
+`~/Documents/unirita-develop-pj/secuaigent` はユーザーの業務用の作業ツリーなので `git checkout` / `git pull` しない。参照専用 worktree `secuaigent-ref` を使い、最新化は `git -C ~/Documents/unirita-develop-pj/secuaigent fetch origin develop && git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/develop` で行う。
+
+| ディレクトリ | git 管理状況 |
 |---|---|
-| `~/Documents/naw-server` | 最初から git 管理。`develop` ブランチあり |
-| `~/Documents/secuaigent-client` | 途中から git 管理（別チームが開発した初期実装は git 履歴なし）。`git log` や `git blame` で全履歴を追えない場合がある。最新のコードを読んで実装を把握すること |
+| `server/` | 最初から git 管理。`git log` で全履歴を追える |
+| `client/` | 2026-07-13 にモノレポへ取り込まれた。それ以前（別チームの初期実装を含む）は履歴を追えない場合がある。最新のコードを読んで実装を把握すること |
 
 ---
 
@@ -116,8 +121,8 @@ NAW-XXXX の移植。〇〇機能を FastAPI / React で実装する。
 
 ## 参照
 - 元チケット: NAW-XXXX
-- 移植元（バックエンド）: `~/Documents/naw-server/src/...`
-- 移植元（フロントエンド）: `~/Documents/secuaigent-client/src/...`
+- 移植元（バックエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/server/src/...`
+- 移植元（フロントエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/...`
 ```
 
 ---

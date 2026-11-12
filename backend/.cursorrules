@@ -2,7 +2,7 @@
 
 ## 移植元リポジトリ
 
-Spring Boot 実装: `~/Documents/naw-server`
+Spring Boot 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/server`
 
 **このリポジトリは日々更新される**。実装前に必ず最新の Spring Boot 実装を確認してからポートすること。
 

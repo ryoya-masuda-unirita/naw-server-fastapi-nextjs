@@ -11,10 +11,15 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 
 企業向け AI チャット管理 SaaS の移植プロジェクト。
 
-| 移植元 | 移植先 |
+移植元は GitLab のモノレポ `secuaigent`（製品名 SecuAiGent、旧称 NAW）。複数のプロジェクトが入っており、すべて移植対象とする。
+
+| 移植元（`~/Documents/unirita-develop-pj/secuaigent-ref/` 配下） | 移植先 |
 |---|---|
-| Angular: `~/Documents/secuaigent/client` | React（Vite + React Router）: `frontend/` |
-| Spring Boot: `~/Documents/secuaigent/server` | FastAPI: `backend/` |
+| `server/`（Spring Boot 3.5 / Java 21） | FastAPI: `backend/` |
+| `client/`（Angular 21） | React（Vite + React Router）: `frontend/` |
+| `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター） | `generative-ai-adapter/`（Python、新設予定） |
+| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python、新設予定） |
+| `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
 
 参照リポジトリは日々更新される。移植作業を始める前に、必ず参照リポジトリの最新状態と `git log` を確認し、どの変更をどう取り込むか判断してから実装すること。
 
@@ -23,19 +28,21 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 
 ### 現在の開発方針
 
-しばらくはバックエンド（`backend/`）優先で開発を進める。
+バックエンド（`backend/`）とフロントエンド（`frontend/`、React）を並行して進める。（2026-11-12 改定。それまでは「バックエンド優先・`frontend/` は当面不問」だった）
 
-- Issue 起票・実装対応は `backend/` を優先し、`frontend/`（React 移植）は後回しにする
-- バックエンドの動作確認（ブラウザ操作）には `frontend/` ではなく `frontend-angular/`（`http://localhost:4201`）を使う
-- `frontend/`（React）は当面不問とする。動作確認・code review 等で `frontend/` 側の不具合を発見しても、その場で新規 Issue を起票したり修正したりしない。気づいた点があれば会話内で一言触れる程度に留め、対応要否の判断はユーザーに委ねる
-- フロントエンド側の対応が必要な Issue が来た場合は、優先順位についてユーザーに確認すること
-- 新しいチケットに着手する際は、作業を始める前に必ず「今回もバックエンド（FastAPI実装）でいいですか？」とユーザーに確認すること
+- `backend/` と `frontend/` の Issue は、どちらも通常どおり起票・対応してよい。`frontend/` の不具合を見つけた場合も起票・修正の対象にする
+- 新しく移植対象に加わった `generative-ai-adapter/`・`server-local/`・その他のモジュールは、着手（Issue 起票を含む）前に優先順位をユーザーに確認する
+- 新しいチケットに着手する際は、Issue の内容から対象モジュール（`backend/` / `frontend/` / その他）を判断する。判断に迷う場合だけユーザーに確認する
+- バックエンドの動作確認（ブラウザ操作）には、React 移植が完了するまでは `frontend-angular/`（`http://localhost:4201`）を使う
 - frontend 移植 Issue を起票・着手・自動処理する場合は、`frontend-port` ラベルを使って backend Issue と区別すること
 
 ### 参照リポジトリの注意点
 
-- `~/Documents/secuaigent/server` は最初から git 管理されており、`develop` ブランチがある
-- `~/Documents/secuaigent/client` は途中から git 管理のため、履歴だけでは追いきれない箇所がある。必要に応じて最新コードも直接読むこと
+- `~/Documents/unirita-develop-pj/secuaigent` はユーザーが業務で使う作業ツリー（作業中のブランチが checkout されている）。ここで `git checkout` / `git pull` をしない
+- 参照には参照専用 worktree `~/Documents/unirita-develop-pj/secuaigent-ref`（`origin/develop` に detached）を使う。最新化は `git -C ~/Documents/unirita-develop-pj/secuaigent fetch origin develop && git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/develop`。worktree がない場合は `git -C ~/Documents/unirita-develop-pj/secuaigent worktree add --detach ../secuaigent-ref origin/develop` で作る
+- `secuaigent-ref` は読むだけにする。ファイルの変更・コミット・push・MR 作成はしない（GitLab の `secuaigent` に Issue・MR を作らない）
+- `server/` は最初から git 管理されており、`git log` で全履歴を追える
+- `client/` は 2026-07-13 にモノレポへ取り込まれたため、それ以前は履歴だけでは追いきれない箇所がある。必要に応じて最新コードも直接読むこと
 
 ### テナント識別方式（サブドメイン廃止・移植/調査時の前提条件）
 
@@ -46,7 +53,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 | frontend-angular（Issue #193） | `resolveTenantId()` の hostname パース、`user-list-tenant.helpers.ts` の `extractTenantIdFromHostname()` | ログイン画面でテナントIDを明示入力 → `sessionStorage` 保存 → `X-Tenant-ID` ヘッダ送信 |
 | infra（Issue #195） | Route53ホストゾーン、ACM証明書（ワイルドカードSAN）、CloudFrontエイリアス、ワイルドカードCORS正規表現 | CloudFrontデフォルトドメイン（`*.cloudfront.net`）配信、固定オリジンのCORS |
 
-**参照リポジトリ（`secuaigent/client` / `naw-server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリの `frontend-angular` 側は #193 で撤去済み）。
+**参照リポジトリ（`secuaigent/client` / `secuaigent/server`）はサブドメインを廃止していない。** サブドメイン廃止はこのリポジトリ側だけの意図的な決定であり、参照リポジトリの実装が古い／未移植なわけではない。実際、`secuaigent/client` の `tenant.helpers.ts` は今も hostname フォールバックを持つ（このリポジトリの `frontend-angular` 側は #193 で撤去済み）。
 
 - **未移植判定からの除外（最重要）**: Issue 一括起票系 skill（`naw-issue-batch` / `naw-frontend-issue-batch`）で参照リポジトリとの差分を検出する際、サブドメイン（hostname）ベースのテナント識別・ワイルドカードDNS/証明書前提の設計は「未移植の欠落」として検出・Issue化しない。意図的に廃止したものであり、差分として存在すること自体が正しい状態
 - 逆に、参照リポジトリの調査・読解自体（挙動理解、無関係な機能のリサーチ等）では通常どおりサブドメイン前提のコードも含めてそのまま読む。除外するのは「未移植候補としての検出」の場面に限る
@@ -109,7 +116,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 
 - `/naw-issue-batch`
 - 未移植のバックエンド機能をまとめて Issue 起票する
-- `~/Documents/secuaigent/server` から未移植候補を検出し、Issue 作成だけを繰り返す
+- `~/Documents/unirita-develop-pj/secuaigent-ref/server` から未移植候補を検出し、Issue 作成だけを繰り返す
 
 この skill は Issue 起票のみを行う。ブランチ作成、`docs/issue-*` 作成、実装、PR 作成には進まない。
 
@@ -119,7 +126,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-X-NAW
 
 - `/naw-frontend-issue-batch`
 - 未移植の frontend 機能をまとめて Issue 起票する
-- `~/Documents/secuaigent/client` から未移植候補を検出し、frontend 向け Issue 作成だけを繰り返す
+- `~/Documents/unirita-develop-pj/secuaigent-ref/client` から未移植候補を検出し、frontend 向け Issue 作成だけを繰り返す
 
 この skill は frontend 移植 Issue の起票のみを行う。ブランチ作成、`docs/issue-*` 作成、実装、PR 作成には進まない。起票時は `frontend-port` ラベルを必ず付与する。
 

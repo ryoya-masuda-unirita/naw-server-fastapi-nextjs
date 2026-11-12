@@ -52,7 +52,7 @@ bash .claude/skills/naw-issue-loop/scripts/next_todo_issue.sh
 メインの会話コンテキストを圧迫しないよう、Issue1件分の「着手〜実装〜テスト〜PR作成〜code-review」一式を `Agent(subagent_type: claude)` に委譲する。会話の前提を知らない前提で、以下を自己完結のプロンプトに含めること。
 
 - 対象Issue番号
-- `~/Documents/naw-server-fastapi-nextjs` の `.claude/skills/naw-issue-workflow/SKILL.md` と `.claude/skills/naw-issue-workflow/references/doc-templates.md` を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
+- `~/Documents/personal/naw-server-fastapi-nextjs` の `.claude/skills/naw-issue-workflow/SKILL.md` と `.claude/skills/naw-issue-workflow/references/doc-templates.md` を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
 - 以下の**本スキル独自の上書きルール**を明示すること（`naw-issue-workflow` のデフォルトと異なる部分なので、エージェントが読み違えないよう強調する）:
   1. **着手前に必ず `gh issue view {番号} --json title,body` でIssue本文を確認し、`NAW-XXXX` 形式の元チケット参照があるかを判定すること。** その上で `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh` を次のいずれかの引数で実行する（このスクリプトが `develop` の最新化・`feature/issue-*` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）
      - NAW番号の記載なし: `issue-{番号}`（→ `feature/issue-{番号}` ブランチ、`docs/issue-{番号}/`）
