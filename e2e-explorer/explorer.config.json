@@ -1,0 +1,110 @@
+{
+  "target": {
+    "baseUrl": "http://localhost:55173",
+    "apiUrl": "http://localhost:58000",
+    "login": {
+      "path": "/auth/login",
+      "tenantField": "#tenantId",
+      "userField": "#username",
+      "passwordField": "#password",
+      "submit": "form button[type=submit]"
+    }
+  },
+  "workers": 4,
+  "seed": 1,
+  "limits": {
+    "maxDepth": 3,
+    "maxActions": 120,
+    "maxActionsPerState": 40,
+    "maxMinutes": 10
+  },
+  "timing": {
+    "settleQuietMs": 400,
+    "settleTimeoutMs": 8000,
+    "navigationTimeoutMs": 20000
+  },
+  "oracle": {
+    "slowResponseMs": 3000,
+    "slowActionMs": 5000,
+    "axe": true,
+    "axeImpacts": ["critical", "serious"],
+    "viewports": [
+      { "name": "desktop", "width": 1280, "height": 800 },
+      { "name": "mobile", "width": 375, "height": 812 }
+    ],
+    "overflowTolerancePx": 1,
+    "expectedHttp": [
+      {
+        "description": "ログイン画面などの認証画面を開いたときのセッション確認（未ログインなら 401 が正しい）",
+        "method": "GET",
+        "path": "^/api/auth$",
+        "status": [401],
+        "pagePath": "^/auth/"
+      },
+      {
+        "description": "異常値を送信した直後の入力エラー・認証エラー・回数制限",
+        "status": [400, 401, 403, 422, 429],
+        "onlyAfterAbnormalInput": true
+      }
+    ],
+    "ignoreConsole": ["^Failed to load resource"]
+  },
+  "crawl": {
+    "inputKinds": ["empty", "whitespace", "max", "maxPlus1", "symbols", "markup", "emoji", "negative", "long", "mixed"],
+    "defaultMaxLength": 255,
+    "longLength": 5000,
+    "dialogs": "accept",
+    "excludeSelectors": ["[data-e2e-explorer-skip]"],
+    "sharedRegions": ["aside", "header", "nav", "[role=navigation]"],
+    "sharedRegistryPerRole": false
+  },
+  "tenants": {
+    "perShard": true,
+    "prefix": "e2e-"
+  },
+  "roles": {
+    "anonymous": {
+      "description": "未ログイン",
+      "anonymous": true
+    },
+    "admin": {
+      "description": "テナント管理者（seed の admin。権限 ADMIN）",
+      "loginId": "admin",
+      "password": "admin@1234",
+      "sourceTenantId": "test-tenant"
+    },
+    "user": {
+      "description": "一般ユーザー（seed の user01。権限 USER）",
+      "loginId": "user01",
+      "password": "user01@1234",
+      "sourceTenantId": "test-tenant"
+    }
+  },
+  "groups": [
+    {
+      "id": "auth",
+      "description": "認証画面（ログイン・パスワード再設定）を未ログインで",
+      "startPath": "/auth/login",
+      "include": ["^/auth(/|$)"],
+      "roles": ["anonymous"]
+    },
+    {
+      "id": "dashboard",
+      "description": "ログイン後のトップ・ダッシュボードと、全画面に共通のサイドバー",
+      "startPath": "/dashboard",
+      "include": ["^/$", "^/dashboard(/|$)"],
+      "roles": ["admin", "user"]
+    },
+    {
+      "id": "account",
+      "description": "ログイン後のパスワード再設定（ユーザーメニューから開く画面）",
+      "startPath": "/auth/pw-reset",
+      "include": ["^/auth/pw-reset$"],
+      "roles": ["admin", "user"]
+    }
+  ],
+  "environment": {
+    "composeFile": "docker/compose.yml",
+    "projectName": "naw-e2e-explorer"
+  }
+}
