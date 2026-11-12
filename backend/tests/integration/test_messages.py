@@ -334,20 +334,31 @@ def _content_form(
 
 
 @contextmanager
-def _patched_llm(engine: AsyncEngine, answer: str) -> Iterator[None]:
+def _patched_llm(
+    engine: AsyncEngine,
+    answer: str,
+    sent_messages: list[list[ChatMessage]] | None = None,
+) -> Iterator[None]:
     """LLM呼び出しを固定回答に差し替え、ストリーミング後の永続化先をテスト用DBにする。
 
     Args:
         engine: テスト用DBエンジン。
         answer: LLMが返す回答テキスト。
+        sent_messages: 指定した場合、LLMへ渡された会話履歴を呼び出しごとに追記する。
 
     Yields:
         差し替えが有効な間の制御を呼び出し元へ渡す。
     """
+    # 呼び出し側が会話履歴を位置引数・キーワード引数のどちらで渡しても取り出せるよう、
+    # 差し替え前の本物のシグネチャで引数を束縛する。
+    stream_chat_signature = inspect.signature(AzureLlmChatClient.stream_chat)
 
     async def _stream_chunks(
         *args: Any, **kwargs: Any
     ) -> AsyncIterator[ChatStreamChunk]:
+        if sent_messages is not None:
+            bound = stream_chat_signature.bind(*args, **kwargs)
+            sent_messages.append(bound.arguments["messages"])
         yield ChatStreamChunk(text_delta=answer)
         yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
@@ -1094,27 +1105,7 @@ class TestMessageRouter:
         ):
             """userInputが空文字でも画像添付と一緒にLLMへ送られ、空文字の質問と回答が保存されること(Issue #245)"""
             sent_messages: list[list[ChatMessage]] = []
-            stream_chat_signature = inspect.signature(AzureLlmChatClient.stream_chat)
-
-            async def _stream_chunks(
-                *args: Any, **kwargs: Any
-            ) -> AsyncIterator[ChatStreamChunk]:
-                bound = stream_chat_signature.bind(*args, **kwargs)
-                sent_messages.append(bound.arguments["messages"])
-                yield ChatStreamChunk(text_delta="画像の説明")
-                yield ChatStreamChunk(input_tokens=10, output_tokens=5)
-
-            test_session_maker = async_sessionmaker(engine, expire_on_commit=False)
-            with (
-                patch(
-                    "app.services.message_service.AzureLlmChatClient.stream_chat",
-                    side_effect=_stream_chunks,
-                ),
-                patch(
-                    "app.services.message_service.get_session_maker",
-                    return_value=test_session_maker,
-                ),
-            ):
+            with _patched_llm(engine, "画像の説明", sent_messages=sent_messages):
                 async with client as c:
                     response = await c.post(
                         "/api/messages/content",

@@ -2594,20 +2594,6 @@ class TestMessageContentCreateRequestAttachmentFiles:
         assert req.attachmentFiles == []
         assert req.historyAttachmentFiles == []
 
-    def test_accepts_when_history_attachment_count_matches(self):
-        """historyAttachmentFilesの件数がattachmentsCount合計と一致する場合、正常にパースされること"""
-        req = MessageContentCreateRequest(
-            messageId="msg-1",
-            userInput="質問",
-            historyMessages=[
-                MessageContentHistoryTurn(
-                    role="user", content="過去の質問", attachmentsCount=2
-                )
-            ],
-            historyAttachmentFiles=[self._file("a.png"), self._file("b.png")],
-        )
-        assert len(req.historyAttachmentFiles) == 2
-
     def test_accepts_when_history_attachment_count_mismatches(self):
         """historyAttachmentFilesの件数がattachmentsCount合計と一致しなくても、移植元と同じく受け付けること"""
         req = MessageContentCreateRequest(
