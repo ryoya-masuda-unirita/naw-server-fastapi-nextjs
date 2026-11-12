@@ -7,15 +7,26 @@ const LOGIN_KEY_QUERY = 'loginkey';
 // サブドメインでテナントを判定しないため、テナントIDもクエリで受け取る（X-Tenant-ID ヘッダに使う）
 const TENANT_ID_QUERY = 'tenantId';
 
-export const LOGIN_KEY_ERROR_MESSAGE_KEY = 'AUTH.LOGIN_KEY.ERROR';
-
 export interface LoginKeyInitializerDeps {
   loginWithKey: (loginKey: string) => Promise<boolean>;
-  /** 認証に失敗したとき（移植元はトーストで AUTH.LOGIN_KEY.ERROR を出す） */
+  /** 認証に失敗したとき（移植元はトーストで翻訳キー AUTH.LOGIN_KEY.ERROR の文言を出す） */
   onError?: () => void;
 }
 
-export async function runLoginKeyInitializer(deps: LoginKeyInitializerDeps): Promise<void> {
+// 認証中にもう一度呼ばれたら同じ処理を待たせる。React の StrictMode（開発時）は初期化の effect を2回走らせ、
+// 2回目がすぐにセッション確認（GET /api/auth）へ進むと、ログインキーの認証より先に未ログインと判定されるため
+let inFlight: Promise<void> | null = null;
+
+export function runLoginKeyInitializer(deps: LoginKeyInitializerDeps): Promise<void> {
+  if (!inFlight) {
+    inFlight = authenticateWithLoginKey(deps).finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
+async function authenticateWithLoginKey(deps: LoginKeyInitializerDeps): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const loginKey = params.get(LOGIN_KEY_QUERY);
   if (!loginKey) return;
@@ -25,9 +36,7 @@ export async function runLoginKeyInitializer(deps: LoginKeyInitializerDeps): Pro
     persistTenantId(tenantId);
   }
 
-  // 履歴・ブックマークに鍵を残さないよう、URL から認証パラメータを消す。
-  // 移植元は認証後に消すが、React の StrictMode（開発時）は初期化の effect を2回走らせるため、
-  // 先に消して2回目の呼び出しで再認証しないようにする
+  // 履歴・ブックマークに鍵を残さないよう、URL から認証パラメータを消す（移植元は認証後だが、失敗しても消す点は同じ）
   params.delete(LOGIN_KEY_QUERY);
   params.delete(TENANT_ID_QUERY);
   const query = params.toString();

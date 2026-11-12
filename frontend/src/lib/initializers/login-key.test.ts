@@ -56,4 +56,26 @@ describe('runLoginKeyInitializer', () => {
 
     expect(loginWithKey).toHaveBeenCalledTimes(1);
   });
+
+  test('認証中に呼ばれた2回目は、認証が終わるまで待つこと（先にセッション確認へ進まない）', async () => {
+    openUrl('/dashboard?loginkey=key-1');
+    let finishLogin: (ok: boolean) => void = () => undefined;
+    const loginWithKey = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishLogin = resolve;
+        })
+    );
+    const order: string[] = [];
+
+    const first = runLoginKeyInitializer({ loginWithKey }).then(() => order.push('first'));
+    const second = runLoginKeyInitializer({ loginWithKey }).then(() => order.push('second'));
+    await Promise.resolve();
+    expect(order).toEqual([]);
+
+    finishLogin(true);
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(['first', 'second']);
+  });
 });

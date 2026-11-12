@@ -30,7 +30,11 @@ export function scrollToFirstFormError(
 
   for (const { controlName, elementId } of fields) {
     if (isInvalid(controlName)) {
-      root.querySelector<HTMLElement>(`#${elementId}`)?.scrollIntoView({ behavior, block });
+      // セレクタ（`#id`）にすると数字で始まる id や `:` を含む id で例外になるため、id で取ってから範囲を確かめる
+      const element = document.getElementById(elementId);
+      if (element && root.contains(element)) {
+        element.scrollIntoView({ behavior, block });
+      }
       return;
     }
   }

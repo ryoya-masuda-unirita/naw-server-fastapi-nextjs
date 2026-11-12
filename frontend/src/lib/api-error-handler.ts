@@ -1,4 +1,4 @@
-import type { ApiErrorContext, ApiErrorHandler } from '@/lib/api-client';
+import { AUTH_API_PATH_PREFIX, type ApiErrorContext, type ApiErrorHandler } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 
 // 移植元 core/interceptors/error.interceptor.ts の判定部分。
@@ -57,7 +57,7 @@ export function shouldInvalidateSession({
 }: ApiErrorContext): boolean {
   if (error.status !== HTTP_STATUS.UNAUTHORIZED || skipSessionInvalidation) return false;
   const isSessionPath = error.path === API_PATHS.AUTH.SESSION;
-  const isAuthApiPath = error.path.startsWith('/auth/');
+  const isAuthApiPath = error.path.startsWith(AUTH_API_PATH_PREFIX);
   return !isSessionPath && !isAuthApiPath;
 }
 

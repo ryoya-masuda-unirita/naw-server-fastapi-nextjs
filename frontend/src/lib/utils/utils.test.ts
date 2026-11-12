@@ -127,6 +127,16 @@ describe('scroll-to-error', () => {
     expect(nameEl.scrollIntoView).not.toHaveBeenCalled();
     expect(emailEl.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
   });
+
+  test('数字で始まる id でも例外にならずスクロールすること', () => {
+    document.body.innerHTML = '<div role="dialog"><input id="1-name" /></div>';
+    const el = document.getElementById('1-name') as HTMLElement;
+    el.scrollIntoView = vi.fn();
+
+    scrollToFirstFormError(() => true, [{ controlName: 'name', elementId: '1-name' }]);
+
+    expect(el.scrollIntoView).toHaveBeenCalled();
+  });
 });
 
 describe('tab-query-param', () => {

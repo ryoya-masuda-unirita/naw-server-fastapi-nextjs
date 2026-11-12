@@ -193,6 +193,21 @@ describe('apiClient のリクエスト', () => {
       expect(handler.mock.calls[0][0].error.status).toBe(400);
     });
 
+    test('呼び出し側が中断したら、通信エラーにせず元の理由のまま投げること', async () => {
+      const handler = vi.fn<(context: ApiErrorContext) => void>();
+      setApiErrorHandler(handler);
+      server.use(http.get('*/api/rooms', () => HttpResponse.json({})));
+      const controller = new AbortController();
+      controller.abort(new Error('cancelled'));
+
+      const error = await apiClient
+        .get('/api/rooms', { signal: controller.signal })
+        .catch((e: unknown) => e);
+
+      expect(error).not.toBeInstanceOf(ApiError);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
     test('通信自体に失敗したら status 0 の ApiError を投げること', async () => {
       const handler = vi.fn<(context: ApiErrorContext) => void>();
       setApiErrorHandler(handler);

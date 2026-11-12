@@ -4,7 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
 // 本番ビルドで /backend を付けて呼び分ける（#240）。移植元の authBaseUrl に相当する。
 // 未指定（ローカル開発・テスト）なら他のAPIと同じベースURLを使う。
 const AUTH_API_BASE_URL = import.meta.env.VITE_AUTH_API_URL ?? API_BASE_URL;
-const AUTH_API_PATH_PREFIX = '/auth/';
+export const AUTH_API_PATH_PREFIX = '/auth/';
 // 移植元の *FromCustomUrl（ローカルサーバ向け）に相当。ベースURLを付けずにそのまま送る
 const ABSOLUTE_URL_PATTERN = /^https?:\/\//;
 // fetch 自体が失敗した（ネットワーク断・CORS）ときの status。Angular の HttpErrorResponse と同じく 0 にする
@@ -202,7 +202,8 @@ async function request<T>(
   try {
     res = await send(method, path, options);
   } catch (e) {
-    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    // 呼び出し側の中断（abort・AbortSignal.timeout）は通信エラーにせず、元の理由のまま投げる
+    if (options.signal?.aborted) throw e;
     throw notifyError(
       new ApiError({ status: NETWORK_ERROR_STATUS, body: null, method, path }),
       path,
