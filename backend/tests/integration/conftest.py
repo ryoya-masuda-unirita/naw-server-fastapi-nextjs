@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import fakeredis.aioredis
@@ -171,6 +171,10 @@ async def test_user(session, test_tenant):
     return user
 
 
+# 既存パスワード履歴の作成日を現在から何日前にするか
+_EXISTING_PASSWORD_AGE_DAYS = 1
+
+
 @pytest.fixture
 async def test_user_with_password(session, test_tenant, test_user):
     """テスト用ユーザー（パスワード設定済み）"""
@@ -181,7 +185,10 @@ async def test_user_with_password(session, test_tenant, test_user):
         tenant_id=test_tenant.id,
         user_id=test_user.id,
         password=hashed_password,
-        created_at=datetime.utcnow(),
+        # 既存の（過去に設定済みの）パスワード履歴として1日前にする。現在時刻にすると、
+        # テストの SQLite では server_default の now() が秒単位になるため、同じ1秒内に
+        # 再設定した履歴よりマイクロ秒付きのこちらが新しいと判定され、テストが不安定になる。
+        created_at=datetime.utcnow() - timedelta(days=_EXISTING_PASSWORD_AGE_DAYS),
     )
     session.add(password_history)
     await session.flush()
