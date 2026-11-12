@@ -1428,6 +1428,55 @@ class TestFindChatEndpoint:
         assert tenant_endpoint.type == EndpointType.BEDROCK_CHAT
         assert assistant_endpoint.model == _BEDROCK_MODEL
 
+    async def test_prefers_azure_when_both_azure_and_bedrock_are_linked(
+        self, session, messages_tenant, message_assistant
+    ):
+        """Azure OpenAIとBedrockの両方を紐づけた場合、IDの並びによらずAzure OpenAIを従来どおり選ぶこと"""
+        # BedrockのIDのほうが辞書順で小さくなるようにし、ID順ではBedrockが選ばれる状況にする
+        bedrock_endpoint = TenantEndpoint(
+            id="0" * 32,
+            tenant_id=messages_tenant.id,
+            type=EndpointType.BEDROCK_CHAT,
+            endpoint_name="bedrock",
+            endpoint="https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+            api_key="bedrock-api-key",
+        )
+        azure_endpoint = TenantEndpoint(
+            id="f" * 32,
+            tenant_id=messages_tenant.id,
+            type=EndpointType.AZURE_OPENAI_CHAT,
+            endpoint_name="azure",
+            endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+        )
+        session.add_all([bedrock_endpoint, azure_endpoint])
+        await session.commit()
+        session.add_all(
+            [
+                AssistantEndpoint(
+                    assistant_id=message_assistant.id,
+                    endpoint_id=bedrock_endpoint.id,
+                    tenant_id=messages_tenant.id,
+                    model=_BEDROCK_MODEL,
+                ),
+                AssistantEndpoint(
+                    assistant_id=message_assistant.id,
+                    endpoint_id=azure_endpoint.id,
+                    tenant_id=messages_tenant.id,
+                    model="gpt-4o",
+                ),
+            ]
+        )
+        await session.commit()
+
+        result = await AssistantEndpointRepository.find_chat_endpoint(
+            message_assistant.id, messages_tenant.id, session
+        )
+
+        assert result is not None
+        assert result[1].id == azure_endpoint.id
+        assert result[0].model == "gpt-4o"
+
     async def test_returns_none_without_chat_endpoint(
         self, session, messages_tenant, message_assistant
     ):

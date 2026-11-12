@@ -184,17 +184,6 @@ class LlmChatService:
             )
         tenant_endpoint_type = CHAT_TENANT_ENDPOINT_TYPES[ai_model.endpoint_type]
 
-        tools = _to_core_tool_configs(req.tools)
-        if ai_model.endpoint_type == AIModelEndpointType.BEDROCK_CHAT:
-            # ストリーミング開始後に失敗するとSSEのerrorとしてしか返せないため、
-            # Bedrockで扱えないパラメータは開始前に400で拒否する。
-            try:
-                BedrockLlmChatClient.validate_request(tools)
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                ) from e
-
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
             tenant_id, tenant_endpoint_type, session
         )
@@ -224,6 +213,18 @@ class LlmChatService:
             await require_owned_room(tenant_id, current_user, message.room_id, session)
             room_id = message.room_id
             message_id_for_usage = message.id
+
+        tools = _to_core_tool_configs(req.tools)
+        if ai_model.endpoint_type == AIModelEndpointType.BEDROCK_CHAT:
+            # ストリーミング開始後に失敗するとSSEのerrorとしてしか返せないため、
+            # Bedrockで扱えないパラメータは開始前に400で拒否する。エンドポイント・
+            # messageIdの存在確認や所有者確認（404/403）を優先するため、それらの後に行う。
+            try:
+                BedrockLlmChatClient.validate_request(tools)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                ) from e
 
         chat_messages = LlmChatService._apply_additional_prompt(
             [

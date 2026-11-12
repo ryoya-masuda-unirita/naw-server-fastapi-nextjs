@@ -1,9 +1,9 @@
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai_model import CHAT_AI_MODEL_ENDPOINT_TYPES
 from app.models.assistant import AssistantEndpoint
-from app.models.tenant_endpoint import TenantEndpoint
+from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemResponse
 
 
@@ -27,9 +27,16 @@ class AssistantEndpointRepository:
         Returns:
             (アシスタントとエンドポイントの紐付け, テナントエンドポイント) のタプル。
             紐づくチャット用エンドポイントが存在しない場合はNone。複数存在する
-            場合は`AssistantEndpoint.endpoint_id`が最小のものを採用する
-            （`AssistantEndpoint`の主キーは`(assistant_id, endpoint_id)`の複合キーのため）。
+            場合はAzure OpenAIを優先し、同じ種別の中では`AssistantEndpoint.endpoint_id`が
+            最小のものを採用する（`AssistantEndpoint`の主キーは`(assistant_id, endpoint_id)`
+            の複合キーのため）。
         """
+        # Bedrock対応(#249)前はAzure OpenAIのエンドポイントだけを解決していたため、
+        # 両方を紐づけたアシスタントで送信先がUUIDの並びによって変わらないよう、
+        # Azure OpenAIを優先して従来の送信先を保つ。
+        azure_first = case(
+            (TenantEndpoint.type == EndpointType.AZURE_OPENAI_CHAT, 0), else_=1
+        )
         stmt = (
             select(AssistantEndpoint, TenantEndpoint)
             .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
@@ -39,7 +46,7 @@ class AssistantEndpointRepository:
                 TenantEndpoint.tenant_id == tenant_id,
                 TenantEndpoint.type.in_(CHAT_AI_MODEL_ENDPOINT_TYPES.keys()),
             )
-            .order_by(AssistantEndpoint.endpoint_id)
+            .order_by(azure_first, AssistantEndpoint.endpoint_id)
         )
         result = await session.execute(stmt)
         row = result.first()

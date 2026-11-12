@@ -588,6 +588,51 @@ class TestStreamChatBedrockDispatch:
         assert "web_search/mcp" in exc_info.value.detail
         mock_bedrock_stream.assert_not_called()
 
+    @patch(
+        "app.services.llm_chat_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name_and_endpoint_types",
+        new_callable=AsyncMock,
+    )
+    async def test_message_not_found_takes_precedence_over_bedrock_tools_error(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_find_message,
+        test_user,
+    ):
+        """Bedrockでtoolsを指定しても、messageIdが存在しない場合はtoolsの400より404を優先すること"""
+        mock_find_model.return_value = _ai_model(
+            name="anthropic.claude-sonnet-5",
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        )
+        mock_find_endpoints.return_value = [
+            _tenant_endpoint(type=EndpointType.BEDROCK_CHAT)
+        ]
+        mock_find_message.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1",
+                test_user,
+                _request(
+                    deployName="anthropic.claude-sonnet-5",
+                    tools=[ToolConfig(name="web_search")],
+                    messageId="missing",
+                ),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 404
+
     @patch("app.services.llm_chat_service.get_session_maker")
     @patch("app.services.llm_chat_service.BedrockLlmChatClient.stream_chat")
     @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
