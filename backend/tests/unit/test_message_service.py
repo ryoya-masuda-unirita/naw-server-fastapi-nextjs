@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -113,6 +114,27 @@ def _file(file_id: str, reference: str | None) -> File:
         user_id="11111111-1111-1111-1111-111111111111",
         index_id="index-1",
     )
+
+
+def _sse_events(body: str) -> list[dict]:
+    """SSE本文を、frontend-angularと同じ規則でイベントの一覧へ変換する。
+
+    frontend-angularの`parseSseDataLine`/`parseStreamEvent`と同じく`data:`行だけを
+    JSONとして読み、種別`type`を持つものをイベントとして扱う。
+
+    Args:
+        body: SSEレスポンスの本文。
+
+    Returns:
+        `type`を持つイベント(JSON)の一覧。
+    """
+    events = []
+    for line in body.splitlines():
+        if line.startswith("data:"):
+            event = json.loads(line[len("data:") :].strip())
+            if "type" in event:
+                events.append(event)
+    return events
 
 
 def _request(**overrides) -> MessageContentCreateRequest:
@@ -441,14 +463,20 @@ class TestStreamMessageContent:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: text_delta" in body
-        assert '"text": "こんに"' in body
-        assert '"text": "ちは"' in body
-        assert "event: message_stop" in body
-        assert '"inputTokens": 10' in body
-        assert '"outputTokens": 5' in body
-        assert "event: complete" in body
-        assert '"id": "content-1"' in body
+        # 移植元と同じく、イベント名の行は付けずdata行のJSONのtypeで種別を表すこと
+        assert "event:" not in body
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "text_delta",
+            "message_stop",
+            "message_content",
+        ]
+        assert [event["text"] for event in events[:2]] == ["こんに", "ちは"]
+        assert events[2]["inputTokens"] == 10
+        assert events[2]["outputTokens"] == 5
+        assert events[3]["data"]["id"] == "content-1"
+        assert events[3]["data"]["status"] == "OK"
         mock_save_content.assert_awaited_once()
         # get_session_maker()は永続化(MessageContent保存後のRoom更新)とトークン使用量
         # 永続化の2箇所で呼ばれるため、addは2回(Room, TokenUsage)呼ばれる。
@@ -820,9 +848,11 @@ class TestStreamMessageContent:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: error" in body
-        assert "azure error" in body
-        assert "event: complete" in body
+        # 移植元と同じく、errorイベントの後にERRORステータスのmessage_contentが届くこと
+        events = _sse_events(body)
+        assert [event["type"] for event in events] == ["error", "message_content"]
+        assert "azure error" in events[0]["message"]
+        assert events[1]["data"]["status"] == "ERROR"
 
         saved_content = mock_save_content.await_args.args[0]
         assert saved_content.status == MessageContentStatus.ERROR
@@ -1103,9 +1133,10 @@ class TestStreamMessageContentRegenerate:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: complete" in body
-        assert '"question": "元の質問"' in body
-        assert '"answer": "新しい回答"' in body
+        final_event = _sse_events(body)[-1]
+        assert final_event["type"] == "message_content"
+        assert final_event["data"]["question"] == "元の質問"
+        assert final_event["data"]["answer"] == "新しい回答"
 
         mock_update_answer.assert_awaited_once()
         _, update_kwargs = mock_update_answer.await_args
@@ -1295,13 +1326,20 @@ class TestStreamMessageContentCreateLibrary:
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
-        assert "event: library_title_delta" in body
-        assert '"text": "タイトルA' in body
-        assert "event: library_content_delta" in body
-        assert '"text": "本文B' in body
-        assert "event: text_delta" in body
-        assert '"text": "コメントC"' in body
-        assert "event: message_stop" in body
+        events = _sse_events(body)
+        texts_by_type: dict[str, str] = {}
+        for event in events:
+            if "text" in event:
+                texts_by_type[event["type"]] = (
+                    texts_by_type.get(event["type"], "") + event["text"]
+                )
+        assert texts_by_type["library_title_delta"].startswith("タイトルA")
+        assert texts_by_type["library_content_delta"].startswith("本文B")
+        assert texts_by_type["text_delta"] == "コメントC"
+        assert [event["type"] for event in events][-2:] == [
+            "message_stop",
+            "message_content",
+        ]
 
         mock_save_library.assert_awaited_once()
         saved_library = mock_save_library.await_args.args[0]
@@ -2795,6 +2833,7 @@ class TestStreamMessageContentWithAttachmentFiles:
 
         mock_save_attachment_files.assert_awaited_once()
         mock_new_session.rollback.assert_awaited_once()
-        # 添付ファイル保存失敗後もRoom更新・completeイベント送出まで到達すること
-        assert "event: complete" in body
-        assert '"attachmentFiles": []' in body
+        # 添付ファイル保存失敗後もRoom更新・message_contentイベント送出まで到達すること
+        final_event = _sse_events(body)[-1]
+        assert final_event["type"] == "message_content"
+        assert final_event["data"]["attachmentFiles"] == []
