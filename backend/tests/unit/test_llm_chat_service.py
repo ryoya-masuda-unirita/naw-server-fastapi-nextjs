@@ -11,6 +11,7 @@ from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest, LlmChatTurn
+from app.schemas.message import ToolConfig
 from app.services.llm_chat_service import LlmChatService
 
 
@@ -542,8 +543,176 @@ class TestStreamChatBedrockDispatch:
             "tenant-1", EndpointType.BEDROCK_CHAT, ANY
         )
         mock_bedrock_stream.assert_called_once()
-        call_kwargs = mock_bedrock_stream.call_args.kwargs
-        assert call_kwargs["max_tokens_fallback"] == 4096
+        # maxTokens未指定時は、Bedrockで必須の上限としてAIモデルの上限が渡されること
+        assert mock_bedrock_stream.call_args.args[5] == 4096
+
+    @patch("app.services.llm_chat_service.BedrockLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name_and_endpoint_types",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_400_when_tools_specified_for_bedrock(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_bedrock_stream,
+        test_user,
+    ):
+        """Bedrockのモデルでtoolsを指定すると、ストリーミング開始前に400になりクライアントを呼ばないこと"""
+        mock_find_model.return_value = _ai_model(
+            name="anthropic.claude-sonnet-5",
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        )
+        mock_find_endpoints.return_value = [
+            _tenant_endpoint(type=EndpointType.BEDROCK_CHAT)
+        ]
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1",
+                test_user,
+                _request(
+                    deployName="anthropic.claude-sonnet-5",
+                    tools=[ToolConfig(name="web_search")],
+                ),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "web_search/mcp" in exc_info.value.detail
+        mock_bedrock_stream.assert_not_called()
+
+    @patch(
+        "app.services.llm_chat_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name_and_endpoint_types",
+        new_callable=AsyncMock,
+    )
+    async def test_message_not_found_takes_precedence_over_bedrock_tools_error(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_find_message,
+        test_user,
+    ):
+        """Bedrockでtoolsを指定しても、messageIdが存在しない場合はtoolsの400より404を優先すること"""
+        mock_find_model.return_value = _ai_model(
+            name="anthropic.claude-sonnet-5",
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        )
+        mock_find_endpoints.return_value = [
+            _tenant_endpoint(type=EndpointType.BEDROCK_CHAT)
+        ]
+        mock_find_message.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await LlmChatService.stream_chat(
+                "tenant-1",
+                test_user,
+                _request(
+                    deployName="anthropic.claude-sonnet-5",
+                    tools=[ToolConfig(name="web_search")],
+                    messageId="missing",
+                ),
+                session=None,
+            )
+
+        assert exc_info.value.status_code == 404
+
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.BedrockLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name_and_endpoint_types",
+        new_callable=AsyncMock,
+    )
+    async def test_caps_max_tokens_for_bedrock(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_bedrock_stream,
+        mock_get_session_maker,
+        test_user,
+    ):
+        """BedrockでmaxTokensがAIモデルの上限を超える場合、上限に切り詰めて呼び出すこと"""
+        mock_find_model.return_value = _ai_model(
+            name="anthropic.claude-sonnet-5",
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+        )
+        mock_find_endpoints.return_value = [
+            _tenant_endpoint(type=EndpointType.BEDROCK_CHAT)
+        ]
+        mock_bedrock_stream.return_value = _AsyncChunkIterator([])
+        mock_get_session_maker.return_value = MagicMock()
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(deployName="anthropic.claude-sonnet-5", maxTokens=10000),
+            session=None,
+        )
+        await _consume(response)
+
+        assert mock_bedrock_stream.call_args.args[5] == 4096
+
+    @pytest.mark.parametrize(
+        ("requested", "expected"),
+        [(10000, 4096), (100, 100), (None, None)],
+        ids=["over_limit", "within_limit", "not_specified"],
+    )
+    @patch("app.services.llm_chat_service.get_session_maker")
+    @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")
+    @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
+    @patch(
+        "app.services.llm_chat_service.TenantEndpointRepository.find_by_tenant_id_and_type",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "app.services.llm_chat_service.AIModelRepository.find_by_name_and_endpoint_types",
+        new_callable=AsyncMock,
+    )
+    async def test_caps_max_tokens_for_azure(
+        self,
+        mock_find_model,
+        mock_find_endpoints,
+        mock_enforce,
+        mock_azure_stream,
+        mock_get_session_maker,
+        requested,
+        expected,
+        test_user,
+    ):
+        """Azure OpenAIでmaxTokensをAIモデルの上限で切り詰め、未指定ならNoneのまま呼び出すこと"""
+        mock_find_model.return_value = _ai_model()
+        mock_find_endpoints.return_value = [_tenant_endpoint()]
+        mock_azure_stream.return_value = _AsyncChunkIterator([])
+        mock_get_session_maker.return_value = MagicMock()
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1", test_user, _request(maxTokens=requested), session=None
+        )
+        await _consume(response)
+
+        assert mock_azure_stream.call_args.args[5] == expected
 
     @patch("app.services.llm_chat_service.get_session_maker")
     @patch("app.services.llm_chat_service.AzureLlmChatClient.stream_chat")

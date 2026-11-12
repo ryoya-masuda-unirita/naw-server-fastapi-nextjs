@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
@@ -31,7 +32,9 @@ from app.models.room import Room
 from app.models.share import Share, ShareRoom
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
+from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
+from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 
 
 def _tenant(tenant_id: str) -> Tenant:
@@ -1446,3 +1449,230 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 404
+
+
+_BEDROCK_MODEL = "anthropic.claude-sonnet-5"
+_BEDROCK_MAX_TOKENS = 8192
+
+
+@pytest.fixture
+async def message_bedrock_endpoint(session, messages_tenant, message_assistant):
+    """メッセージ送信(SSE)テスト用のBedrockチャットエンドポイント・AIモデル一式"""
+    tenant_endpoint = TenantEndpoint(
+        tenant_id=messages_tenant.id,
+        type=EndpointType.BEDROCK_CHAT,
+        endpoint_name="bedrock",
+        endpoint="https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+        api_key="bedrock-api-key",
+    )
+    session.add(tenant_endpoint)
+    await session.commit()
+    await session.refresh(tenant_endpoint)
+
+    session.add(
+        AssistantEndpoint(
+            assistant_id=message_assistant.id,
+            endpoint_id=tenant_endpoint.id,
+            tenant_id=messages_tenant.id,
+            model=_BEDROCK_MODEL,
+        )
+    )
+    session.add(
+        AIModel(
+            endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
+            name=_BEDROCK_MODEL,
+            max_tokens=_BEDROCK_MAX_TOKENS,
+            token_weight=Decimal("1.0"),
+        )
+    )
+    await session.commit()
+    return tenant_endpoint
+
+
+class TestFindChatEndpoint:
+    """AssistantEndpointRepository.find_chat_endpoint のテスト"""
+
+    async def test_resolves_bedrock_chat_endpoint(
+        self, session, messages_tenant, message_assistant, message_bedrock_endpoint
+    ):
+        """Bedrockのチャット用エンドポイントだけを紐づけたアシスタントでも解決できること"""
+        result = await AssistantEndpointRepository.find_chat_endpoint(
+            message_assistant.id, messages_tenant.id, session
+        )
+
+        assert result is not None
+        assistant_endpoint, tenant_endpoint = result
+        assert tenant_endpoint.id == message_bedrock_endpoint.id
+        assert tenant_endpoint.type == EndpointType.BEDROCK_CHAT
+        assert assistant_endpoint.model == _BEDROCK_MODEL
+
+    async def test_prefers_azure_when_both_azure_and_bedrock_are_linked(
+        self, session, messages_tenant, message_assistant
+    ):
+        """Azure OpenAIとBedrockの両方を紐づけた場合、IDの並びによらずAzure OpenAIを従来どおり選ぶこと"""
+        # BedrockのIDのほうが辞書順で小さくなるようにし、ID順ではBedrockが選ばれる状況にする
+        bedrock_endpoint = TenantEndpoint(
+            id="0" * 32,
+            tenant_id=messages_tenant.id,
+            type=EndpointType.BEDROCK_CHAT,
+            endpoint_name="bedrock",
+            endpoint="https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+            api_key="bedrock-api-key",
+        )
+        azure_endpoint = TenantEndpoint(
+            id="f" * 32,
+            tenant_id=messages_tenant.id,
+            type=EndpointType.AZURE_OPENAI_CHAT,
+            endpoint_name="azure",
+            endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+        )
+        session.add_all([bedrock_endpoint, azure_endpoint])
+        await session.commit()
+        session.add_all(
+            [
+                AssistantEndpoint(
+                    assistant_id=message_assistant.id,
+                    endpoint_id=bedrock_endpoint.id,
+                    tenant_id=messages_tenant.id,
+                    model=_BEDROCK_MODEL,
+                ),
+                AssistantEndpoint(
+                    assistant_id=message_assistant.id,
+                    endpoint_id=azure_endpoint.id,
+                    tenant_id=messages_tenant.id,
+                    model="gpt-4o",
+                ),
+            ]
+        )
+        await session.commit()
+
+        result = await AssistantEndpointRepository.find_chat_endpoint(
+            message_assistant.id, messages_tenant.id, session
+        )
+
+        assert result is not None
+        assert result[1].id == azure_endpoint.id
+        assert result[0].model == "gpt-4o"
+
+    async def test_returns_none_without_chat_endpoint(
+        self, session, messages_tenant, message_assistant
+    ):
+        """チャット用以外（埋め込み）のエンドポイントしか紐づいていない場合はNoneになること"""
+        embedding_endpoint = TenantEndpoint(
+            tenant_id=messages_tenant.id,
+            type=EndpointType.AZURE_OPENAI_EMBEDDING,
+            endpoint_name="embedding",
+            endpoint="https://example.openai.azure.com",
+            api_key="api-key",
+        )
+        session.add(embedding_endpoint)
+        await session.commit()
+        await session.refresh(embedding_endpoint)
+        session.add(
+            AssistantEndpoint(
+                assistant_id=message_assistant.id,
+                endpoint_id=embedding_endpoint.id,
+                tenant_id=messages_tenant.id,
+                model="text-embedding-ada-002",
+            )
+        )
+        await session.commit()
+
+        result = await AssistantEndpointRepository.find_chat_endpoint(
+            message_assistant.id, messages_tenant.id, session
+        )
+
+        assert result is None
+
+
+class TestCreateMessageContentWithBedrock:
+    """Bedrockのエンドポイントを紐づけたアシスタントへのメッセージ送信のテスト"""
+
+    async def test_streams_with_bedrock_assistant(
+        self, client, owner_headers, owned_message, message_bedrock_endpoint, engine
+    ):
+        """Bedrockのアシスタントへ送信するとBedrockクライアントで応答し、使用量がBEDROCK_CHATで記録されること"""
+        bedrock_calls: list[tuple[Any, ...]] = []
+
+        async def _stream_chunks(
+            *args: Any, **kwargs: Any
+        ) -> AsyncIterator[ChatStreamChunk]:
+            bedrock_calls.append(args)
+            yield ChatStreamChunk(input_tokens=10)
+            yield ChatStreamChunk(text_delta="Bedrockの回答")
+            yield ChatStreamChunk(output_tokens=5)
+
+        test_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        with (
+            patch(
+                "app.services.message_service.BedrockLlmChatClient.stream_chat",
+                side_effect=_stream_chunks,
+            ),
+            patch(
+                "app.services.message_service.get_session_maker",
+                return_value=test_session_maker,
+            ),
+        ):
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=_content_form(
+                        {"messageId": owned_message.id, "userInput": "質問"}
+                    ),
+                    headers=owner_headers,
+                )
+
+        assert response.status_code == 200
+        events = _sse_events(response.text)
+        assert [event["type"] for event in events] == [
+            "text_delta",
+            "message_stop",
+            "message_content",
+        ]
+        assert events[2]["data"]["answer"] == "Bedrockの回答"
+        assert len(bedrock_calls) == 1
+        # モデルID・APIキーはBedrockのエンドポイントのもの、上限はAIモデルの上限であること
+        assert bedrock_calls[0][1] == "bedrock-api-key"
+        assert bedrock_calls[0][2] == _BEDROCK_MODEL
+        assert bedrock_calls[0][5] == _BEDROCK_MAX_TOKENS
+
+        async with test_session_maker() as verify_session:
+            usages = (
+                (
+                    await verify_session.execute(
+                        select(TokenUsage).where(
+                            TokenUsage.message_id == owned_message.id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert [(u.endpoint_type, u.model) for u in usages] == [
+            ("BEDROCK_CHAT", _BEDROCK_MODEL)
+        ]
+
+    async def test_returns_400_when_tools_specified_with_bedrock(
+        self, client, owner_headers, owned_message, message_bedrock_endpoint
+    ):
+        """Bedrockのアシスタントでtoolsを指定すると、SSEを始めずに400になりLLMを呼ばないこと"""
+        with patch(
+            "app.services.message_service.BedrockLlmChatClient.stream_chat"
+        ) as mock_stream:
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=_content_form(
+                        {
+                            "messageId": owned_message.id,
+                            "userInput": "質問",
+                            "tools": [{"name": "web_search"}],
+                        }
+                    ),
+                    headers=owner_headers,
+                )
+
+        assert response.status_code == 400
+        assert "web_search/mcp" in response.json()["message"]
+        mock_stream.assert_not_called()

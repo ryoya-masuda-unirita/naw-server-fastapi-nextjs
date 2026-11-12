@@ -258,6 +258,25 @@ class TestLlmChat:
             (deploy_name, 10, 5)
         ]
 
+    async def test_bedrock_with_tools_returns_400(
+        self, client, session, engine, headers, chat_models
+    ):
+        """Bedrockのモデルでtoolsを指定すると、SSEを始めずに400になりLLM呼び出し・使用量の記録をしないこと"""
+        text_data = {
+            "deployName": _BEDROCK_MODEL,
+            "messages": [{"role": "user", "content": "こんにちは"}],
+            "tools": [{"name": "web_search"}],
+        }
+        with _patched_llm(engine, ["回答"]) as calls:
+            response = await client.post(
+                "/api/llm/chat", headers=headers, files=_form(text_data)
+            )
+
+        assert response.status_code == 400
+        assert "web_search/mcp" in response.json()["message"]
+        assert calls.bedrock == []
+        assert (await session.execute(select(TokenUsage))).scalars().all() == []
+
     @pytest.mark.parametrize(
         ("deploy_name", "provider"),
         [(_AZURE_MODEL, "azure"), (_BEDROCK_MODEL, "bedrock")],
