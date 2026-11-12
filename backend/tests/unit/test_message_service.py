@@ -1895,7 +1895,7 @@ class TestStreamMessageContentRag:
     )
     @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
     @patch(
-        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        "app.services.message_service.FileRepository.find_not_deleted_by_ids_and_tenant_id",
         new_callable=AsyncMock,
     )
     @patch(
@@ -2044,7 +2044,7 @@ class TestStreamMessageContentRag:
     )
     @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
     @patch(
-        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        "app.services.message_service.FileRepository.find_not_deleted_by_ids_and_tenant_id",
         new_callable=AsyncMock,
     )
     @patch(
@@ -2165,7 +2165,7 @@ class TestStreamMessageContentRag:
     )
     @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
     @patch(
-        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        "app.services.message_service.FileRepository.find_not_deleted_by_ids_and_tenant_id",
         new_callable=AsyncMock,
     )
     @patch(
@@ -2295,7 +2295,7 @@ class TestStreamMessageContentRag:
     )
     @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
     @patch(
-        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        "app.services.message_service.FileRepository.find_not_deleted_by_ids_and_tenant_id",
         new_callable=AsyncMock,
     )
     @patch(
@@ -2414,7 +2414,7 @@ class TestStreamMessageContentRag:
     )
     @patch("app.services.message_service.AzureLlmChatClient.stream_chat")
     @patch(
-        "app.services.message_service.FileRepository.find_by_ids_and_tenant_id",
+        "app.services.message_service.FileRepository.find_not_deleted_by_ids_and_tenant_id",
         new_callable=AsyncMock,
     )
     @patch(
