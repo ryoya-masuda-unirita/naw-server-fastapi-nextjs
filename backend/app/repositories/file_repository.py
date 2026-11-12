@@ -121,7 +121,7 @@ class FileRepository:
             display_name: 表示名の部分一致検索文字列。
             file_name: ファイル名の部分一致検索文字列。
             user_id: 絞り込み対象のユーザーID（解決済みUUID）。Noneなら絞り込まない。
-            status: 絞り込み対象のステータス。Noneなら絞り込まない。
+            status: 絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
             updated_at_from: 更新日時の範囲開始（この値以上）。
             updated_at_to: 更新日時の範囲終了（この値以下）。
             sort_col_name: ソート対象列名（"displayName"・"updatedAt"・"userId"・"status"）。
@@ -142,6 +142,10 @@ class FileRepository:
             stmt = stmt.where(File.user_id == user_id)
         if status is not None:
             stmt = stmt.where(File.status == status)
+        else:
+            # 削除は状態をDELETEDにするだけ（論理削除）のため、指定が無いときは一覧から除く
+            # （移植元 NAW-1332 と同じ）。
+            stmt = stmt.where(File.status != FileStatus.DELETED)
         if updated_at_from is not None:
             stmt = stmt.where(File.updated_at >= updated_at_from)
         if updated_at_to is not None:
