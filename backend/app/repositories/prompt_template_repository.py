@@ -9,6 +9,13 @@ from app.models.prompt_template import GroupPromptTemplate, PromptTemplate
 
 NO_GROUP_FILTER = "__none__"
 
+# 管理者向け一覧で並べ替えに使える項目（画面の「テンプレート名順」「更新日時順」）。
+# キーは移植元（Spring Data `sort`）と同じエンティティのプロパティ名。
+_ADMIN_SORT_COLUMNS = {
+    "name": PromptTemplate.name,
+    "updatedAt": PromptTemplate.updated_at,
+}
+
 
 class PromptTemplateRepository:
     @staticmethod
@@ -92,6 +99,8 @@ class PromptTemplateRepository:
         exclude_group_id: str | None,
         admin: bool,
         admin_group_ids: Collection[str],
+        sort_col_name: str,
+        sort_dir: str,
         page: int,
         size: int,
         session: AsyncSession,
@@ -105,6 +114,8 @@ class PromptTemplateRepository:
             exclude_group_id: 指定グループに紐付いていないテンプレートのみに絞り込む場合のグループID。
             admin: 全体管理者かどうか。
             admin_group_ids: グループ管理者が管理するグループID一覧（`admin` が False の場合に使用）。
+            sort_col_name: ソート対象項目（"name" または "updatedAt"。それ以外は "updatedAt" として扱う）。
+            sort_dir: ソート方向（"asc" または "desc"）。
             page: ページ番号（0始まり）。
             size: 1ページあたりの件数。
             session: 非同期DBセッション。
@@ -153,7 +164,12 @@ class PromptTemplateRepository:
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        stmt = stmt.order_by(PromptTemplate.updated_at.desc())
+        sort_col = _ADMIN_SORT_COLUMNS.get(sort_col_name, PromptTemplate.updated_at)
+        # 同名・同時刻のテンプレートがページ境界で入れ替わらないよう、IDを第2キーにして順序を確定させる
+        stmt = stmt.order_by(
+            sort_col.desc() if sort_dir == "desc" else sort_col.asc(),
+            PromptTemplate.id.asc(),
+        )
         stmt = stmt.offset(page * size).limit(size)
         templates = (await session.execute(stmt)).scalars().all()
         return list(templates), total

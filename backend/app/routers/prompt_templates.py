@@ -47,19 +47,24 @@ async def get_admin_prompt_templates(
     search: str | None = Query(None),
     team: str | None = Query(None),
     exclude_group_id: str | None = Query(None, alias="excludeGroupId"),
+    sort: str = Query("updatedAt,desc"),
     page: int = Query(0, ge=0),
     size: int = Query(DEFAULT_PAGE_SIZE, ge=0, le=1000),
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PagedPromptTemplateResponse:
-    """プロンプトテンプレート一覧取得（管理者向け、検索・チームフィルタ・除外グループフィルタ対応）"""
+    """プロンプトテンプレート一覧取得（管理者向け、検索・チームフィルタ・除外グループフィルタ・並べ替え対応）
+
+    `sort` は移植元（Spring Data `Pageable`）と同じ `<項目>,<asc|desc>` 形式で受け取る。
+    """
     return await PromptTemplateService.get_admin_prompt_templates(
         x_tenant_id,
         current_user,
         search,
         team,
         exclude_group_id,
+        sort,
         page,
         size or DEFAULT_PAGE_SIZE,
         session,
