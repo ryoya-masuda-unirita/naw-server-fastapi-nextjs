@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant_category import AssistantCategory
@@ -33,6 +34,17 @@ def _user() -> User:
         role=UserRole.ADMIN,
         is_required_password_reset=False,
     )
+
+
+def _integrity_error() -> IntegrityError:
+    """一意制約違反を模した例外を作る。
+
+    Returns
+    -------
+    IntegrityError
+        一意制約違反の例外。
+    """
+    return IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed"))
 
 
 def _category(tenant_id: str, updated_user_id: UUID) -> AssistantCategory:
@@ -105,6 +117,24 @@ class TestCreateAssistantCategory:
         created_category = mock_create.call_args.args[0]
         assert created_category.updated_user_id == user.id
         assert result.name == "cat"
+
+    @patch(f"{_REPOSITORY}.create", new_callable=AsyncMock)
+    async def test_create_converts_integrity_error_to_500(self, mock_create):
+        """一意制約違反はロールバックして移植元と同じ500に変換されること"""
+        mock_create.side_effect = _integrity_error()
+        session = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await AssistantCategoryService.create_assistant_category(
+                "tenant-1",
+                _user(),
+                AssistantCategoryCreateRequest(name="dup"),
+                session=session,
+            )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Internal Server Error"
+        session.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -215,6 +245,27 @@ class TestUpdateAssistantCategory:
         )
 
         assert result.description == " new desc "
+
+    @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
+    @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
+    async def test_update_converts_integrity_error_to_500(self, mock_find, mock_update):
+        """一意制約違反はロールバックして移植元と同じ500に変換されること"""
+        mock_find.return_value = _category("tenant-1", uuid4())
+        mock_update.side_effect = _integrity_error()
+        session = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await AssistantCategoryService.update_assistant_category(
+                "cat-1",
+                "tenant-1",
+                _user(),
+                AssistantCategoryUpdateRequest(name="dup"),
+                session=session,
+            )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Internal Server Error"
+        session.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio

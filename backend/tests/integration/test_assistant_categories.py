@@ -1,12 +1,10 @@
 from uuid import uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlmodel import col
 
 from app.core.security import create_access_token
-from app.main import app
 from app.models.assistant_category import AssistantCategory
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
@@ -166,19 +164,6 @@ def member_headers(member_user, tenant):
     return _headers(member_user.login_id, tenant.id)
 
 
-@pytest.fixture
-def server_error_client(override_get_session, override_get_redis_client):
-    """未処理の例外を500の応答として受け取るテストクライアント
-
-    既定の `client` は未処理の例外をテストへ送出するため、移植元と同じく
-    DBの一意制約違反が500で返ることを応答で確かめるときに使う。
-    """
-    return AsyncClient(
-        transport=ASGITransport(app=app, raise_app_exceptions=False),
-        base_url="http://test",
-    )
-
-
 async def _count_categories(session, tenant_id: str, name: str) -> int:
     """テナント内の指定した名前のアシスタントカテゴリ件数を数える。
 
@@ -196,8 +181,6 @@ async def _count_categories(session, tenant_id: str, name: str) -> int:
     int
         件数。
     """
-    # 一意制約違反で中断したトランザクションを片付けてから数える
-    await session.rollback()
     result = await session.execute(
         select(func.count())
         .select_from(AssistantCategory)
@@ -289,12 +272,12 @@ class TestCreateAssistantCategory:
         assert response.status_code == 403
 
     async def test_create_with_duplicate_name_returns_500(
-        self, server_error_client, session, admin_headers, category
+        self, client, session, admin_headers, category
     ):
         """同一テナント内に同名のカテゴリがあると移植元と同じく一意制約違反の500になり作成されないこと"""
-        # 一意制約違反の後はロールバックまで属性を読めないため、先に控える
+        # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
         tenant_id, name = category.tenant_id, category.name
-        async with server_error_client as c:
+        async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
                 json={"name": name, "description": "別の説明"},
@@ -302,6 +285,7 @@ class TestCreateAssistantCategory:
             )
 
         assert response.status_code == 500
+        assert response.json()["message"] == "Internal Server Error"
         assert await _count_categories(session, tenant_id, name) == 1
 
     async def test_create_with_other_tenant_category_name_succeeds(
@@ -465,13 +449,13 @@ class TestUpdateAssistantCategory:
         assert response.status_code == 200
 
     async def test_update_with_duplicate_name_returns_500(
-        self, server_error_client, session, admin_headers, category, second_category
+        self, client, session, admin_headers, category, second_category
     ):
         """更新後の名前が別カテゴリと重複すると移植元と同じく一意制約違反の500になり変更されないこと"""
-        # 一意制約違反の後はロールバックまで属性を読めないため、先に控える
+        # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
         category_id, tenant_id = category.id, category.tenant_id
         second_name = second_category.name
-        async with server_error_client as c:
+        async with client as c:
             response = await c.patch(
                 f"/api/admin/assistant-categories/{category_id}",
                 json={"name": second_name},
@@ -479,6 +463,7 @@ class TestUpdateAssistantCategory:
             )
 
         assert response.status_code == 500
+        assert response.json()["message"] == "Internal Server Error"
         assert await _count_categories(session, tenant_id, "orig") == 1
         assert await _count_categories(session, tenant_id, second_name) == 1
 

@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant_category import AssistantCategory
@@ -16,22 +17,11 @@ from app.schemas.assistant_category import (
 # 移植元は更新処理だけコロンの後に空白が入るため、文言を2つ持つ。
 _NOT_FOUND_MESSAGE = "AssistantCategory not found with id:{category_id}"
 _NOT_FOUND_MESSAGE_ON_UPDATE = "AssistantCategory not found with id: {category_id}"
-
-
-def _is_not_blank(value: str | None) -> bool:
-    """移植元 `StringUtils.isNotBlank` と同じく、空白以外の文字を含むかを判定する。
-
-    Parameters
-    ----------
-    value : str | None
-        判定する文字列。
-
-    Returns
-    -------
-    bool
-        None・空文字・空白だけでない場合True。
-    """
-    return value is not None and value.strip() != ""
+# 移植元は同名カテゴリの一意制約違反（DataIntegrityViolationException）を
+# APIControllerAdvice で扱わず、Spring Boot 既定の500（error: "Internal Server Error"）
+# になる。状態コードと文言を合わせつつ、共通のエラー形式・CORSヘッダーで返すため
+# HTTPException に変換する（未処理の例外のままだとCORSヘッダーの無い応答になる）。
+_CONSTRAINT_VIOLATION_MESSAGE = "Internal Server Error"
 
 
 class AssistantCategoryService:
@@ -56,6 +46,20 @@ class AssistantCategoryService:
             name=category.name,
             description=category.description,
             updatedAt=category.updated_at,
+        )
+
+    @staticmethod
+    def _constraint_violation_error() -> HTTPException:
+        """DB制約違反を表す、移植元と同じ500の例外を作る。
+
+        Returns
+        -------
+        HTTPException
+            500の例外。
+        """
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_CONSTRAINT_VIOLATION_MESSAGE,
         )
 
     @staticmethod
@@ -129,8 +133,8 @@ class AssistantCategoryService:
 
         Raises
         ------
-        sqlalchemy.exc.IntegrityError
-            同一テナント内に同名のカテゴリが既に存在する場合。
+        HTTPException
+            同一テナント内に同名のカテゴリが既に存在する場合500を返す。
         """
         category = AssistantCategory(
             tenant_id=tenant_id,
@@ -138,7 +142,11 @@ class AssistantCategoryService:
             description=req.description,
             updated_user_id=current_user.id,
         )
-        created = await AssistantCategoryRepository.create(category, session)
+        try:
+            created = await AssistantCategoryRepository.create(category, session)
+        except IntegrityError as exc:
+            await session.rollback()
+            raise AssistantCategoryService._constraint_violation_error() from exc
         return AssistantCategoryService._to_response(created)
 
     @staticmethod
@@ -229,9 +237,8 @@ class AssistantCategoryService:
         Raises
         ------
         HTTPException
-            存在しない場合404を返す。
-        sqlalchemy.exc.IntegrityError
-            同一テナント内に同名の別カテゴリが既に存在する場合。
+            存在しない場合404、同一テナント内に同名の別カテゴリが既に存在する場合
+            500を返す。
         """
         category = await AssistantCategoryService._get_category_or_404(
             category_id,
@@ -241,10 +248,15 @@ class AssistantCategoryService:
         )
 
         category.name = req.name
-        if _is_not_blank(req.description):
+        # 移植元 StringUtils.isNotBlank と同じく、None・空文字・空白だけなら残す
+        if req.description and req.description.strip():
             category.description = req.description
         category.updated_user_id = current_user.id
-        updated = await AssistantCategoryRepository.update(category, session)
+        try:
+            updated = await AssistantCategoryRepository.update(category, session)
+        except IntegrityError as exc:
+            await session.rollback()
+            raise AssistantCategoryService._constraint_violation_error() from exc
         return AssistantCategoryService._to_response(updated)
 
     @staticmethod
