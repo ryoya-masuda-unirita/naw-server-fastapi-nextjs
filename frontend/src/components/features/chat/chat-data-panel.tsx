@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useViewerStore } from '@/store/viewer-store';
+import { renderChatSummary } from './render-chat-summary';
 
 export const VIEWER_WIDTH_EXPANDED = 400;
 export const VIEWER_WIDTH_COLLAPSED = 52;
@@ -11,8 +13,8 @@ interface ChatDataPanelProps {
   isReadOnly?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   /**
-   * パネルの中身（移植元の `<app-chat-summary>`。ビューワー本体は #288）。
-   * 未指定なら空の領域になる。折りたたみの切り替えは渡された `onCollapseChange` で通知する
+   * パネルの中身（移植元の `<app-chat-summary>`）。未指定ならビューワー（`ChatSummary`）。
+   * 折りたたみの切り替えは渡された `onCollapseChange` で通知する
    */
   renderSummary?: (params: {
     roomId: string | null;
@@ -26,7 +28,7 @@ export function ChatDataPanel({
   roomId,
   isReadOnly = false,
   onCollapseChange,
-  renderSummary,
+  renderSummary = renderChatSummary,
 }: ChatDataPanelProps) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLElement | null>(null);
@@ -37,6 +39,12 @@ export function ChatDataPanel({
   const stopResizeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => stopResizeRef.current?.(), []);
+
+  // ルームが替わったらそのルームのライブラリ一覧を読む。モバイルのビューワー（ChatWindow）もこの一覧を使うので、
+  // パネルが hidden でも読み込む（移植元の effect）
+  useEffect(() => {
+    if (roomId) void useViewerStore.getState().loadList(roomId);
+  }, [roomId]);
 
   const handleCollapseChange = (collapsed: boolean) => {
     setIsCollapsed(collapsed);
@@ -94,7 +102,7 @@ export function ChatDataPanel({
         />
       )}
 
-      {renderSummary?.({ roomId, isReadOnly, onCollapseChange: handleCollapseChange })}
+      {renderSummary({ roomId, isReadOnly, onCollapseChange: handleCollapseChange })}
     </aside>
   );
 }

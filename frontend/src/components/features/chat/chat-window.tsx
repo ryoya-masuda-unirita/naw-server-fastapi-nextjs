@@ -16,6 +16,7 @@ import { ChatAssistantExam } from './chat-assistant-exam';
 import { chatAttachmentSlots } from './chat-attachment-slots';
 import { ChatHeader } from './chat-header';
 import { ChatInput } from './chat-input';
+import { renderChatSummary } from './render-chat-summary';
 import { CHAT_INPUT_SLOTS } from './chat-input-slots';
 import { ChatMessageList } from './chat-message-list';
 import { ChatRenameDialog } from './chat-rename-dialog';
@@ -50,7 +51,7 @@ interface ChatWindowProps {
   onLikeClick?: () => void;
   /** 入力欄に別 Issue の部品を差し込む口（#286）。添付（#287）は既定で入る */
   inputSlots?: ChatInputSlots;
-  /** モバイルで開くビューワー（移植元の `<app-chat-summary>`。#288）。未指定なら空の領域 */
+  /** モバイルで開くビューワー（移植元の `<app-chat-summary>`）。未指定なら `ChatSummary` */
   renderViewer?: ComponentProps<typeof ChatDataPanel>['renderSummary'];
 }
 
@@ -65,7 +66,7 @@ export function ChatWindow({
   onShareClick,
   onLikeClick,
   inputSlots,
-  renderViewer,
+  renderViewer = renderChatSummary,
 }: ChatWindowProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -151,7 +152,7 @@ export function ChatWindow({
       });
   };
 
-  const viewerSlot: ReactNode = renderViewer?.({
+  const viewerSlot: ReactNode = renderViewer({
     roomId: viewerRoomId,
     isReadOnly,
     onCollapseChange: (collapsed) => {

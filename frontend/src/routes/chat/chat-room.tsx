@@ -6,6 +6,7 @@ import { Loading } from '@/components/shared/loading';
 import { takePendingMessage } from '@/lib/chat/pending-message';
 import { useChatStore } from '@/store/chat-store';
 import { useMessagesStore, useVisibleMessages } from '@/store/messages-store';
+import { useViewerStore } from '@/store/viewer-store';
 
 /**
  * `/chat/:roomId` のチャットルーム画面（移植元 features/admin/chat-room の AdminChatRoomComponent）。
@@ -37,8 +38,11 @@ export function AdminChatRoomPage() {
     }
   }, [roomId]);
 
-  // ライブラリ生成中の表示条件（移植元の `isLibraryStreaming && streamingRoomId === roomId`）は、ビューワー（#288）が足す
-  const showViewer = messages.some((message) => message.role === 'assistant');
+  // ライブラリ生成中は、回答がまだ無くてもビューワーを出して途中経過を見せる
+  const isStreamingThisRoom = useViewerStore(
+    (s) => s.isLibraryStreaming && s.streamingRoomId === roomId,
+  );
+  const showViewer = messages.some((message) => message.role === 'assistant') || isStreamingThisRoom;
 
   return (
     <div className="flex h-screen! overflow-hidden bg-white w-full">
