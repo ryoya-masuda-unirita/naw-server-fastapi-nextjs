@@ -14,6 +14,14 @@ from app.schemas.user_import import UserImportJobResponse, UserImportResponse
 from app.services.user_import_queue_service import UserImportQueueService
 
 
+# 移植元 `CsvUserImportValidator` の廃止した列とメッセージ（NAW-1342 AC-04）。
+REMOVED_COLUMN_CREATE_LOGIN_KEY = "createLoginKey"
+REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE = (
+    "'createLoginKey' 列は廃止しました。ログインキーは、画面または API で"
+    "サーバーが発行します。CSV から 'createLoginKey' 列を削除してください"
+)
+
+
 class UserImportService:
     REQUIRED_COLUMNS = {"login_id", "name", "password", "role"}
     MAX_ROWS = 100
@@ -159,6 +167,8 @@ class UserImportService:
             )
             for column in sorted(missing_columns):
                 errors.append(f"必須カラム '{column}' が存在しません")
+            if REMOVED_COLUMN_CREATE_LOGIN_KEY in reader.fieldnames:
+                errors.append(REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE)
             if errors:
                 return b""
             rows = list(reader)
@@ -246,13 +256,6 @@ class UserImportService:
             elif role.upper() not in UserRole.__members__:
                 errors.append(
                     f"行{index}: ロール '{role}' は無効です（有効な値: USER, ADMIN, SYSTEM）"
-                )
-
-            create_login_key = UserImportService._value(row, "createLoginKey")
-            if create_login_key and create_login_key.lower() not in {"true", "false"}:
-                errors.append(
-                    f"行{index}: createLoginKey '{create_login_key}' は無効です"
-                    "（有効な値: true, false）"
                 )
 
             group_ids = UserImportService._value(row, "groupIds")

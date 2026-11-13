@@ -18,6 +18,7 @@ from app.core.credit_quota import (
 )
 from app.core.sort import SortOrder, build_order_by, enum_as_string, find_order
 from app.core.password_policy import check_password_not_reused, verify_password_strength
+from app.core.login_key import generate_login_key, hash_login_key
 from app.core.security import hash_password
 from app.models.group import GroupUser
 from app.models.tenant import Tenant
@@ -29,6 +30,7 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     PagedUserResponse,
     UserCreateRequest,
+    LoginKeyAction,
     UserCreateResponse,
     UserProfileUpdateRequest,
     UserResponse,
@@ -342,11 +344,14 @@ class UserService:
 
         tenant = await UserService._get_tenant(tenant_id, session)
 
+        issued_login_key = generate_login_key() if req.issueLoginKey else None
         user = User(
             login_id=req.loginId,
             name=req.name,
             role=req.role,
-            login_key=req.loginKey,
+            login_key_hash=hash_login_key(issued_login_key)
+            if issued_login_key
+            else None,
             tenant_id=tenant_id,
             is_required_password_reset=True,
         )
@@ -360,7 +365,7 @@ class UserService:
         await session.refresh(user)
 
         return UserCreateResponse.from_user(
-            user, plain_password, expired_at, req.loginKey
+            user, plain_password, expired_at, issued_login_key
         )
 
     @staticmethod
@@ -399,8 +404,12 @@ class UserService:
             user.name = req.name
         if req.role is not None:
             user.role = req.role
-        if req.loginKey is not None:
-            user.login_key = req.loginKey
+        issued_login_key: str | None = None
+        if req.loginKeyAction == LoginKeyAction.REISSUE:
+            issued_login_key = generate_login_key()
+            user.login_key_hash = hash_login_key(issued_login_key)
+        elif req.loginKeyAction == LoginKeyAction.REVOKE:
+            user.login_key_hash = None
 
         plain_password = None
         expired_at = None
@@ -417,7 +426,7 @@ class UserService:
         await session.refresh(user)
 
         return UserUpdateResponse.from_user(
-            user, plain_password, expired_at, req.loginKey
+            user, plain_password, expired_at, issued_login_key
         )
 
     @staticmethod

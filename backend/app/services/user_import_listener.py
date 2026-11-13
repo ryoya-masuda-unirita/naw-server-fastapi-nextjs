@@ -3,7 +3,6 @@ import csv
 import io
 import json
 import logging
-import uuid
 from datetime import datetime, timedelta, timezone
 
 import aioboto3
@@ -245,7 +244,6 @@ class UserImportListener:
         name = (row.get("name") or "").strip()
         password = (row.get("password") or "").strip()
         role = UserRole((row.get("role") or "").strip().upper())
-        create_login_key = (row.get("createLoginKey") or "").strip().lower()
 
         try:
             async with session.begin_nested():
@@ -253,18 +251,12 @@ class UserImportListener:
                 if user:
                     user.name = name
                     user.role = role
-                    if create_login_key == "true":
-                        user.login_key = uuid.uuid4().hex
-                    elif create_login_key == "false":
-                        user.login_key = None
                 else:
-                    login_key = uuid.uuid4().hex if create_login_key == "true" else None
                     user = User(
                         login_id=login_id,
                         tenant_id=tenant.id,
                         name=name,
                         role=role,
-                        login_key=login_key,
                         is_required_password_reset=True,
                     )
                     session.add(user)

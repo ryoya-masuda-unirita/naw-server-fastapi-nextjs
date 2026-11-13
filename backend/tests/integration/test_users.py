@@ -2,9 +2,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
 
+from app.core.login_key import generate_login_key, hash_login_key
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models.group import Group, GroupUser
@@ -14,6 +16,7 @@ from app.models.tenant import Tenant
 from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
 from app.models.password_history import PasswordHistory
+from app.schemas.user import LEGACY_LOGIN_KEY_REMOVED_MESSAGE
 
 
 @pytest.fixture
@@ -886,7 +889,7 @@ class TestLoginKeyIsNotExposed:
         user : User
             ログインキーを保存するユーザー。
         """
-        user.login_key = STORED_LOGIN_KEY
+        user.login_key_hash = hash_login_key(STORED_LOGIN_KEY)
         session.add(user)
         await session.commit()
 
@@ -930,10 +933,10 @@ class TestLoginKeyIsNotExposed:
         assert all("loginKey" not in row for row in rows.values())
         assert STORED_LOGIN_KEY not in response.text
 
-    async def test_create_returns_key_set_in_request_with_no_store(
-        self, client, admin_headers
+    async def test_create_with_issue_login_key_returns_plain_key_once(
+        self, client, session, admin_headers
     ):
-        """作成は設定したキーを loginKey で返し、Cache-Control: no-store を付けること"""
+        """issueLoginKey=true の作成は平文のキーを返し、DB にはハッシュだけを保存すること"""
         async with client as c:
             response = await c.post(
                 "/api/admin/users",
@@ -942,16 +945,157 @@ class TestLoginKeyIsNotExposed:
                     "loginId": "key-user",
                     "name": "Key User",
                     "role": "USER",
-                    "loginKey": "created-key",
+                    "issueLoginKey": True,
                 },
             )
 
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
         body = response.json()
-        assert body["loginKey"] == "created-key"
+        issued = body["loginKey"]
+        assert len(issued) == 32
+        assert issued.isalnum()
         assert body["hasLoginKey"] is True
         assert "totalCredits" not in body
+        stored = (
+            (await session.execute(select(User).where(User.login_id == "key-user")))
+            .scalars()
+            .one()
+        )
+        assert stored.login_key_hash == hash_login_key(issued)
+        assert issued not in str(stored.login_key_hash)
+
+    async def test_create_without_issue_login_key_has_no_key(
+        self, client, admin_headers
+    ):
+        """issueLoginKey を省略した作成は loginKey が null・hasLoginKey が false になること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={"loginId": "no-key", "name": "No Key", "role": "USER"},
+            )
+
+        body = response.json()
+        assert response.status_code == 200
+        assert body["loginKey"] is None
+        assert body["hasLoginKey"] is False
+
+    async def test_create_with_legacy_login_key_returns_400(
+        self, client, admin_headers
+    ):
+        """廃止した loginKey を付けた作成は 400 とあわせて置き換え先を案内すること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "loginId": "legacy",
+                    "name": "Legacy",
+                    "role": "USER",
+                    "loginKey": "my-key",
+                },
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == LEGACY_LOGIN_KEY_REMOVED_MESSAGE
+
+    async def test_update_with_null_legacy_login_key_is_accepted(
+        self, client, admin_headers, normal_user
+    ):
+        """loginKey を明示的に null で送っても通ること（移植元の @Null と同じ）"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/users/{normal_user.login_id}",
+                headers=admin_headers,
+                json={"name": "Renamed", "loginKey": None, "loginKeyAction": None},
+            )
+
+        assert response.status_code == 200
+
+    async def test_update_with_legacy_login_key_returns_400(
+        self, client, admin_headers, normal_user
+    ):
+        """廃止した loginKey を付けた更新は 400 になること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/users/{normal_user.login_id}",
+                headers=admin_headers,
+                json={"loginKey": "my-key"},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["message"] == LEGACY_LOGIN_KEY_REMOVED_MESSAGE
+
+    async def test_update_reissue_returns_new_key_and_replaces_hash(
+        self, client, session, admin_headers, normal_user
+    ):
+        """REISSUE は新しいキーを返し、保存済みのハッシュを置き換えること"""
+        await self._set_login_key(session, normal_user)
+
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/users/{normal_user.login_id}",
+                headers=admin_headers,
+                json={"loginKeyAction": "REISSUE"},
+            )
+
+        body = response.json()
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert len(body["loginKey"]) == 32
+        assert body["loginKey"] != STORED_LOGIN_KEY
+        assert body["hasLoginKey"] is True
+        await session.refresh(normal_user)
+        assert normal_user.login_key_hash == hash_login_key(body["loginKey"])
+
+    async def test_update_revoke_clears_key(
+        self, client, session, admin_headers, normal_user
+    ):
+        """REVOKE はキーを無効にし、loginKey は null・hasLoginKey は false になること"""
+        await self._set_login_key(session, normal_user)
+
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/users/{normal_user.login_id}",
+                headers=admin_headers,
+                json={"loginKeyAction": "REVOKE"},
+            )
+
+        body = response.json()
+        assert body["loginKey"] is None
+        assert body["hasLoginKey"] is False
+        await session.refresh(normal_user)
+        assert normal_user.login_key_hash is None
+
+    async def test_issued_key_can_log_in(self, client, admin_headers, tenant):
+        """発行したキーで POST /auth/login-key のログインができること"""
+        async with client as c:
+            created = await c.post(
+                "/api/admin/users",
+                headers=admin_headers,
+                json={
+                    "loginId": "login-by-key",
+                    "name": "By Key",
+                    "role": "USER",
+                    "issueLoginKey": True,
+                },
+            )
+            login = await c.post(
+                "/auth/login-key",
+                json={"loginKey": created.json()["loginKey"]},
+                headers={"X-Tenant-ID": tenant.id},
+            )
+
+        assert login.status_code == 200
+        assert login.json()["id"] == "login-by-key"
+
+    async def test_generate_login_key_is_random_alphanumeric(self):
+        """発行するキーが英数字 32 文字で、毎回異なること"""
+        keys = {generate_login_key() for _ in range(20)}
+
+        assert len(keys) == 20
+        assert all(len(k) == 32 and k.isalnum() for k in keys)
 
     async def test_update_does_not_return_stored_key(
         self, client, session, admin_headers, normal_user

@@ -5,12 +5,14 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
+from app.core.login_key import hash_login_key
 from app.core.security import hash_password
 from app.core.sort import parse_sort
 from app.services.user_service import UserService
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.schemas.user import (
+    LoginKeyAction,
     UserCreateRequest,
     UserUpdateRequest,
     UserProfileUpdateRequest,
@@ -133,8 +135,8 @@ class TestCreateUser:
         assert result.loginKey is None
         assert result.hasLoginKey is False
 
-    async def test_returns_login_key_set_in_request(self, test_tenant):
-        """作成で設定したログインキーを loginKey と hasLoginKey で返すこと"""
+    async def test_issues_login_key_and_stores_only_hash(self, test_tenant):
+        """issueLoginKey=true で発行したキーを返し、ユーザーにはハッシュだけを持たせること"""
         session = AsyncMock()
 
         mock_dup = MagicMock()
@@ -147,14 +149,19 @@ class TestCreateUser:
         session.refresh = AsyncMock()
 
         req = UserCreateRequest(
-            loginId="keyuser", name="Key User", role=UserRole.USER, loginKey="new-key"
+            loginId="keyuser",
+            name="Key User",
+            role=UserRole.USER,
+            issueLoginKey=True,
         )
 
         with patch(f"{REPO_PATH}.save", new=AsyncMock()):
             result = await UserService.create_user(req, test_tenant.id, session)
 
-        assert result.loginKey == "new-key"
         assert result.hasLoginKey is True
+        assert result.loginKey is not None
+        saved = session.add.call_args_list[0].args[0]
+        assert saved.login_key_hash == hash_login_key(result.loginKey)
 
     async def test_raises_400_on_duplicate_login_id(self, test_tenant, test_user):
         """同一 loginId が存在する場合 400 を返すこと"""
@@ -212,7 +219,7 @@ class TestUpdateUser:
 
     async def test_does_not_return_stored_login_key(self, test_tenant, test_user):
         """ログインキーを設定しない更新では保存済みのキーを返さず hasLoginKey だけ返すこと"""
-        test_user.login_key = "stored-key"
+        test_user.login_key_hash = hash_login_key("stored-key")
         session = AsyncMock()
 
         mock_user = MagicMock()
@@ -228,8 +235,10 @@ class TestUpdateUser:
         assert result.loginKey is None
         assert result.hasLoginKey is True
 
-    async def test_returns_login_key_set_in_request(self, test_tenant, test_user):
-        """更新で設定したログインキーを loginKey で返すこと"""
+    async def test_reissue_replaces_hash_and_returns_new_key(
+        self, test_tenant, test_user
+    ):
+        """REISSUE で新しいキーを発行してハッシュを置き換え、平文を返すこと"""
         session = AsyncMock()
 
         mock_user = MagicMock()
@@ -240,14 +249,35 @@ class TestUpdateUser:
 
         result = await UserService.update_user(
             test_user.login_id,
-            UserUpdateRequest(loginKey="changed-key"),
+            UserUpdateRequest(loginKeyAction=LoginKeyAction.REISSUE),
             test_tenant.id,
             session,
         )
 
-        assert test_user.login_key == "changed-key"
-        assert result.loginKey == "changed-key"
+        assert result.loginKey is not None
+        assert test_user.login_key_hash == hash_login_key(result.loginKey)
         assert result.hasLoginKey is True
+
+    async def test_revoke_clears_hash(self, test_tenant, test_user):
+        """REVOKE でハッシュを消し、hasLoginKey が false になること"""
+        test_user.login_key_hash = hash_login_key("stored-key")
+        session = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.scalars.return_value.first.return_value = test_user
+        session.execute = AsyncMock(return_value=mock_user)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+
+        result = await UserService.update_user(
+            test_user.login_id,
+            UserUpdateRequest(loginKeyAction=LoginKeyAction.REVOKE),
+            test_tenant.id,
+            session,
+        )
+
+        assert test_user.login_key_hash is None
+        assert result.loginKey is None
+        assert result.hasLoginKey is False
 
     async def test_resets_password_when_flag_is_true(self, test_tenant, test_user):
         """resetPassword=true でパスワードリセットし initialPassword が返ること"""

@@ -65,8 +65,7 @@ class TestUserImportListener:
     ):
         """正常なメッセージでユーザーが登録されジョブがCOMPLETEDになること"""
         csv_content = (
-            "login_id,name,password,role,createLoginKey\n"
-            "new-import,New Import,Pass123!,USER,true\n"
+            "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
         )
         fake_storage = AsyncMock()
         fake_storage.download.return_value = csv_content.encode()
@@ -88,7 +87,7 @@ class TestUserImportListener:
             .one()
         )
         assert user.name == "New Import"
-        assert user.login_key is not None
+        assert user.login_key_hash is None
         fake_storage.delete.assert_awaited_once_with(listener_job.storage_url)
 
     async def test_process_import_message_fails_job_on_tenant_id_mismatch(

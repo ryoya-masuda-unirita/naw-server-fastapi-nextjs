@@ -13,6 +13,7 @@ from app.models.password_history import PasswordHistory
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
+from app.services.user_import_service import REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE
 from app.services.user_import_listener import UserImportListener
 
 
@@ -174,7 +175,9 @@ class TestUserImport:
         self, client, admin_headers, session, mock_user_import_infra
     ):
         """CSVインポートの受付がPENDINGになり、キュー受信処理後にユーザーとCOMPLETEDのジョブが作成されること"""
-        csv_content = "login_id,name,password,role,createLoginKey\nnew-import,New Import,Pass123!,USER,true\n"
+        csv_content = (
+            "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
+        )
 
         async with client as c:
             response = await c.post(
@@ -201,7 +204,7 @@ class TestUserImport:
             .one()
         )
         assert created.name == "New Import"
-        assert created.login_key is not None
+        assert created.login_key_hash is None
 
         password_history_count = (
             await session.execute(
@@ -392,6 +395,29 @@ class TestUserImport:
 
         assert response.status_code == 403
 
+    async def test_import_users_rejects_removed_create_login_key_column(
+        self, client, admin_headers, mock_user_import_infra
+    ):
+        """廃止した createLoginKey 列があるCSVは、移植元と同じメッセージでジョブがFAILEDになること"""
+        csv_content = (
+            "login_id,name,password,role,createLoginKey\n"
+            "with-column,With Column,Pass123!,USER,true\n"
+        )
+        async with client as c:
+            response = await c.post(
+                "/api/admin/users/import",
+                headers=admin_headers,
+                files=_csv_file(csv_content),
+            )
+            body = response.json()
+            detail = await c.get(
+                f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
+            )
+
+        assert body["status"] == "FAILED"
+        assert mock_user_import_infra == []
+        assert REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE in detail.json()["errorDetails"]
+
     async def test_import_users_preserves_login_key_when_column_omitted(
         self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
@@ -402,7 +428,7 @@ class TestUserImport:
             login_id="login-key-import",
             name="Before",
             role=UserRole.USER,
-            login_key="existing-login-key",
+            login_key_hash="existing-login-key-hash",
             is_required_password_reset=False,
         )
         session.add(user)
@@ -426,7 +452,7 @@ class TestUserImport:
 
         await session.refresh(user)
         assert user.name == "After"
-        assert user.login_key == "existing-login-key"
+        assert user.login_key_hash == "existing-login-key-hash"
 
     async def test_import_users_records_row_error_for_duplicate_group_id_and_continues(
         self, client, admin_headers, session, import_tenant, mock_user_import_infra

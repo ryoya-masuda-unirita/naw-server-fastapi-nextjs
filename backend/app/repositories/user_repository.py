@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.login_key import hash_login_key
 from app.models.user import User
 
 
@@ -33,19 +34,27 @@ class UserRepository:
     ) -> User | None:
         """ログインキーとtenantIdでユーザーを取得する。
 
+        DB にはハッシュ値だけがあるため、ログインキーをハッシュ化して照合する。
         tenant_id もクエリ条件に含めることで、別テナントの同じログインキーを
         持つユーザーを取得できないようにし、テナント分離をクエリレベルで担保する。
 
-        Args:
-            login_key: ログインキー。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_key : str
+            ログインキー（平文）。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        User | None
             該当する User。存在しない場合は None。
         """
         stmt = select(User).where(
-            User.login_key == login_key, User.tenant_id == tenant_id
+            User.login_key_hash == hash_login_key(login_key),
+            User.tenant_id == tenant_id,
         )
         result = await session.execute(stmt)
         return result.scalars().first()

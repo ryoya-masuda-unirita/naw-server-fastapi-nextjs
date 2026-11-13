@@ -14,6 +14,9 @@ from app.services.auth_service import (
     PASSWORD_RESET_LOCKED_MESSAGE,
 )
 
+# conftest の test_user_with_login_key が保存しているキー（DB にはハッシュだけを入れる）
+LOGIN_KEY = "test-login-key-1234"
+
 # サービスと同じ設定から取り、.env で上限を変えてもテストが実装とずれないようにする
 MAX_FAILURE_ATTEMPTS = get_password_reset_settings().max_failure_attempts
 
@@ -73,7 +76,7 @@ class TestAuthAPI:
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
-                json={"loginKey": test_user_with_login_key.login_key},
+                json={"loginKey": LOGIN_KEY},
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
@@ -100,7 +103,7 @@ class TestAuthAPI:
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
-                json={"loginKey": test_user_with_login_key.login_key},
+                json={"loginKey": LOGIN_KEY},
                 headers={"X-Tenant-ID": test_other_tenant.id},
             )
 
@@ -113,7 +116,7 @@ class TestAuthAPI:
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
-                json={"loginKey": test_user_with_login_key.login_key},
+                json={"loginKey": LOGIN_KEY},
             )
 
         assert response.status_code == 400
@@ -125,7 +128,7 @@ class TestAuthAPI:
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
-                json={"loginKey": test_user_with_login_key.login_key},
+                json={"loginKey": LOGIN_KEY},
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
@@ -910,7 +913,7 @@ class TestAuthLoginLockout:
         async with client as c:
             response = await c.post(
                 "/auth/login-key",
-                json={"loginKey": test_user_with_login_key.login_key},
+                json={"loginKey": LOGIN_KEY},
                 headers={"X-Tenant-ID": test_tenant.id},
             )
 
