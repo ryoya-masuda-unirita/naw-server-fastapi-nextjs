@@ -53,7 +53,11 @@ def _proxy_url(proxy: CoreProxySetting) -> str:
         credentials = (
             f"{quote(proxy.username, safe='')}:{quote(proxy.password, safe='')}@"
         )
-    return f"{PROXY_SCHEME}://{credentials}{proxy.host}:{proxy.port}"
+    # IPv6 のアドレスは URL では角括弧で囲む
+    host = proxy.host
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"{PROXY_SCHEME}://{credentials}{host}:{proxy.port}"
 
 
 def client_options(setting: CoreNetworkSetting | None) -> dict[str, Any]:

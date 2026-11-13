@@ -25,6 +25,7 @@ from waha_emulator.sessions import (
     SLOT_TEXTDATA,
     SlotFile,
 )
+from waha_emulator.stream_file import StreamFileError
 from waha_emulator.workflow_config import (
     ECHO_PROPERTIES,
     NORMAL_CHAT_OUTPUT_TYPE,
@@ -247,7 +248,7 @@ def test_build_adapter_job_maps_question_to_char_column(tmp_path: Path) -> None:
 
 
 def test_build_adapter_job_writes_attachment_for_normal_chat(tmp_path: Path) -> None:
-    """通常 chat の添付が job_dir に書かれ、index 0 の FILE 列のパスになること"""
+    """通常 chat の添付が job_dir の専用サブディレクトリに書かれ、index 0 の FILE 列のパスになること"""
     inputs = {
         SLOT_QUESTION: _slot(QUESTION),
         SLOT_ATTACHMENT: _slot(b"attached", "../evil/memo.txt"),
@@ -256,7 +257,7 @@ def test_build_adapter_job_writes_attachment_for_normal_chat(tmp_path: Path) -> 
     job = build_adapter_job(_echo_definition(), _request(inputs), tmp_path)
 
     attachment = Path(str(_value(job.record[1])))
-    assert attachment == tmp_path / "memo.txt"
+    assert attachment == tmp_path / "attachments" / "memo.txt"
     assert attachment.read_bytes() == b"attached"
 
 
@@ -597,3 +598,55 @@ async def test_execute_routes_service_ids_to_their_definitions(
 
     assert outputs["plain"] == QUESTION
     assert json.loads(outputs["other"])["answer"] == QUESTION
+
+
+def test_build_adapter_job_attachment_cannot_overwrite_fixed_files(
+    tmp_path: Path,
+) -> None:
+    """固定名（textData.json・histories.json）と同じ名前の添付が、検証済みのファイルを上書きしないこと"""
+    inputs = {
+        SLOT_QUESTION: _slot(QUESTION),
+        SLOT_TEXTDATA: _slot(b'{"k":"v"}'),
+        SLOT_HISTORY: _slot(b"[]"),
+        SLOT_ATTACHMENT: _slot(b"evil", "textData.json"),
+    }
+
+    job = build_adapter_job(_echo_definition(), _request(inputs), tmp_path)
+
+    text_data_path = Path(job.properties[PropertyIds.TEXT_DATA_JSON_FILE_PATH])
+    assert text_data_path.read_bytes() == b'{"k":"v"}'
+    assert (tmp_path / "histories.json").read_bytes() == b"[]"
+    assert Path(str(_value(job.record[1]))).read_bytes() == b"evil"
+
+
+def test_build_adapter_job_passes_resolved_stream_path(tmp_path: Path) -> None:
+    """許可ディレクトリがあれば、プロパティ 42 にシンボリックリンクを解決した後のパスを渡すこと"""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    real = allowed / "real.txt"
+    real.touch()
+    link = allowed / "link.txt"
+    link.symlink_to(real)
+    job_dir = tmp_path / "job"
+    job_dir.mkdir()
+    request = _request(
+        {SLOT_QUESTION: _slot(QUESTION)}, {"streamfilepath": str(link)}, allowed
+    )
+
+    job = build_adapter_job(_echo_definition(), request, job_dir)
+
+    assert job.properties[PropertyIds.REASONING_OUTPUT_PATH] == str(real.resolve())
+
+
+def test_build_adapter_job_rejects_stream_path_outside_allowed_dir(
+    tmp_path: Path,
+) -> None:
+    """execute の streamfilepath が許可ディレクトリの外なら WorkflowError にならず StreamFileError になること"""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    request = _request(
+        {SLOT_QUESTION: _slot(QUESTION)}, {"streamfilepath": "/etc/hosts"}, allowed
+    )
+
+    with pytest.raises(StreamFileError):
+        build_adapter_job(_echo_definition(), request, tmp_path)

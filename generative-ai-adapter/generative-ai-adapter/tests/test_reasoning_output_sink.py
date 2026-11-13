@@ -805,3 +805,21 @@ def test_close_failure_does_not_overwrite_primary_write_failure_or_flushed_line(
     assert "write-sentinel.invalid" not in str(info.value)
     assert "close-sentinel.invalid" not in str(info.value)
     assert writer.flushed == KEPT_LINE
+
+
+def test_default_open_flushes_a_long_line_with_a_single_write(tmp_path: Path) -> None:
+    """既定の開き方では、バッファより長い行でも 1 回の flush（1 回の write）で書かれること"""
+    path = tmp_path / "stream.txt"
+    path.touch()
+    sink = ReasoningOutputSink.open(str(path))
+    long_text = "あ" * 100_000  # UTF-8 で約 300 KB（標準のバッファ 8 KB より大きい）
+
+    try:
+        sink.append_delta(long_text)
+        written = path.read_bytes()
+    finally:
+        sink.close()
+
+    assert written.endswith(b"\n")
+    assert written.count(b"\n") == 1
+    assert json.loads(written.decode().removeprefix("data:"))["text"] == long_text

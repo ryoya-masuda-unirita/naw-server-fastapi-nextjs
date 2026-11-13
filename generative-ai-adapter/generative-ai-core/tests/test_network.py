@@ -13,7 +13,7 @@ from generative_ai_core.network.setting import (
     CoreProxySetting,
     ProxyMode,
 )
-from generative_ai_core.network.transport import create_transport
+from generative_ai_core.network.transport import client_options, create_transport
 
 ENDPOINT = "http://transport.example.invalid/"
 
@@ -142,3 +142,18 @@ def test_proxy_validation_rejects_half_configured_credentials() -> None:
                 60,
             )
         )
+
+
+def test_ipv6_manual_proxy_host_is_bracketed_in_proxy_url() -> None:
+    """IPv6 の手動プロキシは URL で角括弧に囲まれ、認証情報も付くこと"""
+    plain = client_options(
+        CoreNetworkSetting(CoreProxySetting.manual("::1", 8080), False, 60)
+    )
+    with_credentials = client_options(
+        CoreNetworkSetting(
+            CoreProxySetting.manual("fd00::1", 3128, "u", "p"), False, 60
+        )
+    )
+
+    assert plain["proxy"] == "http://[::1]:8080"
+    assert with_credentials["proxy"] == "http://u:p@[fd00::1]:3128"

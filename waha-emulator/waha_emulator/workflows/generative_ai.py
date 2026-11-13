@@ -20,6 +20,7 @@ import json
 import logging
 import tempfile
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path, PurePath
 
 from generative_ai_adapter.app import App
@@ -32,6 +33,7 @@ from generative_ai_adapter.waha import (
     ColumnType,
 )
 
+from waha_emulator.jobs import STREAM_FILE_PARAM
 from waha_emulator.sessions import (
     SLOT_ATTACHMENT,
     SLOT_HISTORY,
@@ -45,10 +47,10 @@ from waha_emulator.workflows.base import WorkflowError, WorkflowRequest
 
 logger = logging.getLogger(__name__)
 
-STREAM_FILE_PARAM = "streamfilepath"
 TEXT_DATA_STREAM_KEY = "streamfilepath"
 OUTPUT_VIEW_NAME = "output.json"
 HISTORY_FILENAME = "histories.json"
+ATTACHMENT_DIRNAME = "attachments"
 TEXT_DATA_FILENAME = "textData.json"
 ATTACHMENT_FALLBACK_FILENAME = "attachment"
 JOB_DIR_PREFIX = "waha-job-"
@@ -191,7 +193,10 @@ def build_adapter_job(
     properties[PropertyIds.OUTPUT_DIR] = str(job_dir)
     stream_path = request.params.get(STREAM_FILE_PARAM)
     if stream_path:
-        properties[PropertyIds.REASONING_OUTPUT_PATH] = stream_path
+        # 確かめた後にシンボリックリンクへ差し替えられても辿らないよう、解決後のパスを渡す
+        properties[PropertyIds.REASONING_OUTPUT_PATH] = str(
+            resolve_allowed(stream_path, request.stream_allowed_dir)
+        )
     text_data = inputs.get(SLOT_TEXTDATA)
     if text_data is not None:
         _check_text_data_stream_path(text_data, request.stream_allowed_dir)
@@ -205,7 +210,11 @@ def build_adapter_job(
     if definition.output_type != RAG_OUTPUT_TYPE:
         attachment_path = SKIPPED_FILE_PATH
         if attachment is not None:
-            path = job_dir / _safe_filename(attachment.filename)
+            # 固定名のファイル（textData.json・histories.json・output.json）と同じ名前の
+            # 添付で上書きされないよう、専用のサブディレクトリに置く
+            attachment_dir = job_dir / ATTACHMENT_DIRNAME
+            attachment_dir.mkdir()
+            path = attachment_dir / _safe_filename(attachment.filename)
             path.write_bytes(attachment.data)
             attachment_path = str(path)
         columns.append(ColumnInformation("添付", ColumnType.FILE, INDEX_USER))
@@ -226,6 +235,18 @@ def build_adapter_job(
     return AdapterJob(columns, record, properties)
 
 
+@cache
+def _names_by_id() -> dict[int, str]:
+    """プロパティ ID → 名前の対応（ログ用。一度だけ作る）。
+
+    Returns
+    -------
+    dict[int, str]
+        ID → 名前。
+    """
+    return {value: name for name, value in PropertyIds.by_name().items()}
+
+
 def _property_names(properties: dict[int, str]) -> list[str]:
     """ログに出すプロパティの名前の一覧（値は出さない）。
 
@@ -239,7 +260,7 @@ def _property_names(properties: dict[int, str]) -> list[str]:
     list[str]
         名前の一覧。
     """
-    names = {value: name for name, value in PropertyIds.by_name().items()}
+    names = _names_by_id()
     return sorted(names.get(prop_id, str(prop_id)) for prop_id in properties)
 
 

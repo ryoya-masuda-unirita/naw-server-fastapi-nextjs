@@ -20,6 +20,7 @@ from typing import TextIO
 
 logger = logging.getLogger(__name__)
 
+WRITE_BUFFER_BYTES = 1024 * 1024
 MIN_RETRY_DELAY_MILLIS = 50
 MAX_RETRY_DELAY_MILLIS = 150
 MAX_RETRIES = 20
@@ -65,7 +66,11 @@ def _open_append(path: Path) -> TextIO:
         開けないとき。
     """
     fd = os.open(path, os.O_WRONLY | os.O_APPEND)
-    return os.fdopen(fd, "w", encoding="utf-8", newline="")
+    # 1 行（1 イベント）が flush で 1 回の write になるよう、バッファを大きくする
+    # （server-local が書きかけの行を読まないため）
+    return os.fdopen(
+        fd, "w", encoding="utf-8", newline="", buffering=WRITE_BUFFER_BYTES
+    )
 
 
 def _sleep_millis(millis: int) -> None:
