@@ -13,8 +13,22 @@ from app.schemas.library_tag import (
 
 
 class LibraryTagService:
+    """ライブラリタグに関するビジネスロジック。"""
+
     @staticmethod
     def _to_response(tag: LibraryTag) -> LibraryTagResponse:
+        """ライブラリタグのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        tag : LibraryTag
+            ライブラリタグ。
+
+        Returns
+        -------
+        LibraryTagResponse
+            ライブラリタグのレスポンス。
+        """
         return LibraryTagResponse(
             id=tag.id,
             tenantId=tag.tenant_id,
@@ -30,16 +44,24 @@ class LibraryTagService:
     ) -> LibraryTag:
         """IDとテナントIDでライブラリタグを取得し、存在しなければ404を送出する。
 
-        Args:
-            tag_id: ライブラリタグID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tag_id : str
+            ライブラリタグID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTag
             該当するライブラリタグ。
 
-        Raises:
-            HTTPException: 存在しない場合、またはID形式でない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合、またはID形式でない場合404を返す。
         """
         # ハイフン付き・なしのどちらでも同じタグに当たるよう保存形式に揃えて比べる。
         # 不正な形式は、ライブラリAPIのパス変数と同じく存在しないIDと同様に扱う（404）。
@@ -62,11 +84,16 @@ class LibraryTagService:
     ) -> list[LibraryTagResponse]:
         """テナント内のライブラリタグを名前順に全件取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[LibraryTagResponse]
             名前順のライブラリタグ一覧。
         """
         tags = await LibraryTagRepository.find_by_tenant_id_order_by_name(
@@ -84,14 +111,22 @@ class LibraryTagService:
     ) -> LibraryTagPageResponse:
         """テナント内のライブラリタグをページング・検索付きで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            search: タグ名の部分一致検索文字列。
-            page: 0始まりのページ番号。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        search : str | None
+            タグ名の部分一致検索文字列。
+        page : int
+            0始まりのページ番号。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTagPageResponse
             ページング済みのライブラリタグ一覧。
         """
         tags, total = await LibraryTagRepository.find_page(
@@ -110,16 +145,24 @@ class LibraryTagService:
     ) -> LibraryTagResponse:
         """ライブラリタグを新規作成する。
 
-        Args:
-            tenant_id: テナントID。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        req : LibraryTagCreateRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTagResponse
             作成したライブラリタグ。
 
-        Raises:
-            HTTPException: 同一テナント内に同名のタグが既に存在する場合400を返す。
+        Raises
+        ------
+        HTTPException
+            同一テナント内に同名のタグが既に存在する場合400を返す。
         """
         if await LibraryTagRepository.exists_by_tenant_id_and_name(
             tenant_id, req.name, session
@@ -144,18 +187,27 @@ class LibraryTagService:
     ) -> LibraryTagResponse:
         """ライブラリタグを更新する。未指定（空白のみ含む）の項目は現状維持する。
 
-        Args:
-            tag_id: 更新対象のライブラリタグID。
-            tenant_id: テナントID。
-            req: 更新リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tag_id : str
+            更新対象のライブラリタグID。
+        tenant_id : str
+            テナントID。
+        req : LibraryTagUpdateRequest
+            更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTagResponse
             更新後のライブラリタグ。
 
-        Raises:
-            HTTPException: 存在しない場合404、同一テナント内に同名の別タグが
-                既に存在する場合400を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404、同一テナント内に同名の別タグが
+            既に存在する場合400を返す。
         """
         tag = await LibraryTagService._get_tag_or_404(tag_id, tenant_id, session)
 
@@ -182,13 +234,19 @@ class LibraryTagService:
     ) -> None:
         """ライブラリタグを一括削除する。存在しないIDは無視する。
 
-        Args:
-            tenant_id: テナントID。
-            ids: 削除対象のライブラリタグID一覧（ハイフンなし32桁またはUUID標準形式）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        ids : list[str]
+            削除対象のライブラリタグID一覧（ハイフンなし32桁またはUUID標準形式）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: どちらの形式でもないIDを含む場合400を返す（1件も削除しない）。
+        Raises
+        ------
+        HTTPException
+            どちらの形式でもないIDを含む場合400を返す（1件も削除しない）。
         """
         # 移植元は削除の前に全IDをUUIDへ変換し、失敗すれば400にするため、
         # 削除より先に全件を正規化する。

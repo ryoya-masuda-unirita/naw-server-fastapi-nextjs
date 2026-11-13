@@ -11,6 +11,8 @@ _NAME_SIZE_MESSAGE = f"タグ名は{NAME_MAX_LENGTH}文字以内で入力して�
 
 
 class LibraryTagCreateRequest(RequestModel):
+    """ライブラリタグ作成のリクエスト。"""
+
     name: Annotated[
         str,
         Field(max_length=NAME_MAX_LENGTH),
@@ -23,14 +25,20 @@ class LibraryTagCreateRequest(RequestModel):
     def _validate_name_not_blank(cls, value: str) -> str:
         """タグ名が空白のみでないことを検証する。
 
-        Args:
-            value: 検証対象のタグ名。`Field()`の長さ制約を通過済み。
+        Parameters
+        ----------
+        value : str
+            検証対象のタグ名。`Field()`の長さ制約を通過済み。
 
-        Returns:
+        Returns
+        -------
+        str
             検証済みのタグ名。
 
-        Raises:
-            ValueError: 空白のみの場合。
+        Raises
+        ------
+        ValueError
+            空白のみの場合。
         """
         if not value.strip():
             raise ValueError(_NAME_REQUIRED_MESSAGE)
@@ -49,6 +57,8 @@ class LibraryTagUpdateRequest(RequestModel):
 
 
 class LibraryTagDeleteRequest(RequestModel):
+    """ライブラリタグ削除のリクエスト。"""
+
     ids: Annotated[
         list[str],
         Field(min_length=1),
@@ -57,6 +67,8 @@ class LibraryTagDeleteRequest(RequestModel):
 
 
 class LibraryTagResponse(BaseModel):
+    """ライブラリタグのレスポンス。"""
+
     id: str
     tenantId: str
     name: str
@@ -66,10 +78,14 @@ class LibraryTagResponse(BaseModel):
 
 
 class LibraryTagListResponse(BaseModel):
+    """ライブラリタグ一覧のレスポンス。"""
+
     tags: list[LibraryTagResponse]
 
 
 class LibraryTagPageResponse(BaseModel):
+    """ライブラリタグ一覧のページングレスポンス。"""
+
     content: list[LibraryTagResponse]
     totalElements: int
     number: int

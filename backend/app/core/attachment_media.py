@@ -22,11 +22,16 @@ def build_user_content(
 ) -> str | list[dict[str, object]]:
     """ユーザー発話本文と添付ファイルから、Chat Completions API向けのcontentを組み立てる。
 
-    Args:
-        text: ユーザー発話の本文。
-        files: 添付ファイル一覧。
+    Parameters
+    ----------
+    text : str
+        ユーザー発話の本文。
+    files : list[AttachmentFile]
+        添付ファイル一覧。
 
-    Returns:
+    Returns
+    -------
+    str | list[dict[str, object]]
         添付ファイルが存在しない場合は`text`をそのまま返す。存在する場合は、
         テキストパートと画像パート(画像ファイルのみ)からなるリストを返す。
     """

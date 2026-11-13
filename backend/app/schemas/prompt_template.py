@@ -47,6 +47,8 @@ class PromptTemplateResponse(BaseModel):
 
 
 class PagedPromptTemplateResponse(BaseModel):
+    """プロンプトテンプレート一覧のページングレスポンス。"""
+
     content: list[PromptTemplateResponse]
     totalElements: int
     number: int

@@ -41,6 +41,13 @@ class LocalFileStorage:
     """
 
     def __init__(self, root: Path) -> None:
+        """ローカルストレージを初期化する。
+
+        Parameters
+        ----------
+        root : Path
+            ファイルを保存するルートディレクトリ。
+        """
         self._root = root
 
     async def upload(
@@ -48,13 +55,20 @@ class LocalFileStorage:
     ) -> str:
         """ファイルをローカルディスクに保存し、`storage_url`を返す。
 
-        Args:
-            tenant_id: テナントID。
-            file_id: ファイルID。
-            filename: 元のファイル名。
-            content: ファイルの内容（バイト列）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        file_id : str
+            ファイルID。
+        filename : str
+            元のファイル名。
+        content : bytes
+            ファイルの内容（バイト列）。
 
-        Returns:
+        Returns
+        -------
+        str
             保存先を表す`file://`スキームのURL。
         """
         tenant_dir = self._root / tenant_id
@@ -71,14 +85,20 @@ class LocalFileStorage:
     async def download(self, storage_url: str) -> bytes:
         """`storage_url`からファイルの内容を読み出す。
 
-        Args:
-            storage_url: `upload`が返した`file://`スキームのURL。
+        Parameters
+        ----------
+        storage_url : str
+            `upload`が返した`file://`スキームのURL。
 
-        Returns:
+        Returns
+        -------
+        bytes
             ファイルの内容（バイト列）。
 
-        Raises:
-            FileNotFoundError: 保存先のファイルが存在しない場合。
+        Raises
+        ------
+        FileNotFoundError
+            保存先のファイルが存在しない場合。
         """
         path = self._storage_url_to_path(storage_url)
         return path.read_bytes()
@@ -86,14 +106,33 @@ class LocalFileStorage:
     async def delete(self, storage_url: str) -> None:
         """`storage_url`が指すファイルを削除する。存在しない場合は何もしない。
 
-        Args:
-            storage_url: `upload`が返した`file://`スキームのURL。
+        Parameters
+        ----------
+        storage_url : str
+            `upload`が返した`file://`スキームのURL。
         """
         path = self._storage_url_to_path(storage_url)
         path.unlink(missing_ok=True)
 
     @staticmethod
     def _storage_url_to_path(storage_url: str) -> Path:
+        """`file://`形式のstorage_urlをファイルパスに変換する。
+
+        Parameters
+        ----------
+        storage_url : str
+            保存先を表すURL。
+
+        Returns
+        -------
+        Path
+            ローカルファイルのパス。
+
+        Raises
+        ------
+        ValueError
+            `file://`以外のURLが渡された場合。
+        """
         if not storage_url.startswith("file://"):
             raise ValueError(f"未対応のstorage_urlです: {storage_url}")
         return Path(storage_url.removeprefix("file://"))
@@ -127,6 +166,21 @@ class S3FileStorage:
         aws_access_key_id: str | None,
         aws_secret_access_key: str | None,
     ) -> None:
+        """S3ストレージを初期化する。
+
+        Parameters
+        ----------
+        bucket_name : str
+            保存先のS3バケット名。
+        region_name : str
+            S3のリージョン名。
+        endpoint_url : str | None
+            S3互換ストレージのエンドポイントURL。AWS標準の場合は None。
+        aws_access_key_id : str | None
+            AWSアクセスキーID。環境の既定認証を使う場合は None。
+        aws_secret_access_key : str | None
+            AWSシークレットアクセスキー。環境の既定認証を使う場合は None。
+        """
         self._bucket_name = bucket_name
         self._session = aioboto3.Session()
         self._client_kwargs = {
@@ -141,13 +195,20 @@ class S3FileStorage:
     ) -> str:
         """ファイルをS3に保存し、`storage_url`を返す。
 
-        Args:
-            tenant_id: テナントID。
-            file_id: ファイルID。
-            filename: 元のファイル名。
-            content: ファイルの内容（バイト列）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        file_id : str
+            ファイルID。
+        filename : str
+            元のファイル名。
+        content : bytes
+            ファイルの内容（バイト列）。
 
-        Returns:
+        Returns
+        -------
+        str
             保存先を表す`s3://{bucket}/{key}`形式のURL。
         """
         # LocalFileStorageと同様、クライアントが任意に指定できるファイル名から
@@ -161,14 +222,20 @@ class S3FileStorage:
     async def download(self, storage_url: str) -> bytes:
         """`storage_url`からファイルの内容を読み出す。
 
-        Args:
-            storage_url: `upload`が返した`s3://{bucket}/{key}`形式のURL。
+        Parameters
+        ----------
+        storage_url : str
+            `upload`が返した`s3://{bucket}/{key}`形式のURL。
 
-        Returns:
+        Returns
+        -------
+        bytes
             ファイルの内容（バイト列）。
 
-        Raises:
-            FileNotFoundError: 保存先のオブジェクトが存在しない場合。
+        Raises
+        ------
+        FileNotFoundError
+            保存先のオブジェクトが存在しない場合。
         """
         bucket, key = self._storage_url_to_bucket_and_key(storage_url)
         async with self._session.client("s3", **self._client_kwargs) as client:
@@ -187,8 +254,10 @@ class S3FileStorage:
     async def delete(self, storage_url: str) -> None:
         """`storage_url`が指すオブジェクトを削除する。存在しない場合も何もしない扱いになる。
 
-        Args:
-            storage_url: `upload`が返した`s3://{bucket}/{key}`形式のURL。
+        Parameters
+        ----------
+        storage_url : str
+            `upload`が返した`s3://{bucket}/{key}`形式のURL。
         """
         bucket, key = self._storage_url_to_bucket_and_key(storage_url)
         async with self._session.client("s3", **self._client_kwargs) as client:
@@ -196,6 +265,23 @@ class S3FileStorage:
 
     @staticmethod
     def _storage_url_to_bucket_and_key(storage_url: str) -> tuple[str, str]:
+        """`s3://`形式のstorage_urlをバケット名とキーに分解する。
+
+        Parameters
+        ----------
+        storage_url : str
+            保存先を表すURL。
+
+        Returns
+        -------
+        tuple[str, str]
+            バケット名とオブジェクトキー。
+
+        Raises
+        ------
+        ValueError
+            `s3://`以外のURLが渡された場合。
+        """
         if not storage_url.startswith("s3://"):
             raise ValueError(f"未対応のstorage_urlです: {storage_url}")
         parsed = urlparse(storage_url)
@@ -208,8 +294,10 @@ def get_user_import_file_storage() -> FileStorage:
     ユーザーインポートはS3/SQSを使った非同期構成に移行済みのため、他機能（学習データ
     ファイル・インデックス）とは別に、常に`S3FileStorage`を返す専用のファクトリとする。
 
-    Raises:
-        RuntimeError: `AWS_S3_BUCKET_NAME`が未設定の場合。
+    Raises
+    ------
+    RuntimeError
+        `AWS_S3_BUCKET_NAME`が未設定の場合。
     """
     aws_settings = get_aws_settings()
     if not aws_settings.aws_s3_bucket_name:

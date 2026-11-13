@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """アプリケーション全体の設定。環境変数と`.env`から読み込む。"""
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
@@ -22,8 +24,10 @@ class Settings(BaseSettings):
     def _validate_cookie_same_site_requires_secure(self) -> "Settings":
         """`SameSite=None`は`Secure`が伴わないとブラウザに拒否されるため整合性を検証する。
 
-        Raises:
-            ValueError: `cookie_same_site`が`none`なのに`cookie_secure`が`False`の場合。
+        Raises
+        ------
+        ValueError
+            `cookie_same_site`が`none`なのに`cookie_secure`が`False`の場合。
         """
         if self.cookie_same_site == "none" and not self.cookie_secure:
             raise ValueError(
@@ -59,10 +63,14 @@ class CorsSettings(BaseSettings):
     def split_csv(cls, v: str | list[str]) -> list[str]:
         """カンマ区切りの環境変数を許可オリジンのリストに変換する。
 
-        Args:
-            v: 環境変数から読み込んだ生の値（カンマ区切り文字列、または既にリストの場合はそのまま）。
+        Parameters
+        ----------
+        v : str | list[str]
+            環境変数から読み込んだ生の値（カンマ区切り文字列、または既にリストの場合はそのまま）。
 
-        Returns:
+        Returns
+        -------
+        list[str]
             前後の空白を除去した許可オリジンのリスト。
         """
         if isinstance(v, str):
@@ -78,10 +86,14 @@ class CorsSettings(BaseSettings):
         pydantic-settings は `None` ではなく空文字列 `''` として読み込むため、
         ここで正規化しないと `CORSMiddleware` に無意味な空パターンが渡ってしまう。
 
-        Args:
-            v: 環境変数から読み込んだ生の値。
+        Parameters
+        ----------
+        v : str | None
+            環境変数から読み込んだ生の値。
 
-        Returns:
+        Returns
+        -------
+        str | None
             空文字列であれば `None`、それ以外はそのままの値。
         """
         return v or None
@@ -215,39 +227,95 @@ class AzureOpenAISettings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """アプリケーション全体の設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    Settings
+        アプリケーション全体の設定。
+    """
     return Settings()
 
 
 @lru_cache
 def get_cors_settings() -> CorsSettings:
+    """CORSの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    CorsSettings
+        CORSの設定。
+    """
     return CorsSettings()
 
 
 @lru_cache
 def get_azure_cost_settings() -> AzureCostSettings:
+    """Azure Cost Managementの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    AzureCostSettings
+        Azure Cost Managementの設定。
+    """
     return AzureCostSettings()
 
 
 @lru_cache
 def get_llm_credit_settings() -> LlmCreditSettings:
+    """LLMクレジットの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    LlmCreditSettings
+        LLMクレジットの設定。
+    """
     return LlmCreditSettings()
 
 
 @lru_cache
 def get_azure_openai_settings() -> AzureOpenAISettings:
+    """Azure OpenAIの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    AzureOpenAISettings
+        Azure OpenAIの設定。
+    """
     return AzureOpenAISettings()
 
 
 @lru_cache
 def get_password_reset_settings() -> PasswordResetSettings:
+    """パスワードリセットの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    PasswordResetSettings
+        パスワードリセットの設定。
+    """
     return PasswordResetSettings()
 
 
 @lru_cache
 def get_redis_settings() -> RedisSettings:
+    """Redisの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    RedisSettings
+        Redisの設定。
+    """
     return RedisSettings()
 
 
 @lru_cache
 def get_aws_settings() -> AwsSettings:
+    """AWSの設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    AwsSettings
+        AWSの設定。
+    """
     return AwsSettings()

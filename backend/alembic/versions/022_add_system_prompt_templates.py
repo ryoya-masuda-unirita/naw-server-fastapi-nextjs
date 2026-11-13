@@ -98,6 +98,7 @@ _LIBRARY_PROMPT_CONTENT = """\
 
 
 def upgrade() -> None:
+    """マイグレーションを適用する。"""
     op.create_table(
         "system_prompt_templates",
         sa.Column("type", sa.String(64), nullable=False),
@@ -129,4 +130,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """マイグレーションを取り消す。"""
     op.drop_table("system_prompt_templates")

@@ -43,10 +43,14 @@ class TokenUsagePeriodQuery(RequestModel):
         比較時にnaive/aware混在で`TypeError`が送出され400ではなく500になってしまうため、
         ここで両者を必ずaware(UTC)に揃える。
 
-        Args:
-            value: パース済みの日時。
+        Parameters
+        ----------
+        value : datetime
+            パース済みの日時。
 
-        Returns:
+        Returns
+        -------
+        datetime
             タイムゾーン情報を持つ日時（元々naiveだった場合はUTCを付与）。
         """
         if value.tzinfo is None:
@@ -57,11 +61,15 @@ class TokenUsagePeriodQuery(RequestModel):
     def _validate_period(self) -> "TokenUsagePeriodQuery":
         """`from<=to`かつ期間が31日以内であることを検証する。
 
-        Returns:
+        Returns
+        -------
+        'TokenUsagePeriodQuery'
             検証済みの自身のインスタンス。
 
-        Raises:
-            ValueError: 期間の前後関係が逆、または31日を超える場合。
+        Raises
+        ------
+        ValueError
+            期間の前後関係が逆、または31日を超える場合。
         """
         if self.from_ > self.to:
             raise ValueError("開始日時は終了日時以前である必要があります")
@@ -71,6 +79,8 @@ class TokenUsagePeriodQuery(RequestModel):
 
 
 class TokenUsageListQuery(TokenUsagePeriodQuery):
+    """トークン使用量一覧のクエリパラメータ。"""
+
     page: Annotated[
         int,
         Field(ge=0),
@@ -91,11 +101,15 @@ class TokenUsageListQuery(TokenUsagePeriodQuery):
     def _validate_order_by(self) -> "TokenUsageListQuery":
         """`orderBy`が許可された値であることを検証する。
 
-        Returns:
+        Returns
+        -------
+        'TokenUsageListQuery'
             検証済みの自身のインスタンス。
 
-        Raises:
-            ValueError: `createdAt`・`totalTokens`以外が指定された場合。
+        Raises
+        ------
+        ValueError
+            `createdAt`・`totalTokens`以外が指定された場合。
         """
         if self.order_by not in ALLOWED_ORDER_BY_COLUMNS:
             raise ValueError(
@@ -105,6 +119,8 @@ class TokenUsageListQuery(TokenUsagePeriodQuery):
 
 
 class TokenUsageItemResponse(BaseModel):
+    """トークン使用量1件分のレスポンス。"""
+
     id: str
     userId: str | None
     messageId: str | None
@@ -126,10 +142,14 @@ class TokenUsageItemResponse(BaseModel):
         `totalCredits`はDBに永続化されない導出値のため、ここで
         `inputCredits+outputCredits+embeddingCredits`を計算する（移植元と同様）。
 
-        Args:
-            token_usage: 変換対象のエンティティ。
+        Parameters
+        ----------
+        token_usage : TokenUsage
+            変換対象のエンティティ。
 
-        Returns:
+        Returns
+        -------
+        'TokenUsageItemResponse'
             レスポンス用DTO。
         """
         return cls(
@@ -154,12 +174,16 @@ class TokenUsageItemResponse(BaseModel):
 
 
 class TokenUsageListResponse(BaseModel):
+    """トークン使用量一覧のレスポンス。"""
+
     contents: list[TokenUsageItemResponse]
     totalCount: int
     hasNext: bool
 
 
 class TokenUsageSummaryResponse(BaseModel):
+    """トークン使用量集計のレスポンス。"""
+
     inputTokens: int
     outputTokens: int
     embeddingTokens: int

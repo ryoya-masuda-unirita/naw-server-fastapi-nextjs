@@ -19,18 +19,26 @@ _ADMIN_SORT_COLUMNS = {
 
 
 class PromptTemplateRepository:
+    """プロンプトテンプレートのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_id_and_tenant_id(
         template_id: str, tenant_id: str, session: AsyncSession
     ) -> PromptTemplate | None:
         """テンプレートIDとテナントIDでプロンプトテンプレートを取得する。
 
-        Args:
-            template_id: プロンプトテンプレートID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_id : str
+            プロンプトテンプレートID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PromptTemplate | None
             該当する PromptTemplate。存在しない場合は None。
         """
         stmt = select(PromptTemplate).where(
@@ -41,6 +49,20 @@ class PromptTemplateRepository:
 
     @staticmethod
     def _apply_search(stmt: Select, search: str | None) -> Select:
+        """プロンプトテンプレートの名前・内容などに対する部分一致検索を条件に加える。
+
+        Parameters
+        ----------
+        stmt : Select
+            絞り込み前のクエリ。
+        search : str | None
+            検索文字列。空の場合は絞り込まない。
+
+        Returns
+        -------
+        Select
+            検索条件を加えたクエリ。
+        """
         if not search:
             return stmt
         pattern = escape_like_pattern(search.lower())
@@ -60,15 +82,24 @@ class PromptTemplateRepository:
     ) -> tuple[list[PromptTemplate], int]:
         """一般ユーザー向け: 所属グループに紐づくテンプレートをページネーションで取得する。
 
-        Args:
-            group_ids: ログインユーザーの所属グループID一覧。
-            tenant_id: テナントID。
-            search: 名前・説明の部分一致検索文字列。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_ids : Collection[str]
+            ログインユーザーの所属グループID一覧。
+        tenant_id : str
+            テナントID。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[PromptTemplate], int]
             (プロンプトテンプレート一覧, 総件数) のタプル。
         """
         if not group_ids:
@@ -108,19 +139,32 @@ class PromptTemplateRepository:
     ) -> tuple[list[PromptTemplate], int]:
         """管理者向け: 権限とフィルター条件に応じてプロンプトテンプレートをページネーションで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            search: 名前・説明の部分一致検索文字列。
-            group_filter: チームフィルタ（グループID）。`"__none__"` の場合は未紐付けのテンプレートのみに絞り込む。
-            exclude_group_id: 指定グループに紐付いていないテンプレートのみに絞り込む場合のグループID。
-            admin: 全体管理者かどうか。
-            admin_group_ids: グループ管理者が管理するグループID一覧（`admin` が False の場合に使用）。
-            sort: 並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外は"updatedAt"として扱う）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        group_filter : str | None
+            チームフィルタ（グループID）。`"__none__"` の場合は未紐付けのテンプレートのみに絞り込む。
+        exclude_group_id : str | None
+            指定グループに紐付いていないテンプレートのみに絞り込む場合のグループID。
+        admin : bool
+            全体管理者かどうか。
+        admin_group_ids : Collection[str]
+            グループ管理者が管理するグループID一覧（`admin` が False の場合に使用）。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外は"updatedAt"として扱う）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[PromptTemplate], int]
             (プロンプトテンプレート一覧, 総件数) のタプル。
         """
         stmt = select(PromptTemplate).where(PromptTemplate.tenant_id == tenant_id)
@@ -187,12 +231,18 @@ class PromptTemplateRepository:
 
         存在しないIDは無視される（呼び出し側で件数を比較して存在確認を行うこと）。
 
-        Args:
-            ids: 対象のプロンプトテンプレートID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        ids : list[str]
+            対象のプロンプトテンプレートID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[PromptTemplate]
             該当するプロンプトテンプレート一覧。
         """
         if not ids:
@@ -209,10 +259,14 @@ class PromptTemplateRepository:
     ) -> None:
         """テンプレートIDとテナントIDでプロンプトテンプレートを削除する。存在しない場合は何もしない。
 
-        Args:
-            template_id: プロンプトテンプレートID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_id : str
+            プロンプトテンプレートID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
         """
         template = await PromptTemplateRepository.find_by_id_and_tenant_id(
             template_id, tenant_id, session

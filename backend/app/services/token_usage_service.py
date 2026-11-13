@@ -13,19 +13,27 @@ from app.schemas.token_usage import (
 
 
 class TokenUsageService:
+    """トークン使用量に関するビジネスロジック。"""
+
     @staticmethod
     async def _ensure_user_exists_if_specified(
         tenant_id: str, query: TokenUsagePeriodQuery, session: AsyncSession
     ) -> None:
         """`userId`指定時に、そのユーザーがテナント内に実在することを確認する。
 
-        Args:
-            tenant_id: テナントID。
-            query: 期間・ユーザー絞り込み条件。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : TokenUsagePeriodQuery
+            期間・ユーザー絞り込み条件。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 指定された`userId`がテナント内に存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            指定された`userId`がテナント内に存在しない場合404を返す。
         """
         if query.user_id is None:
             return
@@ -43,16 +51,24 @@ class TokenUsageService:
     ) -> TokenUsageListResponse:
         """条件に合致するトークン消費量を1ページ分取得する。
 
-        Args:
-            tenant_id: テナントID。
-            query: 一覧取得条件（期間・ユーザー・ページング・ソート）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : TokenUsageListQuery
+            一覧取得条件（期間・ユーザー・ページング・ソート）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        TokenUsageListResponse
             トークン消費量一覧レスポンス。
 
-        Raises:
-            HTTPException: `userId`指定時に該当ユーザーがテナント内に存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            `userId`指定時に該当ユーザーがテナント内に存在しない場合404を返す。
         """
         await TokenUsageService._ensure_user_exists_if_specified(
             tenant_id, query, session
@@ -85,16 +101,24 @@ class TokenUsageService:
     ) -> TokenUsageSummaryResponse:
         """条件に合致するトークン消費量のサマリ（合計値）を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            query: サマリ取得条件（期間・ユーザー）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : TokenUsagePeriodQuery
+            サマリ取得条件（期間・ユーザー）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        TokenUsageSummaryResponse
             トークン消費量サマリレスポンス。
 
-        Raises:
-            HTTPException: `userId`指定時に該当ユーザーがテナント内に存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            `userId`指定時に該当ユーザーがテナント内に存在しない場合404を返す。
         """
         await TokenUsageService._ensure_user_exists_if_specified(
             tenant_id, query, session

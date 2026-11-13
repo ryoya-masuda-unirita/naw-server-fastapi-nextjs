@@ -27,8 +27,22 @@ SAAS_INDEX_LIMIT = 15
 
 
 class IndexService:
+    """インデックスに関するビジネスロジック。"""
+
     @staticmethod
     def _is_tenant_admin(current_user: User) -> bool:
+        """テナント管理者かどうかを判定する。
+
+        Parameters
+        ----------
+        current_user : User
+            判定対象のユーザー。
+
+        Returns
+        -------
+        bool
+            テナント管理者の場合は True。
+        """
         return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
@@ -43,12 +57,18 @@ class IndexService:
         グループ管理者（テナント管理者でない）の場合は、自分の管理グループのアシスタントが
         使用しているインデックスID一覧と、管理グループID一覧を返す。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[str] | None, list[str] | None]
             (許可インデックスID一覧, 許可グループID一覧) のタプル。絞り込み不要な場合は両方None。
         """
         if IndexService._is_tenant_admin(current_user):
@@ -74,6 +94,22 @@ class IndexService:
         tenant_endpoints_by_index_id: dict[str, list],
         group_ids_by_index_id: dict[str, list[str]],
     ) -> IndexResponse:
+        """インデックスのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        index : Index
+            インデックス。
+        tenant_endpoints_by_index_id : dict[str, list]
+            インデックスIDごとのテナントエンドポイント一覧。
+        group_ids_by_index_id : dict[str, list[str]]
+            インデックスIDごとのグループID一覧。
+
+        Returns
+        -------
+        IndexResponse
+            インデックスのレスポンス。
+        """
         endpoints = tenant_endpoints_by_index_id.get(index.id, [])
         return IndexResponse(
             id=index.id,
@@ -108,6 +144,28 @@ class IndexService:
         size: int,
         session: AsyncSession,
     ) -> PagedIndexResponse:
+        """インデックス一覧からページングレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        indexes : list[Index]
+            インデックス一覧。
+        total : int
+            条件に合う総件数。
+        tenant_id : str
+            テナントID。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        PagedIndexResponse
+            インデックス一覧のページングレスポンス。
+        """
         index_ids = [i.id for i in indexes]
         tenant_endpoints_by_index_id = (
             await IndexRepository.find_tenant_endpoints_grouped_by_index_ids(
@@ -142,17 +200,28 @@ class IndexService:
     ) -> PagedIndexResponse:
         """インデックス一覧をページネーションで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            group_id: グループでの絞り込み。
-            search: 名前・説明の部分一致検索文字列。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        group_id : str | None
+            グループでの絞り込み。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedIndexResponse
             ページネーション済みインデックス一覧。
         """
         if group_id:
@@ -210,14 +279,21 @@ class IndexService:
         取得・更新・削除のいずれについても、グループ管理者が自分の管理範囲外の
         インデックスを操作できないようにする（見えないインデックスは存在しないものとして404）。
 
-        Args:
-            index: 検証対象のインデックス。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index : Index
+            検証対象のインデックス。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 可視範囲外の場合404を返す。
+        Raises
+        ------
+        HTTPException
+            可視範囲外の場合404を返す。
         """
         if IndexService._is_tenant_admin(current_user):
             return
@@ -253,17 +329,26 @@ class IndexService:
 
         移植元同様、一覧と同じ可視性ロジックで再チェックし、見えない場合は404を返す。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        IndexResponse
             インデックス詳細。
 
-        Raises:
-            HTTPException: インデックスが存在しない、または可視範囲外の場合404を返す。
+        Raises
+        ------
+        HTTPException
+            インデックスが存在しない、または可視範囲外の場合404を返す。
         """
         index = await IndexRepository.find_by_id_and_tenant_id(
             index_id, tenant_id, session
@@ -294,6 +379,22 @@ class IndexService:
     async def _resolve_endpoint_ids(
         tenant_id: str, endpoint_ids: list[str], session: AsyncSession
     ) -> list[str]:
+        """指定されたテナントエンドポイントIDが、テナント内に存在することを確かめる。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        endpoint_ids : list[str]
+            テナントエンドポイントIDの一覧。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        list[str]
+            検証済みのテナントエンドポイントID。
+        """
         endpoints = await TenantEndpointRepository.find_by_ids_and_tenant_id(
             endpoint_ids, tenant_id, session
         )
@@ -308,6 +409,22 @@ class IndexService:
     async def _resolve_group_ids(
         tenant_id: str, group_ids: list[str] | None, session: AsyncSession
     ) -> list[str]:
+        """指定されたグループIDが、テナント内に存在することを確かめる。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        group_ids : list[str] | None
+            グループIDの一覧。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        list[str]
+            検証済みのグループID。指定がなければ空リスト。
+        """
         if not group_ids:
             return []
         groups = await GroupRepository.find_by_tenant_id_and_ids(
@@ -326,17 +443,25 @@ class IndexService:
     ) -> IndexResponse:
         """インデックスを新規作成する。
 
-        Args:
-            tenant_id: テナントID。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        req : IndexRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        IndexResponse
             作成したインデックス。
 
-        Raises:
-            HTTPException: SAAS_GLOBALインデックスが既に15件ある場合400を返す。
-                指定されたエンドポイント・グループが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            SAAS_GLOBALインデックスが既に15件ある場合400を返す。
+            指定されたエンドポイント・グループが存在しない場合404を返す。
         """
         if req.type == IndexType.SAAS_GLOBAL:
             existing_count = await IndexRepository.count_saas_indexes(
@@ -405,20 +530,30 @@ class IndexService:
         存在しないが、本APIの他エンドポイント・他ドメインAPIとは異なりインデックスは
         `groupId`によるアクセス制御が特に重要なため、FastAPI版では一貫性を優先して追加する）。
 
-        Args:
-            index_id: 更新対象のインデックスID。
-            tenant_id: テナントID。
-            req: 更新リクエスト。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            更新対象のインデックスID。
+        tenant_id : str
+            テナントID。
+        req : IndexRequest
+            更新リクエスト。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        IndexResponse
             更新後のインデックス。
 
-        Raises:
-            HTTPException: インデックスが存在しない、または可視範囲外の場合404を返す。
-                指定されたエンドポイント・グループが存在しない場合404を返す
-                （SAAS_GLOBALの15件上限チェックは移植元同様、更新時はスキップする）。
+        Raises
+        ------
+        HTTPException
+            インデックスが存在しない、または可視範囲外の場合404を返す。
+            指定されたエンドポイント・グループが存在しない場合404を返す
+            （SAAS_GLOBALの15件上限チェックは移植元同様、更新時はスキップする）。
         """
         index = await IndexRepository.find_by_id_and_tenant_id(
             index_id, tenant_id, session
@@ -479,15 +614,22 @@ class IndexService:
         グループ管理者が自分の管理範囲外のインデックスを削除できないよう、
         `update_index`と同様に可視性チェックを行う。
 
-        Args:
-            index_id: 削除対象のインデックスID。
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            削除対象のインデックスID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: グループ管理者が可視範囲外のインデックスを指定した場合404を返す
-                （存在しないインデックスの指定自体は冪等に扱い、何もしない）。
+        Raises
+        ------
+        HTTPException
+            グループ管理者が可視範囲外のインデックスを指定した場合404を返す
+            （存在しないインデックスの指定自体は冪等に扱い、何もしない）。
         """
         index = await IndexRepository.find_by_id_and_tenant_id(
             index_id, tenant_id, session
@@ -506,8 +648,10 @@ class IndexService:
         移植元`FileService.syncFiles`相当。SAAS環境ではファイル一括同期機能自体が
         未実装であり、移植元は常にエラーを返すスタブ実装のため、その挙動をそのまま踏襲する。
 
-        Raises:
-            HTTPException: 常に400を返す。
+        Raises
+        ------
+        HTTPException
+            常に400を返す。
         """
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -534,23 +678,34 @@ class IndexService:
         ロジックのため`core.file_creation`に切り出したものを再利用する（`xxx_service.py`
         が別の`yyy_service.py`を呼ぶ構造を避けるため）。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            current_user: 追加学習を実行するユーザー。
-            feedback_id: 学習データソースとするフィードバックID。`room_id`と排他。
-            room_id: 学習データソースとするルームID。`feedback_id`と排他。
-            upload: 追加学習用のアップロードファイル。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            追加学習を実行するユーザー。
+        feedback_id : str | None
+            学習データソースとするフィードバックID。`room_id`と排他。
+        room_id : str | None
+            学習データソースとするルームID。`feedback_id`と排他。
+        upload : UploadFile
+            追加学習用のアップロードファイル。
+        storage : FileStorage
+            ファイルストレージ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: `feedback_id`・`room_id`のどちらも未指定、または両方指定の場合400。
-                インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
-                当月クレジット上限超過の場合429を返す。指定された`feedback_id`・`room_id`が
-                テナント内に存在しない場合404を返す（`files.feedback_id`は単一列FKのため、
-                テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
-                黙って紐付いてしまう）。
+        Raises
+        ------
+        HTTPException
+            `feedback_id`・`room_id`のどちらも未指定、または両方指定の場合400。
+            インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
+            当月クレジット上限超過の場合429を返す。指定された`feedback_id`・`room_id`が
+            テナント内に存在しない場合404を返す（`files.feedback_id`は単一列FKのため、
+            テナントスコープでの事前存在確認を行わないと他テナントのフィードバックへ
+            黙って紐付いてしまう）。
         """
         learning_source_not_specified = feedback_id is None and room_id is None
         confused_learning_source = feedback_id is not None and room_id is not None

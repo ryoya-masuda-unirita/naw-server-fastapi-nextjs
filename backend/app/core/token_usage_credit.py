@@ -15,10 +15,14 @@ def positive_token_weight(token_weight: float) -> float:
     `ai_models.token_weight`は本来正の値のみを想定するが、不正なデータ（0以下・NaN・無限大）が
     混入した場合に誤ったクレジット数（0や無限大）を算出しないよう、その場合は1.0にフォールバックする。
 
-    Args:
-        token_weight: DBから取得したモデルの重み係数。
+    Parameters
+    ----------
+    token_weight : float
+        DBから取得したモデルの重み係数。
 
-    Returns:
+    Returns
+    -------
+    float
         正規化された重み係数。不正な値の場合は1.0。
     """
     if token_weight <= 0 or math.isnan(token_weight) or math.isinf(token_weight):
@@ -34,13 +38,20 @@ def input_credits(
 ) -> int:
     """入力トークン数からクレジット数を算出する（切り上げ）。
 
-    Args:
-        input_tokens: 入力トークン数。
-        tokens_per_credit: 1クレジットあたりのトークン数。
-        input_credit_weight: 入力トークンの重み係数。
-        token_weight: 呼び出したモデル(`ai_models.token_weight`)の重み係数。
+    Parameters
+    ----------
+    input_tokens : int
+        入力トークン数。
+    tokens_per_credit : int
+        1クレジットあたりのトークン数。
+    input_credit_weight : float
+        入力トークンの重み係数。
+    token_weight : float
+        呼び出したモデル(`ai_models.token_weight`)の重み係数。
 
-    Returns:
+    Returns
+    -------
+    int
         入力トークン数から算出したクレジット数。`input_tokens`が0以下の場合は0。
     """
     if input_tokens <= 0:
@@ -54,12 +65,18 @@ def output_credits(
 ) -> int:
     """出力トークン数からクレジット数を算出する（切り上げ）。
 
-    Args:
-        output_tokens: 出力トークン数。
-        tokens_per_credit: 1クレジットあたりのトークン数。
-        token_weight: 呼び出したモデル(`ai_models.token_weight`)の重み係数。
+    Parameters
+    ----------
+    output_tokens : int
+        出力トークン数。
+    tokens_per_credit : int
+        1クレジットあたりのトークン数。
+    token_weight : float
+        呼び出したモデル(`ai_models.token_weight`)の重み係数。
 
-    Returns:
+    Returns
+    -------
+    int
         出力トークン数から算出したクレジット数。`output_tokens`が0以下の場合は0。
     """
     if output_tokens <= 0:
@@ -72,12 +89,18 @@ def embedding_credits(
 ) -> int:
     """埋め込みトークン数からクレジット数を算出する（切り上げ）。
 
-    Args:
-        embedding_tokens: 埋め込みトークン数。
-        tokens_per_credit: 1クレジットあたりのトークン数。
-        token_weight: 呼び出した埋め込みモデル(`ai_models.token_weight`)の重み係数。
+    Parameters
+    ----------
+    embedding_tokens : int
+        埋め込みトークン数。
+    tokens_per_credit : int
+        1クレジットあたりのトークン数。
+    token_weight : float
+        呼び出した埋め込みモデル(`ai_models.token_weight`)の重み係数。
 
-    Returns:
+    Returns
+    -------
+    int
         埋め込みトークン数から算出したクレジット数。`embedding_tokens`が0以下の場合は0。
     """
     if embedding_tokens <= 0:

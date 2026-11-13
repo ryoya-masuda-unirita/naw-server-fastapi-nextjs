@@ -7,11 +7,15 @@ from sqlmodel import Field, SQLModel
 
 
 class MessageContentStatus(str, Enum):
+    """メッセージ内容の状態の取りうる値。"""
+
     OK = "OK"
     ERROR = "ERROR"
 
 
 class MessageRating(str, Enum):
+    """メッセージへの評価の取りうる値。"""
+
     GOOD = "GOOD"
     BAD = "BAD"
 

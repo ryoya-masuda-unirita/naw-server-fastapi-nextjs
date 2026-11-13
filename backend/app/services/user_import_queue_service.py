@@ -18,13 +18,19 @@ class UserImportQueueService:
     ) -> None:
         """インポートジョブの受付をSQSに送信する。
 
-        Args:
-            import_job_id: インポートジョブID。
-            tenant_id: テナントID。
-            storage_url: アップロード済みCSVの保存先URL。
+        Parameters
+        ----------
+        import_job_id : str
+            インポートジョブID。
+        tenant_id : str
+            テナントID。
+        storage_url : str
+            アップロード済みCSVの保存先URL。
 
-        Raises:
-            RuntimeError: `AWS_SQS_QUEUE_URL`が未設定の場合。
+        Raises
+        ------
+        RuntimeError
+            `AWS_SQS_QUEUE_URL`が未設定の場合。
         """
         aws_settings = get_aws_settings()
         if not aws_settings.aws_sqs_queue_url:

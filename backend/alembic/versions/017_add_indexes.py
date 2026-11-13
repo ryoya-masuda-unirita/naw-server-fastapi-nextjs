@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """マイグレーションを適用する。"""
     op.create_table(
         "indexes",
         sa.Column("id", sa.String(32), nullable=False),
@@ -96,6 +97,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """マイグレーションを取り消す。"""
     op.drop_table("indexes_groups")
     op.drop_table("indexes_endpoints")
     op.drop_table("indexes")

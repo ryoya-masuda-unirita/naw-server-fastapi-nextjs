@@ -6,6 +6,8 @@ from app.models.user import User
 
 
 class RoomPinRepository:
+    """ルームのピン留めのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_pinned_room_ids_by_login_id(
         tenant_id: str, login_id: str, session: AsyncSession

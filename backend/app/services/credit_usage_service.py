@@ -11,18 +11,26 @@ from app.schemas.credit_usage import (
 
 
 class CreditUsageService:
+    """クレジット使用状況に関するビジネスロジック。"""
+
     @staticmethod
     async def get_my_credit_usage(
         tenant_id: str, current_user: User, session: AsyncSession
     ) -> MyCreditUsageResponse:
         """ログインユーザー本人の請求期間内クレジット利用状況を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MyCreditUsageResponse
             本人のクレジット利用状況レスポンス。有効なサブスクリプションが存在しない
             場合は全フィールドが`None`のレスポンスを返す。
         """
@@ -54,11 +62,16 @@ class CreditUsageService:
     ) -> WorkspaceCreditUsageResponse:
         """テナント全体の請求期間内クレジット利用状況を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        WorkspaceCreditUsageResponse
             テナント全体のクレジット利用状況レスポンス。有効なサブスクリプションが
             存在しない場合は全フィールドが`None`のレスポンスを返す。
         """

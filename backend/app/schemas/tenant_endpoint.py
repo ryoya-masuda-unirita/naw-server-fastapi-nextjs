@@ -4,6 +4,8 @@ from app.models.tenant_endpoint import EndpointType
 
 
 class TenantEndpointCreateRequest(BaseModel):
+    """テナントエンドポイント作成のリクエスト。"""
+
     type: EndpointType
     endpointName: str
     endpoint: str
@@ -11,6 +13,8 @@ class TenantEndpointCreateRequest(BaseModel):
 
 
 class TenantEndpointUpdateRequest(BaseModel):
+    """テナントエンドポイント更新のリクエスト。"""
+
     type: EndpointType | None = None
     endpointName: str | None = None
     endpoint: str | None = None

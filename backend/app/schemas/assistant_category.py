@@ -37,14 +37,20 @@ class _AssistantCategoryRequestBase(RequestModel):
     def _validate_name_not_blank(cls, value: str) -> str:
         """カテゴリ名が空白のみでないことを検証する（文字数は`Field(max_length=...)`で検証済み）。
 
-        Args:
-            value: 検証対象のカテゴリ名。`Field()`の長さ制約を通過済み。
+        Parameters
+        ----------
+        value : str
+            検証対象のカテゴリ名。`Field()`の長さ制約を通過済み。
 
-        Returns:
+        Returns
+        -------
+        str
             検証済みのカテゴリ名。
 
-        Raises:
-            ValueError: 空白のみの場合。
+        Raises
+        ------
+        ValueError
+            空白のみの場合。
         """
         if not value.strip():
             raise ValueError(_NAME_REQUIRED_MESSAGE)
@@ -52,14 +58,20 @@ class _AssistantCategoryRequestBase(RequestModel):
 
 
 class AssistantCategoryCreateRequest(_AssistantCategoryRequestBase):
+    """アシスタントカテゴリ作成のリクエスト。"""
+
     pass
 
 
 class AssistantCategoryUpdateRequest(_AssistantCategoryRequestBase):
+    """アシスタントカテゴリ更新のリクエスト。"""
+
     pass
 
 
 class AssistantCategoryResponse(BaseModel):
+    """アシスタントカテゴリのレスポンス。"""
+
     id: str
     name: str
     description: str | None

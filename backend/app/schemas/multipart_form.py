@@ -28,10 +28,14 @@ def _to_request_validation_error(error: ValidationError) -> RequestValidationErr
     `("body", "textData", ...)`に揃え、`input`は含めない（モデル単位のエラーでは
     添付ファイルを含むリクエスト全体が入り、例外が肥大化するため）。
 
-    Args:
-        error: `textData`の解釈・検証で発生したエラー。
+    Parameters
+    ----------
+    error : ValidationError
+        `textData`の解釈・検証で発生したエラー。
 
-    Returns:
+    Returns
+    -------
+    RequestValidationError
         共通の例外ハンドラ（`app.core.errors`）が400として返す入力エラー。
     """
     return RequestValidationError(
@@ -52,10 +56,14 @@ async def _to_attachment_payload(upload: UploadFile) -> dict[str, object]:
     `AttachmentFile.data`は`Base64Bytes`型で、検証時にBase64をデコードして生の
     バイト列を保持する。そのため生のバイト列をBase64エンコードして渡す。
 
-    Args:
-        upload: multipartで受け取ったファイル。
+    Parameters
+    ----------
+    upload : UploadFile
+        multipartで受け取ったファイル。
 
-    Returns:
+    Returns
+    -------
+    dict[str, object]
         `AttachmentFile`として検証できる辞書。
     """
     data = await upload.read()
@@ -76,17 +84,25 @@ async def parse_text_data_form[ModelT: BaseModel](
     クライアントは`textData`を`application/json`のBlobとして送るためファイルパート
     (`UploadFile`)として届くが、通常のフォーム値として送られた場合も受け付ける。
 
-    Args:
-        model: 検証先のリクエストモデル。
-        text_data: リクエスト本体(JSON)。
-        file_parts: 添付ファイルパート（モデルの項目名 → 受け取ったファイル一覧）。
+    Parameters
+    ----------
+    model : type[ModelT]
+        検証先のリクエストモデル。
+    text_data : UploadFile | str
+        リクエスト本体(JSON)。
+    file_parts : dict[str, list[UploadFile] | None]
+        添付ファイルパート（モデルの項目名 → 受け取ったファイル一覧）。
 
-    Returns:
+    Returns
+    -------
+    ModelT
         検証済みのリクエスト。
 
-    Raises:
-        RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
-            場合、または項目の検証に失敗した場合（いずれも400）。
+    Raises
+    ------
+    RequestValidationError
+        `textData`がUTF-8のJSONオブジェクトとして解釈できない
+        場合、または項目の検証に失敗した場合（いずれも400）。
     """
     raw_text_data = (
         text_data.encode("utf-8")

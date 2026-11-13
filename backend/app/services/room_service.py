@@ -25,8 +25,22 @@ from app.schemas.room import (
 
 
 class RoomService:
+    """ルームに関するビジネスロジック。"""
+
     @staticmethod
     def _is_tenant_admin(current_user: User) -> bool:
+        """テナント管理者かどうかを判定する。
+
+        Parameters
+        ----------
+        current_user : User
+            判定対象のユーザー。
+
+        Returns
+        -------
+        bool
+            テナント管理者の場合は True。
+        """
         return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
@@ -36,6 +50,18 @@ class RoomService:
 
     @staticmethod
     def _to_room_response(room: Room) -> RoomResponse:
+        """ルームのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        room : Room
+            ルーム。
+
+        Returns
+        -------
+        RoomResponse
+            ルームのレスポンス。
+        """
         return RoomResponse(
             id=room.id,
             tenantId=room.tenant_id,
@@ -48,6 +74,23 @@ class RoomService:
 
     @staticmethod
     def _parse_user_id(value: str | None) -> UUID | None:
+        """文字列のユーザーIDをUUIDに変換する。
+
+        Parameters
+        ----------
+        value : str | None
+            ユーザーIDの文字列。指定しない場合は None。
+
+        Returns
+        -------
+        UUID | None
+            変換したUUID。指定がなければ None。
+
+        Raises
+        ------
+        HTTPException
+            UUIDとして不正な場合（400）。
+        """
         if value is None:
             return None
         try:
@@ -62,6 +105,29 @@ class RoomService:
     async def _get_owned_room_or_404(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> Room:
+        """自分のルームを取得する。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        Room
+            取得したルーム。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない、または自分のものでない場合（404）。
+        """
         room = await RoomRepository.find_by_id_and_login_id(
             room_id, tenant_id, current_user.login_id, session
         )
@@ -75,6 +141,22 @@ class RoomService:
     async def _validate_assistant_or_400(
         assistant_id: str, tenant_id: str, session: AsyncSession
     ) -> None:
+        """指定したアシスタントがテナントに存在することを確かめる。
+
+        Parameters
+        ----------
+        assistant_id : str
+            アシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            データベースセッション。
+
+        Raises
+        ------
+        HTTPException
+            アシスタントが存在しない場合（400）。
+        """
         assistant = await session.get(Assistant, assistant_id)
         if not assistant or assistant.tenant_id != tenant_id:
             raise HTTPException(
@@ -91,6 +173,28 @@ class RoomService:
         name: str | None,
         session: AsyncSession,
     ) -> PagedRoomResponse:
+        """自分のルームを新しい順にページングして返す。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        name : str | None
+            絞り込み用の名前。部分一致で検索する。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        PagedRoomResponse
+            ルーム一覧のページングレスポンス。
+        """
         group_ids = await GroupUserRepository.find_belonging_group_ids(
             tenant_id, current_user.id, session
         )
@@ -121,6 +225,29 @@ class RoomService:
     async def get_room(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> RoomResponse:
+        """自分のルームを1件返す。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        RoomResponse
+            ルームのレスポンス。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合（404）。
+        """
         room = await require_viewable_room(tenant_id, current_user, room_id, session)
         return RoomService._to_room_response(room)
 
@@ -218,6 +345,29 @@ class RoomService:
         req: RoomCreateRequest,
         session: AsyncSession,
     ) -> RoomResponse:
+        """ルームを作成する。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        req : RoomCreateRequest
+            リクエスト本文。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        RoomResponse
+            作成したルーム。
+
+        Raises
+        ------
+        HTTPException
+            アシスタントが存在しない場合（400）。
+        """
         await RoomService._validate_assistant_or_400(
             req.assistantId, tenant_id, session
         )
@@ -240,6 +390,31 @@ class RoomService:
         req: RoomUpdateRequest,
         session: AsyncSession,
     ) -> RoomResponse:
+        """ルームを更新する。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        req : RoomUpdateRequest
+            リクエスト本文。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        RoomResponse
+            更新後のルーム。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合（404）、またはアシスタントが存在しない場合（400）。
+        """
         room = await RoomService._get_owned_room_or_404(
             room_id, tenant_id, current_user, session
         )
@@ -253,6 +428,24 @@ class RoomService:
     async def delete_room(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> None:
+        """ルームを削除する。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        session : AsyncSession
+            データベースセッション。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合（404）。
+        """
         room = await RoomService._get_owned_room_or_404(
             room_id, tenant_id, current_user, session
         )
@@ -263,6 +456,24 @@ class RoomService:
     async def pin_room(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> None:
+        """ルームをピン留めする。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        session : AsyncSession
+            データベースセッション。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合（404）。
+        """
         room = await RoomService._get_owned_room_or_404(
             room_id, tenant_id, current_user, session
         )
@@ -281,6 +492,24 @@ class RoomService:
     async def unpin_room(
         room_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> None:
+        """ルームのピン留めを解除する。
+
+        Parameters
+        ----------
+        room_id : str
+            ルームID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            操作しているユーザー。
+        session : AsyncSession
+            データベースセッション。
+
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合（404）。
+        """
         await RoomService._get_owned_room_or_404(
             room_id, tenant_id, current_user, session
         )

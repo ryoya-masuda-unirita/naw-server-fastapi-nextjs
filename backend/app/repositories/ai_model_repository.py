@@ -7,14 +7,20 @@ from app.models.ai_model import AIModel, AIModelEndpointType
 
 
 class AIModelRepository:
+    """AIモデルのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_all(session: AsyncSession) -> list[AIModel]:
         """AIモデルを全件取得する。
 
-        Args:
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AIModel]
             AIモデル一覧。
         """
         stmt = select(AIModel)
@@ -33,12 +39,18 @@ class AIModelRepository:
         登録されうるため、呼び出し元が扱える種別に絞り、idの昇順で先頭を返す
         （どの行が選ばれるかを決定的にするため）。
 
-        Args:
-            name: モデル名(デプロイ名)。
-            endpoint_types: 対象とするエンドポイント種別。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        name : str
+            モデル名(デプロイ名)。
+        endpoint_types : Collection[AIModelEndpointType]
+            対象とするエンドポイント種別。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AIModel | None
             該当するAIモデル。存在しない場合はNone。
         """
         stmt = (
@@ -56,12 +68,18 @@ class AIModelRepository:
     ) -> AIModel | None:
         """エンドポイントタイプとモデル名(デプロイ名)でAIモデルを取得する。
 
-        Args:
-            endpoint_type: エンドポイントタイプ。
-            name: モデル名(デプロイ名)。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        endpoint_type : AIModelEndpointType
+            エンドポイントタイプ。
+        name : str
+            モデル名(デプロイ名)。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AIModel | None
             該当するAIモデル。存在しない場合はNone。
         """
         stmt = select(AIModel).where(

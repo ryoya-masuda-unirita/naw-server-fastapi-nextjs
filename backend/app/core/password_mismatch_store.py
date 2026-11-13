@@ -42,11 +42,16 @@ _PREVIOUS_FAILURE_INDEX = 1
 def _key(user_id: uuid.UUID, tenant_id: str) -> str:
     """ユーザーの失敗記録を保存するキーを返す。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
 
-    Returns:
+    Returns
+    -------
+    str
         Redisのキー。
     """
     return f"{_KEY_PREFIX}{tenant_id}:{user_id}"
@@ -55,11 +60,16 @@ def _key(user_id: uuid.UUID, tenant_id: str) -> str:
 def _window_start(lockout_minutes: int, now: float) -> float:
     """失敗を数える期間の開始時刻（UNIX秒）を返す。
 
-    Args:
-        lockout_minutes: 失敗を数える期間（分）。
-        now: 現在時刻（UNIX秒）。
+    Parameters
+    ----------
+    lockout_minutes : int
+        失敗を数える期間（分）。
+    now : float
+        現在時刻（UNIX秒）。
 
-    Returns:
+    Returns
+    -------
+    float
         期間の開始時刻。この時刻ちょうどの記録は数えない。
     """
     return now - lockout_minutes * _SECONDS_PER_MINUTE
@@ -74,11 +84,16 @@ def _add_failure(
     パスワード再設定の判定はロック時間内の件数が上限以上か（新しい方から上限件あれば
     足りる）しか見ないため、新しい方から両者の上限の大きい方の件数だけ残す。
 
-    Args:
-        pipe: Redisのパイプライン。
-        key: 失敗記録のキー。
-        now: 失敗した時刻（UNIX秒）。
-        password_reset_max_attempts: パスワード再設定のロックする失敗回数。
+    Parameters
+    ----------
+    pipe : Pipeline
+        Redisのパイプライン。
+    key : str
+        失敗記録のキー。
+    now : float
+        失敗した時刻（UNIX秒）。
+    password_reset_max_attempts : int
+        パスワード再設定のロックする失敗回数。
     """
     retained = max(LOGIN_FAILURE_THRESHOLD, password_reset_max_attempts)
     # 同じ時刻の失敗も別件として数えるため、メンバーは失敗ごとに一意にする
@@ -98,14 +113,22 @@ async def is_locked_out(
 
     失敗は記録しない。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        max_attempts: ロックする失敗回数。
-        lockout_minutes: 失敗を数える期間（分）。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    max_attempts : int
+        ロックする失敗回数。
+    lockout_minutes : int
+        失敗を数える期間（分）。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    bool
         ロック中なら`True`。
     """
     since = _window_start(lockout_minutes, time.time())
@@ -123,14 +146,22 @@ async def record_failure_and_check_lockout(
 ) -> bool:
     """パスワード再設定の失敗を記録し、その結果ロックすべきかを判定する。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        max_attempts: ロックする失敗回数。
-        lockout_minutes: 失敗を数える期間（分）。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    max_attempts : int
+        ロックする失敗回数。
+    lockout_minutes : int
+        失敗を数える期間（分）。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    bool
         今回の失敗を含めてロック時間内の失敗が上限に達したら`True`。
     """
     key = _key(user_id, tenant_id)
@@ -151,13 +182,19 @@ def _is_login_locked(
 ) -> bool:
     """移植元`LoginAttemptService.isCurrentlyLocked`と同じ規則でログインのロックを判定する。
 
-    Args:
-        failure_count: 期間を区切らない通算の失敗件数（上限を超えて残さないため、
-            実際の通算件数より少ないことがあるが、上限以上かの判定は変わらない）。
-        recent_failures: 新しい方から2番目の失敗（メンバーと時刻の組）。なければ空。
-        now: 現在時刻（UNIX秒）。
+    Parameters
+    ----------
+    failure_count : int
+        期間を区切らない通算の失敗件数（上限を超えて残さないため、
+        実際の通算件数より少ないことがあるが、上限以上かの判定は変わらない）。
+    recent_failures : list[tuple[str, float]]
+        新しい方から2番目の失敗（メンバーと時刻の組）。なければ空。
+    now : float
+        現在時刻（UNIX秒）。
 
-    Returns:
+    Returns
+    -------
+    bool
         通算の失敗が上限以上で、2番目に新しい失敗がロック時間内なら`True`。
     """
     if failure_count < LOGIN_FAILURE_THRESHOLD or not recent_failures:
@@ -172,12 +209,18 @@ async def is_login_locked_out(
 ) -> bool:
     """ログインがロック中かを判定する（失敗は記録しない）。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    bool
         ロック中なら`True`。
     """
     key = _key(user_id, tenant_id)
@@ -197,12 +240,18 @@ async def record_login_failure_and_check_lockout(
 ) -> bool:
     """ログインの失敗を記録し、その結果ロックすべきかを判定する。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    bool
         今回の失敗を含めてロックの条件を満たしたら`True`。
     """
     key = _key(user_id, tenant_id)
@@ -227,9 +276,13 @@ async def clear_failures(
     ログイン成功・パスワード再設定成功のどちらでも呼ぶ（移植元の
     `deleteAllByUserIdAndTenantId`）。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
     """
     await redis_client.delete(_key(user_id, tenant_id))

@@ -5,17 +5,24 @@ from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 
 
 class TenantEndpointRepository:
+    """テナントエンドポイントのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_tenant_id(
         tenant_id: str, session: AsyncSession
     ) -> list[TenantEndpoint]:
         """テナント内の全エンドポイントを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[TenantEndpoint]
             エンドポイント一覧。
         """
         stmt = select(TenantEndpoint).where(TenantEndpoint.tenant_id == tenant_id)
@@ -28,12 +35,18 @@ class TenantEndpointRepository:
     ) -> list[TenantEndpoint]:
         """テナント内の指定タイプのエンドポイントを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            endpoint_type: エンドポイントタイプ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        endpoint_type : EndpointType
+            エンドポイントタイプ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[TenantEndpoint]
             エンドポイント一覧。
         """
         stmt = select(TenantEndpoint).where(
@@ -48,12 +61,18 @@ class TenantEndpointRepository:
     ) -> TenantEndpoint | None:
         """エンドポイントIDとテナントIDでエンドポイントを取得する。
 
-        Args:
-            endpoint_id: エンドポイントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        endpoint_id : str
+            エンドポイントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        TenantEndpoint | None
             該当する TenantEndpoint。存在しない場合は None。
         """
         stmt = select(TenantEndpoint).where(
@@ -68,12 +87,18 @@ class TenantEndpointRepository:
     ) -> list[TenantEndpoint]:
         """エンドポイントID一覧とテナントIDでエンドポイントを取得する。
 
-        Args:
-            ids: 取得対象のエンドポイントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        ids : list[str]
+            取得対象のエンドポイントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[TenantEndpoint]
             該当するエンドポイント一覧。
         """
         if not ids:
@@ -88,9 +113,12 @@ class TenantEndpointRepository:
     async def delete(endpoint: TenantEndpoint, session: AsyncSession) -> None:
         """エンドポイントを削除する。
 
-        Args:
-            endpoint: 削除対象の TenantEndpoint。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        endpoint : TenantEndpoint
+            削除対象の TenantEndpoint。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(endpoint)
         await session.commit()

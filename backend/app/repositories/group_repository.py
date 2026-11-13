@@ -15,18 +15,26 @@ _SORT_COLUMNS: dict[str, Any] = {
 
 
 class GroupRepository:
+    """グループのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_id_and_tenant_id(
         group_id: str, tenant_id: str, session: AsyncSession
     ) -> Group | None:
         """グループIDとテナントIDでグループを取得する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Group | None
             該当する Group。存在しない場合は None。
         """
         stmt = select(Group).where(Group.id == group_id, Group.tenant_id == tenant_id)
@@ -39,12 +47,18 @@ class GroupRepository:
     ) -> list[Group]:
         """テナントIDとグループID一覧に合致するグループを取得する。存在しないIDは無視される。
 
-        Args:
-            tenant_id: テナントID。
-            ids: 対象のグループID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        ids : list[str]
+            対象のグループID一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[Group]
             該当するグループ一覧。
         """
         if not ids:
@@ -59,11 +73,16 @@ class GroupRepository:
     ) -> list[Group]:
         """テナント内の全グループを名前昇順で取得する（isBelonged=false用）。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[Group]
             グループ一覧。
         """
         stmt = (
@@ -84,17 +103,27 @@ class GroupRepository:
     ) -> tuple[list[Group], int]:
         """グループ一覧をページネーションで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            name_search: グループ名の部分一致検索文字列。
-            allowed_group_ids: 絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
-                Noneの場合は絞り込みなし。
-            sort: 並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外はグループ名順）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        name_search : str | None
+            グループ名の部分一致検索文字列。
+        allowed_group_ids : list[str] | None
+            絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
+            Noneの場合は絞り込みなし。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"name"・"updatedAt"。それ以外はグループ名順）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Group], int]
             (グループ一覧, 総件数) のタプル。
         """
         stmt = select(Group).where(Group.tenant_id == tenant_id)
@@ -126,9 +155,12 @@ class GroupRepository:
     async def delete(group: Group, session: AsyncSession) -> None:
         """グループを削除する。所属ユーザー（groups_users）はDBのON DELETE CASCADEで連動削除される。
 
-        Args:
-            group: 削除対象のGroup。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group : Group
+            削除対象のGroup。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(group)
         await session.commit()

@@ -35,18 +35,26 @@ _SORT_COLUMNS: dict[str, Any] = {
 
 
 class AssistantRepository:
+    """アシスタントのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_ids_and_tenant_id(
         assistant_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[Assistant]:
         """アシスタントID一覧とテナントIDでアシスタントを取得する。
 
-        Args:
-            assistant_ids: 取得対象のアシスタントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            取得対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[Assistant]
             アシスタント一覧。
         """
         if not assistant_ids:
@@ -63,12 +71,18 @@ class AssistantRepository:
     ) -> Assistant | None:
         """アシスタントIDとテナントIDでアシスタントを取得する。
 
-        Args:
-            assistant_id: アシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            アシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Assistant | None
             該当するアシスタント。存在しない場合はNone。
         """
         stmt = select(Assistant).where(
@@ -87,12 +101,18 @@ class AssistantRepository:
         アシスタント一覧から`indexId`を抽出する処理に相当。`index_id`カラムのみを
         `IN`句でまとめて取得し、アシスタント本体は取得しないことでN+1を避ける。
 
-        Args:
-            assistant_ids: 対象のアシスタントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[str]
             重複なしのインデックスID一覧（`index_id`がNoneのものは除外）。
         """
         if not assistant_ids:
@@ -113,11 +133,16 @@ class AssistantRepository:
     async def create(assistant: Assistant, session: AsyncSession) -> Assistant:
         """アシスタントを新規作成する。
 
-        Args:
-            assistant: 作成するアシスタント。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant : Assistant
+            作成するアシスタント。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Assistant
             作成したアシスタント。
         """
         session.add(assistant)
@@ -129,11 +154,16 @@ class AssistantRepository:
     async def update(assistant: Assistant, session: AsyncSession) -> Assistant:
         """アシスタントを更新する。
 
-        Args:
-            assistant: 更新するアシスタント。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant : Assistant
+            更新するアシスタント。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Assistant
             更新後のアシスタント。
         """
         session.add(assistant)
@@ -145,9 +175,12 @@ class AssistantRepository:
     async def delete(assistant: Assistant, session: AsyncSession) -> None:
         """アシスタントを削除する。
 
-        Args:
-            assistant: 削除するアシスタント。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant : Assistant
+            削除するアシスタント。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(assistant)
         await session.commit()
@@ -168,21 +201,35 @@ class AssistantRepository:
     ) -> tuple[list[Assistant], int]:
         """管理者向けアシスタント一覧をページネーションで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            search: 名前・説明の部分一致検索文字列。
-            assistant_type: 種別での絞り込み（Noneなら条件なし）。
-            category_id: カテゴリでの絞り込み。Noneなら条件なし、"NONE"ならカテゴリ未設定のみ。
-            group_id: グループでの絞り込み。Noneなら条件なし、"NONE"なら未所属のみ。
-            exclude_group_id: 指定グループに所属していないものに絞り込む（Noneなら条件なし）。
-            allowed_group_ids: 絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
-                Noneの場合は絞り込みなし。空リストの場合は該当なしとして早期リターンする。
-            sort: 並べ替え指定の並び（キーは"name"・"type"・"updatedAt"など）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        assistant_type : AssistantType | None
+            種別での絞り込み（Noneなら条件なし）。
+        category_id : str | None
+            カテゴリでの絞り込み。Noneなら条件なし、"NONE"ならカテゴリ未設定のみ。
+        group_id : str | None
+            グループでの絞り込み。Noneなら条件なし、"NONE"なら未所属のみ。
+        exclude_group_id : str | None
+            指定グループに所属していないものに絞り込む（Noneなら条件なし）。
+        allowed_group_ids : list[str] | None
+            絞り込み対象のグループID一覧（グループ管理者が非テナント管理者の場合に指定）。
+            Noneの場合は絞り込みなし。空リストの場合は該当なしとして早期リターンする。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"name"・"type"・"updatedAt"など）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Assistant], int]
             (アシスタント一覧, 総件数) のタプル。
         """
         if allowed_group_ids is not None and not allowed_group_ids:

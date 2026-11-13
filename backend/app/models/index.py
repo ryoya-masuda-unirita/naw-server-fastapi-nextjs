@@ -7,6 +7,8 @@ from sqlmodel import Field, SQLModel
 
 
 class IndexType(str, Enum):
+    """インデックスの種別の取りうる値。"""
+
     SAAS_GLOBAL = "SAAS_GLOBAL"
     LOCAL = "LOCAL"
 

@@ -58,19 +58,29 @@ class AzureAiSearchVectorStoreClient:
     ) -> list[VectorSearchResult]:
         """クエリベクトルに類似するドキュメントをAzure AI Searchから検索する。
 
-        Args:
-            endpoint: テナントに紐づくベクトルDB接続情報のエンドポイントURL。
-            api_key: テナントに紐づくベクトルDB接続情報のAPIキー。
-            index_name: 検索対象のAzure Searchインデックス名
-                （移植元同様、ベクトルDB接続情報が属するテナントIDを使う）。
-            query_vector: 検索クエリの埋め込みベクトル。
-            top_k: 取得する類似ドキュメント件数の上限。
+        Parameters
+        ----------
+        endpoint : str
+            テナントに紐づくベクトルDB接続情報のエンドポイントURL。
+        api_key : str
+            テナントに紐づくベクトルDB接続情報のAPIキー。
+        index_name : str
+            検索対象のAzure Searchインデックス名
+            （移植元同様、ベクトルDB接続情報が属するテナントIDを使う）。
+        query_vector : list[float]
+            検索クエリの埋め込みベクトル。
+        top_k : int
+            取得する類似ドキュメント件数の上限。
 
-        Returns:
+        Returns
+        -------
+        list[VectorSearchResult]
             類似度順の検索結果一覧。
 
-        Raises:
-            HTTPException: Azure AI Searchへの接続・検索に失敗した場合は400。
+        Raises
+        ------
+        HTTPException
+            Azure AI Searchへの接続・検索に失敗した場合は400。
         """
         try:
             async with SearchClient(
@@ -101,10 +111,14 @@ class AzureAiSearchVectorStoreClient:
 def _to_search_result(document: dict) -> VectorSearchResult:
     """Azure AI Searchの検索結果1件を`VectorSearchResult`へ変換する。
 
-    Args:
-        document: Azure AI Searchが返す1件分のフィールド辞書。
+    Parameters
+    ----------
+    document : dict
+        Azure AI Searchが返す1件分のフィールド辞書。
 
-    Returns:
+    Returns
+    -------
+    VectorSearchResult
         変換後の検索結果。
     """
     metadata_raw = document.get(_METADATA_FIELD)

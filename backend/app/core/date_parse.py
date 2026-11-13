@@ -17,10 +17,14 @@ _ISO_INSTANT_PATTERN = re.compile(
 def _invalid_iso_instant(parameter_name: str) -> HTTPException:
     """日時として解釈できない値の400を作る（移植元と同じ文言）。
 
-    Args:
-        parameter_name: エラーメッセージに出すパラメータ名。
+    Parameters
+    ----------
+    parameter_name : str
+        エラーメッセージに出すパラメータ名。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         400の`HTTPException`。
     """
     return HTTPException(
@@ -38,15 +42,22 @@ def parse_iso_instant(value: str | None, parameter_name: str) -> datetime | None
     時刻やオフセットを持たない値は、どのタイムゾーンの時刻か決まらないため受け付けない
     （移植元`DateParseUtil.parseIsoInstant`と同じ）。
 
-    Args:
-        value: 変換する文字列。`None`・空文字（空白だけを含む）は「指定なし」として`None`を返す。
-        parameter_name: エラーメッセージに出すパラメータ名。
+    Parameters
+    ----------
+    value : str | None
+        変換する文字列。`None`・空文字（空白だけを含む）は「指定なし」として`None`を返す。
+    parameter_name : str
+        エラーメッセージに出すパラメータ名。
 
-    Returns:
+    Returns
+    -------
+    datetime | None
         UTCの日時。指定なしなら`None`。
 
-    Raises:
-        HTTPException: 400。日時として解釈できない場合。
+    Raises
+    ------
+    HTTPException
+        400。日時として解釈できない場合。
     """
     if value is None or not value.strip():
         return None
@@ -66,17 +77,34 @@ def iso_instant_query(
 ) -> Callable[..., datetime | None]:
     """日時のクエリパラメータを`parse_iso_instant`で解釈するFastAPIの依存関数を作る。
 
-    Args:
-        parameter_name: クエリパラメータ名（エラーメッセージにも出す）。
-        description: OpenAPIに載せるパラメータの説明。
+    Parameters
+    ----------
+    parameter_name : str
+        クエリパラメータ名（エラーメッセージにも出す）。
+    description : str
+        OpenAPIに載せるパラメータの説明。
 
-    Returns:
+    Returns
+    -------
+    Callable[..., datetime | None]
         `Depends`に渡す依存関数。
     """
 
     def dependency(
         value: str | None = Query(None, alias=parameter_name, description=description),
     ) -> datetime | None:
+        """クエリパラメータのISO 8601文字列を日時に変換する。
+
+        Parameters
+        ----------
+        value : str | None
+            クエリパラメータの値。指定がない場合は None。
+
+        Returns
+        -------
+        datetime | None
+            変換した日時。指定がなければ None。
+        """
         return parse_iso_instant(value, parameter_name)
 
     return dependency

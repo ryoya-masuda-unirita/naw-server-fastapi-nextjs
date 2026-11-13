@@ -26,10 +26,14 @@ _UUID_STRING_MAX_LENGTH = 36
 def normalize_library_tag_id(tag_id: str) -> str | None:
     """ライブラリタグIDを保存形式（ハイフンなし32桁の小文字）に揃える。
 
-    Args:
-        tag_id: ハイフンなし32桁またはUUID標準形式のタグID。大文字小文字は問わない。
+    Parameters
+    ----------
+    tag_id : str
+        ハイフンなし32桁またはUUID標準形式のタグID。大文字小文字は問わない。
 
-    Returns:
+    Returns
+    -------
+    str | None
         保存形式のタグID。どちらの形式でもない場合はNone。
     """
     if not _LIBRARY_TAG_ID_PATTERN.fullmatch(tag_id):
@@ -40,15 +44,21 @@ def normalize_library_tag_id(tag_id: str) -> str | None:
 def normalize_library_tag_ids(tag_ids: Iterable[str]) -> list[str]:
     """ライブラリタグID一覧を保存形式に揃える。順序は保ち、重複は除かない。
 
-    Args:
-        tag_ids: ハイフンなし32桁またはUUID標準形式のタグID一覧。
+    Parameters
+    ----------
+    tag_ids : Iterable[str]
+        ハイフンなし32桁またはUUID標準形式のタグID一覧。
 
-    Returns:
+    Returns
+    -------
+    list[str]
         保存形式のタグID一覧。
 
-    Raises:
-        HTTPException: どちらの形式でもないIDを含む場合400を返す。移植元は
-            `UUID.fromString`の失敗を400にするため合わせる。
+    Raises
+    ------
+    HTTPException
+        どちらの形式でもないIDを含む場合400を返す。移植元は
+        `UUID.fromString`の失敗を400にするため合わせる。
     """
     normalized: list[str] = []
     for tag_id in tag_ids:
@@ -68,10 +78,14 @@ def _invalid_uuid_message(tag_id: str) -> str:
     長すぎる値は、移植元と同じく値を含めない文言にする（巨大な入力をそのまま
     応答に返さないため）。それ以外は移植元で最もよく出る文言にする。
 
-    Args:
-        tag_id: 不正な形式のタグID。
+    Parameters
+    ----------
+    tag_id : str
+        不正な形式のタグID。
 
-    Returns:
+    Returns
+    -------
+    str
         エラーメッセージ。
     """
     if len(tag_id) > _UUID_STRING_MAX_LENGTH:

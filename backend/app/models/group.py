@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class Group(SQLModel, table=True):
+    """グループのテーブル定義。"""
+
     __tablename__ = "groups"
 
     id: str = Field(

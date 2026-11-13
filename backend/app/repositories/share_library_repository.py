@@ -8,6 +8,8 @@ from app.models.library import ShareLibrary
 
 
 class ShareLibraryRepository:
+    """ライブラリの共有のDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_groups_grouped_by_library_ids(
         library_ids: list[uuid.UUID], tenant_id: str, session: AsyncSession
@@ -17,12 +19,18 @@ class ShareLibraryRepository:
         ライブラリごとに個別クエリを発行するとN+1になるため、対象ライブラリID一覧に対する
         (library_id, group_id, group_name) の組を1クエリで取得しPython側で集約する。
 
-        Args:
-            library_ids: 対象のライブラリID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        library_ids : list[uuid.UUID]
+            対象のライブラリID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[uuid.UUID, list[tuple[str, str]]]
             ライブラリIDをキーとした (グループID, グループ名) 一覧の辞書。
         """
         if not library_ids:
@@ -55,11 +63,16 @@ class ShareLibraryRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            library_id: 対象のライブラリID。
-            tenant_id: テナントID。
-            group_ids: 共有先グループID一覧（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        library_id : uuid.UUID
+            対象のライブラリID。
+        tenant_id : str
+            テナントID。
+        group_ids : list[str]
+            共有先グループID一覧（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(ShareLibrary).where(

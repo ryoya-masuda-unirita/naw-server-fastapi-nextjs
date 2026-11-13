@@ -42,11 +42,16 @@ async def resolve_active_billing_period(
     双方から利用する（`xxx_service.py`が別の`yyy_service.py`を呼ぶ構造を避けるため、
     共通ロジックは`core/`に置く）。
 
-    Args:
-        tenant_id: テナントID。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    tuple[Subscription, Plan, datetime, datetime] | None
         `(subscription, plan, period_from, period_to)`のタプル。有効なサブスクリプション
         が存在しない場合、または請求サイクルの起算日が算出できない場合は`None`。
     """
@@ -70,12 +75,18 @@ async def resolve_credit_limit(
 ) -> int | None:
     """プランの月間クレジット上限とテナントの従量課金上限からクレジット上限を算出する。
 
-    Args:
-        tenant_id: テナントID。
-        plan: 契約中のプラン。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    plan : Plan
+        契約中のプラン。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    int | None
         クレジット上限。`plan.max_credits_per_month`が未設定の場合は`None`（上限なし）。
     """
     if plan.max_credits_per_month is None:
@@ -95,14 +106,19 @@ async def enforce_within_quota(tenant_id: str, session: AsyncSession) -> None:
     が存在しない場合、またはプランに上限が設定されていない場合はチェックをスキップする
     （移植元同様、上限が定義されていなければ制限しない）。
 
-    Args:
-        tenant_id: テナントID。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Raises:
-        HTTPException: 請求期間内の利用クレジット合計が
-            「プランのクレジット枠 + テナント個別の利用ベース上限」以上の場合、
-            429（Too Many Requests）を返す。
+    Raises
+    ------
+    HTTPException
+        請求期間内の利用クレジット合計が
+        「プランのクレジット枠 + テナント個別の利用ベース上限」以上の場合、
+        429（Too Many Requests）を返す。
     """
     billing_period = await resolve_active_billing_period(tenant_id, session)
     if billing_period is None:
@@ -130,10 +146,14 @@ def is_sort_by_total_credits(sort: Sequence[SortOrder]) -> bool:
     移植元(Spring Boot)`UserBillingUsageService.isSortByTotalCredits`と同じく、
     先頭に限らずいずれかの指定に含まれていれば True とする。
 
-    Args:
-        sort: 並べ替え指定の並び。
+    Parameters
+    ----------
+    sort : Sequence[SortOrder]
+        並べ替え指定の並び。
 
-    Returns:
+    Returns
+    -------
+    bool
         totalCredits の指定が含まれていれば True。
     """
     return find_order(sort, TOTAL_CREDITS_SORT_PROPERTY) is not None
@@ -146,12 +166,17 @@ def validate_total_credits_sort(sort: Sequence[SortOrder], include_usage: bool) 
     `UserService.get_users`・`GroupService.list_group_users`の双方から呼ぶため、
     「serviceが別serviceを呼ばない」規約に抵触しないよう`core/`に置く。
 
-    Args:
-        sort: 並べ替え指定の並び。
-        include_usage: クレジット利用量をレスポンスに含めるかどうか（includeUsageクエリパラメータ）。
+    Parameters
+    ----------
+    sort : Sequence[SortOrder]
+        並べ替え指定の並び。
+    include_usage : bool
+        クレジット利用量をレスポンスに含めるかどうか（includeUsageクエリパラメータ）。
 
-    Raises:
-        HTTPException: sort=totalCreditsが指定されているのにinclude_usage=Falseの場合400を返す。
+    Raises
+    ------
+    HTTPException
+        sort=totalCreditsが指定されているのにinclude_usage=Falseの場合400を返す。
     """
     if is_sort_by_total_credits(sort) and not include_usage:
         raise HTTPException(
@@ -169,13 +194,20 @@ def total_credits_correlated_subquery(
     `UserService.get_users`・`GroupUserRepository.find_page_by_group`の双方から
     利用するため、クエリ組み立てロジックを共通化する。
 
-    Args:
-        tenant_id: テナントID。
-        from_: 請求期間の開始（この値以上）。
-        to: 請求期間の終了（この値以下）。
-        user_id_column: 相関させるユーザーID列（`User.id`または`GroupUser.user_id`）。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    from_ : datetime
+        請求期間の開始（この値以上）。
+    to : datetime
+        請求期間の終了（この値以下）。
+    user_id_column : Any
+        相関させるユーザーID列（`User.id`または`GroupUser.user_id`）。
 
-    Returns:
+    Returns
+    -------
+    Any
         ORDER BYにそのまま使えるスカラーサブクエリ。
     """
     return (

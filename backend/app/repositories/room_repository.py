@@ -14,6 +14,8 @@ from app.models.user import User
 
 
 class RoomRepository:
+    """ルームのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_page_viewable_by_user(
         tenant_id: str,
@@ -29,16 +31,26 @@ class RoomRepository:
         「閲覧可能」は、自ユーザーが所有するルーム、または共有リンクで自ユーザーの
         所属グループに共有されているルームのいずれか（issue-114で追加）。
 
-        Args:
-            tenant_id: テナントID。
-            user_id: ログインユーザーのID。
-            group_ids: ログインユーザーが所属するグループID一覧。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            name: ルーム名の部分一致検索文字列。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            ログインユーザーのID。
+        group_ids : list[str]
+            ログインユーザーが所属するグループID一覧。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        name : str | None
+            ルーム名の部分一致検索文字列。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Room], int]
             (ルーム一覧, 総件数) のタプル。
         """
         conditions = [Room.user_id == user_id]
@@ -112,12 +124,18 @@ class RoomRepository:
     ) -> list[Room]:
         """ルームID一覧とテナントIDでルーム一覧を1クエリで取得する。
 
-        Args:
-            room_ids: 取得対象のルームID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        room_ids : list[str]
+            取得対象のルームID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[Room]
             ルーム一覧。
         """
         if not room_ids:
@@ -204,21 +222,36 @@ class RoomRepository:
     ) -> tuple[list[Row], int]:
         """管理者向けルーム履歴一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            user_id: ユーザーIDでの絞り込み。
-            created_at_from: 作成日時の範囲開始（この値以上）。
-            created_at_to: 作成日時の範囲終了（この値より前）。
-            room_rate: 評価での絞り込み。`unRated` の場合は未評価。
-            name: ルーム名の部分一致検索文字列。
-            visible_assistant_ids: グループ管理者向けに可視なアシスタントID一覧。Noneなら制限なし。
-            order_by: ソート対象（updatedAt/name/userName）。
-            reverse: Trueなら降順。
-            page: ページ番号。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID | None
+            ユーザーIDでの絞り込み。
+        created_at_from : datetime | None
+            作成日時の範囲開始（この値以上）。
+        created_at_to : datetime | None
+            作成日時の範囲終了（この値より前）。
+        room_rate : str | None
+            評価での絞り込み。`unRated` の場合は未評価。
+        name : str | None
+            ルーム名の部分一致検索文字列。
+        visible_assistant_ids : list[str] | None
+            グループ管理者向けに可視なアシスタントID一覧。Noneなら制限なし。
+        order_by : str
+            ソート対象（updatedAt/name/userName）。
+        reverse : bool
+            Trueなら降順。
+        page : int
+            ページ番号。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Row], int]
             (行一覧, 総件数) のタプル。
         """
         if visible_assistant_ids is not None and not visible_assistant_ids:

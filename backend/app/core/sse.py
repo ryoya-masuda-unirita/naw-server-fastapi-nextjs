@@ -15,11 +15,16 @@ def sse_event(event_type: str, payload: dict[str, object]) -> bytes:
     受け手（secuaigent/client・local-server）はJSON内の`type`で種別を判定するため、
     この形式に合わせる（issue-183・issue-224）。
 
-    Args:
-        event_type: イベント種別（`text_delta`・`message_stop`等）。
-        payload: 種別以外のイベントデータ(JSONへ変換される)。
+    Parameters
+    ----------
+    event_type : str
+        イベント種別（`text_delta`・`message_stop`等）。
+    payload : dict[str, object]
+        種別以外のイベントデータ(JSONへ変換される)。
 
-    Returns:
+    Returns
+    -------
+    bytes
         SSE形式にエンコードされたバイト列。
     """
     # payloadに`type`キーが含まれていても種別が上書きされないよう、`type`を後に置く。

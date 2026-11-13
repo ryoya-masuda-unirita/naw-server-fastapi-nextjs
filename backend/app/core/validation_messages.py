@@ -61,14 +61,22 @@ class ValidationMessages:
     文言を置き換えるだけで、制約は追加しない。たとえば`not_blank`を指定しても空白のみの
     値は弾かれず、弾くには`Field(min_length=1)`や独自チェックを別に書く必要がある。
 
-    Attributes:
-        not_blank: `@NotBlank`。欠落・null・空文字・空白のみの値が弾かれたとき。
-        not_null: `@NotNull`。欠落・nullで弾いたとき（空文字・空配列は対象外）。
-        not_empty: `@NotEmpty`。欠落・null・空文字・空配列で弾いたとき。
-        size: `@Size`。文字数・件数の上限を超えたとき。
-        min_value: `@Min`・`@DecimalMin`・`@PositiveOrZero`。下限を下回ったとき。
-        max_value: `@Max`・`@DecimalMax`。上限を超えたとき。
-        iso8601_instant: `@ISO8601Instant`。日時として解釈できないとき。
+    Attributes
+    ----------
+    not_blank
+        `@NotBlank`。欠落・null・空文字・空白のみの値が弾かれたとき。
+    not_null
+        `@NotNull`。欠落・nullで弾いたとき（空文字・空配列は対象外）。
+    not_empty
+        `@NotEmpty`。欠落・null・空文字・空配列で弾いたとき。
+    size
+        `@Size`。文字数・件数の上限を超えたとき。
+    min_value
+        `@Min`・`@DecimalMin`・`@PositiveOrZero`。下限を下回ったとき。
+    max_value
+        `@Max`・`@DecimalMax`。上限を超えたとき。
+    iso8601_instant
+        `@ISO8601Instant`。日時として解釈できないとき。
     """
 
     not_blank: str | None = None
@@ -87,10 +95,14 @@ class ValidationMessages:
     def message_for(self, error: ErrorDetails) -> str | None:
         """1件のエラーを置き換える文言を返す。
 
-        Args:
-            error: この項目で起きたPydanticのエラー。
+        Parameters
+        ----------
+        error : ErrorDetails
+            この項目で起きたPydanticのエラー。
 
-        Returns:
+        Returns
+        -------
+        str | None
             置き換える文言。置き換えない場合は`None`。
         """
         error_type = error["type"]
@@ -121,11 +133,16 @@ class ValidationMessages:
     ) -> core_schema.CoreSchema:
         """項目のスキーマを包み、項目自身のエラーを指定の文言に置き換える。
 
-        Args:
-            source_type: 項目の型。
-            handler: 内側（`Field()`の制約を含む）のスキーマを作る関数。
+        Parameters
+        ----------
+        source_type : Any
+            項目の型。
+        handler : GetCoreSchemaHandler
+            内側（`Field()`の制約を含む）のスキーマを作る関数。
 
-        Returns:
+        Returns
+        -------
+        core_schema.CoreSchema
             内側のスキーマを包んだスキーマ。
         """
         return core_schema.no_info_wrap_validator_function(
@@ -139,15 +156,22 @@ class ValidationMessages:
 
         配列の要素・入れ子のモデルのエラーは、この項目の制約ではないため置き換えない。
 
-        Args:
-            value: 項目の入力値。
-            handler: 内側の検証。
+        Parameters
+        ----------
+        value : Any
+            項目の入力値。
+        handler : core_schema.ValidatorFunctionWrapHandler
+            内側の検証。
 
-        Returns:
+        Returns
+        -------
+        Any
             検証済みの値。
 
-        Raises:
-            ValidationError: 内側の検証に失敗した場合。
+        Raises
+        ------
+        ValidationError
+            内側の検証に失敗した場合。
         """
         try:
             return handler(value)
@@ -169,11 +193,16 @@ def _replace_messages(
     接頭辞の除去（`value_error`）とログ（位置と種類）がそのまま動く。置き換えない
     Pydantic組み込みのエラーは、`ctx`も含めて元のまま作り直す。
 
-    Args:
-        exc: 元のエラー。
-        message_for: 1件のエラーを置き換える文言を返す関数（置き換えないなら`None`）。
+    Parameters
+    ----------
+    exc : ValidationError
+        元のエラー。
+    message_for : Callable[[ErrorDetails], str | None]
+        1件のエラーを置き換える文言を返す関数（置き換えないなら`None`）。
 
-    Returns:
+    Returns
+    -------
+    ValidationError | None
         置き換えた`ValidationError`。置き換えるエラーが無ければ`None`。
     """
     errors = exc.errors()
@@ -190,11 +219,16 @@ def _replace_messages(
 def _line_error(error: ErrorDetails, message: str | None) -> InitErrorDetails:
     """`ValidationError`を作り直すための1件分のエラーを作る。
 
-    Args:
-        error: 元のエラー。
-        message: 置き換える文言。置き換えないなら`None`。
+    Parameters
+    ----------
+    error : ErrorDetails
+        元のエラー。
+    message : str | None
+        置き換える文言。置き換えないなら`None`。
 
-    Returns:
+    Returns
+    -------
+    InitErrorDetails
         作り直すエラー。
     """
     if message is None and error["type"] in _KNOWN_ERROR_TYPES:
@@ -227,15 +261,22 @@ class RequestModel(BaseModel):
     ) -> Self:
         """モデル直下の項目の欠落を、その項目の必須の文言に置き換える。
 
-        Args:
-            data: 入力値。
-            handler: モデルの検証。
+        Parameters
+        ----------
+        data : Any
+            入力値。
+        handler : ModelWrapValidatorHandler[Self]
+            モデルの検証。
 
-        Returns:
+        Returns
+        -------
+        Self
             検証済みのモデル。
 
-        Raises:
-            ValidationError: 検証に失敗した場合。
+        Raises
+        ------
+        ValidationError
+            検証に失敗した場合。
         """
         try:
             return handler(data)
@@ -249,10 +290,14 @@ class RequestModel(BaseModel):
     def _missing_message(cls, error: ErrorDetails) -> str | None:
         """モデル直下の項目の欠落なら、その項目の必須の文言を返す。
 
-        Args:
-            error: モデルの検証で起きたエラー。
+        Parameters
+        ----------
+        error : ErrorDetails
+            モデルの検証で起きたエラー。
 
-        Returns:
+        Returns
+        -------
+        str | None
             必須の文言。対象外なら`None`。
         """
         if error["type"] != _MISSING_ERROR_TYPE or len(error["loc"]) != 1:
@@ -270,10 +315,14 @@ def _field_messages_by_loc(
     Pydanticはエラーの位置を別名で出すため、項目名と別名のどちらでも引けるようにする。
     モデルの項目は定義後に変わらないため、モデルごとに一度だけ作る。
 
-    Args:
-        model: 対象のモデル。
+    Parameters
+    ----------
+    model : type[BaseModel]
+        対象のモデル。
 
-    Returns:
+    Returns
+    -------
+    dict[str | int, ValidationMessages]
         位置の名前から`ValidationMessages`への表。
     """
     by_loc: dict[str | int, ValidationMessages] = {}

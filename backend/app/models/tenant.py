@@ -5,6 +5,8 @@ from sqlmodel import Field, SQLModel
 
 
 class Tenant(SQLModel, table=True):
+    """テナントのテーブル定義。"""
+
     __tablename__ = "tenants"
     __table_args__ = (
         sa.CheckConstraint(

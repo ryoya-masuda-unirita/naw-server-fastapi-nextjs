@@ -6,11 +6,15 @@ from app.models.user_import_job import UserImportJob, UserImportJobStatus
 
 
 class UserImportResponse(BaseModel):
+    """ユーザーインポート開始時のレスポンス。"""
+
     jobId: str
     status: UserImportJobStatus
 
 
 class UserImportJobResponse(BaseModel):
+    """ユーザーインポートジョブの状況を表すレスポンス。"""
+
     id: str
     tenantId: str
     status: UserImportJobStatus
@@ -24,6 +28,18 @@ class UserImportJobResponse(BaseModel):
 
     @classmethod
     def from_job(cls, job: UserImportJob) -> "UserImportJobResponse":
+        """ジョブのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        job : UserImportJob
+            ユーザーインポートジョブ。
+
+        Returns
+        -------
+        UserImportJobResponse
+            ジョブの状況を表すレスポンス。
+        """
         return cls(
             id=job.id,
             tenantId=job.tenant_id,

@@ -8,6 +8,8 @@ from app.models.subscription import Subscription, SubscriptionStatus
 
 
 class SubscriptionRepository:
+    """サブスクリプションのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_active_by_tenant_id_with_plan(
         tenant_id: str, today: date, session: AsyncSession
@@ -17,12 +19,18 @@ class SubscriptionRepository:
         有効なサブスクリプションとは、ステータスが`ACTIVE`かつ`end_date`が未設定
         または本日以降であるものを指す。複数該当する場合は作成日時が最新のものを採用する。
 
-        Args:
-            tenant_id: テナントID。
-            today: 判定基準日（UTC日付）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        today : date
+            判定基準日（UTC日付）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[Subscription, Plan] | None
             該当する`(Subscription, Plan)`のタプル。存在しない場合は`None`。
         """
         stmt = (

@@ -20,6 +20,8 @@ from app.schemas.llm import LlmEmbeddingRequest, LlmEmbeddingResponse
 
 
 class LlmEmbeddingService:
+    """埋め込みベクトル生成に関するビジネスロジック。"""
+
     @staticmethod
     async def create_embedding(
         tenant_id: str,
@@ -29,19 +31,28 @@ class LlmEmbeddingService:
     ) -> LlmEmbeddingResponse:
         """入力テキストをAzure OpenAI Embeddingsモデルでベクトル化する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: 埋め込みリクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : LlmEmbeddingRequest
+            埋め込みリクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LlmEmbeddingResponse
             埋め込みベクトルを含むレスポンス。
 
-        Raises:
-            HTTPException: クレジット上限超過時は429、指定deployNameのAIモデルが
-                存在しない・テナントにAzure OpenAI Embeddingエンドポイントが
-                存在しない場合は400を返す。
+        Raises
+        ------
+        HTTPException
+            クレジット上限超過時は429、指定deployNameのAIモデルが
+            存在しない・テナントにAzure OpenAI Embeddingエンドポイントが
+            存在しない場合は400を返す。
         """
         await enforce_within_quota(tenant_id, session)
 

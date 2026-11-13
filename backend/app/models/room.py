@@ -7,6 +7,8 @@ from sqlmodel import Field, SQLModel
 
 
 class RoomRating(str, Enum):
+    """ルームへの評価の取りうる値。"""
+
     EXCELLENT = "EXCELLENT"
     VERY_GOOD = "VERY_GOOD"
     GOOD = "GOOD"
@@ -15,6 +17,8 @@ class RoomRating(str, Enum):
 
 
 class Room(SQLModel, table=True):
+    """ルームのテーブル定義。"""
+
     __tablename__ = "rooms"
     __table_args__ = (
         sa.UniqueConstraint("id", "tenant_id", name="uq_rooms_id_tenant_id"),
@@ -68,6 +72,8 @@ class Room(SQLModel, table=True):
 
 
 class RoomPin(SQLModel, table=True):
+    """ユーザーごとのルームのピン留めのテーブル定義。"""
+
     __tablename__ = "room_pins"
 
     user_id: uuid.UUID = Field(

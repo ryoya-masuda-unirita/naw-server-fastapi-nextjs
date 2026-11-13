@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class AssistantCategory(SQLModel, table=True):
+    """アシスタントカテゴリのテーブル定義。"""
+
     __tablename__ = "assistant_categories"
     __table_args__ = (
         sa.UniqueConstraint(
