@@ -19,6 +19,12 @@ import type {
   RoomsListApiResponse,
 } from '@/types/chat/chat-room.type';
 
+/**
+ * 最新の検索の連番。入力が続いたときに、遅れて届いた前の検索の応答で結果を上書きしないよう、
+ * 古い連番の応答は捨てる（移植元にはない）。
+ */
+let searchSequence = 0;
+
 /** サイドバーのルーム一覧を 1 回に読み込む件数 */
 const ROOM_PAGE_SIZE = 20;
 
@@ -378,18 +384,21 @@ export const useRoomsStore = create<RoomsStore>((set, get) => {
     },
 
     searchRooms: async (query) => {
+      const sequence = ++searchSequence;
       set({ isSearchLoading: true });
       try {
         const data = await apiClient.get<RoomsListApiResponse>(API_PATHS.ROOMS.LIST, {
           params: query.trim() ? { name: query } : undefined,
         });
+        if (sequence !== searchSequence) return;
         const existingById = new Map(get().allRooms.map((room) => [room.id, room]));
         set({ searchResults: mapRoomListApiResponse(data, existingById) });
       } catch (error) {
+        if (sequence !== searchSequence) return;
         set({ searchResults: [] });
         throw error;
       } finally {
-        set({ isSearchLoading: false });
+        if (sequence === searchSequence) set({ isSearchLoading: false });
       }
     },
 

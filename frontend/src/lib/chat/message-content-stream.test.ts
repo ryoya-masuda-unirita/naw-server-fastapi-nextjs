@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { server } from '@/test/setup';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { persistTenantId } from '@/lib/api-client';
@@ -259,4 +259,32 @@ describe('streamMessageContent', () => {
     expect(request!.credentials).toBe('omit');
     expect(result.answer).toBe('最終回答');
   });
+
+  test('ハンドラーが例外を投げたら、接続を閉じてからその例外を投げること', async () => {
+    // MSW が本文を中継するため、元のストリームの cancel は観測できない。reader の cancel 呼び出しを見る
+    const cancel = vi.spyOn(ReadableStreamDefaultReader.prototype, 'cancel');
+    server.use(
+      http.post(mockPath(API_PATHS.MESSAGES.CONTENT), () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encode({ type: 'text_delta', text: 'a' }));
+          },
+        });
+        return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } });
+      }),
+    );
+
+    await expect(
+      streamMessageContent(buildFormData(), 'local-1', {
+        onTextDelta: () => {
+          throw new Error('handler failed');
+        },
+        onMessageContent: () => undefined,
+      }),
+    ).rejects.toThrow('handler failed');
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    cancel.mockRestore();
+  });
+
 });

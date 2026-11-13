@@ -8,8 +8,8 @@ import {
   deriveRoomNameFromMessage,
   isPlaceholderRoomName,
 } from './room-name';
-import { mapRoomListApiItemToChatRoom, getRoomListTotalCount } from './room-list-mapper';
-import { buildShareUrl, parseShareIdFromShareUrl } from './share-url';
+import { mapRoomListApiItemToChatRoom } from './room-list-mapper';
+import { parseShareIdFromShareUrl } from './share-url';
 
 const FIXTURE_ASSISTANTS: Assistant[] = [
   { id: 'a1', name: 'アシスタント1', description: '', category: '', model: '' },
@@ -81,10 +81,6 @@ describe('share-url', () => {
     expect(parseShareIdFromShareUrl('https://x.test/other')).toBeNull();
     expect(parseShareIdFromShareUrl(null)).toBeNull();
   });
-
-  test('shareId から共有 URL を作ること', () => {
-    expect(buildShareUrl('abc', 'https://x.test')).toBe('https://x.test/chat/share/abc');
-  });
 });
 
 describe('room-list-mapper', () => {
@@ -127,12 +123,6 @@ describe('room-list-mapper', () => {
       shareId: 'old',
     });
     expect(room).toMatchObject({ lastMessage: '前', lastMessageTime: 'T', category: 'data', shareId: 'old' });
-  });
-
-  test('総件数は total → totalElements → 件数の順に使うこと', () => {
-    expect(getRoomListTotalCount({ content: [api], total: 9, totalElements: 5 })).toBe(9);
-    expect(getRoomListTotalCount({ content: [api], totalElements: 5 })).toBe(5);
-    expect(getRoomListTotalCount({ content: [api] })).toBe(1);
   });
 });
 

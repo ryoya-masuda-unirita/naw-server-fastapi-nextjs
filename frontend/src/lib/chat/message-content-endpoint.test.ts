@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { CHAT_ASSISTANT_TYPE } from '@/lib/constants/assistant-type';
 import type { MessageListAssistant } from '@/types/chat/message-api.type';
 import {
-  buildLocalLibraryContentUrl,
-  buildLocalLibraryUrl,
   buildLocalMessageContentUrl,
   buildLocalMessageContentsUrl,
   resolveAssistantEndpoint,
@@ -112,15 +110,13 @@ describe('message-content-endpoint.resolver', () => {
     ).toEqual({ kind: 'invalid', reason: 'no_endpoint' });
   });
 
-  it('buildLocalLibraryContentUrl はライブラリ本文 GET 向け URL を返すこと', () => {
-    expect(buildLocalLibraryContentUrl('https://local.example.com', 'lib-1')).toBe(
-      'https://local.example.com/api/libraries/lib-1/content',
-    );
-  });
-
-  it('buildLocalLibraryUrl はライブラリ削除向け URL を返すこと', () => {
-    expect(buildLocalLibraryUrl('https://local.example.com/', 'lib-1')).toBe(
-      'https://local.example.com/api/libraries/lib-1',
-    );
+  it('endpoint の model が空白のときは assistant 直下の model にフォールバックすること', () => {
+    expect(
+      resolveAssistantModel({
+        ...secureAssistant,
+        model: 'root-model',
+        endpoints: [{ ...secureAssistant.endpoints[0], model: '  ' }],
+      }),
+    ).toBe('root-model');
   });
 });

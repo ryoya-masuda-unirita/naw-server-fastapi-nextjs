@@ -329,4 +329,29 @@ describe('評価・検索', () => {
 
     expect(state().allRooms[0]).toMatchObject({ name: '変更', lastMessage: 'a' });
   });
+
+describe('古い検索の応答', () => {
+  test('後から入力した検索の結果を、遅れて届いた前の検索の応答で上書きしないこと', async () => {
+    let releaseSlow: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    server.use(
+      http.get(mockPath(API_PATHS.ROOMS.LIST), async ({ request }) => {
+        const name = new URL(request.url).searchParams.get('name');
+        if (name === 'ab') await slow;
+        return HttpResponse.json({ content: [buildApiRoom(`hit-${name}`)], totalElements: 1 });
+      }),
+    );
+
+    const first = state().searchRooms('ab');
+    await state().searchRooms('abc');
+    releaseSlow();
+    await first;
+
+    expect(state().searchResults.map((r) => r.id)).toEqual(['hit-abc']);
+    expect(state().isSearchLoading).toBe(false);
+  });
+});
+
 });

@@ -27,14 +27,6 @@ export function buildLocalMessageContentUrl(destination: string): string {
   return buildLocalApiUrl(destination, LOCAL_MESSAGE_CONTENT_PATH);
 }
 
-export function buildLocalLibraryContentUrl(destination: string, libraryId: string): string {
-  return buildLocalApiUrl(destination, `api/libraries/${libraryId}/content`);
-}
-
-export function buildLocalLibraryUrl(destination: string, libraryId: string): string {
-  return buildLocalApiUrl(destination, `api/libraries/${libraryId}`);
-}
-
 export function findSecureLocalEndpoint(
   assistant: MessageListAssistant,
 ): MessageListAssistantEndpoint | undefined {
@@ -48,7 +40,7 @@ export function findSecureLocalEndpoint(
 /** SECURE ローカル SSE 向け textData.assistantId に設定する model を返す */
 export function resolveAssistantModel(assistant: MessageListAssistant): string | undefined {
   const endpoint = findSecureLocalEndpoint(assistant);
-  const model = endpoint?.model?.trim() ?? assistant.model?.trim();
+  const model = endpoint?.model?.trim() || assistant.model?.trim();
   return model || undefined;
 }
 

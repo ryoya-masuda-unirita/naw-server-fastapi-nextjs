@@ -584,4 +584,36 @@ describe('deleteMessage / rateMessage', () => {
     await expect(state().rateMessage('m1', 'BAD')).rejects.toMatchObject({ status: 500 });
     expect(state().messageRecords[0].isRated).toBe(false);
   });
+
+describe('古い読み込みの応答', () => {
+  test('ルームを切り替えたあとに届いた前のルームの応答は捨てること', async () => {
+    let releaseSlow: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    server.use(
+      http.get(mockPath(API_PATHS.MESSAGES.LIST), async ({ request }) => {
+        const roomId = new URL(request.url).searchParams.get('roomId');
+        if (roomId === 'room-a') await slow;
+        return HttpResponse.json({
+          assistants: [NAW_ASSISTANT],
+          messages: [buildRecord(roomId === 'room-a' ? 'ma' : 'mb', null)],
+        });
+      }),
+      http.post(mockPath(API_PATHS.MESSAGES.CONTENTS), async ({ request }) => {
+        const body = (await request.json()) as { messageIds: string[] };
+        return HttpResponse.json(body.messageIds.map((id) => buildContent(id, `回答-${id}`)));
+      }),
+    );
+
+    const loadingA = state().loadMessagesForRoom('room-a', true);
+    await state().loadMessagesForRoom('room-b', true);
+    releaseSlow();
+    await loadingA;
+
+    expect(state().messageRecords.map((r) => r.id)).toEqual(['mb']);
+    expect(state().isLoading).toBe(false);
+  });
+});
+
 });

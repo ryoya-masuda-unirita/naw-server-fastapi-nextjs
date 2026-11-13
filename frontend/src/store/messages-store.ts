@@ -1,7 +1,7 @@
 import i18next from 'i18next';
 import { create } from 'zustand';
 import { useMemo } from 'react';
-import { ApiError, apiClient } from '@/lib/api-client';
+import { ApiError, apiClient, resolveTenantId } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { getLibraryStreamBridge } from '@/lib/chat/library-stream-bridge';
 import { getAccessTokenForLocalContent } from '@/lib/chat/local-content-token';
@@ -25,7 +25,6 @@ import {
   toMessageGroupKey,
   type MessageVersionInfo,
 } from '@/lib/chat/message-thread';
-import { resolveTenantId } from '@/lib/api-client';
 import { parseReasoningText } from '@/lib/utils/reasoning-text';
 import { buildFirstMessageRenameName } from '@/lib/utils/room-name';
 import { useToastStore } from '@/components/shared/toast-store';
@@ -60,6 +59,12 @@ export interface SendMessageOptions {
 export type MessageLoadError = 'forbidden' | 'general' | null;
 
 const HTTP_FORBIDDEN = 403;
+
+/**
+ * 最新の読み込みの連番。ルームを切り替えたあとに、遅れて届いた前のルームの応答が state を上書きしないよう、
+ * 古い連番の応答は捨てる（移植元にはない。`clearMessages` でも進める）。
+ */
+let loadSequence = 0;
 
 /** 本文取得の失敗理由のうち、ローカルサーバーの接続情報の不備にあたるもの */
 const INVALID_ENDPOINT_REASONS = [
@@ -488,7 +493,8 @@ export const useMessagesStore = create<MessagesStore>((set, get) => {
 
     setAssistantCatalog: (assistants) => set({ assistantCatalog: assistants }),
 
-    clearMessages: () =>
+    clearMessages: () => {
+      loadSequence += 1;
       set({
         messages: [],
         messageRecords: [],
@@ -497,9 +503,12 @@ export const useMessagesStore = create<MessagesStore>((set, get) => {
         isLoading: false,
         isGenerating: false,
         loadError: null,
-      }),
+      });
+    },
 
     loadMessagesForRoom: async (roomId, isInit) => {
+      const sequence = ++loadSequence;
+      const isStale = () => sequence !== loadSequence;
       if (isInit) {
         set({ isLoading: true });
       }
@@ -509,6 +518,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => {
         const listData = await apiClient.get<MessagesListApiResponse>(API_PATHS.MESSAGES.LIST, {
           params: { roomId },
         });
+        if (isStale()) return;
 
         mergeAssistants(listData.assistants ?? []);
 
@@ -520,6 +530,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => {
 
         const assistantIdMap = new Map(records.map((m) => [m.id, m.assistantId]));
         const { contents, failures } = await fetchMessageContents(listData);
+        if (isStale()) return;
 
         if (failures.length > 0) {
           notifyContentFetchFailures(failures);
@@ -536,13 +547,14 @@ export const useMessagesStore = create<MessagesStore>((set, get) => {
           activeVersionIndex: initializeActiveVersionIndex(records),
         });
       } catch (err) {
+        if (isStale()) return;
         set({
           messages: [],
           messageRecords: [],
           loadError: err instanceof ApiError && err.status === HTTP_FORBIDDEN ? 'forbidden' : 'general',
         });
       } finally {
-        set({ isLoading: false });
+        if (!isStale()) set({ isLoading: false });
       }
     },
 

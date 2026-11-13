@@ -154,13 +154,17 @@ describe('MarkdownView', () => {
     expect(container.querySelector('pre')).not.toBeNull();
   });
 
-  test('mermaid のブロックを strict で初期化して描画すること', async () => {
+  test('mermaid のブロックを strict・エラー図なしで初期化して描画すること', async () => {
     mermaidInitialize.mockClear();
     mermaidRun.mockClear();
     const { container } = render(<MarkdownView data={'```mermaid\ngraph TD; A-->B;\n```'} />);
 
     await waitFor(() => expect(mermaidRun).toHaveBeenCalledTimes(1));
-    expect(mermaidInitialize).toHaveBeenCalledWith({ startOnLoad: false, securityLevel: 'strict' });
+    expect(mermaidInitialize).toHaveBeenCalledWith({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      suppressErrorRendering: true,
+    });
     expect(mermaidRun).toHaveBeenCalledWith({ nodes: [container.querySelector('.mermaid')] });
   });
 
@@ -180,4 +184,21 @@ describe('MarkdownView', () => {
     await Promise.resolve();
     expect(mermaidRun).not.toHaveBeenCalled();
   });
+
+  test('chartBlocks だけを切り替えても、チャートの有無が切り替わること', () => {
+    const { container, rerender } = render(<MarkdownView data={FIXTURE_LINE_BLOCK} />);
+    flushRaf();
+    expect(container.querySelector('.chart-block')).not.toBeNull();
+
+    rerender(<MarkdownView data={FIXTURE_LINE_BLOCK} chartBlocks={false} />);
+    flushRaf();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.chart-block')).toBeNull();
+    expect(container.querySelector('pre')).not.toBeNull();
+
+    rerender(<MarkdownView data={FIXTURE_LINE_BLOCK} />);
+    flushRaf();
+    expect(container.querySelector('.chart-block')).not.toBeNull();
+  });
+
 });

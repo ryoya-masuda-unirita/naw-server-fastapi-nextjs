@@ -35,7 +35,3 @@ export function mapRoomListApiResponse(
     mapRoomListApiItemToChatRoom(item, existingById?.get(item.id)),
   );
 }
-
-export function getRoomListTotalCount(response: RoomsListApiResponse): number {
-  return response.total ?? response.totalElements ?? response.content.length;
-}

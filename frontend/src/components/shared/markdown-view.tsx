@@ -2,8 +2,16 @@ import { useEffect, useMemo, useRef } from 'react';
 import { disposeChartBlocks, renderChartBlocks, type RenderedChart } from './chart-blocks';
 import { renderMarkdownToHtml } from './markdown-render';
 
-/** mermaid の初期化オプション。移植元 app.config.ts の MERMAID_OPTIONS（securityLevel: strict）と ngx-markdown の既定（startOnLoad: false） */
-const MERMAID_OPTIONS = { startOnLoad: false, securityLevel: 'strict' } as const;
+/**
+ * mermaid の初期化オプション。移植元 app.config.ts の MERMAID_OPTIONS（securityLevel: strict）と ngx-markdown の既定（startOnLoad: false）。
+ * `suppressErrorRendering` は移植元にない。ストリーミング途中の未完成な図が構文エラーになるたびに、
+ * mermaid がエラー図（bomb）を body 直下へ残していくのを防ぐ。
+ */
+const MERMAID_OPTIONS = {
+  startOnLoad: false,
+  securityLevel: 'strict',
+  suppressErrorRendering: true,
+} as const;
 
 interface MarkdownViewProps {
   /** Markdown 本文。ストリーミング中は逐次更新してよい */
@@ -54,8 +62,16 @@ export function MarkdownView({
     };
   }, [html, mermaid, chartBlocks]);
 
-  // innerHTML は html が変わったときだけ React が書き換える。チャート・mermaid が加えた DOM は、本文が変わるまで残る
-  return <div ref={hostRef} className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  // innerHTML は html が変わったときだけ React が書き換える。チャート・mermaid が加えた DOM は、本文が変わるまで残る。
+  // chartBlocks だけが切り替わっても html は変わらず、差し替え済みのコードブロックが戻らないため、key で作り直す
+  return (
+    <div
+      key={String(chartBlocks)}
+      ref={hostRef}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 async function renderMermaidBlocks(host: HTMLElement, isCancelled: () => boolean): Promise<void> {

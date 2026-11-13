@@ -179,6 +179,10 @@ export async function streamMessageContent(
       buffer = '';
       consume(trailing);
     }
+  } catch (error) {
+    // ハンドラーや復号で失敗したとき、接続を開いたままにするとサーバーが生成を続けてしまう
+    void reader.cancel().catch(() => undefined);
+    throw error;
   } finally {
     reader.releaseLock();
   }

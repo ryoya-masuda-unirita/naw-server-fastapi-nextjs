@@ -2,14 +2,6 @@ import type { Assistant } from '@/types/chat/assistant.type';
 
 export const DEFAULT_ROOM_NAME_MAX_LENGTH = 50;
 
-export function normalizeRoomName(roomName: string): string {
-  return roomName.trim();
-}
-
-export function isValidRoomName(roomName: string): boolean {
-  return normalizeRoomName(roomName).length > 0;
-}
-
 /** 最初のメッセージからルーム名を作る。空白を 1 つにまとめ、長ければ切って `…` を付ける */
 export function deriveRoomNameFromMessage(
   content: string,
