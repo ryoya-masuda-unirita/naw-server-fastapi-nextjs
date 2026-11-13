@@ -431,6 +431,8 @@ test.describe('15_アシスタント', () => {
     }).toBe(true);
   });
 
+  // カテゴリ管理タブは、並べ替えとページ分けを画面側（JavaScript の文字列の大小比較）で行う（移植元 `AssistantCategoryListStore.applyFilter` と同じ）。
+  // そのため、期待も同じ比較（`sort()`）で作る。DB の照合順序には依存しない
   test('[15-35] カテゴリ並替（カテゴリ名）', async ({ assistantsPage, page }) => {
     await assistantsPage.gotoCategoryTab();
     await waitForList(page, M.categoryNoData);

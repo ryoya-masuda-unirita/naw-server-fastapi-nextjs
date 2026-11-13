@@ -14,8 +14,8 @@ import {
  *
  * 移植元との対応:
  * - 並列で他のテストも同じテナントを使うため、検索・並べ替えの確認は「このテスト専用の接頭辞」で検索して絞り込んでから行う
- * - 期間の確認（項番 6〜9・23）は、seed-demo.sql の管理者のチャット（2・5・8・11 日前に更新）を使う。
- *   作ったばかりのチャット（今日）と合わせて、期間の境界をまたぐ
+ * - 期間の確認（項番 6〜9・23）は、「含まれること」を作ったばかりのチャット（今日）で、「含まれないこと」を
+ *   seed-demo.sql の管理者のチャット（seed 投入の 2・8・11 日前に更新）で確かめる。環境が古くなるほどこれらはより古くなるので、除外の確認は変わらない
  * - 件数表示は「開始-終了件 / 総数件」（移植元の ja.json の CHAT_HISTORY.PAGE_COUNT）
  * - 項番 25（Chrome）は Playwright の Chromium（Chrome と同じエンジン）で確かめる
  */
@@ -26,7 +26,6 @@ const USER_NAME = 'ユーザー1';
 const ADMIN_NAME = '管理者';
 /** seed-demo.sql の管理者のチャット。更新日時は seed 投入の 2・5・8・11 日前。 */
 const SEED_ROOM_2_DAYS_AGO = '経費精算の手順（管理者メモ）';
-const SEED_ROOM_5_DAYS_AGO = '週次定例のテンプレート';
 const SEED_ROOM_8_DAYS_AGO = 'お礼メールの定型文';
 const SEED_ROOM_11_DAYS_AGO = '社内 FAQ：パスワードの変更';
 /** seed-demo.sql の今日更新のチャット（チャット詳細の確認用）。 */
@@ -96,7 +95,7 @@ test.describe('16_チャット履歴', () => {
     await expect.poll(() => chatHistoryPage.roomNames()).toEqual([SEED_ROOM_11_DAYS_AGO]);
   });
 
-  test('[16-07] 期間（今日）', async ({ chatHistoryPage, makeRoom, prefix }) => {
+  test('[16-07] 期間（今日）', async ({ chatHistoryPage, makeRoom, page, prefix }) => {
     await makeRoom('user', `${prefix}-today`);
     await chatHistoryPage.goto();
     await chatHistoryPage.choosePeriod(M.today);
@@ -104,24 +103,29 @@ test.describe('16_チャット履歴', () => {
     await expect.poll(() => chatHistoryPage.roomNames()).toEqual([`${prefix}-today`]);
     // 2 日前に更新したチャットは出ない
     await chatHistoryPage.search(SEED_ROOM_2_DAYS_AGO);
+    // 絞り込みの結果が反映されて 0 件の表示になるのを待つ（読み込み中の 0 行で通らないように）
+    await expect(page.getByText(M.noData)).toBeVisible();
     await expect(chatHistoryPage.rows).toHaveCount(0);
   });
 
-  test('[16-08] 期間（7日）', async ({ chatHistoryPage }) => {
+  test('[16-08] 期間（7日）', async ({ chatHistoryPage, makeRoom, page, prefix }) => {
+    await makeRoom('user', `${prefix}-recent`);
     await chatHistoryPage.goto();
     await chatHistoryPage.choosePeriod(M.past7days);
-    await chatHistoryPage.search(SEED_ROOM_5_DAYS_AGO);
-    await expect.poll(() => chatHistoryPage.roomNames()).toEqual([SEED_ROOM_5_DAYS_AGO]);
+    await chatHistoryPage.search(prefix);
+    await expect.poll(() => chatHistoryPage.roomNames()).toEqual([`${prefix}-recent`]);
     // 8 日前に更新したチャットは出ない
     await chatHistoryPage.search(SEED_ROOM_8_DAYS_AGO);
+    await expect(page.getByText(M.noData)).toBeVisible();
     await expect(chatHistoryPage.rows).toHaveCount(0);
   });
 
-  test('[16-09] 期間（30日）', async ({ chatHistoryPage }) => {
+  test('[16-09] 期間（30日）', async ({ chatHistoryPage, makeRoom, prefix }) => {
+    await makeRoom('user', `${prefix}-recent`);
     await chatHistoryPage.goto();
     await chatHistoryPage.choosePeriod(M.past30days);
-    await chatHistoryPage.search(SEED_ROOM_11_DAYS_AGO);
-    await expect.poll(() => chatHistoryPage.roomNames()).toEqual([SEED_ROOM_11_DAYS_AGO]);
+    await chatHistoryPage.search(prefix);
+    await expect.poll(() => chatHistoryPage.roomNames()).toEqual([`${prefix}-recent`]);
   });
 
   test('[16-10] 並替（更新日時）', async ({ chatHistoryPage, makeRoom, prefix }) => {

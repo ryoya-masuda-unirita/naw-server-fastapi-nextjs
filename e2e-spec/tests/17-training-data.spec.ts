@@ -15,7 +15,7 @@ import {
   type CreatedFolder,
 } from '../src/api-service-settings.ts';
 import { loginApi } from '../src/api.ts';
-import { createQuotaTenant, dropQuotaTenant, type QuotaScenario } from '../src/db-quota.ts';
+import type { QuotaScenario, QuotaTenant } from '../src/db-quota.ts';
 import { expect, test } from '../src/fixtures-service-settings.ts';
 import {
   bottomPager,
@@ -168,7 +168,7 @@ test.describe('17_学習データ', () => {
     expect(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy)).toEqual([USER_NAME]);
   });
 
-  test('[17-12] 詳細期間（今日）', async ({ trainingDataPage, adminApi, prefix }) => {
+  test('[17-12] 詳細期間（今日）', async ({ trainingDataPage, adminApi, page, prefix }) => {
     const { folder, names } = await makeFolder(adminApi, prefix, ['today']);
     await trainingDataPage.gotoDetail(folder.id, folder.name);
     await trainingDataPage.choosePeriod(M.today);
@@ -177,10 +177,12 @@ test.describe('17_学習データ', () => {
     await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
     await trainingDataPage.choosePeriod(M.today);
     await trainingDataPage.search(seedFileName(10));
+    // 絞り込みの結果が反映されて 0 件の表示になるのを待つ（読み込み中の 0 行で通らないように）
+    await expect(page.getByText(M.noData)).toBeVisible();
     await expect(trainingDataPage.rows).toHaveCount(0);
   });
 
-  test('[17-13] 詳細期間（7日）', async ({ trainingDataPage, adminApi, prefix }) => {
+  test('[17-13] 詳細期間（7日）', async ({ trainingDataPage, adminApi, page, prefix }) => {
     const { folder, names } = await makeFolder(adminApi, prefix, ['recent']);
     await trainingDataPage.gotoDetail(folder.id, folder.name);
     await trainingDataPage.choosePeriod(M.past7days);
@@ -188,10 +190,12 @@ test.describe('17_学習データ', () => {
     await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
     await trainingDataPage.choosePeriod(M.past7days);
     await trainingDataPage.search(seedFileName(10));
+    // 絞り込みの結果が反映されて 0 件の表示になるのを待つ（読み込み中の 0 行で通らないように）
+    await expect(page.getByText(M.noData)).toBeVisible();
     await expect(trainingDataPage.rows).toHaveCount(0);
   });
 
-  test('[17-14] 詳細期間（30日）', async ({ trainingDataPage, adminApi, prefix }) => {
+  test('[17-14] 詳細期間（30日）', async ({ trainingDataPage, adminApi, page, prefix }) => {
     const { folder, names } = await makeFolder(adminApi, prefix, ['recent']);
     await trainingDataPage.gotoDetail(folder.id, folder.name);
     await trainingDataPage.choosePeriod(M.past30days);
@@ -200,6 +204,8 @@ test.describe('17_学習データ', () => {
     await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
     await trainingDataPage.choosePeriod(M.past30days);
     await trainingDataPage.search(seedFileName(10));
+    // 絞り込みの結果が反映されて 0 件の表示になるのを待つ（読み込み中の 0 行で通らないように）
+    await expect(page.getByText(M.noData)).toBeVisible();
     await expect(trainingDataPage.rows).toHaveCount(0);
   });
 
@@ -209,6 +215,7 @@ test.describe('17_学習データ', () => {
       params: { displayName: seedFileName(10) },
     });
     const updatedAt = new Date(((await res.json()) as { content: { updatedAt: string }[] }).content[0].updatedAt);
+    // 画面の日付はブラウザのタイムゾーン（この PC と同じ）。テストの側も同じタイムゾーンで日付を出す
     const now = new Date();
     const monthsAgo = (now.getFullYear() - updatedAt.getFullYear()) * 12 + now.getMonth() - updatedAt.getMonth();
     await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
@@ -478,30 +485,31 @@ const TENANT_LIMIT = 500;
 
 /**
  * プランとテナントのクレジット上限・今月の利用クレジットを決めた専用のテナントで、クラウドのフォルダにファイルを追加する（画面から）。
- * 追加できたかどうかを返す。
+ * 追加の API（POST /api/admin/indexes/{id}/files）の応答を待って、結果を返す。
  */
 async function addFileUnderQuota(
-  { loginPage, trainingDataPage, page }: { loginPage: LoginPage; trainingDataPage: TrainingDataPage; page: Page },
-  scenario: QuotaScenario
-): Promise<{ added: boolean; errorToast: boolean }> {
-  const tenant = createQuotaTenant(scenario);
+  { loginPage, trainingDataPage, page, tenant }: { loginPage: LoginPage; trainingDataPage: TrainingDataPage; page: Page; tenant: QuotaTenant }
+): Promise<{ status: number; rowShown: boolean; errorToast: boolean }> {
+  const api = await loginApi({ tenantId: tenant.tenantId, loginId: tenant.loginId, password: tenant.password });
   try {
-    const api = await loginApi({ tenantId: tenant.tenantId, loginId: tenant.loginId, password: tenant.password });
-    try {
-      const folder = await createFolder(api, `quota-folder`, 'SAAS_GLOBAL', tenant.endpointIds);
-      await loginPage.login({ tenantId: tenant.tenantId, loginId: tenant.loginId, password: tenant.password });
-      await trainingDataPage.gotoDetail(folder.id, folder.name);
-      await trainingDataPage.addFile('quota.txt', 'quota-data');
-      const added = trainingDataPage.rows.filter({ hasText: 'quota-data' });
-      const errorToast = page.getByTestId('toast-error');
-      await expect(added.or(errorToast).first()).toBeVisible();
-      // エラーのトーストはすぐ消えるので、出ていたかどうかをここで取っておく
-      return { added: (await added.count()) === 1, errorToast: (await errorToast.count()) > 0 };
-    } finally {
-      await api.dispose();
-    }
+    const folder = await createFolder(api, 'quota-folder', 'SAAS_GLOBAL', tenant.endpointIds);
+    await loginPage.login({ tenantId: tenant.tenantId, loginId: tenant.loginId, password: tenant.password });
+    await trainingDataPage.gotoDetail(folder.id, folder.name);
+    const uploaded = page.waitForResponse(
+      (response) => response.request().method() === 'POST' && new URL(response.url()).pathname === `/api/admin/indexes/${folder.id}/files`
+    );
+    await trainingDataPage.addFile('quota.txt', 'quota-data');
+    const status = (await uploaded).status();
+    const errorToast = page.getByTestId('toast-error');
+    // 応答のあと、画面の結果（一覧に出るか、エラーのトーストが出るか）が出るのを待つ
+    await expect(trainingDataPage.rows.filter({ hasText: 'quota-data' }).or(errorToast).first()).toBeVisible();
+    return {
+      status,
+      rowShown: (await trainingDataPage.rows.filter({ hasText: 'quota-data' }).count()) === 1,
+      errorToast: (await errorToast.count()) > 0,
+    };
   } finally {
-    dropQuotaTenant(tenant);
+    await api.dispose();
   }
 }
 
@@ -521,10 +529,12 @@ test.describe('17_学習データ（プラン制限）', () => {
   ];
 
   for (const { id, title, scenario, allowed } of cases) {
-    test(`[17-${id}] ${title}`, async ({ loginPage, trainingDataPage, page }) => {
-      // 利用クレジットが上限（プラン + テナント）に達していなければ追加できて一覧に出る。達していれば拒否される
-      const result = await addFileUnderQuota({ loginPage, trainingDataPage, page }, scenario);
-      expect(result.added, allowed ? 'ファイルが追加されて一覧に出る' : 'ファイル追加が拒否される').toBe(allowed);
+    test(`[17-${id}] ${title}`, async ({ loginPage, trainingDataPage, page, makeQuotaTenant }) => {
+      // 利用クレジットが上限（プラン + テナント）に達していなければ追加できて一覧に出る。達していれば 429 で拒否され、一覧に出ない
+      const tenant = makeQuotaTenant(scenario);
+      const result = await addFileUnderQuota({ loginPage, trainingDataPage, page, tenant });
+      expect(result.status, allowed ? 'ファイル追加が成功する' : 'ファイル追加が拒否される（429）').toBe(allowed ? 200 : 429);
+      expect(result.rowShown, allowed ? 'ファイルが一覧に出る' : 'ファイルが一覧に出ない').toBe(allowed);
       // 拒否のとき、エラーのトーストが出る（文言は項目書に無いので確かめない）
       if (!allowed) expect(result.errorToast, '拒否されたことがトーストで分かる').toBe(true);
     });

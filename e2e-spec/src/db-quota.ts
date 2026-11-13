@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { COMPOSE_PROJECT_NAME } from './env.ts';
+import { USERS } from './users.ts';
 
 /**
  * 17_学習データの「ファイル追加-プラン制限」の項目（38〜47）用に、専用環境の DB へ直接 SQL を流して
@@ -12,9 +13,9 @@ import { COMPOSE_PROJECT_NAME } from './env.ts';
 export class DbError extends Error {}
 
 const SEED_TENANT_ID = 'test-tenant';
-export const QUOTA_ADMIN_LOGIN_ID = 'admin';
-/** seed の管理者のパスワード（パスワード履歴ごとコピーするので同じ）。 */
-export const QUOTA_ADMIN_PASSWORD = 'admin@1234';
+export const QUOTA_ADMIN_LOGIN_ID = USERS.tenantAdmin.loginId;
+/** seed のテナント管理者のパスワード（パスワード履歴ごとコピーするので同じ）。 */
+export const QUOTA_ADMIN_PASSWORD = USERS.tenantAdmin.password;
 const ID_SUFFIX_LENGTH = 8;
 
 /** 専用環境の PostgreSQL に SQL を流す。 */

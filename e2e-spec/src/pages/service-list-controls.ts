@@ -127,6 +127,7 @@ export async function chooseCustomPeriod(page: Page, testidPrefix: string, range
     const calendar = page.locator('.datepicker');
     // 前の月へ戻る（先頭のボタンが「戻る」= 前の月）
     for (let i = 0; i < monthsAgo; i++) await calendar.getByRole('button', { name: '戻る' }).click();
+    // 表示中の月以外の日（前月末・翌月初）はボタンではないので、日の名前のボタンは 1 つに決まる
     await calendar.getByRole('button', { name: String(day), exact: true }).click();
     // 日を選ぶと入力欄に日付が入る（期間の入力欄が閉じたら、ここで失敗する）
     await expect(page.getByTestId(`${testidPrefix}-${target}-input`), `${target} の日付が入力欄に入る`).not.toHaveValue('', {

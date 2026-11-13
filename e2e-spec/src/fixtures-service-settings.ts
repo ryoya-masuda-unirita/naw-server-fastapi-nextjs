@@ -8,6 +8,7 @@ import {
   deleteRoom,
   type CreatedRoom,
 } from './api-service-settings.ts';
+import { createQuotaTenant, dropQuotaTenant, type QuotaScenario, type QuotaTenant } from './db-quota.ts';
 import { test as base } from './fixtures.ts';
 import { AssistantsPage } from './pages/assistants.page.ts';
 import { ChatHistoryPage } from './pages/chat-history.page.ts';
@@ -23,6 +24,9 @@ import { USERS } from './users.ts';
  *   prefix          このテスト専用の名前の接頭辞（`d-xxxxxxxx`）。画面から作ったアシスタント・カテゴリ・学習先フォルダは、
  *                   名前にこれを含めておけば、終了時に自動で削除される（画面での削除が失敗しても残らない）
  *   makeRoom        チャットルームを API で作る（`owner` はルームの持ち主。管理者か一般ユーザー）。終了時に自動で削除される
+ *   makeQuotaTenant クレジット上限と今月の利用量を決めた専用のテナントを DB に作る。終了時に自動で削除される
+ *
+ * 後片付けは、1 つが失敗しても残りを続け、最後にまとめて報告する（テストの失敗の原因を覆い隠さず、残骸も増やさない）。
  */
 
 export { expect } from './fixtures.ts';
@@ -35,6 +39,25 @@ export interface ServiceSettingsFixtures {
   trainingDataPage: TrainingDataPage;
   prefix: string;
   makeRoom: (owner: RoomOwner, name: string) => Promise<CreatedRoom>;
+  makeQuotaTenant: (scenario: QuotaScenario) => QuotaTenant;
+}
+
+/**
+ * 後片付けの処理を順に実行する。1 つが失敗しても残りを実行し、失敗があれば最後にまとめて投げる。
+ *
+ * @param steps 後片付けの処理
+ * @throws AggregateError 1 つ以上の処理が失敗したとき
+ */
+async function runCleanup(steps: (() => Promise<void> | void)[]): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw new AggregateError(errors, '後片付けに失敗しました');
 }
 
 export const test = base.extend<ServiceSettingsFixtures>({
@@ -53,10 +76,12 @@ export const test = base.extend<ServiceSettingsFixtures>({
   prefix: async ({ adminApi, uniqueId }, use) => {
     const prefix = uniqueId('d');
     await use(prefix);
-    // 後片付け。アシスタントを先に消してから、カテゴリ・フォルダ（アシスタントが使っているものは消せないため）
-    await deleteAssistantsByKeyword(adminApi, prefix);
-    await deleteCategoriesByKeyword(adminApi, prefix);
-    await deleteFoldersByKeyword(adminApi, prefix);
+    // アシスタントを先に消してから、カテゴリ・フォルダ（アシスタントが使っているものは消せないため）
+    await runCleanup([
+      () => deleteAssistantsByKeyword(adminApi, prefix),
+      () => deleteCategoriesByKeyword(adminApi, prefix),
+      () => deleteFoldersByKeyword(adminApi, prefix),
+    ]);
   },
 
   makeRoom: async ({ adminApi }, use) => {
@@ -68,10 +93,25 @@ export const test = base.extend<ServiceSettingsFixtures>({
       created.push({ owner, room });
       return room;
     });
-    for (const { owner, room } of created) {
-      const api = owners[owner];
-      if (api) await deleteRoom(api, room);
-    }
-    await owners.user?.dispose();
+    await runCleanup([
+      ...created.map(({ owner, room }) => async () => {
+        const api = owners[owner];
+        if (api) await deleteRoom(api, room);
+      }),
+      async () => {
+        await owners.user?.dispose();
+      },
+    ]);
+  },
+
+  // eslint-disable-next-line no-empty-pattern -- Playwright は fixture の第 1 引数を分割代入で受ける必要がある
+  makeQuotaTenant: async ({}, use) => {
+    const tenants: QuotaTenant[] = [];
+    await use((scenario) => {
+      const tenant = createQuotaTenant(scenario);
+      tenants.push(tenant);
+      return tenant;
+    });
+    await runCleanup(tenants.map((tenant) => () => dropQuotaTenant(tenant)));
   },
 });
