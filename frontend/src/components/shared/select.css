@@ -1,0 +1,47 @@
+/* 移植元 select/select.component.scss。:host は .app-select に置き換えてスコープする */
+.app-select .trigger-wrapper::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  transition: box-shadow 0.2s ease;
+}
+
+.app-select .trigger-wrapper.is-open::before {
+  box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+}
+
+.app-select:focus-within .trigger-wrapper.has-value:not(.is-open)::before {
+  box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+}
+
+/* After blur: same surface as empty — no tinted fill or brand label until focused again. */
+.app-select:not(:focus-within) .trigger-wrapper.has-value:not(.is-open) {
+  background-color: var(--color-surface-white) !important;
+}
+
+.app-select:not(:focus-within) .trigger-wrapper.has-value:not(.is-open) > span.flex-1 {
+  color: var(--color-text-default) !important;
+}
+
+.app-select input::placeholder {
+  color: var(--color-text-lighter);
+  font-weight: 500;
+}
+
+@keyframes app-select-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-select .animate-fade-in {
+  animation: app-select-fade-in 0.15s ease-out;
+}

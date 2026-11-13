@@ -7,7 +7,7 @@ import { ROUTES } from '@/lib/constants/routes';
 import { useAuthStore } from '@/store/auth-store';
 
 export interface UseApiErrorInterceptorOptions {
-  /** 共通のエラートーストの表示。トースト（#278）を移植したら渡す。 */
+  /** 共通のエラートーストの表示。`main.tsx` が `components/shared/toast-store` の `showErrorToast` を渡す。 */
   showErrorToast?: (message: string) => void;
 }
 

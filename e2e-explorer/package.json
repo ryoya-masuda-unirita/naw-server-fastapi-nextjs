@@ -1,0 +1,33 @@
+{
+  "name": "naw-e2e-explorer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "画面操作を再帰的にたどってバグの疑いを検出する E2E 探索ハーネス",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "explore:all": "node src/cli.ts run",
+    "explore": "node src/cli.ts explore",
+    "env:up": "node src/cli.ts env:up",
+    "env:down": "node src/cli.ts env:down",
+    "merge": "node src/cli.ts merge",
+    "shards": "node src/cli.ts shards",
+    "install:browsers": "playwright install chromium",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "globals": "17.7.0",
+    "playwright-core": "1.64.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0"
+  }
+}

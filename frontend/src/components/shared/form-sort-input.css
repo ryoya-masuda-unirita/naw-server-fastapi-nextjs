@@ -1,0 +1,41 @@
+/*
+ * 移植元 form/form-sort-input/form-sort-input.component.scss。
+ * 移植元はビューカプセル化でこの部品の中だけに効くので、ホストクラス .app-form-sort-input でスコープする。
+ */
+.app-form-sort-input .trigger-wrapper::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  transition: box-shadow 0.2s ease;
+}
+
+.app-form-sort-input .trigger-wrapper.has-value::before {
+  box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+}
+
+.app-form-sort-input .trigger-wrapper.is-open::before {
+  box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+}
+
+.app-form-sort-input .mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  line-height: 20px;
+}
+
+/*
+ * 移植元はデスクトップのメニューを mat-menu で出す。React には mat-menu がないので、
+ * mat-menu のパネル既定スタイル（mat-mdc-menu-panel）をここで再現する。
+ * 移植元の `::ng-deep .sort-menu` はメニュー項目（mat-menu-item）向けの上書きで、項目は使っていないため移していない。
+ */
+.app-form-sort-input .mat-mdc-menu-panel {
+  min-width: 112px;
+  max-width: 280px;
+  overflow: auto;
+  box-sizing: border-box;
+  outline: 0;
+}

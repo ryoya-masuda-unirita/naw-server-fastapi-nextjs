@@ -11,6 +11,20 @@ def make_client(
     handler: Callable[[httpx.Request], httpx.Response],
     base_url: str = "http://naw.test/",
 ) -> tuple[NawApiClient, httpx.AsyncClient]:
+    """NAW へ通信せず handler が応答を返す NawApiClient を作る。
+
+    Parameters
+    ----------
+    handler : Callable[[httpx.Request], httpx.Response]
+        リクエストを受けて NAW の応答を返す関数。
+    base_url : str
+        NAW のベース URL。
+
+    Returns
+    -------
+    tuple[NawApiClient, httpx.AsyncClient]
+        クライアントと、テスト側で閉じるための httpx クライアント。
+    """
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return NawApiClient(base_url=base_url, http_client=http), http
 
@@ -20,6 +34,18 @@ async def test_create_library_stub() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """リクエストを記録し、ライブラリ ID 付きの成功応答を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            NawApiClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            data.id を持つ 200 応答。
+        """
         requests.append(request)
         return httpx.Response(200, json={"data": {"id": "lib-1"}})
 
@@ -47,6 +73,18 @@ async def test_update_library_title() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """リクエストを記録し、本文なしの成功応答を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            NawApiClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            204 応答。
+        """
         requests.append(request)
         return httpx.Response(204)
 

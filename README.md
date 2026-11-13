@@ -56,6 +56,34 @@ cd ../server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設�
 docker compose up -d --build
 ```
 
+## 社内（オンプレ）側をまとめて起動する
+
+server-local・Waha! エミュレーター・ベクトルDB・ファイルサーバーの代わりを、`onprem/` の compose でまとめて起動できる（#301。ポートはルートの compose と衝突しない）。起動・停止とクラウド側（ルートの compose の backend）とのつなぎ方は [onprem/README.md](./onprem/README.md)。
+
+## モノレポ構成
+
+| ディレクトリ | 内容 |
+|---|---|
+| `backend/` | FastAPI（移植元 `server/` の移植先） |
+| `frontend/` | React（Vite + React Router。移植元 `client/` の移植先） |
+| `server-local/` | FastAPI + SQLite（移植元 `secuaigent-server-local/` の移植先） |
+| `waha-emulator/` | FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト） |
+| `onprem/` | 社内（オンプレ）側をまとめて起動する compose（server-local・Waha! エミュレーター・ベクトルDB など） |
+| `e2e-explorer/` | Playwright（TypeScript）の E2E 探索ハーネス。画面操作を再帰的にたどり、500・画面の例外・真っ白・表示崩れなどの「バグの疑い」を再現手順付きで一覧にする（移植元にはない独自のもの） |
+| `infra/` | Terraform（AWS インフラ定義） |
+
+## E2E 探索ハーネス（e2e-explorer）
+
+専用の使い捨て環境（docker compose。既存のローカル環境とは名前・ポートが別）で frontend・backend を起動し、権限ごとにログインして画面を自動で巡回し、バグの疑いをレポートにする。
+
+```bash
+cd e2e-explorer
+npm ci && npm run install:browsers
+npm run explore:all   # 起動 → 巡回 → レポート → 破棄
+```
+
+何を見つけられて何を見つけられないか・担当範囲の分け方・レポートの読み方は [e2e-explorer/README.md](e2e-explorer/README.md)、レポートの仕分け（Issue の文案づくり）は `.claude/skills/e2e-explorer-triage/SKILL.md` を参照。
+
 ## ローカル疎通確認（frontend + backend）
 
 React（`frontend/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。

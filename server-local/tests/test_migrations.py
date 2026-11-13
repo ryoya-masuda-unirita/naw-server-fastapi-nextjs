@@ -12,6 +12,22 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> dict[str, tuple[str, bool]]:
+    """テーブルの列を PRAGMA table_info で読み、モデル定義と比べられる形にする。
+
+    型名は大文字にそろえ、SQLite の表記揺れで比較が失敗しないようにする。
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        マイグレーション済み DB への接続。
+    table : str
+        テーブル名。
+
+    Returns
+    -------
+    dict[str, tuple[str, bool]]
+        列名をキーにした (型名, NOT NULL か) の辞書。
+    """
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {row[1]: (row[2].upper(), bool(row[3])) for row in rows}
 

@@ -1,0 +1,15 @@
+/* 移植元 toast-container.component.ts の component styles */
+@keyframes app-toast-slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.app-toast-container .animate-slide-in-right {
+  animation: app-toast-slide-in-right 0.3s ease-out;
+}
