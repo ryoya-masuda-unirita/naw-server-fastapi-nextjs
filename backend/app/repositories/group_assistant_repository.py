@@ -12,18 +12,22 @@ from app.models.assistant import (
     AssistantType,
     GroupAssistant,
 )
+from app.repositories.assistant_category_mapping_repository import (
+    PRIMARY_CATEGORY_NAME,
+)
 
 # 移植元は種別を varchar で持つため、宣言順ではなく文字列順で並べる
 _TYPE_SORT_COLUMN: Any = enum_as_string(Assistant.type)
 
 # 移植元(GroupService)は addedAt を所属レコードの更新日時、server をアシスタント種別、
-# name をアシスタント名に読み替える。対応表にないキーは従来どおり追加日時順にする。
+# name をアシスタント名、category をカテゴリ名に読み替える。対応表にないキーは従来どおり追加日時順にする。
 _SORT_COLUMNS: dict[str, Any] = {
     "name": Assistant.name,
     "assistant.name": Assistant.name,
     "type": _TYPE_SORT_COLUMN,
     "server": _TYPE_SORT_COLUMN,
     "assistantType": _TYPE_SORT_COLUMN,
+    "category": PRIMARY_CATEGORY_NAME,
     "addedAt": GroupAssistant.updated_at,
 }
 

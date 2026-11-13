@@ -1,6 +1,9 @@
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from uuid import uuid4
+
 
 from app.core.security import create_access_token
 from app.main import app
@@ -1480,6 +1483,77 @@ async def _list_admin_assistants(
     return response.json()["content"]
 
 
+async def _add_categorized_assistants(
+    session: AsyncSession, tenant_id: str, user_id: UUID, group_id: str | None = None
+) -> dict[str, str]:
+    """カテゴリ順の並べ替え確認用に、カテゴリ付きのアシスタントを3件作る。
+
+    カテゴリ名は ID の昇順に Charlie・Alpha・Bravo とする。a3 は Charlie と Alpha の2つを持ち、
+    表示用の先頭カテゴリ（ID 昇順）は Charlie になる。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        テスト用の DB セッション。
+    tenant_id : str
+        テナント ID。
+    user_id : UUID
+        カテゴリの更新ユーザー ID。
+    group_id : str | None
+        指定した場合、3件をこのグループに追加日時の順（a1, a2, a3）で所属させる。
+
+    Returns
+    -------
+    dict[str, str]
+        アシスタント名（a1〜a3）からアシスタント ID への対応。
+    """
+    category_names = {"cat-1": "Charlie", "cat-2": "Alpha", "cat-3": "Bravo"}
+    for category_id, name in category_names.items():
+        session.add(
+            AssistantCategory(
+                id=category_id,
+                tenant_id=tenant_id,
+                name=name,
+                updated_user_id=user_id,
+            )
+        )
+    categories_by_assistant = {
+        "a1": ["cat-2"],
+        "a2": ["cat-3"],
+        "a3": ["cat-1", "cat-2"],
+    }
+    ids: dict[str, str] = {}
+    for index, (name, category_ids) in enumerate(categories_by_assistant.items()):
+        assistant = Assistant(
+            tenant_id=tenant_id,
+            type=AssistantType.SAAS_CHAT,
+            name=name,
+            include_history=False,
+        )
+        session.add(assistant)
+        await session.flush()
+        ids[name] = assistant.id
+        for category_id in category_ids:
+            session.add(
+                AssistantCategoryMapping(
+                    assistant_id=assistant.id,
+                    category_id=category_id,
+                    tenant_id=tenant_id,
+                )
+            )
+        if group_id is not None:
+            session.add(
+                GroupAssistant(
+                    group_id=group_id,
+                    tenant_id=tenant_id,
+                    assistant_id=assistant.id,
+                    updated_at=datetime(2026, 1, 1 + index, tzinfo=timezone.utc),
+                )
+            )
+    await session.commit()
+    return ids
+
+
 @pytest.mark.asyncio
 class TestListAdminAssistantsSort:
     """GET /api/admin/assistants の並べ替え（Issue #225）"""
@@ -1503,6 +1577,25 @@ class TestListAdminAssistantsSort:
         asc_ids = [a["id"] for a in asc]
         assert len(asc_ids) == 3
         assert [a["id"] for a in desc] == list(reversed(asc_ids))
+
+    async def test_sort_by_category_uses_first_category_name(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        admin_headers: dict[str, str],
+    ) -> None:
+        """sort=category で先頭カテゴリ（ID昇順）の名前順になり、行が重複しないこと"""
+        ids = await _add_categorized_assistants(session, tenant.id, admin_user.id)
+
+        async with client as c:
+            asc = await _list_admin_assistants(c, admin_headers, "category,asc")
+            desc = await _list_admin_assistants(c, admin_headers, "category,desc")
+
+        # Alpha(a1)・Bravo(a2)・Charlie(a3)。a3 は Alpha も持つが先頭は Charlie
+        assert [a["id"] for a in asc] == [ids["a1"], ids["a2"], ids["a3"]]
+        assert [a["id"] for a in desc] == [ids["a3"], ids["a2"], ids["a1"]]
 
     async def test_sort_direction_is_case_insensitive(
         self,
