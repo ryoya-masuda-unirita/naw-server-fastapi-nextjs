@@ -4,26 +4,38 @@ from pydantic import BaseModel
 
 
 class GroupCreateRequest(BaseModel):
+    """グループ作成のリクエスト。"""
+
     name: str
 
 
 class GroupUpdateRequest(BaseModel):
+    """グループ更新のリクエスト。"""
+
     name: str | None = None
 
 
 class GroupUsersAddRequest(BaseModel):
+    """グループへのユーザー追加のリクエスト。"""
+
     userIds: list[str]
 
 
 class GroupAssistantsAddRequest(BaseModel):
+    """グループへのアシスタント追加のリクエスト。"""
+
     assistantIds: list[str]
 
 
 class GroupPromptTemplatesAddRequest(BaseModel):
+    """グループへのプロンプトテンプレート追加のリクエスト。"""
+
     templateIds: list[str]
 
 
 class GroupUserRoleUpdateRequest(BaseModel):
+    """グループ内のユーザーの管理者フラグ更新のリクエスト。"""
+
     groupAdmin: bool
 
 
@@ -45,6 +57,8 @@ class GroupListItemResponse(BaseModel):
 
 
 class GroupListPageResponse(BaseModel):
+    """グループ一覧のページ応答。"""
+
     data: list[GroupListItemResponse]
     total: int
     page: int
@@ -52,6 +66,8 @@ class GroupListPageResponse(BaseModel):
 
 
 class GroupDetailResponse(BaseModel):
+    """グループ詳細の応答。"""
+
     id: str
     name: str
     tenantId: str
@@ -67,7 +83,6 @@ class GroupMemberUserResponse(BaseModel):
     role: str
     usedTokens: int | None = None
     totalCredits: int | None = None
-    loginKey: str | None
     accountType: str | None = None
     email: str | None = None
     groupAdmin: bool
@@ -75,6 +90,8 @@ class GroupMemberUserResponse(BaseModel):
 
 
 class PagedGroupMemberResponse(BaseModel):
+    """グループ所属ユーザー一覧のページ応答。"""
+
     content: list[GroupMemberUserResponse]
     totalElements: int
     number: int
