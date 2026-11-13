@@ -93,3 +93,31 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 ## テスト
 
 `msw` の `server.use(...)` で API を差し替える。SSE は `new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })` で返せる（例: `store/messages-store.test.ts`）。jsdom の `Blob` は `fetch` に渡すと本文が空になるため、`textData` の中身は `FormData.prototype.append` を監視して読む（同ファイルの `captureTextData`）。
+
+## チャット画面（#284）と、別 Issue が差し込む口
+
+画面の部品は `components/features/chat/`、ページは `routes/chat/chat-new.tsx`（`/dashboard`・`/chat/new`）と `routes/chat/chat-room.tsx`（`/chat/:roomId`）。
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| 表示中のルーム（`activeRoomId`・`startNewChat`・`selectRoom`）・`useActiveRoom()` | `store/chat-store.ts` | `ChatService` のうち messages・rooms に属さない部分 |
+| 入力欄の状態（アシスタント・Web 検索・テンプレート・ライブラリ作成・添付） | `hooks/use-chat-input-controls.ts` | `ChatInputComponent` の signal |
+| 新規チャットで預けた最初のメッセージ | `lib/chat/pending-message.ts` | `router.navigate` の `state.pendingMessage` |
+| ウィンドウ・ヘッダー・一覧・メッセージ・入力欄・ビューワーの枠 | `chat-window`・`chat-header`・`chat-message-list`・`chat-message-item`・`chat-message-footer`・`chat-input`・`chat-data-panel` | 同名の `chat-*` |
+
+### 別 Issue の部品を差し込む口（未指定なら移植元と同じ位置の空の領域）
+
+`ChatInput` の `renderXxx` は `ChatInputControls`（`use-chat-input-controls.ts`）を受け取る。`ChatWindow` の `inputSlots` でまとめて渡す（ページが `ChatWindow` に渡す）。
+
+| 口 | 位置 | 担当 |
+|---|---|---|
+| `renderMention`・`onTextareaKeyDown` | textarea の上（候補パネル）・キー入力 | #286 |
+| `renderToolbar` | 送信ボタンの左（有効な機能ウィジェット・アシスタント選択） | #286 |
+| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286・#287 |
+| `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287 |
+| `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287 |
+| `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288 |
+
+- 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
+- `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
+- `AdminChatRoomPage` はサイドバーのルーム一覧（#285）が未移植の間、一覧がなければ読み込む（ヘッダーのルーム名のため）

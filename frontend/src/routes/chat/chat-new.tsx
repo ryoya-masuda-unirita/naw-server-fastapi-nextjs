@@ -1,7 +1,31 @@
-import { NotPortedPage } from '@/components/layouts/not-ported';
+import { useEffect } from 'react';
+import { ChatWindow } from '@/components/features/chat/chat-window';
+import { Loading } from '@/components/shared/loading';
+import { useChatStore } from '@/store/chat-store';
+import { useMessagesStore, useVisibleMessages } from '@/store/messages-store';
 
-// 仮の画面。#284 で移植元 features/chat/pages/chat-new を移植し、このファイルの中身を本物に置き換える（export 名は変えない）。
-// ルート定義（routes/index.tsx）・ルート定数・サイドバーは設定済みのため触らなくてよい
+/**
+ * `/dashboard`・`/chat/new` の新規チャット画面（移植元 features/chat/pages/chat-new の ChatNewComponent）。
+ * 開くたびに新規チャットの状態（ルームなし・メッセージなし）にする。最初のメッセージを送ると
+ * ルームを作って `/chat/:roomId` へ移り、そこで送信する（ChatWindow）。
+ */
 export function ChatNewPage() {
-  return <NotPortedPage name="ChatNewComponent" issue={284} />;
+  const messages = useVisibleMessages();
+  const isLoading = useMessagesStore((s) => s.isLoading);
+
+  useEffect(() => {
+    useChatStore.getState().startNewChat();
+  }, []);
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-white w-full">
+      {isLoading ? (
+        <div className="chat-main">
+          <Loading />
+        </div>
+      ) : (
+        <ChatWindow isLoading={isLoading} messages={messages} roomId={null} />
+      )}
+    </div>
+  );
 }

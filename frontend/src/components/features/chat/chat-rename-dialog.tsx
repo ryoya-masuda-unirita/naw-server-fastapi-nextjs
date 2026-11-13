@@ -1,0 +1,48 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Dialog } from '@/components/shared/dialog';
+import { FormInput } from '@/components/shared/form-input';
+import { isValidRoomName, normalizeRoomName } from '@/lib/utils/room-name';
+
+interface ChatRenameDialogProps {
+  /** 開いたときの入力欄の初期値（現在のルーム名）。開くたびにマウントし直す前提 */
+  initialName: string;
+  /** 保存。正規化（前後の空白を除いた）後の名前を渡す */
+  onSave: (name: string) => void;
+  onCancel: () => void;
+}
+
+/** 移植元 `ChatWindowComponent.openRenameDialog` と `<app-chat-rename-dialog>`。ルーム名の変更 */
+export function ChatRenameDialog({ initialName, onSave, onCancel }: ChatRenameDialogProps) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(initialName);
+  const isRenameDisabled = !isValidRoomName(name);
+
+  return (
+    <Dialog
+      open
+      title={t('HEADER.RENAME')}
+      showClose={false}
+      showCancel
+      showConfirm
+      buttonAlign="right"
+      cancelText={t('COMMON.CANCEL')}
+      confirmText={t('COMMON.SAVE')}
+      confirmDisabled={isRenameDisabled}
+      dialogWidth="800px"
+      onCancel={onCancel}
+      onConfirm={() => {
+        if (isRenameDisabled) return;
+        onSave(normalizeRoomName(name));
+      }}
+      onClose={onCancel}
+    >
+      <FormInput
+        label={t('CHAT.WINDOW.RENAME_NAME_LABEL')}
+        placeholder={t('CHAT.WINDOW.RENAME_NAME_PLACEHOLDER')}
+        value={name}
+        onValueChange={setName}
+      />
+    </Dialog>
+  );
+}
