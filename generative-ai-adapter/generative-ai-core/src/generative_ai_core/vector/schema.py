@@ -3,38 +3,16 @@
 import re
 
 from generative_ai_core.vector.jdbc import JdbcTemplate
+from generative_ai_core.vector.target import (
+    pgroonga_content_index_name,
+    safe_identifier,
+)
 
 EMBEDDING_DIMENSIONS = 1536
 MAX_IDENTIFIER_LENGTH = 63
 _IDENTIFIER_PATTERN = re.compile(r"[a-z_][a-z0-9_]{0,62}")
 INDEX_SUFFIX = "_hnsw_idx"
 CONTENT_INDEX_SUFFIX = "_pgroonga_content_idx"
-
-
-def safe_identifier(identifier: str | None, field_name: str = "tableName") -> str:
-    """SQL に埋め込んでよい識別子か検証し、小文字にして返す。
-
-    Parameters
-    ----------
-    identifier : str | None
-        識別子。
-    field_name : str
-        エラーメッセージに出す項目名。
-
-    Returns
-    -------
-    str
-        小文字にした識別子。
-
-    Raises
-    ------
-    ValueError
-        `[a-z_][a-z0-9_]{0,62}` に一致しないとき。
-    """
-    normalized = "" if identifier is None else identifier.strip().lower()
-    if _IDENTIFIER_PATTERN.fullmatch(normalized) is None:
-        raise ValueError(f"{field_name} must match [A-Za-z_][A-Za-z0-9_]{{0,62}}")
-    return normalized
 
 
 def qualified_table_name(identifier: str | None) -> str:
@@ -71,24 +49,6 @@ def _suffixed_name(table_name: str, suffix: str) -> str:
     if len(table_name) + len(suffix) <= MAX_IDENTIFIER_LENGTH:
         return table_name + suffix
     return table_name[: MAX_IDENTIFIER_LENGTH - len(suffix)] + suffix
-
-
-def pgroonga_content_index_name(table_name: str | None) -> str:
-    """PGroonga の本文索引名を返す（移植元 PgVectorPgroongaReadinessResources）。
-
-    Parameters
-    ----------
-    table_name : str | None
-        テーブル名。
-
-    Returns
-    -------
-    str
-        索引名。
-    """
-    return _suffixed_name(
-        safe_identifier(table_name, "tableName"), CONTENT_INDEX_SUFFIX
-    )
 
 
 def embedding_index_name(table_name: str) -> str:

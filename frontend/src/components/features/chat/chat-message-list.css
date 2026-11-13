@@ -1,0 +1,17 @@
+/* 移植元 chat-message-list.component.scss。Angular ではコンポーネント内の要素にだけ効くので、スクロール領域に限定する */
+.chat-page-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-page-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.chat-page-messages::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.chat-page-messages::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}

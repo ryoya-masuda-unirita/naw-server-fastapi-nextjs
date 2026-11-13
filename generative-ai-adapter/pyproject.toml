@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "naw-generative-ai-core",
     "naw-generative-ai-adapter",
+    "naw-retrieval-adapter",
     "naw-embedding-adapter",
 ]
 
@@ -24,17 +25,28 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-# 移植元と同じ分け方。retrieval-adapter は後続の Issue（#299）で加える
-members = ["generative-ai-core", "generative-ai-adapter", "embedding-adapter"]
+# 移植元と同じ分け方
+members = [
+    "generative-ai-core",
+    "generative-ai-adapter",
+    "retrieval-adapter",
+    "embedding-adapter",
+]
 
 [tool.uv.sources]
 naw-generative-ai-core = { workspace = true }
 naw-generative-ai-adapter = { workspace = true }
+naw-retrieval-adapter = { workspace = true }
 naw-embedding-adapter = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["generative-ai-core/tests", "generative-ai-adapter/tests", "embedding-adapter/tests"]
-# core と adapter の tests に同じ名前のモジュールがあっても衝突しないようにする
+testpaths = [
+    "generative-ai-core/tests",
+    "generative-ai-adapter/tests",
+    "retrieval-adapter/tests",
+    "embedding-adapter/tests",
+]
+# core と各 adapter の tests に同じ名前のモジュールがあっても衝突しないようにする
 addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
@@ -49,9 +61,15 @@ convention = "numpy"
 
 [tool.mypy]
 # 標準実行コマンド（core と adapter の tests に同名の conftest.py があるため、別々に実行する）:
-#   cd generative-ai-adapter && uv run mypy generative-ai-core && uv run mypy generative-ai-adapter
+#   cd generative-ai-adapter && uv run mypy generative-ai-core && uv run mypy generative-ai-adapter \
+#     && uv run mypy retrieval-adapter
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 explicit_package_bases = true
-mypy_path = ["generative-ai-core/src", "generative-ai-adapter/src", "embedding-adapter/src"]
+mypy_path = [
+    "generative-ai-core/src",
+    "generative-ai-adapter/src",
+    "retrieval-adapter/src",
+    "embedding-adapter/src",
+]

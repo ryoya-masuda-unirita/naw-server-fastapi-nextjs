@@ -807,6 +807,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "naw-retrieval-adapter"
+version = "0.1.0"
+source = { editable = "../generative-ai-adapter/retrieval-adapter" }
+dependencies = [
+    { name = "naw-generative-ai-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "naw-generative-ai-core", editable = "../generative-ai-adapter/generative-ai-core" }]
+
+[[package]]
 name = "naw-waha-emulator"
 version = "0.1.0"
 source = { virtual = "." }
@@ -814,6 +825,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "naw-embedding-adapter" },
     { name = "naw-generative-ai-adapter" },
+    { name = "naw-retrieval-adapter" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
@@ -838,6 +850,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "naw-embedding-adapter", editable = "../generative-ai-adapter/embedding-adapter" },
     { name = "naw-generative-ai-adapter", editable = "../generative-ai-adapter/generative-ai-adapter" },
+    { name = "naw-retrieval-adapter", editable = "../generative-ai-adapter/retrieval-adapter" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },

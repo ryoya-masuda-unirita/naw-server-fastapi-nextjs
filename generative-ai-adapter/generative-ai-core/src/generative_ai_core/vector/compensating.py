@@ -30,9 +30,9 @@ from generative_ai_core.vector.model import (
     CoreVectorDbPayload,
     CoreVectorDbRequest,
     CoreVectorDbRequestBuilder,
-    CoreVectorDbTarget,
 )
 from generative_ai_core.vector.runtime import CoreVectorDbRuntime
+from generative_ai_core.vector.target import CoreVectorDbTarget
 
 TRIGGER_FAILURE_CODE = "LLM_CANDIDATE_OUTPUT_REJECTED"
 HASH_LENGTH = 16

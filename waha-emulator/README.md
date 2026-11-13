@@ -2,7 +2,7 @@
 
 Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（FastAPI）のサービス（Issue #274）。`server-local/` から SECURE アシスタントのチャットを通しで動かすために、Waha! の代わりに置く。
 
-移植元のリポジトリには Waha! 本体がないため、API は `server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。学習・削除・同期は、移植した**埋め込みアダプタ**（#300）をワークフローに差し込んで動かす（ベクトルDB は PostgreSQL + pgvector）。検索のアダプタは、後続の Issue で移植してワークフローに差し込む。
+移植元のリポジトリには Waha! 本体がないため、API は `server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。学習・削除・同期は、移植した**埋め込みアダプタ**（#300）をワークフローに差し込んで動かす（ベクトルDB は PostgreSQL + pgvector）。RAG には、移植した**検索アダプタ**（#299）を前段に差し込める（`retrieval`）。
 
 - 動作環境: Linux（Docker コンテナ）。ホストで直接動かしてもよい
 - セッションはメモリに持つ（再起動で消える）
@@ -75,11 +75,27 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 }
 ```
 
-- `outputType`: アダプタの出力モード。`0` チャット用_回答（`RetrievalAnswer` の JSON）、`1` チャット用_コンテクスト（RAG 回答。JSON）、`2` 回答（本文だけ）。省略は `0`。`1` では `question` に加えて `ragContextJson` の RAG Context JSON を引用資料にして回答する。**検索アダプタ（別 Issue）ができるまで、RAG の入力はこのファイル固定**（`RAG_CONTEXT_JSON_ALLOW_ROOT` の下のファイル。契約は移植元の `docs/rag-context-json-contract.md`）
+- `outputType`: アダプタの出力モード。`0` チャット用_回答（`RetrievalAnswer` の JSON）、`1` チャット用_コンテクスト（RAG 回答。JSON）、`2` 回答（本文だけ）。省略は `0`。`1` では `question` に加えて `ragContextJson` の RAG Context JSON を引用資料にして回答する。`ragContextJson` は検索アダプタを使わず固定の入力で確かめるとき用（`RAG_CONTEXT_JSON_ALLOW_ROOT` の下のファイル。契約は移植元の `docs/rag-context-json-contract.md`）。`retrieval` を書くと、その前に検索アダプタが動く（下記）
 - `properties`: 移植元の `PropertyIds` の名前（`URL`・`API_KEY`・`MODEL_NAME`・`VENDOR`・`TENANT_ID`・`TEMPERATURE`・`TIMEOUT_SECONDS`・`REASONING_EFFORT` など）→ 値。`VENDOR` は `AzureOpenAI` のような名前でも `1` のような ID でもよい。値は `${環境変数}` で参照できる（API キーをファイルに書かないため。未設定の環境変数は起動時のエラー）
-- `OUTPUT_DIR`・`REASONING_OUTPUT_PATH`・`TEXT_DATA_JSON_FILE_PATH` はエミュレーターがジョブごとに決めるため書けない
+- `retrieval`（出力モード 1 のときだけ）: RAG の前に検索アダプタを動かす。`properties` は検索アダプタの `RetrievalPropertyIds` の名前（`VENDOR`・`URL`・`API_KEY`・`MODEL_NAME`＝クエリの埋め込み、`VDB_VENDOR`・`VDB_URL`・`VDB_USER_NAME`・`VDB_PASSWORD`・`VDB_DATABASE_NAME`・`VDB_TABLE_NAME`＝ベクトルDB、`SEARCH_COUNT`、`GRAPH_RAG_ENABLED`、`AGE_GRAPH_NAME`、`HYBRID_RETRIEVAL_ENABLED`、`PROVIDER_LLM_RERANK_*` など）。`VENDOR`（`Echo`・`OpenAI`・`AzureOpenAI`・`SecuAiGent` または ID）と `VDB_VENDOR`（`PostgreSQL(PGVector)`・`Azure AI Search` または ID）は名前でも書ける。`ragContextJson`・`RAG_CONTEXT_JSON_ALLOW_ROOT` とは同時に書けない
+- `OUTPUT_DIR`・`REASONING_OUTPUT_PATH`・`TEXT_DATA_JSON_FILE_PATH` はエミュレーターがジョブごとに決めるため書けない（`retrieval.properties` では `OUTPUT_DIR`・`TEXT_DATA_JSON_FILE_PATH`。textData は生成AIアダプタと同じファイルを検索アダプタにも渡す）
 - 不正な設定（未知の名前・不正な値・未知のベンダー）は起動時にエラーにする（アダプタの保存時チェック `validate_property` を通す）
 - 例は [config/workflows.example.json](./config/workflows.example.json)（Docker では `config/` が `/app/config` に読み取り専用でマウントされる）
+
+### 検索 → 生成AI（RAG チャット）
+
+`retrieval` があるサービスでは、質問を検索文字列として検索アダプタ（出力モード 1）を動かし、ジョブのディレクトリに RAG Context JSON を書かせてから、生成AIアダプタ（出力モード 1）の列 index 6 にそのパスを渡す。ログ（INFO）は次の順に並ぶ:
+
+```
+[…workflows.generative_ai] workflow step 1/2 retrieval: serviceId=…, columns=[(0, 'CHAR')], properties=[…]   ← 検索アダプタの入力（値は出さない）
+[retrieval_adapter.controller] retrieval: queryChars=…, maxResult=…, outputFormat=RAG_CONTEXT_JSON_V1, vectorDb=…
+[generative_ai_core.retrieval.runtime] core retrieval: provider=PostgreSQL, queryType=…, strategies=[…]       ← クエリの分類と検索戦略
+[generative_ai_core.retrieval.postgresql_provider] postgresql retrieval: route=vector | hybrid
+[generative_ai_core.retrieval.query_embedding] query embedding: provider=…, dimensions=…
+[…runtime] core retrieval finished: ids=N, graphExpanded=…
+[retrieval_adapter.controller] retrieval output written: format=RAG_CONTEXT_JSON_V1, ids=N, chars=…
+[…workflows.generative_ai] workflow step 2/2 generative-ai: serviceId=…                                       ← ここから生成AIアダプタ
+```
 
 ### 埋め込みアダプタのワークフロー（学習・削除・同期）
 

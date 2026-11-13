@@ -162,5 +162,15 @@ describe('Dialog', () => {
       );
       expect(screen.getByRole('textbox', { name: '名前' })).toHaveFocus();
     });
+
+    test('autoFocus が false のときは操作可能な要素ではなくダイアログ自体にフォーカスすること', () => {
+      render(
+        <Dialog open title="t" showConfirm autoFocus={false}>
+          <input aria-label="名前" />
+        </Dialog>,
+      );
+      expect(screen.getByRole('textbox', { name: '名前' })).not.toHaveFocus();
+      expect(screen.getByRole('dialog', { name: 't' })).toHaveFocus();
+    });
   });
 });

@@ -24,9 +24,9 @@ const LOOKUP_PAGE_SIZE = 1000;
 const GROUP_SCOPED_PAGE_SIZE = 100;
 
 /** 一覧・名前解決・グループ内補完の key の先頭 */
-const GROUP_LIST_QUERY_KEY = 'admin-group-list';
+export const GROUP_LIST_QUERY_KEY = 'admin-group-list';
 /** テンプレート管理などが使うグループ選択肢の key の先頭（作成後に更新する） */
-const GROUP_OPTIONS_QUERY_KEY = 'admin-groups';
+export const GROUP_OPTIONS_QUERY_KEY = 'admin-groups';
 
 type NameKind = 'user' | 'admin' | 'assistant' | 'template';
 

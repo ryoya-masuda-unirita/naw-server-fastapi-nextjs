@@ -34,8 +34,8 @@ from generative_ai_core.vector.model import (
 from generative_ai_core.vector.schema import (
     PgVectorSchemaInitializer,
     qualified_table_name,
-    safe_identifier,
 )
+from generative_ai_core.vector.target import safe_identifier
 
 PROVIDER_ID = "PostgreSQL"
 FILE_UNIQUE_ID_DELETE_RESULT_ID = "fileUniqueId-delete"

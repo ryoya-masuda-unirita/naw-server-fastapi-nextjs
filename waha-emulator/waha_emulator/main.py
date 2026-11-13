@@ -1,10 +1,11 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from generative_ai_adapter.core_mappers import ChatRuntimeFactory
+from generative_ai_core.retrieval.runtime import CoreRetrievalRuntime
 
 from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
@@ -29,6 +30,7 @@ HTTPX_LOG_LEVEL = logging.WARNING
 def build_workflow(
     definition: WorkflowDefinition,
     chat_runtime_factory: ChatRuntimeFactory | None = None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None = None,
     source_allowed_dir: Path | None = None,
 ) -> Workflow:
     """定義のアダプタに合うワークフローを作る。
@@ -39,6 +41,8 @@ def build_workflow(
         サービスの定義。
     chat_runtime_factory : ChatRuntimeFactory | None
         core の chat を作る処理（生成AIアダプタ。テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（生成AIアダプタの RAG。テストで差し替える）。
     source_allowed_dir : Path | None
         埋め込みの学習で `filepath` を読んでよいディレクトリ。
 
@@ -49,12 +53,15 @@ def build_workflow(
     """
     if definition.adapter == ADAPTER_EMBEDDING:
         return EmbeddingWorkflow(definition, source_allowed_dir)
-    return GenerativeAiWorkflow(definition, chat_runtime_factory)
+    return GenerativeAiWorkflow(
+        definition, chat_runtime_factory, retrieval_runtime_factory
+    )
 
 
 def build_registry(
     config: WorkflowConfig,
     chat_runtime_factory: ChatRuntimeFactory | None = None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None = None,
     source_allowed_dir: Path | None = None,
 ) -> WorkflowRegistry:
     """ワークフローの設定から、サービス ID → ワークフローの対応を作る。
@@ -65,6 +72,8 @@ def build_registry(
         ワークフローの設定。
     chat_runtime_factory : ChatRuntimeFactory | None
         core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで DB・プロバイダを差し替える）。
     source_allowed_dir : Path | None
         埋め込みの学習で `filepath` を読んでよいディレクトリ。
 
@@ -75,11 +84,17 @@ def build_registry(
     """
     return WorkflowRegistry(
         default=build_workflow(
-            config.default, chat_runtime_factory, source_allowed_dir
+            config.default,
+            chat_runtime_factory,
+            retrieval_runtime_factory,
+            source_allowed_dir,
         ),
         by_service_id={
             service_id: build_workflow(
-                definition, chat_runtime_factory, source_allowed_dir
+                definition,
+                chat_runtime_factory,
+                retrieval_runtime_factory,
+                source_allowed_dir,
             )
             for service_id, definition in config.services.items()
         },
@@ -91,6 +106,7 @@ def create_app(
     *,
     registry: WorkflowRegistry | None = None,
     chat_runtime_factory: ChatRuntimeFactory | None = None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None = None,
 ) -> FastAPI:
     """アプリを組み立てる。
 
@@ -104,6 +120,8 @@ def create_app(
         サービス ID → ワークフロー。None なら設定（WAHA_WORKFLOWS_FILE）から作る。
     chat_runtime_factory : ChatRuntimeFactory | None
         core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで DB・プロバイダを差し替える）。
 
     Returns
     -------
@@ -125,7 +143,10 @@ def create_app(
             {sid: d.describe() for sid, d in config.services.items()},
         )
         registry = build_registry(
-            config, chat_runtime_factory, settings.source_allowed_dir
+            config,
+            chat_runtime_factory,
+            retrieval_runtime_factory,
+            settings.source_allowed_dir,
         )
     session_store = SessionStore(
         idle_timeout_seconds=settings.session_idle_timeout_seconds

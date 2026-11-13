@@ -15,7 +15,10 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
-from generative_ai_core.vector.model import CoreVectorDbTarget
+from generative_ai_core.vector.target import (
+    CoreVectorDbTarget,
+    parse_endpoint,
+)
 
 DEFAULT_PORT = 5432
 MIN_PORT = 1
@@ -64,94 +67,6 @@ class Connection(Protocol):
 
 
 ConnectionFactory = Callable[[CoreVectorDbTarget], Connection]
-
-
-class Endpoint:
-    """`host[:port]` を分けたもの（移植元 PgVectorCoreVectorDbProvider.Endpoint）。"""
-
-    def __init__(self, host: str, port: int | None) -> None:
-        """ホストとポートを保持する。
-
-        Parameters
-        ----------
-        host : str
-            ホスト。
-        port : int | None
-            ポート。指定なしは None。
-        """
-        self.host = host
-        self.port = port
-
-    def port_or_default(self, default_port: int) -> int:
-        """ポートを返す。指定がなければ既定値。
-
-        Parameters
-        ----------
-        default_port : int
-            既定のポート。
-
-        Returns
-        -------
-        int
-            ポート。
-        """
-        return default_port if self.port is None else self.port
-
-
-def parse_port(value: str) -> int:
-    """ポート番号を解釈する。
-
-    Parameters
-    ----------
-    value : str
-        ポートの文字列。
-
-    Returns
-    -------
-    int
-        ポート番号。
-
-    Raises
-    ------
-    ValueError
-        数値でない、または 1〜65535 の範囲外のとき。
-    """
-    port = int(value)
-    if port < MIN_PORT or port > MAX_PORT:
-        raise ValueError("endpoint port must be between 1 and 65535")
-    return port
-
-
-def parse_endpoint(value: str) -> Endpoint:
-    """`host`・`host:port`・`[ipv6]:port` を分ける。
-
-    Parameters
-    ----------
-    value : str
-        エンドポイント。
-
-    Returns
-    -------
-    Endpoint
-        ホストとポート。
-
-    Raises
-    ------
-    ValueError
-        ポートが不正なとき。
-    """
-    if value.startswith("["):
-        closing = value.find("]")
-        if closing > 0 and len(value) > closing + 1 and value[closing + 1] == ":":
-            return Endpoint(value[1:closing], parse_port(value[closing + 2 :]))
-        return Endpoint(value, None)
-    separator = value.rfind(":")
-    # コロンが 1 つだけで、後ろがすべて数字のときだけポートとみなす（IPv6 を壊さない）
-    if 0 < separator == value.find(":") and separator < len(value) - 1:
-        port_value = value[separator + 1 :]
-        if port_value.isdigit():
-            return Endpoint(value[:separator], parse_port(port_value))
-    return Endpoint(value, None)
 
 
 def default_connection_factory(target: CoreVectorDbTarget) -> Connection:

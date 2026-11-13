@@ -34,7 +34,6 @@ from generative_ai_core.vector.jdbc import (
     ConnectionFactory,
     JdbcTemplate,
     default_connection_factory,
-    parse_endpoint,
 )
 from generative_ai_core.vector.model import (
     DEFAULT_GRAPH_NAME,
@@ -48,7 +47,6 @@ from generative_ai_core.vector.model import (
     CoreVectorDbRequest,
     CoreVectorDbRequestBuilder,
     CoreVectorDbResult,
-    CoreVectorDbTarget,
     CoreVectorSearchMatch,
     validate_graph_name,
 )
@@ -60,7 +58,13 @@ from generative_ai_core.vector.runtime import CoreVectorDbRuntime
 from generative_ai_core.vector.schema import (
     EMBEDDING_DIMENSIONS,
     PgVectorSchemaInitializer,
+)
+from generative_ai_core.vector.target import (
+    CoreVectorDbTarget,
+    Endpoint,
+    parse_endpoint,
     pgroonga_content_index_name,
+    safe_identifier,
 )
 
 __all__ = [
@@ -91,6 +95,7 @@ __all__ = [
     "CoreVectorDbRuntime",
     "CoreVectorDbTarget",
     "CoreVectorSearchMatch",
+    "Endpoint",
     "JdbcTemplate",
     "LayerStatus",
     "OverallStatus",
@@ -102,6 +107,7 @@ __all__ = [
     "ensure_age_session",
     "parse_endpoint",
     "pgroonga_content_index_name",
+    "safe_identifier",
     "validate_graph_name",
     "with_age_session",
 ]

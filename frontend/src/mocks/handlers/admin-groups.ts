@@ -10,6 +10,9 @@ import { mockPath } from '@/mocks/utils';
 const EMPTY_PAGE = { content: [], totalElements: 0, number: 0, size: 20 };
 
 export const adminGroupHandlers = [
+  http.get(mockPath(API_PATHS.ADMIN.GROUPS.DETAIL(':groupId')), ({ params }) =>
+    HttpResponse.json({ id: params.groupId, tenantId: 'tenant', name: 'テストグループ' }),
+  ),
   http.get(mockPath(API_PATHS.ADMIN.ASSISTANTS.LIST), () => HttpResponse.json(EMPTY_PAGE)),
   http.get(mockPath(API_PATHS.ADMIN.GROUPS.USERS(':groupId')), () => HttpResponse.json(EMPTY_PAGE)),
   http.get(mockPath(API_PATHS.ADMIN.GROUPS.ASSISTANTS(':groupId')), () =>

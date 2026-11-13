@@ -72,7 +72,21 @@ switchVersion(versionInfo.groupKey, 'prev');
 - `rateMessage` は評価を先に画面へ反映し、失敗したら戻して例外を投げる。**フィードバック管理画面の一覧の再取得は `useChatActions().rateMessage` が行う**ので、画面からはそちらを呼ぶ
 - store は query cache を読めないため、アシスタント一覧は `useChatActions()` が `setAssistantCatalog` で渡す（ルーム名の自動変更・SECURE の model に使う）。チャット画面で `useChatActions()` を 1 回呼ぶこと
 - ライブラリ生成中の途中経過は `lib/chat/library-stream-bridge.ts` の `setLibraryStreamBridge()` に登録された窓口へ流す。ビューワー（#288）の store が登録する。未登録なら捨てる
-- SECURE アシスタント（ローカルサーバー）: 接続先の判定・トークンの取得（`lib/chat/local-content-token.ts`）・本文の取得・送信先の切り替えまで移植済み。#289 は結合の確認（backend の `GET /api/auth` に `token` があるか等）から始める
+- SECURE アシスタント（ローカルサーバー）: 接続先の判定・トークンの取得（`lib/chat/local-content-token.ts`）・本文の取得・送信先の切り替えまで移植済み。#289 で結合（backend の `GET /api/auth` の `token`、server-local の CORS、メッセージ一覧の `apiKey`・`model`）を確認し、ライブラリ本文の取得（`lib/chat/library-content-api.ts`）を足した。確認結果は `docs/issue-289/`
+- **ビューワー（#288）へ**: ライブラリを開くときは `fetchLibraryContent(libraryId)`（`lib/chat/library-content-api.ts`。移植元 `LibraryContentApiService.fetch`）を呼ぶ。詳細（タイトル・アシスタント）を NAW から取り、SECURE ならテナントの LOCAL_SERVER エンドポイントから本文を取る。ローカルへの通信エラーは共通エラートーストを出さず `ApiError` を投げる（移植元の `viewer.service.loadContent` と同じく catch して `contentLoadError` にする）。ローカル側の削除は #136 の `lib/utils/library-local-copy.ts`
+
+### server-local との通し（手動）
+
+自動テスト（MSW）では実物の server-local に届かないため、`onprem/` を起動して確かめる手動用のテストがある（`npm test` には含まれない）。
+
+```bash
+# リポジトリのルートで。waha-emulator は build context がルートのため、onprem/docker-compose.yml の `build: ../waha-emulator` のままでは build できない
+docker build -f waha-emulator/Dockerfile -t naw-onprem-waha-emulator .
+# onprem/docker-compose.yml の waha-emulator を image: naw-onprem-waha-emulator にする上書きファイルで server-local と waha-emulator を起動する
+cd frontend && npx vitest run --config vitest.e2e-local.config.ts
+```
+
+`e2e-local/local-server.e2e.ts` が preflight・送信（SSE）・ルームの読み込み（`POST /api/messages/contents`）・認証キー違いの 401 を確かめる。NAW 側（メッセージ作成・`GET /api/auth`）は MSW で用意する。環境変数 `LOCAL_SERVER_URL`・`LOCAL_SERVER_KEY` で接続先を変えられる。
 
 ## 4. ルーム（`useRoomsStore`）
 
@@ -93,3 +107,78 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 ## テスト
 
 `msw` の `server.use(...)` で API を差し替える。SSE は `new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })` で返せる（例: `store/messages-store.test.ts`）。jsdom の `Blob` は `fetch` に渡すと本文が空になるため、`textData` の中身は `FormData.prototype.append` を監視して読む（同ファイルの `captureTextData`）。
+
+## チャット画面（#284）と、別 Issue が差し込む口
+
+画面の部品は `components/features/chat/`、ページは `routes/chat/chat-new.tsx`（`/dashboard`・`/chat/new`）と `routes/chat/chat-room.tsx`（`/chat/:roomId`）。
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| 表示中のルーム（`activeRoomId`・`startNewChat`・`selectRoom`）・`useActiveRoom()` | `store/chat-store.ts` | `ChatService` のうち messages・rooms に属さない部分 |
+| 入力欄の状態（アシスタント・Web 検索・テンプレート・ライブラリ作成・添付） | `hooks/use-chat-input-controls.ts` | `ChatInputComponent` の signal |
+| 新規チャットで預けた最初のメッセージ | `lib/chat/pending-message.ts` | `router.navigate` の `state.pendingMessage` |
+| ウィンドウ・ヘッダー・一覧・メッセージ・入力欄・ビューワーの枠 | `chat-window`・`chat-header`・`chat-message-list`・`chat-message-item`・`chat-message-footer`・`chat-input`・`chat-data-panel` | 同名の `chat-*` |
+
+### 別 Issue の部品を差し込む口（未指定なら移植元と同じ位置の空の領域）
+
+`ChatInput` の `renderXxx` は `ChatInputControls`（`use-chat-input-controls.ts`）を受け取る。`ChatWindow` の `inputSlots` でまとめて渡す（ページが `ChatWindow` に渡す）。
+
+| 口 | 位置 | 担当 |
+|---|---|---|
+| `renderMention`・`onTextareaKeyDown` | textarea の上（候補パネル）・キー入力 | #286（実装済み） |
+| `renderToolbar` | 送信ボタンの左（有効な機能ウィジェット・アシスタント選択） | #286（実装済み） |
+| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286（実装済み。添付の項目は入力欄内の `input[type=file]` を `click()` する） |
+| `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287（実装済み。`ChatWindow` が `chatAttachmentSlots` を既定で渡す） |
+| `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287（実装済み。未指定なら `useChatRoomDialogs` の共有・評価ダイアログを開く） |
+| `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288 |
+
+- 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
+- `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
+- `AdminChatRoomPage` はサイドバーのルーム一覧（#285）が未移植の間、一覧がなければ読み込む（ヘッダーのルーム名のため）
+- ルーム一覧（ヘッダーのルーム名の元）はサイドバー（`components/layouts/sidebar.tsx`、#285）がマウント時に読み込む。`AdminChatRoomPage` は読み込まない
+
+### アシスタント選択・メンション・「＋」メニュー・試験（#286）
+
+`components/features/chat/chat-input-slots.tsx` の `CHAT_INPUT_SLOTS`（`renderMention`・`renderAddMenu`・`renderToolbar`・`onTextareaKeyDown`）を、`ChatWindow` が `ChatInput` に既定で渡す。`inputSlots` に同じ名前を渡すとそのスロットだけ上書きする（添付など別のスロットを足すだけなら、触らなくてよい）。
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| アシスタント選択 | `chat-assistant-selector.tsx` | `chat-assistant-selector` |
+| メンション候補・キー処理 | `chat-mention.tsx`・`chat-assistant-mention-panel.tsx`・`lib/chat/mention-key-handler.ts` | `chat-assistant-mention-panel`・`chat-input` の `handleKeyDown` |
+| 「＋」メニュー・テンプレート選択 | `chat-add-menu.tsx`・`template-selector.tsx`・`hooks/use-prompt-templates.ts` | `chat-input`・`template-selector` |
+| 有効な機能 | `active-features-widget.tsx`・`chat-input-toolbar.tsx` | `active-features-widget` |
+| アシスタント試験（`/chat/assistant`） | `chat-assistant-exam.tsx`・`routes/chat/chat-assistant.tsx`（`ChatWindow` の `isChatExamList`） | `chat-assistant-exam`・`ChatAssistantComponent` |
+
+- メンション候補・ウィジェットのパネルなど、スロットをまたぐ UI 状態は `store/chat-input-ui-store.ts`
+- 「＋」メニューの添付項目は、入力欄内の `input[type=file]`（#287 が `renderDropzone` に置く）をクリックする
+
+## 添付・評価・検索・共有（#287）
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| 添付（ドロップ領域・チップ列） | `components/features/chat/chat-attachments.tsx`（`ChatAttachmentDropzone`・`ChatAttachmentChips`）・`chat-attachment-slots.tsx`（`chatAttachmentSlots`）・`lib/utils/chat-attachment.ts`・`lib/constants/chat-attachment.ts` | `chat-input` の添付・`chat-attachment.constants.ts` |
+| 評価ダイアログ | `chat-rating-dialog.tsx` | `chat-rating-dialog` + `ChatWindow.openRatingDialog` |
+| 共有ダイアログ | `chat-share-dialog.tsx` | `chat-share-dialog` + `ChatWindow.openShareDialog` |
+| 上の 2 つを開く hook | `use-chat-room-dialogs.tsx` | `ChatWindow` |
+| チャット検索 | `chat-search-modal.tsx`（サイドバーが開く） | `chat-search-modal` |
+| 共有 API・チーム一覧 | `store/shares-store.ts`・`store/teams-store.ts` | `SharesService`・`TeamsService` |
+| 添付ファイル・共有ルームの文脈 | `store/chat-store.ts`（`attachedFiles`・`sharedRoomContext`・`openSharedRoom`・`clearSharedRoomContext`） | `ChatService` |
+
+- `renderDropzone` に、移植元と同じ `<input type="file" id="chat-file-upload" data-testid="chat-attach-file-input">` を置く（#286 の「＋」メニューの添付項目がこれを `click()` する）
+- **共有閲覧画面（#288）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
+- `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
+
+
+## 管理者のチャット履歴詳細（#291）
+
+`routes/admin/chat-history/chat-history-detail.tsx`（`/admin/chat-history/:roomId`）。一覧（#134）が `navigate` の state で渡す `roomName`・`userName`・`userId` を読む。
+
+- `chat-store` の `openAdminHistoryRoom` / `clearAdminHistoryRoomContext`（移植元 `ChatService`）。文脈は共有ルームと同じ `sharedRoomContext` に入る
+- `ChatWindow` を `showHeader={false}`・`isReadOnly` で使う。回答があれば右に `ChatDataPanel`（中身は #288）
+- 画面を離れると文脈・表示中ルーム・メッセージを捨てる（移植元 `ngOnDestroy`）
+
+## サイドバーのルーム一覧（#285）
+
+- `sidebar.tsx` がチャットのセクション（`SIDEBAR.CHAT`）を作り、ピン・操作メニュー・バッジは `sidebar/sidebar-route-button.tsx`、メニューは `chat-room-menu.tsx`（名前変更・ピン・削除）・`chat-context-menu.tsx`、まとめて削除は `chat-delete-dialog.tsx`、ピンの一括変更は `chat-sort-dialog.tsx`
+- 移植元でも `chat-context-menu` を開くボタンと `openSortDialog` の呼び出し元がない。部品と配線だけ移してあり、画面からは開けない
+- `PUT /api/rooms/pin`・`PUT /api/rooms/reorder` は移植元 server にも無く、呼ぶと失敗する（移植元の画面と同じ）
