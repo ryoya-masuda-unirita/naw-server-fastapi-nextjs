@@ -33,9 +33,29 @@ TEXT_DATA = {
 
 
 def write_stream(lines: list[str]) -> Callable[[str], None]:
-    """execute 時に Waha! がストリームファイルへ書き込む動きを再現する。"""
+    """execute 時に Waha! がストリームファイルへ書き込む動きを再現する。
+
+    FakeWahaClient.on_execute_with_stream_file に渡すフックを作る。
+
+    Parameters
+    ----------
+    lines : list[str]
+        ストリームファイルへ書き込む行（改行・空行を含めてそのまま書く）。
+
+    Returns
+    -------
+    Callable[[str], None]
+        ストリームファイルのパスを受け取り、lines を追記する関数。
+    """
 
     def _write(path: str) -> None:
+        """ストリームファイルに lines を追記する。
+
+        Parameters
+        ----------
+        path : str
+            ストリームファイルのパス。
+        """
         with Path(path).open("a", encoding="utf-8") as f:
             f.write("".join(lines))
 
@@ -43,12 +63,38 @@ def write_stream(lines: list[str]) -> Callable[[str], None]:
 
 
 def event_types(events: list[dict[str, Any]]) -> list[str]:
+    """SSE イベントの種類だけを並べ、送られた順序を検証しやすくする。
+
+    Parameters
+    ----------
+    events : list[dict[str, Any]]
+        parse_sse で取り出したイベント。
+
+    Returns
+    -------
+    list[str]
+        各イベントの type。
+    """
     return [e["type"] for e in events]
 
 
 async def get_content(
     session_factory: async_sessionmaker[AsyncSession], content_id: str
 ) -> MessageContent:
+    """保存されたメッセージ内容を取り出し、存在することも確かめる。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    content_id : str
+        メッセージ内容の ID。
+
+    Returns
+    -------
+    MessageContent
+        見つかったメッセージ内容。
+    """
     async with session_factory() as session:
         content = await session.get(MessageContent, content_id)
         assert content is not None
@@ -61,6 +107,24 @@ def make_service(
     waha: FakeWahaClient,
     naw: FakeNawApiClient,
 ) -> MessageContentStreamService:
+    """API を通さずにサービスを直接呼ぶテスト用に、偽クライアントを差し込んだサービスを作る。
+
+    Parameters
+    ----------
+    settings : Settings
+        サービスに使う設定。
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    waha : FakeWahaClient
+        偽 Waha! クライアント。
+    naw : FakeNawApiClient
+        偽 NAW API クライアント。
+
+    Returns
+    -------
+    MessageContentStreamService
+        テスト用の依存で作ったサービス。
+    """
     return MessageContentStreamService(
         settings=settings,
         session_factory=session_factory,

@@ -39,7 +39,29 @@ def create_app(
     naw_client: NawApiClient | None = None,
     enable_cleanup: bool = True,
 ) -> FastAPI:
-    """アプリを組み立てる。テストでは DB・外部クライアントを差し替えて使う。"""
+    """アプリを組み立てる。テストでは DB・外部クライアントを差し替えて使う。
+
+    ログ設定・ルーター・例外ハンドラー・ミドルウェアを登録する。DB や外部クライアントは
+    起動時（lifespan）に作り、差し替えが渡されたものはそれを使う。
+
+    Parameters
+    ----------
+    settings : Settings | None, optional
+        アプリの設定。省略時は環境変数と .env から読む。
+    session_factory : async_sessionmaker[AsyncSession] | None, optional
+        DB セッションのファクトリ。省略時は ``settings.database_url`` から作る。
+    waha_client : WahaClient | None, optional
+        Waha! クライアント。省略時は設定から作る。
+    naw_client : NawApiClient | None, optional
+        NAW 本体の API クライアント。省略時は設定から作る。
+    enable_cleanup : bool, optional
+        古いストリームファイルを定期的に消すタスクを動かすか。テストでは止める。
+
+    Returns
+    -------
+    FastAPI
+        組み立てたアプリ。
+    """
     settings = settings or get_settings()
     logging.basicConfig(
         level=settings.log_level.upper(),
@@ -51,6 +73,22 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """起動時に DB・外部クライアント・サービスを用意し、終了時に片付ける。
+
+        ルーターが ``app.state`` から取り出せるよう、作ったものを ``app.state`` に置く。
+        終了時は、掃除タスクの停止・実行中ストリームの終了・HTTP クライアントと
+        エンジンの破棄を行う（差し替えで渡されたものは呼び出し側が管理するため閉じない）。
+
+        Parameters
+        ----------
+        app : FastAPI
+            起動するアプリ。
+
+        Yields
+        ------
+        None
+            アプリが動いている間だけ制御を返す。
+        """
         engine = None
         http_client = None
         if session_factory is None:
@@ -130,5 +168,13 @@ def create_app(
 
 
 def app_factory() -> FastAPI:
-    """uvicorn の `--factory` 用。import 時に設定を読まないようにするため関数にする。"""
+    """設定を環境変数から読んでアプリを作る。
+
+    uvicorn の `--factory` 用。import 時に設定を読まないようにするため関数にする。
+
+    Returns
+    -------
+    FastAPI
+        組み立てたアプリ。
+    """
     return create_app()

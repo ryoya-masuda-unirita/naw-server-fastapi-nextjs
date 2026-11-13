@@ -24,6 +24,31 @@ async def insert_file(
     updated_at: datetime | None = None,
     part_ids: list[str] | None = None,
 ) -> None:
+    """学習ファイルとそのパートを、Waha! を通さず DB に直接入れる。
+
+    更新・削除・同期のテストで、既に登録済みのファイルがある状態を作るため。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    file_id : str
+        ファイル ID。ファイル名は "{file_id}.txt" になる。
+    tenant_id : str
+        テナント ID。
+    index_id : str
+        インデックス ID。
+    display_name : str
+        表示名。
+    user_id : str
+        登録者のユーザー ID。
+    status : FileStatus
+        ファイルの状態。
+    updated_at : datetime | None
+        更新日時。None なら自動で入る現在時刻のままにする。
+    part_ids : list[str] | None
+        一緒に入れるパートの ID。
+    """
     async with session_factory() as session:
         file = File(
             id=file_id,
@@ -47,6 +72,20 @@ async def insert_file(
 async def get_file(
     session_factory: async_sessionmaker[AsyncSession], file_id: str
 ) -> File | None:
+    """API 呼び出し後の DB の状態を確かめるため、学習ファイルを新しいセッションで取り出す。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    file_id : str
+        ファイル ID。
+
+    Returns
+    -------
+    File | None
+        見つかったファイル。無ければ None。
+    """
     async with session_factory() as session:
         return await session.get(File, file_id)
 
@@ -54,6 +93,20 @@ async def get_file(
 async def get_part_ids(
     session_factory: async_sessionmaker[AsyncSession], file_id: str
 ) -> list[str]:
+    """ファイルに紐づくパートの ID を、順序に依存せず比較できるよう並べ替えて返す。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    file_id : str
+        ファイル ID。
+
+    Returns
+    -------
+    list[str]
+        昇順に並べたパート ID。
+    """
     async with session_factory() as session:
         result = await session.execute(
             select(FilePart.id).where(FilePart.file_id == file_id)
@@ -62,6 +115,8 @@ async def get_part_ids(
 
 
 class TestListFiles:
+    """学習ファイル一覧 API（絞り込み・ページング）のテスト。"""
+
     async def test_list_files_filters_and_page_format(
         self,
         client: httpx.AsyncClient,
@@ -185,6 +240,8 @@ class TestListFiles:
 
 
 class TestUploadFile:
+    """学習ファイル登録 API（Waha! の学習ジョブ結果の保存）のテスト。"""
+
     async def test_upload_file(
         self,
         client: httpx.AsyncClient,
@@ -280,6 +337,8 @@ class TestUploadFile:
 
 
 class TestUpdateFile:
+    """学習ファイル更新 API（項目の更新とファイルの差し替え）のテスト。"""
+
     async def test_update_without_file(
         self,
         client: httpx.AsyncClient,
@@ -398,6 +457,8 @@ class TestUpdateFile:
 
 
 class TestDeleteFile:
+    """学習ファイル削除 API（物理削除・論理削除）のテスト。"""
+
     async def test_delete_physical(
         self,
         client: httpx.AsyncClient,
@@ -463,6 +524,8 @@ class TestDeleteFile:
 
 
 class TestSyncFiles:
+    """Waha! 側の学習ファイルを DB に取り込む同期 API のテスト。"""
+
     async def test_sync_files(
         self,
         client: httpx.AsyncClient,
@@ -550,6 +613,8 @@ class TestSyncFiles:
 
 
 class TestAdditionalLearning:
+    """フィードバック・ルームの内容を追加学習させる API のテスト。"""
+
     async def test_additional_learning_feedback(
         self,
         client: httpx.AsyncClient,

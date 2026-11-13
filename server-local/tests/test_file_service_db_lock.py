@@ -25,10 +25,27 @@ class ConcurrentWriter:
     """別セッションから DB に書き込み、ロック待ちせずに成功したかを記録する。"""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        """書き込みに使うセッションファクトリを受け取り、結果の記録を空にする。
+
+        Parameters
+        ----------
+        session_factory : async_sessionmaker[AsyncSession]
+            テスト用 DB のセッションファクトリ。
+        """
         self._session_factory = session_factory
         self.results: list[bool] = []
 
     async def write(self) -> None:
+        """別セッションでメッセージ内容を 1 件書き込み、成功したかを results に残す。
+
+        busy_timeout を 0 にして、ロックされていれば待たずに失敗させる。
+        Waha! を待つ処理の途中で呼び、その間 DB がロックされていないことを確かめる。
+
+        Raises
+        ------
+        Exception
+            コミットに失敗した場合（ロック中など）。results に False を残してから送出する。
+        """
         number = len(self.results)
         async with self._session_factory() as session:
             # ロックされていたら 5 秒待たずに即座に失敗させる
@@ -59,12 +76,25 @@ class ConcurrentWriter:
 async def delete_file_row(
     session_factory: async_sessionmaker[AsyncSession], file_id: str
 ) -> None:
+    """アプリを通さず files テーブルから行を物理削除する。
+
+    Waha! を待つ間に別リクエストでファイルが消された状況を再現するため。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+    file_id : str
+        削除するファイルの ID。
+    """
     async with session_factory() as session:
         await session.execute(text("DELETE FROM files WHERE id = :id"), {"id": file_id})
         await session.commit()
 
 
 class TestDbLockWhileWaitingWaha:
+    """Waha! のジョブを待つ間に DB の書き込みロックを持たないことのテスト。"""
+
     async def test_update_with_file_does_not_lock_db(
         self,
         client: httpx.AsyncClient,
@@ -134,6 +164,7 @@ class TestDbLockWhileWaitingWaha:
         await insert_file(session_factory, "f1", part_ids=["p1"])
 
         async def delete_original() -> None:
+            """Waha! を待っている途中で、差し替え元のファイル行を消す。"""
             await delete_file_row(session_factory, "f1")
 
         fake_waha.on_get_results = delete_original
@@ -177,6 +208,7 @@ class TestDbLockWhileWaitingWaha:
         await insert_file(session_factory, "f1", part_ids=["p1"])
 
         async def delete_original() -> None:
+            """Waha! を待っている途中で、差し替え元のファイル行を消す。"""
             await delete_file_row(session_factory, "f1")
 
         fake_waha.on_get_results = delete_original

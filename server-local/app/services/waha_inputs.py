@@ -24,6 +24,21 @@ ATTACHMENT_FALLBACK_FILENAME = "attachment"
 async def upload_question_history_and_attachment(
     waha: WahaClient, command: CreateMessageContentCommand, session_id: str
 ) -> None:
+    """生成に使う質問・会話履歴・添付ファイルを Waha! のセッションへアップロードする。
+
+    質問は常に送り、会話履歴は 1 件以上あるときだけ `histories.json`（role と
+    content の配列）にして送る。添付は移植元どおり先頭 1 件だけを送り、
+    ファイル名がなければ `attachment` を使う。
+
+    Parameters
+    ----------
+    waha : WahaClient
+        Waha! の API クライアント。
+    command : CreateMessageContentCommand
+        メッセージ内容の生成要求。
+    session_id : str
+        アップロード先の Waha! セッション ID。
+    """
     await waha.upload_file(
         filename=QUESTION_FILENAME,
         content=command.question_text().encode("utf-8"),

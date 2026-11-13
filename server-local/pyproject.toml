@@ -35,3 +35,16 @@ concurrency = ["greenlet", "thread"]
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint]
+# 既定のルール（E4・E7・E9・F）に、docstring の記載漏れを検出する pydocstyle のルールを足す（Issue #311）。
+# D101: public クラス / D102: public メソッド / D103: public 関数 / D105: マジックメソッド /
+# D106: public なネストしたクラス / D107: __init__ / D417: Parameters 節に引数の説明が漏れている。
+# numpy 規約は D107・D417 を既定で外すが、ここで明示して有効にしている。
+# モジュール・パッケージの docstring（D100・D104）は任意のため有効にしない。
+# private（_ 付き）の関数・クラスは ruff では検出できないが、規約として同じく docstring を書く。
+extend-select = ["D101", "D102", "D103", "D105", "D106", "D107", "D417"]
+
+[tool.ruff.lint.pydocstyle]
+# NumPy 形式（Parameters / Returns / Raises の節）で書く。D417 は Parameters 節を見て判定する
+convention = "numpy"
