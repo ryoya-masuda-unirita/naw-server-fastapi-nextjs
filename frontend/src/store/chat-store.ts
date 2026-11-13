@@ -27,6 +27,17 @@ interface ChatActions {
   /** 共有ルームを開く。自分の一覧にあれば文脈は持たず、なければ共有情報から作る（移植元 ChatService.openSharedRoom） */
   openSharedRoom: (access: ShareAccessResponse, shareId: string) => Promise<void>;
   clearSharedRoomContext: () => void;
+  /** 管理者のチャット履歴詳細で開くルームの文脈を作り、表示中のルームにする（移植元 ChatService.openAdminHistoryRoom） */
+  openAdminHistoryRoom: (params: AdminHistoryRoomParams) => void;
+  /** 管理者のチャット履歴詳細の文脈を捨てる（移植元 ChatService.clearAdminHistoryRoomContext） */
+  clearAdminHistoryRoomContext: () => void;
+}
+
+interface AdminHistoryRoomParams {
+  id: string;
+  name: string;
+  userId?: string;
+  userName?: string;
 }
 
 /**
@@ -76,6 +87,13 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
     await useMessagesStore.getState().loadMessagesForRoom(access.roomId, true);
   },
   clearSharedRoomContext: () => set({ sharedRoomContext: undefined }),
+  // 移植元は共有ルームと同じ文脈の置き場（_sharedRoomContext）を使う
+  openAdminHistoryRoom: ({ id, name, userId, userName }) =>
+    set({
+      sharedRoomContext: { id, name, isPinned: false, category: 'chat', userId, userName },
+      activeRoomId: id,
+    }),
+  clearAdminHistoryRoomContext: () => set({ sharedRoomContext: undefined }),
 }));
 
 /** 表示中のルーム（移植元 ChatService.activeRoom）。ルーム一覧になければ共有ルームの文脈を返す */

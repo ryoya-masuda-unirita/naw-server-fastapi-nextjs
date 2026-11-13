@@ -155,6 +155,14 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 - `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
 
 
+## 管理者のチャット履歴詳細（#291）
+
+`routes/admin/chat-history/chat-history-detail.tsx`（`/admin/chat-history/:roomId`）。一覧（#134）が `navigate` の state で渡す `roomName`・`userName`・`userId` を読む。
+
+- `chat-store` の `openAdminHistoryRoom` / `clearAdminHistoryRoomContext`（移植元 `ChatService`）。文脈は共有ルームと同じ `sharedRoomContext` に入る
+- `ChatWindow` を `showHeader={false}`・`isReadOnly` で使う。回答があれば右に `ChatDataPanel`（中身は #288）
+- 画面を離れると文脈・表示中ルーム・メッセージを捨てる（移植元 `ngOnDestroy`）
+
 ## サイドバーのルーム一覧（#285）
 
 - `sidebar.tsx` がチャットのセクション（`SIDEBAR.CHAT`）を作り、ピン・操作メニュー・バッジは `sidebar/sidebar-route-button.tsx`、メニューは `chat-room-menu.tsx`（名前変更・ピン・削除）・`chat-context-menu.tsx`、まとめて削除は `chat-delete-dialog.tsx`、ピンの一括変更は `chat-sort-dialog.tsx`
