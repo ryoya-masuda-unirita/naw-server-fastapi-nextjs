@@ -1,0 +1,100 @@
+# E2E 探索ハーネスの専用環境。
+# 巡回は削除・権限変更も実行するため、開発用のコンテナ（ルートの docker-compose.yml の naw-fastapi-*）
+# とは名前・ポート・データを分ける。データは tmpfs に置き、env:down で消える。
+# ポートはホストの 127.0.0.1 だけに出す。変えるときは E2E_*_PORT と explorer.config.json の target を合わせる。
+name: naw-e2e-explorer
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://root:root@postgres:5432/postgres
+  SECRET_KEY: e2e-explorer-secret-not-for-production
+  REDIS_URL: redis://redis:6379/0
+  CORS_ALLOWED_ORIGINS: http://localhost:${E2E_FRONTEND_PORT:-55173}
+  COOKIE_SECURE: "false"
+  COOKIE_SAME_SITE: lax
+  # ユーザー一括登録の SQS リスナーは LocalStack が要るため止める（巡回では使わない）
+  AWS_SQS_LISTENER_ENABLED: "false"
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      TZ: Asia/Tokyo
+      PGDATA: /var/lib/postgresql/18/data
+    ports:
+      - "127.0.0.1:${E2E_POSTGRES_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7
+    ports:
+      - "127.0.0.1:${E2E_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: naw-e2e-explorer-backend
+    environment: *backend-env
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  seed:
+    image: postgres:18
+    environment:
+      PGPASSWORD: root
+    volumes:
+      - ../../backend/seed.sql:/seed/seed.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "root", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/seed/seed.sql"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  backend:
+    image: naw-e2e-explorer-backend
+    environment: *backend-env
+    ports:
+      - "127.0.0.1:${E2E_BACKEND_PORT:-58000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: ../e2e-explorer/docker/frontend.Dockerfile
+    environment:
+      # ブラウザ（ホスト）から見た backend の URL
+      VITE_API_URL: http://localhost:${E2E_BACKEND_PORT:-58000}
+    ports:
+      - "127.0.0.1:${E2E_FRONTEND_PORT:-55173}:5173"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      backend:
+        condition: service_healthy
