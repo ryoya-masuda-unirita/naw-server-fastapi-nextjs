@@ -7,12 +7,16 @@ from sqlmodel import Field, SQLModel
 
 
 class UserRole(str, Enum):
+    """ユーザーのロール。"""
+
     USER = "USER"
     ADMIN = "ADMIN"
     SYSTEM = "SYSTEM"
 
 
 class User(SQLModel, table=True):
+    """ユーザーのテーブル（`users`）。ログインキーはハッシュ値（`login_key_hash`）だけを持つ。"""
+
     __tablename__ = "users"
     __table_args__ = (
         sa.UniqueConstraint(

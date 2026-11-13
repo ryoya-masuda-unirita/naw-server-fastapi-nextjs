@@ -19,6 +19,7 @@ from app.services.user_import_listener import UserImportListener
 
 @pytest.fixture
 async def import_tenant(session):
+    """テスト用テナント"""
     tenant = Tenant(
         id="tenant-user-import-test",
         name="User Import Test Tenant",
@@ -40,6 +41,7 @@ async def import_tenant(session):
 
 @pytest.fixture
 async def other_tenant(session):
+    """別テナント（テナント分離の確認用）"""
     tenant = Tenant(
         id="tenant-user-import-other",
         name="Other User Import Tenant",
@@ -61,6 +63,7 @@ async def other_tenant(session):
 
 @pytest.fixture
 async def import_admin_user(session, import_tenant):
+    """インポートを実行する管理者ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=import_tenant.id,
@@ -77,6 +80,7 @@ async def import_admin_user(session, import_tenant):
 
 @pytest.fixture
 async def import_normal_user(session, import_tenant):
+    """管理者ではない一般ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=import_tenant.id,
@@ -93,18 +97,21 @@ async def import_normal_user(session, import_tenant):
 
 @pytest.fixture
 def admin_headers(import_admin_user, import_tenant):
+    """管理者の認証ヘッダー"""
     token = create_access_token(import_admin_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
 def user_headers(import_normal_user, import_tenant):
+    """一般ユーザーの認証ヘッダー"""
     token = create_access_token(import_normal_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -112,19 +119,57 @@ class _FakeUserImportStorage:
     """S3実装の代わりに、アップロード内容をインメモリ辞書に保持するフェイク。"""
 
     def __init__(self) -> None:
+        """空のインメモリストレージを作る"""
         self._objects: dict[str, bytes] = {}
 
     async def upload(
         self, tenant_id: str, file_id: str, filename: str, content: bytes
     ) -> str:
+        """内容を保持して、ストレージ URL を返す
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID
+        file_id : str
+            ファイルID
+        filename : str
+            ファイル名
+        content : bytes
+            保存する中身
+
+        Returns
+        -------
+        str
+            保存先を表す s3:// 形式のストレージ URL
+        """
         storage_url = f"s3://test-bucket/{tenant_id}/{file_id}_{filename}"
         self._objects[storage_url] = content
         return storage_url
 
     async def download(self, storage_url: str) -> bytes:
+        """ストレージ URL に対応する内容を返す
+
+        Parameters
+        ----------
+        storage_url : str
+            upload が返したストレージ URL
+
+        Returns
+        -------
+        bytes
+            保存されている中身
+        """
         return self._objects[storage_url]
 
     async def delete(self, storage_url: str) -> None:
+        """ストレージ URL に対応する内容を削除する（無ければ何もしない）
+
+        Parameters
+        ----------
+        storage_url : str
+            upload が返したストレージ URL
+        """
         self._objects.pop(storage_url, None)
 
 
@@ -137,6 +182,17 @@ def mock_user_import_infra():
     async def _fake_send_import_message(
         import_job_id: str, tenant_id: str, storage_url: str
     ) -> None:
+        """SQS へ送るメッセージ本文を組み立てて記録する
+
+        Parameters
+        ----------
+        import_job_id : str
+            インポートジョブID
+        tenant_id : str
+            テナントID
+        storage_url : str
+            アップロード済みファイルのストレージ URL
+        """
         sent_messages.append(
             json.dumps(
                 {
@@ -166,11 +222,27 @@ def mock_user_import_infra():
 
 
 def _csv_file(content: str, filename: str = "users.csv"):
+    """CSV アップロード用の multipart 送信内容を作る
+
+    Parameters
+    ----------
+    content : str
+        CSV の中身
+    filename : str
+        アップロードするファイル名
+
+    Returns
+    -------
+    dict
+        httpx の files 引数に渡す辞書
+    """
     return {"file": (filename, content.encode(), "text/csv")}
 
 
 @pytest.mark.asyncio
 class TestUserImport:
+    """ユーザーインポート API のテスト"""
+
     async def test_import_users_creates_user_and_job(
         self, client, admin_headers, session, mock_user_import_infra
     ):

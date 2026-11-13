@@ -65,12 +65,18 @@ class FileRepository:
     ) -> File | None:
         """ファイルIDとテナントIDでファイルを取得する。
 
-        Args:
-            file_id: ファイルID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file_id : str
+            ファイルID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        File | None
             該当する File。存在しない場合は None。
         """
         stmt = select(File).where(File.id == file_id, File.tenant_id == tenant_id)
@@ -91,12 +97,18 @@ class FileRepository:
         残る。解決できなかった検索結果は呼び出し側で捨てるため、ここで削除済みを除けば
         移植元と同じく削除済みのファイルが回答の文脈・参照先に使われなくなる。
 
-        Args:
-            file_ids: 取得対象のファイルID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file_ids : list[str]
+            取得対象のファイルID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[File]
             該当するファイルのうち、論理削除済み（DELETED）以外の一覧。
         """
         if not file_ids:
@@ -120,12 +132,18 @@ class FileRepository:
         それ以外は個別条件（`displayName`は`display_name`列、`fileName`は`name`/
         `display_name`列へのOR部分一致）として扱う。
 
-        Args:
-            stmt: 組み立て対象のクエリ。
-            display_name: 表示名の部分一致検索文字列。
-            file_name: ファイル名の部分一致検索文字列。
+        Parameters
+        ----------
+        stmt : sa.Select
+            組み立て対象のクエリ。
+        display_name : str | None
+            表示名の部分一致検索文字列。
+        file_name : str | None
+            ファイル名の部分一致検索文字列。
 
-        Returns:
+        Returns
+        -------
+        sa.Select
             絞り込み条件を追加したクエリ。
         """
         if display_name and file_name and display_name == file_name:
@@ -163,22 +181,37 @@ class FileRepository:
     ) -> tuple[list[File], int]:
         """ファイル一覧をページネーションで取得する（移植元`FileService.searchFiles`相当）。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            display_name: 表示名の部分一致検索文字列。
-            file_name: ファイル名の部分一致検索文字列。
-            user_id: 絞り込み対象のユーザーID（解決済みUUID）。Noneなら絞り込まない。
-            status: 絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
-            updated_at_from: 更新日時の範囲開始（この値以上）。
-            updated_at_to: 更新日時の範囲終了（この値より前）。
-            sort: 並べ替え指定の並び（キーは"displayName"・"updatedAt"・"userId"・"status"）。
-                未知のキーは"updatedAt"として扱う。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        display_name : str | None
+            表示名の部分一致検索文字列。
+        file_name : str | None
+            ファイル名の部分一致検索文字列。
+        user_id : object | None
+            絞り込み対象のユーザーID（解決済みUUID）。Noneなら絞り込まない。
+        status : FileStatus | None
+            絞り込み対象のステータス。Noneなら論理削除済み（DELETED）以外。
+        updated_at_from : datetime | None
+            更新日時の範囲開始（この値以上）。
+        updated_at_to : datetime | None
+            更新日時の範囲終了（この値より前）。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"displayName"・"updatedAt"・"userId"・"status"）。
+            未知のキーは"updatedAt"として扱う。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[File], int]
             (ファイル一覧, 総件数) のタプル。
         """
         stmt = select(File).where(
@@ -224,11 +257,16 @@ class FileRepository:
     async def create(file: File, session: AsyncSession) -> File:
         """ファイルを新規作成する。
 
-        Args:
-            file: 保存対象の File。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file : File
+            保存対象の File。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        File
             保存後の File。
         """
         session.add(file)
@@ -240,11 +278,16 @@ class FileRepository:
     async def save(file: File, session: AsyncSession) -> File:
         """ファイルの変更を永続化する。
 
-        Args:
-            file: 更新対象の File（属性は呼び出し側で変更済み）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file : File
+            更新対象の File（属性は呼び出し側で変更済み）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        File
             更新後の File。
         """
         session.add(file)
@@ -256,9 +299,12 @@ class FileRepository:
     async def delete(file: File, session: AsyncSession) -> None:
         """ファイルを物理削除する。
 
-        Args:
-            file: 削除対象の File。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file : File
+            削除対象の File。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(file)
         await session.commit()

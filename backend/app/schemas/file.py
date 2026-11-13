@@ -29,6 +29,8 @@ class FileResponse(BaseModel):
 
 
 class PagedFileResponse(BaseModel):
+    """ファイル一覧のページ応答。"""
+
     content: list[FileResponse]
     totalElements: int
     number: int
@@ -42,11 +44,16 @@ def _prefer_form(form_value: str | None, query_value: str | None) -> str | None:
     パラメータからも値をバインドする。画面（`training-api.service.ts`）は`file`だけを
     ボディに入れ、それ以外をクエリで送るため、FastAPI側でも両方を受け付ける。
 
-    Args:
-        form_value: multipart/フォームのボディ項目の値。
-        query_value: クエリパラメータの値。
+    Parameters
+    ----------
+    form_value : str | None
+        multipart/フォームのボディ項目の値。
+    query_value : str | None
+        クエリパラメータの値。
 
-    Returns:
+    Returns
+    -------
+    str | None
         採用する値。どちらも未指定ならNone。
     """
     return form_value if form_value is not None else query_value
@@ -78,18 +85,29 @@ class FileUpdateForm:
         `file`が未添付ならメタデータ更新のみに使われ、添付時は置換更新の新規メタデータ
         として使われる（置換更新時は`name`が必須。`FileService.update_file`で検証する）。
 
-        Args:
-            name_form: ファイルの内部名（ボディ）。
-            name_query: ファイルの内部名（クエリ）。
-            display_name_form: 表示名（ボディ）。
-            display_name_query: 表示名（クエリ）。
-            reference_form: 参照情報（ボディ）。
-            reference_query: 参照情報（クエリ）。
-            split_length_form: 分割長（ボディ）。コンテンツ分割・埋め込み登録
-                （Issue #88スコープ）で使用する値で、本スキーマでは受理のみ行う。
-            split_length_query: 分割長（クエリ）。
-            status_form: ステータス文字列（ボディ。`ENABLE`・`DISABLE`・`DELETED`）。
-            status_query: ステータス文字列（クエリ）。
+        Parameters
+        ----------
+        name_form : Annotated[str | None, Form(alias="name")]
+            ファイルの内部名（ボディ）。
+        name_query : Annotated[str | None, Query(alias="name")]
+            ファイルの内部名（クエリ）。
+        display_name_form : Annotated[str | None, Form(alias="displayName")]
+            表示名（ボディ）。
+        display_name_query : Annotated[str | None, Query(alias="displayName")]
+            表示名（クエリ）。
+        reference_form : Annotated[str | None, Form(alias="reference")]
+            参照情報（ボディ）。
+        reference_query : Annotated[str | None, Query(alias="reference")]
+            参照情報（クエリ）。
+        split_length_form : Annotated[str | None, Form(alias="splitLength")]
+            分割長（ボディ）。コンテンツ分割・埋め込み登録
+            （Issue #88スコープ）で使用する値で、本スキーマでは受理のみ行う。
+        split_length_query : Annotated[str | None, Query(alias="splitLength")]
+            分割長（クエリ）。
+        status_form : Annotated[str | None, Form(alias="status")]
+            ステータス文字列（ボディ。`ENABLE`・`DISABLE`・`DELETED`）。
+        status_query : Annotated[str | None, Query(alias="status")]
+            ステータス文字列（クエリ）。
         """
         self.name = _prefer_form(name_form, name_query)
         self.display_name = _prefer_form(display_name_form, display_name_query)

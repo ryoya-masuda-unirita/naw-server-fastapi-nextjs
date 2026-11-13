@@ -55,6 +55,8 @@ class AssistantGetResponse(BaseModel):
 
 
 class PagedAssistantResponse(BaseModel):
+    """管理者向けアシスタント一覧のページ応答。"""
+
     content: list[AssistantGetResponse]
     totalElements: int
     number: int
@@ -76,6 +78,8 @@ class AssistantEndpointInput(RequestModel):
 
 
 class AssistantRequestBase(RequestModel):
+    """アシスタント作成・更新のリクエストに共通する項目。"""
+
     type: Annotated[
         AssistantType,
         ValidationMessages(not_null="接続サーバー（タイプ）を指定してください。"),
@@ -100,6 +104,8 @@ class AssistantRequestBase(RequestModel):
 
 
 class AssistantCreateRequest(AssistantRequestBase):
+    """アシスタント作成のリクエスト。"""
+
     name: Annotated[
         str,
         Field(max_length=NAME_MAX_LENGTH),
@@ -116,6 +122,8 @@ class AssistantCreateRequest(AssistantRequestBase):
 
 
 class AssistantUpdateRequest(AssistantRequestBase):
+    """アシスタント更新のリクエスト。"""
+
     name: Annotated[
         str | None,
         Field(max_length=NAME_MAX_LENGTH),
@@ -145,6 +153,8 @@ class AssistantEndpointResponse(BaseModel):
 
 
 class AIModelResponse(BaseModel):
+    """AIモデル1件分の応答。"""
+
     id: int
     endpointType: AIModelEndpointType
     name: str

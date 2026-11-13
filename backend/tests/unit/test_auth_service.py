@@ -36,6 +36,18 @@ def no_group_memberships():
 
 
 def _mismatch_key(user: User) -> str:
+    """パスワード不一致回数を記録する Redis キーを返す
+
+    Parameters
+    ----------
+    user : User
+        対象ユーザー
+
+    Returns
+    -------
+    str
+        Redis キー
+    """
     return f"password_mismatch:{user.tenant_id}:{user.id}"
 
 

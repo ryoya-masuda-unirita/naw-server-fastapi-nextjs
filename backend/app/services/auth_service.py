@@ -79,7 +79,9 @@ async def build_auth_response(
 def _login_locked_error() -> HTTPException:
     """ログインがロック中であることを表す例外を返す。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         429 の HTTPException。
     """
     return HTTPException(
@@ -90,7 +92,9 @@ def _login_locked_error() -> HTTPException:
 def _login_failed_error() -> HTTPException:
     """ログインの認証失敗を表す例外を返す。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         403 の HTTPException。
     """
     return HTTPException(
@@ -103,13 +107,19 @@ async def _fail_login(
 ) -> NoReturn:
     """ログインの失敗を記録し、認証失敗またはロックの例外を送出する。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        redis_client: 失敗記録を保存するRedis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    redis_client : redis.Redis
+        失敗記録を保存するRedis非同期クライアント。
 
-    Raises:
-        HTTPException: 今回の失敗でロックの条件を満たしたら 429、満たさなければ 403。
+    Raises
+    ------
+    HTTPException
+        今回の失敗でロックの条件を満たしたら 429、満たさなければ 403。
     """
     if await password_mismatch_store.record_login_failure_and_check_lockout(
         user_id, tenant_id, redis_client
@@ -135,19 +145,29 @@ class AuthService:
         判定し、認証に失敗したら失敗を記録してロックを判定する。成功したら失敗記録を
         すべて消す。失敗記録はパスワード再設定と共有する。
 
-        Args:
-            username: ログインID。
-            password: 平文パスワード。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-            redis_client: 失敗記録を保存するRedis非同期クライアント。
+        Parameters
+        ----------
+        username : str
+            ログインID。
+        password : str
+            平文パスワード。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        redis_client : redis.Redis
+            失敗記録を保存するRedis非同期クライアント。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証結果を含む AuthResponse。
 
-        Raises:
-            HTTPException: ユーザーが存在しない・パスワード履歴がない・パスワード不一致の
-                場合は 403、ロック中または今回の失敗でロックの条件を満たした場合は 429。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない・パスワード履歴がない・パスワード不一致の
+            場合は 403、ロック中または今回の失敗でロックの条件を満たした場合は 429。
         """
         user = await UserRepository.find_by_login_id(username, tenant_id, session)
         if not user:
@@ -206,16 +226,24 @@ class AuthService:
         ログインキーの場合と、別テナントのログインキーの場合は同じ401を返す
         （ログインキーの存在有無が外部から推測できないようにするため）。
 
-        Args:
-            login_key: ログインキー。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_key : str | None
+            ログインキー。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証結果を含む AuthResponse。
 
-        Raises:
-            HTTPException: ログインキーが存在しない、または別テナントの場合は401を返す。
+        Raises
+        ------
+        HTTPException
+            ログインキーが存在しない、または別テナントの場合は401を返す。
         """
         # 移植元は null・空白のキーも「ユーザーが見つからない」として扱う
         user = (
@@ -246,21 +274,32 @@ class AuthService:
         移植元`PasswordResetService.resetPassword`と同じく、旧パスワードの誤りを
         失敗として記録し、ロック時間内の失敗が上限に達したら再設定をロックする。
 
-        Args:
-            login_id: ログインID。
-            old_password: 旧パスワード（初期パスワード）。
-            new_password: 新パスワード。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-            redis_client: 失敗記録を保存するRedis非同期クライアント。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        old_password : str
+            旧パスワード（初期パスワード）。
+        new_password : str
+            新パスワード。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        redis_client : redis.Redis
+            失敗記録を保存するRedis非同期クライアント。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証成功レスポンス（新パスワードで発行したJWTを含む）。
 
-        Raises:
-            HTTPException: ユーザーが存在しない・パスワード履歴がない・旧パスワード
-                不一致の場合は 403、ロック中または今回の失敗で上限に達した場合は 429、
-                テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない・パスワード履歴がない・旧パスワード
+            不一致の場合は 403、ロック中または今回の失敗で上限に達した場合は 429、
+            テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:

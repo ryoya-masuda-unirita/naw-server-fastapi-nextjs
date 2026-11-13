@@ -15,6 +15,7 @@ from app.services.user_import_listener import RetryableImportError, UserImportLi
 
 @pytest.fixture
 async def listener_tenant(session):
+    """テスト用テナント"""
     tenant = Tenant(
         id="tenant-listener-test",
         name="Listener Test Tenant",
@@ -36,6 +37,7 @@ async def listener_tenant(session):
 
 @pytest.fixture
 async def listener_job(session, listener_tenant):
+    """処理待ち（PENDING）のインポートジョブ"""
     job = UserImportJob(
         tenant_id=listener_tenant.id,
         status=UserImportJobStatus.PENDING,
@@ -49,6 +51,20 @@ async def listener_job(session, listener_tenant):
 
 
 def _message_body(job: UserImportJob, tenant_id: str | None = None) -> str:
+    """リスナーに渡す SQS メッセージ本文を作る
+
+    Parameters
+    ----------
+    job : UserImportJob
+        対象のインポートジョブ
+    tenant_id : str | None
+        メッセージに入れるテナントID。None の場合はジョブのテナントID
+
+    Returns
+    -------
+    str
+        JSON 形式のメッセージ本文
+    """
     return json.dumps(
         {
             "importJobId": job.id,
@@ -60,6 +76,8 @@ def _message_body(job: UserImportJob, tenant_id: str | None = None) -> str:
 
 @pytest.mark.asyncio
 class TestUserImportListener:
+    """ユーザーインポートリスナーのテスト"""
+
     async def test_process_import_message_completes_job_on_success(
         self, session, listener_tenant, listener_job
     ):

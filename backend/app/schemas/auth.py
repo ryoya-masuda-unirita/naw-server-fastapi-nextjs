@@ -46,14 +46,20 @@ class PasswordResetRequest(BaseModel):
         `field_validator`は未指定の項目に対して実行されず、Pydantic標準の
         `Field required`になってしまうため、項目の型チェックより前に検査する。
 
-        Args:
-            data: リクエストボディ（JSONをデコードした値）。
+        Parameters
+        ----------
+        data : Any
+            リクエストボディ（JSONをデコードした値）。
 
-        Returns:
+        Returns
+        -------
+        Any
             検査済みのリクエストボディ（そのまま返す）。
 
-        Raises:
-            ValueError: 必須項目が未指定・null・空白のみの場合。最初の1項目のメッセージ。
+        Raises
+        ------
+        ValueError
+            必須項目が未指定・null・空白のみの場合。最初の1項目のメッセージ。
         """
         if not isinstance(data, dict):
             return data
@@ -90,4 +96,6 @@ class AuthResponse(BaseModel):
     reason: str | None = None
 
     class Config:
+        """Pydantic の設定。ORM オブジェクトからも作れるようにする。"""
+
         from_attributes = True

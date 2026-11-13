@@ -14,6 +14,18 @@ from app.models.user import User, UserRole
 
 
 def _tenant(tenant_id: str) -> Tenant:
+    """テスト用のテナントを作る
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID（名前にも同じ値を使う）
+
+    Returns
+    -------
+    Tenant
+        パスワードポリシーを設定した未保存のテナント
+    """
     return Tenant(
         id=tenant_id,
         name=tenant_id,
@@ -31,6 +43,7 @@ def _tenant(tenant_id: str) -> Tenant:
 
 @pytest.fixture
 async def shares_tenant(session):
+    """テスト用テナント"""
     tenant = _tenant("tenant-shares-test")
     session.add(tenant)
     await session.commit()
@@ -40,6 +53,7 @@ async def shares_tenant(session):
 
 @pytest.fixture
 async def other_tenant(session):
+    """別テナント（テナント分離の確認用）"""
     tenant = _tenant("tenant-shares-other")
     session.add(tenant)
     await session.commit()
@@ -49,6 +63,7 @@ async def other_tenant(session):
 
 @pytest.fixture
 async def room_owner_user(session, shares_tenant):
+    """ルームの所有者ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=shares_tenant.id,
@@ -65,6 +80,7 @@ async def room_owner_user(session, shares_tenant):
 
 @pytest.fixture
 async def group_member_user(session, shares_tenant):
+    """グループに所属するユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=shares_tenant.id,
@@ -81,6 +97,7 @@ async def group_member_user(session, shares_tenant):
 
 @pytest.fixture
 async def unrelated_user(session, shares_tenant):
+    """共有に無関係なユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=shares_tenant.id,
@@ -97,6 +114,7 @@ async def unrelated_user(session, shares_tenant):
 
 @pytest.fixture
 async def share_assistant(session, shares_tenant):
+    """共有対象ルームのアシスタント"""
     assistant = Assistant(
         tenant_id=shares_tenant.id,
         type=AssistantType.SAAS_CHAT,
@@ -111,6 +129,7 @@ async def share_assistant(session, shares_tenant):
 
 @pytest.fixture
 async def owned_room(session, shares_tenant, room_owner_user, share_assistant):
+    """ユーザー自身のルーム"""
     room = Room(
         tenant_id=shares_tenant.id,
         name="Owner Room",
@@ -125,6 +144,7 @@ async def owned_room(session, shares_tenant, room_owner_user, share_assistant):
 
 @pytest.fixture
 async def target_group(session, shares_tenant, group_member_user):
+    """共有先のグループ"""
     group = Group(tenant_id=shares_tenant.id, name="Target Group")
     session.add(group)
     await session.commit()
@@ -143,6 +163,7 @@ async def target_group(session, shares_tenant, group_member_user):
 
 @pytest.fixture
 async def owned_share(session, shares_tenant, owned_room, target_group):
+    """共有済みのルームと共有先グループ"""
     share = Share(tenant_id=shares_tenant.id, room_id=owned_room.id)
     session.add(share)
     await session.commit()
@@ -160,33 +181,55 @@ async def owned_share(session, shares_tenant, owned_room, target_group):
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証済みリクエスト用のヘッダーを作る
+
+    Parameters
+    ----------
+    login_id : str
+        アクセストークンの対象ユーザーのログインID
+    tenant_id : str
+        テナントID（トークンと X-Tenant-ID ヘッダーに使う）
+
+    Returns
+    -------
+    dict[str, str]
+        Authorization と X-Tenant-ID を含むヘッダー
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 def owner_headers(room_owner_user, shares_tenant):
+    """ルーム所有者の認証ヘッダー"""
     return _headers(room_owner_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
 def group_member_headers(group_member_user, shares_tenant):
+    """グループ所属ユーザーの認証ヘッダー"""
     return _headers(group_member_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
 def unrelated_user_headers(unrelated_user, shares_tenant):
+    """無関係なユーザーの認証ヘッダー"""
     return _headers(unrelated_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.mark.asyncio
 class TestShareRouter:
+    """共有 API のテスト"""
+
     class TestUpsertShare:
+        """共有の作成・更新のテスト"""
+
         async def test_create_share_with_owned_room_and_valid_group(
             self, client, owner_headers, owned_room, target_group
         ):
@@ -290,6 +333,8 @@ class TestShareRouter:
             assert response.status_code == 403
 
     class TestResolveShareAccess:
+        """共有アクセス解決のテスト"""
+
         async def test_resolve_access_as_owner_returns_not_read_only(
             self, client, owner_headers, owned_share, owned_room
         ):
@@ -340,6 +385,8 @@ class TestShareRouter:
             assert response.status_code == 404
 
     class TestDeleteShare:
+        """共有削除のテスト"""
+
         async def test_delete_share_as_owner_succeeds(
             self, client, owner_headers, owned_share
         ):
@@ -379,6 +426,8 @@ class TestShareRouter:
             assert response.status_code == 404
 
     class TestTenantIsolation:
+        """テナント分離のテスト"""
+
         async def test_resolve_access_on_other_tenant_share_returns_404(
             self,
             client,

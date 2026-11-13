@@ -25,6 +25,8 @@ _FEEDBACK_ROOM_SORT_FIELD_VALUES = {"updatedAt", "chat", "name", "level"}
 
 
 class FeedbackUserListRequest(BaseModel):
+    """ユーザー別フィードバック集計の検索条件。"""
+
     page: int = Field(default=0, ge=0)
     size: int = Field(default=20, ge=1, le=100)
     responseStatus: str | None = None
@@ -69,12 +71,16 @@ class FeedbackUserListRequest(BaseModel):
 
 
 class FeedbackUserInfo(BaseModel):
+    """フィードバック集計の対象ユーザー。"""
+
     id: str
     userId: str
     displayName: str
 
 
 class FeedbackRoomCount(BaseModel):
+    """ルーム評価の段階ごとの件数。"""
+
     excellent: int = 0
     veryGood: int = 0
     good: int = 0
@@ -99,6 +105,8 @@ class FeedbackUserItemResponse(BaseModel):
 
 
 class PagedFeedbackUserResponse(BaseModel):
+    """ユーザー別フィードバック集計のページ応答。"""
+
     content: list[FeedbackUserItemResponse]
     totalElements: int
     number: int
@@ -108,10 +116,14 @@ class PagedFeedbackUserResponse(BaseModel):
 
 
 class FeedbackUserListResponse(BaseModel):
+    """ユーザー別フィードバック集計の応答（`feedbacks` で包む）。"""
+
     feedbacks: PagedFeedbackUserResponse
 
 
 class FeedbackMessageListRequest(BaseModel):
+    """メッセージ評価一覧の検索条件。"""
+
     page: int = Field(default=0, ge=0)
     size: int = Field(default=20, ge=1, le=100)
     assistantId: str | None = None
@@ -141,17 +153,23 @@ class FeedbackMessageListRequest(BaseModel):
 
 
 class FeedbackMessageContentResponse(BaseModel):
+    """評価されたメッセージの質問と回答。"""
+
     question: str | None
     answer: str | None
 
 
 class FeedbackMessageInfoResponse(BaseModel):
+    """評価されたメッセージの情報。"""
+
     assistantId: str | None
     assistantName: str | None
     content: FeedbackMessageContentResponse
 
 
 class FeedbackMessageItemResponse(BaseModel):
+    """メッセージ評価1件分の応答。"""
+
     id: str
     tenantId: str
     userId: str
@@ -164,6 +182,8 @@ class FeedbackMessageItemResponse(BaseModel):
 
 
 class PagedFeedbackMessageResponse(BaseModel):
+    """メッセージ評価一覧のページ応答。"""
+
     content: list[FeedbackMessageItemResponse]
     totalElements: int
     number: int
@@ -173,16 +193,22 @@ class PagedFeedbackMessageResponse(BaseModel):
 
 
 class ExternalServerInfoResponse(BaseModel):
+    """アシスタントが使う外部サーバー（ローカルサーバー）の情報。"""
+
     url: str
     authKey: str
 
 
 class FeedbackMessageListResponse(BaseModel):
+    """メッセージ評価一覧の応答（`feedbacks` で包む）。"""
+
     feedbacks: PagedFeedbackMessageResponse
     assistantIdToServerMap: dict[str, ExternalServerInfoResponse]
 
 
 class FeedbackRoomListRequest(BaseModel):
+    """ルーム評価一覧の検索条件。"""
+
     page: int = Field(default=0, ge=0)
     size: int = Field(default=20, ge=1, le=100)
     assistantId: str | None = None
@@ -210,6 +236,8 @@ class FeedbackRoomListRequest(BaseModel):
 
 
 class RoomInfoResponse(BaseModel):
+    """評価されたルームの情報（移植元 `FeedbackRoomResponse.RoomInfo`）。"""
+
     id: str
     name: str | None
     defaultAssistantId: str | None
@@ -234,6 +262,8 @@ class FeedbackRoomItemResponse(BaseModel):
 
 
 class PagedFeedbackRoomResponse(BaseModel):
+    """ルーム評価一覧のページ応答。"""
+
     content: list[FeedbackRoomItemResponse]
     totalElements: int
     number: int
@@ -243,4 +273,6 @@ class PagedFeedbackRoomResponse(BaseModel):
 
 
 class FeedbackRoomListResponse(BaseModel):
+    """ルーム評価一覧の応答（`feedbacks` で包む）。"""
+
     feedbacks: PagedFeedbackRoomResponse

@@ -32,11 +32,16 @@ async def _issue_session(
 ) -> None:
     """認証成功時にセッションを作成し、セッションCookieを発行する。
 
-    Args:
-        response: Cookieを設定する対象のレスポンス。
-        auth_response: 認証結果（`token`が設定されていればセッションを作成する）。
-        tenant_id: 認証済みユーザーのテナントID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    response : Response
+        Cookieを設定する対象のレスポンス。
+    auth_response : AuthResponse
+        認証結果（`token`が設定されていればセッションを作成する）。
+    tenant_id : str
+        認証済みユーザーのテナントID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
     """
     if auth_response.token:
         session_id = await session_store.create_session(

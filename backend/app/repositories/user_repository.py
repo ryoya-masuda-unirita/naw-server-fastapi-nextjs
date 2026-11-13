@@ -8,18 +8,26 @@ from app.models.user import User
 
 
 class UserRepository:
+    """ユーザー（`users`）のDBアクセス。"""
+
     @staticmethod
     async def find_by_login_id(
         login_id: str, tenant_id: str, session: AsyncSession
     ) -> User | None:
         """loginId と tenantId でユーザーを取得する。
 
-        Args:
-            login_id: ログインID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        User | None
             該当する User。存在しない場合は None。
         """
         stmt = select(User).where(
@@ -65,12 +73,18 @@ class UserRepository:
     ) -> dict[str, User]:
         """loginId一覧とtenantIdでユーザーをまとめて取得する。
 
-        Args:
-            login_ids: ログインIDの集合。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_ids : set[str]
+            ログインIDの集合。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, User]
             loginId をキーとした User の辞書。
         """
         if not login_ids:
@@ -90,12 +104,18 @@ class UserRepository:
         一覧取得結果の各行に紐づくユーザー名（`updatedBy`等）を解決する際、行数分の
         個別クエリを発行するN+1を避けるために使う。
 
-        Args:
-            user_ids: ユーザーIDの集合。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user_ids : set[uuid.UUID]
+            ユーザーIDの集合。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[uuid.UUID, User]
             ユーザーIDをキーとした User の辞書。
         """
         if not user_ids:
@@ -110,12 +130,18 @@ class UserRepository:
     ) -> User | None:
         """ユーザーIDとテナントIDでユーザーを取得する。
 
-        Args:
-            user_id: ユーザーID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user_id : uuid.UUID
+            ユーザーID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        User | None
             該当する User。存在しない場合は None。
         """
         stmt = select(User).where(User.id == user_id, User.tenant_id == tenant_id)

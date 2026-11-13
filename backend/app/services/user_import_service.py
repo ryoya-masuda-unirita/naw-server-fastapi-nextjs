@@ -23,6 +23,8 @@ REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE = (
 
 
 class UserImportService:
+    """ユーザーのCSVインポートの受付（検証とキュー投入）の業務ロジック。"""
+
     REQUIRED_COLUMNS = {"login_id", "name", "password", "role"}
     MAX_ROWS = 100
     MAX_LOGIN_ID_LENGTH = 255
@@ -40,12 +42,18 @@ class UserImportService:
         済みのレスポンスを返す。実際の行ごとの登録処理は`UserImportListener`が
         キュー受信時に行う。
 
-        Args:
-            file: アップロードされたCSVファイル。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        file : UploadFile
+            アップロードされたCSVファイル。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserImportResponse
             作成したインポートジョブのIDとステータス。
         """
         job = UserImportJob(
@@ -102,16 +110,24 @@ class UserImportService:
     ) -> UserImportJobResponse:
         """インポートジョブの状態を取得する。
 
-        Args:
-            job_id: インポートジョブID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        job_id : str
+            インポートジョブID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserImportJobResponse
             インポートジョブの状態。
 
-        Raises:
-            HTTPException: ジョブが存在しない、または別テナントの場合404を返す。
+        Raises
+        ------
+        HTTPException
+            ジョブが存在しない、または別テナントの場合404を返す。
         """
         job = await UserImportJobRepository.find_by_id_and_tenant_id(
             job_id, tenant_id, session
@@ -130,11 +146,16 @@ class UserImportService:
         検証を通過したファイルの生のバイト列をそのまま返す（ストレージへの
         アップロード・キュー受信側での再パースに使うため、行データには変換しない）。
 
-        Args:
-            file: アップロードされたCSVファイル。
-            errors: 検証エラーを追記するリスト。
+        Parameters
+        ----------
+        file : UploadFile
+            アップロードされたCSVファイル。
+        errors : list[str]
+            検証エラーを追記するリスト。
 
-        Returns:
+        Returns
+        -------
+        bytes
             検証済みのファイル内容（バイト列）。検証エラーがある場合は空バイト列。
         """
         file_name = file.filename or ""
@@ -193,11 +214,16 @@ class UserImportService:
     def _decode_csv(content: bytes, errors: list[str]) -> str:
         """CSVのバイト列をUTF-8またはShift-JISとしてデコードする。
 
-        Args:
-            content: CSVファイルのバイト列。
-            errors: デコード失敗時にエラーを追記するリスト。
+        Parameters
+        ----------
+        content : bytes
+            CSVファイルのバイト列。
+        errors : list[str]
+            デコード失敗時にエラーを追記するリスト。
 
-        Returns:
+        Returns
+        -------
+        str
             デコードされたテキスト。デコードに失敗した場合は空文字列。
         """
         for encoding in ("utf-8-sig", "cp932"):
@@ -214,9 +240,12 @@ class UserImportService:
     def _validate_rows(rows: list[dict[str, str]], errors: list[str]) -> None:
         """CSVの各行の項目内容（必須項目・文字数上限・値の妥当性）を検証する。
 
-        Args:
-            rows: 検証対象の行データ一覧。
-            errors: 検証エラーを追記するリスト。
+        Parameters
+        ----------
+        rows : list[dict[str, str]]
+            検証対象の行データ一覧。
+        errors : list[str]
+            検証エラーを追記するリスト。
         """
         login_ids: set[str] = set()
         for index, row in enumerate(rows, start=2):
@@ -270,11 +299,16 @@ class UserImportService:
     def _value(row: dict[str, str], column: str) -> str:
         """CSV行から指定カラムの値を前後の空白を除いて取得する。
 
-        Args:
-            row: CSVの行データ。
-            column: 取得対象のカラム名。
+        Parameters
+        ----------
+        row : dict[str, str]
+            CSVの行データ。
+        column : str
+            取得対象のカラム名。
 
-        Returns:
+        Returns
+        -------
+        str
             前後の空白を除いた値。値が存在しない場合は空文字列。
         """
         return (row.get(column) or "").strip()

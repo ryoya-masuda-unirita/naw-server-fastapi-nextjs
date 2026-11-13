@@ -8,6 +8,8 @@ from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemR
 
 
 class AssistantEndpointRepository:
+    """アシスタントとテナントエンドポイントの紐付け（`assistants_endpoints`）のDBアクセス。"""
+
     @staticmethod
     async def find_chat_endpoint(
         assistant_id: str, tenant_id: str, session: AsyncSession
@@ -19,12 +21,18 @@ class AssistantEndpointRepository:
         デプロイ名(`AssistantEndpoint.model`)とAPIキーを含む`TenantEndpoint`を
         あわせて1件解決する。対象の種別は`CHAT_AI_MODEL_ENDPOINT_TYPES`で管理する。
 
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[AssistantEndpoint, TenantEndpoint] | None
             (アシスタントとエンドポイントの紐付け, テナントエンドポイント) のタプル。
             紐づくチャット用エンドポイントが存在しない場合はNone。複数存在する
             場合はAzure OpenAIを優先し、同じ種別の中では`AssistantEndpoint.endpoint_id`が
@@ -188,11 +196,16 @@ class AssistantEndpointRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            endpoints: 紐付け先のテナントエンドポイントIDとモデルの一覧（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        endpoints : list[AssistantEndpointInput]
+            紐付け先のテナントエンドポイントIDとモデルの一覧（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(AssistantEndpoint).where(

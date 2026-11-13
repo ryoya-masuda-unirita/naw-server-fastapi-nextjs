@@ -55,6 +55,8 @@ _FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN = {
 
 
 class FeedbackService:
+    """フィードバック（ユーザー別集計・メッセージ評価・ルーム評価）の業務ロジック。"""
+
     @staticmethod
     async def get_feedback_messages(
         tenant_id: str, query: FeedbackMessageListRequest, session: AsyncSession
@@ -151,12 +153,18 @@ class FeedbackService:
     ) -> FeedbackUserListResponse:
         """テナント内のフィードバックユーザー一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            query: 絞り込み・ソート・ページング条件。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : FeedbackUserListRequest
+            絞り込み・ソート・ページング条件。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        FeedbackUserListResponse
             フィードバックユーザー一覧（ページング済み）。
         """
         sort_column = _SORT_FIELD_TO_COLUMN[query.sortField]
