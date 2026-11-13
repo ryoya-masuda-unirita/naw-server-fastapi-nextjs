@@ -1,47 +1,32 @@
-from sqlalchemy import exists, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assistant_category import AssistantCategory
 
 
 class AssistantCategoryRepository:
-    @staticmethod
-    async def exists_by_tenant_id_and_name(
-        tenant_id: str, name: str, session: AsyncSession, exclude_id: str | None = None
-    ) -> bool:
-        """同一テナント内に同名のアシスタントカテゴリが存在するかを判定する。
-
-        Args:
-            tenant_id: テナントID。
-            name: カテゴリ名。
-            session: 非同期DBセッション。
-            exclude_id: 判定から除外するカテゴリID（更新時、自分自身との重複を除くため）。
-
-        Returns:
-            同名のカテゴリが存在する場合True。
-        """
-        conditions = [
-            AssistantCategory.tenant_id == tenant_id,
-            AssistantCategory.name == name,
-        ]
-        if exclude_id:
-            conditions.append(AssistantCategory.id != exclude_id)
-        stmt = select(exists().where(*conditions))
-        result = await session.execute(stmt)
-        return bool(result.scalar())
+    """アシスタントカテゴリのDBアクセスを行うリポジトリ。"""
 
     @staticmethod
     async def find_by_tenant_id_and_ids(
         tenant_id: str, ids: list[str], session: AsyncSession
     ) -> list[AssistantCategory]:
-        """テナントIDとカテゴリID一覧に合致するアシスタントカテゴリを取得する。存在しないIDは無視される。
+        """テナントIDとカテゴリID一覧に合致するアシスタントカテゴリを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            ids: 対象のアシスタントカテゴリID一覧。
-            session: 非同期DBセッション。
+        存在しないIDは無視される。
 
-        Returns:
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        ids : list[str]
+            対象のアシスタントカテゴリID一覧。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[AssistantCategory]
             該当するアシスタントカテゴリ一覧。
         """
         if not ids:
@@ -58,11 +43,16 @@ class AssistantCategoryRepository:
     ) -> AssistantCategory:
         """アシスタントカテゴリを新規作成する。
 
-        Args:
-            category: 作成するアシスタントカテゴリ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category : AssistantCategory
+            作成するアシスタントカテゴリ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantCategory
             作成したアシスタントカテゴリ。
         """
         session.add(category)
@@ -76,11 +66,16 @@ class AssistantCategoryRepository:
     ) -> list[AssistantCategory]:
         """テナントIDに紐づく全てのアシスタントカテゴリを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AssistantCategory]
             アシスタントカテゴリ一覧。
         """
         stmt = select(AssistantCategory).where(AssistantCategory.tenant_id == tenant_id)
@@ -93,12 +88,18 @@ class AssistantCategoryRepository:
     ) -> AssistantCategory | None:
         """IDとテナントIDでアシスタントカテゴリを取得する。
 
-        Args:
-            category_id: アシスタントカテゴリID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category_id : str
+            アシスタントカテゴリID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantCategory | None
             該当するアシスタントカテゴリ。存在しない場合はNone。
         """
         stmt = select(AssistantCategory).where(
@@ -114,11 +115,16 @@ class AssistantCategoryRepository:
     ) -> AssistantCategory:
         """アシスタントカテゴリを更新する。
 
-        Args:
-            category: 更新するアシスタントカテゴリ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category : AssistantCategory
+            更新するアシスタントカテゴリ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantCategory
             更新後のアシスタントカテゴリ。
         """
         session.add(category)
@@ -130,9 +136,12 @@ class AssistantCategoryRepository:
     async def delete(category: AssistantCategory, session: AsyncSession) -> None:
         """アシスタントカテゴリを削除する。
 
-        Args:
-            category: 削除するアシスタントカテゴリ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        category : AssistantCategory
+            削除するアシスタントカテゴリ。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(category)
         await session.commit()

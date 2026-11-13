@@ -38,6 +38,7 @@ async def engine():
     # SQLite はデフォルトで外部キー制約を無効にするため接続ごとに有効化する
     @event.listens_for(_engine.sync_engine, "connect")
     def set_sqlite_pragma(dbapi_conn, _):
+        """SQLite の接続ごとに外部キー制約を有効にする。"""
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
@@ -66,6 +67,7 @@ async def session(engine):
             "system_prompt_templates",
             "files",
             "library_tag_mappings",
+            "library_contents",
             "share_libraries",
             "libraries",
             "library_tags",
