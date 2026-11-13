@@ -15,7 +15,11 @@ const expectAllowed = async (user: User, path: string) => {
   setAuthUser(user);
   const { router } = renderApp(path);
 
-  await waitFor(() => expect(screen.getByRole('main')).not.toBeEmptyDOMElement());
+  // 本物の画面は AdminPageShell が main を入れ子で持つため、いちばん内側（最後）を見る
+  await waitFor(() => {
+    const mains = screen.getAllByRole('main');
+    expect(mains[mains.length - 1]).not.toBeEmptyDOMElement();
+  });
   expect(router.state.location.pathname).toBe(path);
 };
 
