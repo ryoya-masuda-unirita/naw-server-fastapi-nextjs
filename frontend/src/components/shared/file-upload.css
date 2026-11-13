@@ -1,0 +1,51 @@
+/*
+ * 移植元 file/file-upload/file-upload.component.scss（.app-file-upload でスコープ）。
+ * .file-upload の枠線などの基本は index.css（移植元 styles.css）側にあり、ここはコンポーネント固有の上書き。
+ */
+.app-file-upload .file-upload {
+  width: 100%;
+}
+
+.app-file-upload .file-upload[data-drag-over='true'] .file-upload__zone {
+  border-color: var(--color-brand-secondary);
+  background-color: var(--color-bg-brand-strong);
+}
+
+.app-file-upload .file-upload__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.app-file-upload .file-upload__icon-wrap {
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: white;
+  color: var(--color-brand-primary);
+  box-shadow: var(--shadow-default);
+}
+
+.app-file-upload .file-upload__icon {
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.app-file-upload .file-upload__title {
+  font-size: var(--text-label-large);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-brand-secondary);
+  line-height: var(--tw-leading, var(--text-label-large--line-height));
+}
+
+.app-file-upload .file-upload__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}

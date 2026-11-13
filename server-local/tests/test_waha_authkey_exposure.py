@@ -34,6 +34,18 @@ class WahaStub:
     failing_path: str = "/startsession"
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        """失敗させるパスなら 503、セッション開始ならセッション ID、それ以外は OK を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            Waha! の応答。
+        """
         if request.url.path.endswith(self.failing_path):
             return httpx.Response(503)
         if request.url.path.endswith("/startsession"):
@@ -43,6 +55,15 @@ class WahaStub:
 
 @pytest.fixture
 def waha_stub() -> WahaStub:
+    """セッション開始で 503 を返す Waha! の偽物を用意する。
+
+    失敗させる操作はテストの中で failing_path を書き換えて変える。
+
+    Returns
+    -------
+    WahaStub
+        既定の偽 Waha!。
+    """
     return WahaStub()
 
 
@@ -50,7 +71,23 @@ def waha_stub() -> WahaStub:
 async def fake_waha(
     settings: Settings, waha_stub: WahaStub
 ) -> AsyncIterator[WahaClient]:
-    """conftest の fake_waha を上書きし、このモジュールでは実際の WahaClient を使う。"""
+    """conftest の fake_waha を上書きし、このモジュールでは実際の WahaClient を使う。
+
+    通信先だけ waha_stub に差し替え、authkey を URL に含める実際の処理と httpx の
+    例外の経路を通す。リトライ待ちは 0 にしてテストを速くする。
+
+    Parameters
+    ----------
+    settings : Settings
+        Waha! の URL・authkey を持つ設定。
+    waha_stub : WahaStub
+        Waha! の応答を返す偽物。
+
+    Yields
+    ------
+    WahaClient
+        waha_stub に通信する実際の WahaClient。
+    """
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(waha_stub.handle)
     ) as waha_http:
@@ -64,6 +101,18 @@ async def fake_waha(
 
 
 async def get_answers(session_factory: async_sessionmaker[AsyncSession]) -> list[str]:
+    """DB に保存された回答をすべて取り出し、authkey が入っていないか確かめられるようにする。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+
+    Returns
+    -------
+    list[str]
+        保存されている回答。
+    """
     async with session_factory() as session:
         result = await session.execute(select(col(MessageContent.answer)))
         return list(result.scalars().all())

@@ -1,0 +1,7 @@
+/*
+ * 移植元 form/form-radio/form-radio.component.scss。
+ * 移植元はビューカプセル化でこの部品の中だけに効くので、ホストクラス .app-form-radio でスコープする。
+ */
+.app-form-radio input[type='radio'] {
+  accent-color: var(--color-brand-primary);
+}

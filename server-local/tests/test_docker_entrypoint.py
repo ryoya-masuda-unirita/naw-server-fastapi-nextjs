@@ -21,6 +21,18 @@ UVICORN_ARGS = "app.main:app_factory --factory --host 0.0.0.0 --port 8080"
 
 
 def _write_stub(bin_dir: Path, name: str) -> None:
+    """コマンド名と引数を表示するだけの偽コマンドを置く。
+
+    本物の alembic・uvicorn を動かさずに、entrypoint が組み立てた引数を出力から
+    確かめるため。
+
+    Parameters
+    ----------
+    bin_dir : Path
+        偽コマンドを置くディレクトリ（PATH の先頭に入れる）。
+    name : str
+        差し替えるコマンド名。
+    """
     stub = bin_dir / name
     stub.write_text(f'#!/bin/sh\necho "{name} $*"\n', encoding="utf-8")
     stub.chmod(STUB_MODE)

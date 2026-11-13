@@ -117,8 +117,11 @@ naw-server-fastapi-nextjs/
 ├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
 ├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト。generative-ai-adapter/ をパス依存で使う）
 ├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/）
+├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
+
+`e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
 `embedding-adapter/`・`retrieval-adapter/` などは、移植に着手するときに `generative-ai-adapter/` 配下へ足す（「プロジェクト概要」の対応表を参照）。
 

@@ -1,0 +1,33 @@
+/* 移植元 multi-select/multi-select.component.scss。:host は .app-multi-select に置き換えてスコープする */
+.app-multi-select .trigger-wrapper::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  transition: box-shadow 0.2s ease;
+}
+
+.app-multi-select .trigger-wrapper.is-open::before {
+  box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+}
+
+.app-multi-select:focus-within .trigger-wrapper.has-value:not(.is-open)::before {
+  box-shadow: inset 0 0 0 1px var(--color-brand-primary);
+}
+
+@keyframes app-multi-select-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-multi-select .animate-fade-in {
+  animation: app-multi-select-fade-in 0.15s ease-out;
+}

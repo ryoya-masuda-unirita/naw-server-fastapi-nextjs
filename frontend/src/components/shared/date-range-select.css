@@ -1,0 +1,19 @@
+/*
+ * 移植元 filter/date-range-select の component styles（.animate-fade-in）。
+ * パネルは body 直下（CDK overlay 相当）に出すので、パネルに付けた .app-date-range-select-panel でスコープする。
+ */
+@keyframes app-date-range-select-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-date-range-select-panel.animate-fade-in,
+.app-date-range-select-panel .animate-fade-in {
+  animation: app-date-range-select-fade-in 0.15s ease-out;
+}

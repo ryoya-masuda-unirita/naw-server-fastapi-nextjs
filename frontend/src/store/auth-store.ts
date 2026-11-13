@@ -7,6 +7,7 @@ import type {
   LoginCredentials,
   LoginResponse,
   LoginStatus,
+  LoginSuccessResponse,
   AuthSessionResponse,
   BackendAuthResponse,
 } from '@/types/auth';
@@ -15,14 +16,24 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  /** いずれかのグループの管理者か（移植元 AuthStore.isGroupAdmin） */
+  isGroupAdmin: boolean;
+  /** テナント管理者ではなく、グループ管理者だけか（移植元 AuthStore.isGroupAdminOnly） */
+  isGroupAdminOnly: boolean;
+  /** 管理コンソール（/admin 配下）に入れるか（移植元 AuthStore.canAccessAdminConsole） */
+  canAccessAdminConsole: boolean;
+  /** 管理者になっているグループの ID（移植元 AuthStore.adminGroupIds） */
+  adminGroupIds: string[];
   userName: string;
 }
 
 interface AuthStore extends AuthState {
   ensureInitialized: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<LoginStatus>;
+  loginWithKey: (loginKey: string) => Promise<boolean>;
   logout: () => Promise<void>;
   completePasswordReset: (response: AuthSessionResponse) => Promise<void>;
+  invalidateSession: () => void;
 }
 
 const mapToUser = (response: {
@@ -37,30 +48,42 @@ const mapToUser = (response: {
   groups: response.groups ?? [],
 });
 
-const deriveFromUser = (user: User | null): Pick<AuthState, 'isAuthenticated' | 'isAdmin' | 'userName'> => ({
-  isAuthenticated: user !== null,
-  isAdmin: user?.role === 'ADMIN',
-  userName: user?.name ?? 'Guest',
-});
+/** user から権限の派生値を計算する。テストで状態を組み立てるときにも使う */
+export const deriveAuthState = (user: User | null): Omit<AuthState, 'user'> => {
+  const isAdmin = user?.role === 'ADMIN';
+  const adminGroupIds = (user?.groups ?? [])
+    .filter((group) => group.groupAdmin)
+    .map((group) => group.groupId);
+  const isGroupAdmin = adminGroupIds.length > 0;
+  return {
+    isAuthenticated: user !== null,
+    isAdmin,
+    isGroupAdmin,
+    isGroupAdminOnly: !isAdmin && isGroupAdmin,
+    canAccessAdminConsole: isAdmin || isGroupAdmin,
+    adminGroupIds,
+    userName: user?.name ?? 'Guest',
+  };
+};
 
 export const useAuthStore = create<AuthStore>((set) => {
   let initPromise: Promise<void> | null = null;
 
-  const setUser = (user: User | null) => set({ user, ...deriveFromUser(user) });
+  const setUser = (user: User | null) => set({ user, ...deriveAuthState(user) });
 
   return {
     user: null,
-    isAuthenticated: false,
-    isAdmin: false,
-    userName: 'Guest',
+    ...deriveAuthState(null),
 
     async ensureInitialized() {
       if (!initPromise) {
         initPromise = (async () => {
+          let storedUser: User | null = null;
           const stored = sessionStorage.getItem('AUTH_USER');
           if (stored) {
             try {
-              setUser(JSON.parse(stored) as User);
+              storedUser = JSON.parse(stored) as User;
+              setUser(storedUser);
             } catch (e) {
               console.warn('AUTH_USER in sessionStorage is corrupted. Clearing.', e);
               sessionStorage.removeItem('AUTH_USER');
@@ -72,6 +95,13 @@ export const useAuthStore = create<AuthStore>((set) => {
               API_PATHS.AUTH.SESSION
             );
             const user = mapToUser(session);
+            // GET /api/auth はグループを返さないため、ログイン時に保存したグループを引き継ぐ。
+            // 引き継がないと再読み込みでグループ管理者の権限（管理コンソール・グループ詳細）が消える（移植元 initializeSession と同じ）。
+            // 移植元はユーザーを比べないが、別タブで別ユーザーにログインし直した場合に他人のグループを引き継がないよう ID を比べる
+            const previousGroups = storedUser?.id === user.id ? (storedUser.groups ?? []) : [];
+            if (user.groups.length === 0 && previousGroups.length > 0) {
+              user.groups = previousGroups;
+            }
             setUser(user);
             // backend の GET /api/auth は tenant_id を返さないため、ログイン時に保存した入力値をそのまま使う
             sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
@@ -107,7 +137,7 @@ export const useAuthStore = create<AuthStore>((set) => {
         setUser(null);
         sessionStorage.removeItem('AUTH_USER');
         try {
-          await apiClient.post(API_PATHS.AUTH.LOGOUT, null);
+          await apiClient.post(API_PATHS.AUTH.LOGOUT, null, { responseType: 'text' });
         } catch {
           console.error('Logout during password reset failed');
         }
@@ -126,9 +156,28 @@ export const useAuthStore = create<AuthStore>((set) => {
       return 'SUCCESS';
     },
 
+    // 移植元 AuthStore.loginWithKey。URL の loginkey での自動ログイン（lib/initializers/login-key.ts）から呼ぶ
+    async loginWithKey(loginKey: string): Promise<boolean> {
+      try {
+        const response = await apiClient.post<LoginSuccessResponse>(API_PATHS.AUTH.LOGIN_KEY, {
+          loginKey,
+        });
+        const user = mapToUser(response);
+        setUser(user);
+        sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
+        return true;
+      } catch (e) {
+        console.error('Login-key authentication failed', e);
+        setUser(null);
+        sessionStorage.removeItem('AUTH_USER');
+        clearTenantId();
+        return false;
+      }
+    },
+
     async logout(): Promise<void> {
       try {
-        await apiClient.post(API_PATHS.AUTH.LOGOUT, null);
+        await apiClient.post(API_PATHS.AUTH.LOGOUT, null, { responseType: 'text' });
       } catch (e) {
         console.error('Logout service error', e);
       }
@@ -144,6 +193,15 @@ export const useAuthStore = create<AuthStore>((set) => {
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
       window.location.href = ROUTES.APP.DASHBOARD;
+    },
+
+    // API が 401 を返したとき（移植元 errorInterceptor）。移植元は sessionStorage を消すだけだが、
+    // React はストアの user が残るとログイン画面への遷移後も認証済み扱いになるため、ストアも空にする
+    invalidateSession(): void {
+      setUser(null);
+      initPromise = null;
+      sessionStorage.removeItem('AUTH_USER');
+      clearTenantId();
     },
   };
 });

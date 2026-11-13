@@ -1,0 +1,16 @@
+/*
+ * 移植元 <app-mat-icon>（shared/components/icons/mat-icon.component.ts）の component styles。
+ * 中の mat-icon（Angular Material の .mat-icon の基本スタイル）を、外側の要素の font-size に合わせて 1em で描画する。
+ */
+.app-mat-icon > .mat-icon {
+  -webkit-user-select: none;
+  user-select: none;
+  background-repeat: no-repeat;
+  display: inline-block;
+  fill: currentColor;
+  overflow: hidden;
+  font-size: inherit !important;
+  width: 1em !important;
+  height: 1em !important;
+  line-height: 1 !important;
+}

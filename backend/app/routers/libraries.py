@@ -9,6 +9,9 @@ from app.models.user import User
 from app.schemas.library import (
     LibraryPageNumber,
     LibraryPageSize,
+    LibraryTitleUpdateRequest,
+    LibraryContentResponse,
+    LibraryCreateRequest,
     LibraryGetResponse,
     LibraryListItemResponse,
     LibraryPageResponse,
@@ -51,6 +54,20 @@ async def get_libraries(
     return {"data": result}
 
 
+@library_router.post("")
+async def create_library(
+    req: LibraryCreateRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, LibraryUpdateResponse]:
+    """ライブラリスタブ作成（ローカルサーバー生成用のメタデータ）"""
+    result = await LibraryService.create_library_stub(
+        x_tenant_id, current_user, req.messageId, session
+    )
+    return {"data": result}
+
+
 @library_router.get("/{room_id}/list")
 async def get_library_list(
     room_id: str,
@@ -72,10 +89,38 @@ async def get_library(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> LibraryGetResponse:
-    """ライブラリのMarkdownコンテンツ取得"""
+    """ライブラリ詳細取得"""
     return await LibraryService.get_library(
         x_tenant_id, current_user, library_id, session
     )
+
+
+@library_router.get("/{library_id}/content", response_model=LibraryContentResponse)
+async def get_library_content(
+    library_id: str,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LibraryContentResponse:
+    """ライブラリ本文取得"""
+    return await LibraryService.get_library_content(
+        x_tenant_id, current_user, library_id, session
+    )
+
+
+@library_router.patch("/{library_id}/title")
+async def update_library_title(
+    library_id: str,
+    req: LibraryTitleUpdateRequest,
+    x_tenant_id: str = Depends(get_verified_tenant_id),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, LibraryUpdateResponse]:
+    """ライブラリタイトル更新（タイトルのみ）"""
+    result = await LibraryService.update_library_title(
+        x_tenant_id, current_user, library_id, req.title, session
+    )
+    return {"data": result}
 
 
 @library_router.put("/{library_id}")

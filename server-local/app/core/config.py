@@ -84,24 +84,80 @@ class Settings(DatabaseSettings):
     @field_validator("log_level")
     @classmethod
     def normalize_log_level(cls, v: str) -> str:
-        """移植元と同じレベル名（TRACE・WARN・FATAL・OFF など）で書けるようにする。"""
+        """ログレベル名を Python の logging のレベル名にそろえる。
+
+        移植元と同じレベル名（TRACE・WARN・FATAL・OFF など）で書けるようにする。
+        大文字・小文字と前後の空白は問わない。
+
+        Parameters
+        ----------
+        v : str
+            環境変数 ``LOG_LEVEL`` の値。
+
+        Returns
+        -------
+        str
+            大文字にし、Python にない名前を読み替えたレベル名。
+        """
         level = v.strip().upper()
         return SPRING_LOG_LEVEL_ALIASES.get(level, level)
 
     @field_validator("context_path")
     @classmethod
     def normalize_context_path(cls, v: str) -> str:
-        """`secuaigent/` のような指定も `/secuaigent` に揃える。"""
+        """コンテキストパスを先頭 ``/`` あり・末尾 ``/`` なしの形にそろえる。
+
+        `secuaigent/` のような指定も `/secuaigent` に揃える。ルーターの前置きに
+        そのまま使うため、``/`` だけや空の指定は空文字（前置きなし）にする。
+
+        Parameters
+        ----------
+        v : str
+            環境変数 ``CONTEXT_PATH`` の値。
+
+        Returns
+        -------
+        str
+            ``/secuaigent`` の形のパス。指定がなければ空文字。
+        """
         stripped = v.strip().strip("/")
         return f"/{stripped}" if stripped else ""
 
     @field_validator("naw_base_url")
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
-        """移植元 NawApiClient と同じく末尾の `/` を取り除く。"""
+        """NAW 本体の URL から前後の空白と末尾の ``/`` を取り除く。
+
+        移植元 NawApiClient と同じく末尾の `/` を取り除き、パスを連結したときに
+        ``//`` にならないようにする。
+
+        Parameters
+        ----------
+        v : str
+            環境変数 ``NAW_BASE_URL`` の値。
+
+        Returns
+        -------
+        str
+            末尾の ``/`` を除いた URL。
+        """
         return v.strip().rstrip("/")
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """環境変数と .env から設定を読み、以後は同じインスタンスを返す。
+
+    設定はプロセスの実行中に変わらないため、``lru_cache`` で 1 回だけ読む。
+
+    Returns
+    -------
+    Settings
+        アプリの設定。
+
+    Raises
+    ------
+    pydantic.ValidationError
+        必須の設定（``SECURITY_SERVER_AUTH_KEY`` など）がない、または値が不正な場合。
+    """
     return Settings()
