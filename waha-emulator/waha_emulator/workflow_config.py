@@ -487,7 +487,11 @@ def _embedding_definition(
     output_type = raw.get("outputType")
     if operation == OPERATION_LEARN:
         output_type = OUTPUT_TYPE_VDB_NEW if output_type is None else output_type
-        if output_type not in LEARN_OUTPUT_TYPES or isinstance(output_type, bool):
+        if (
+            not isinstance(output_type, int)
+            or isinstance(output_type, bool)
+            or output_type not in LEARN_OUTPUT_TYPES
+        ):
             raise WorkflowConfigError(
                 f"{where}: 学習の outputType は 1（追加登録）か 3（新規登録）です"
             )

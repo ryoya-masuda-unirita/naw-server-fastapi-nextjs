@@ -322,3 +322,20 @@ def test_delete_embedding_strips_id_and_rejects_blank() -> None:
         controller.delete_embedding("  ")
     with pytest.raises(RuntimeError, match="fileUniqueId must not be blank"):
         controller.delete_embedding(None)
+
+
+def test_first_line_longer_than_split_length_does_not_create_empty_chunk(
+    tmp_path: Path,
+) -> None:
+    """先頭の行が分割文字数より長くても、空のチャンクは登録も出力もしないこと"""
+    source = tmp_path / "in.txt"
+    source.write_text("a very long first line\nshort\n", encoding="utf-8")
+    out = tmp_path / "out.tsv"
+    store = FakeStore()
+
+    make_controller(store).execute_embedding(
+        5, str(source), str(out), OUTPUT_TYPE_VDB_ADD, None
+    )
+
+    assert [e.content for e in store.added] == ["a very long first line\n", "short\n"]
+    assert [r[1] for r in read_tsv(out)] == ["a very long first line\n", "short\n"]

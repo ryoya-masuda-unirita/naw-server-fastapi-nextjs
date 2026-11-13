@@ -96,24 +96,31 @@ class RawChunk:
     file_id: str
 
 
-_TSV_RECORD = re.compile(r'"([^"\t]*)"\t"(.*?)"\t"([^"\t]*)"\t"([^"\t]*)"\n', re.DOTALL)
+_ANY_PATH = r'[^"\t]*'
 
 
-def parse_adapter_tsv(text: str) -> list[RawChunk]:
+def parse_adapter_tsv(text: str, source_path: str | None = None) -> list[RawChunk]:
     """アダプタの出力 TSV（本文に改行を含む）を行に分ける。
 
     Parameters
     ----------
     text : str
         アダプタが書いた TSV。
+    source_path : str | None
+        アダプタに渡した入力ファイルのパス。指定すると、行の先頭をこのパスで固定する
+        （アダプタはパスをエスケープせずに書くため、`"` やタブを含むパスでも読める）。
 
     Returns
     -------
     list[RawChunk]
         パート ID が空でないチャンク（取り込まれなかった行は除く）。
     """
+    path_pattern = re.escape(source_path) if source_path is not None else _ANY_PATH
+    record = re.compile(
+        rf'"({path_pattern})"\t"(.*?)"\t"([^"\t]*)"\t"([^"\t]*)"\n', re.DOTALL
+    )
     chunks = []
-    for match in _TSV_RECORD.finditer(text):
+    for match in record.finditer(text):
         path, _body, part_id, file_id = match.groups()
         if part_id:
             chunks.append(RawChunk(path, part_id, file_id))
@@ -356,20 +363,29 @@ class EmbeddingWorkflow:
             job_dir = Path(directory)
             source = self._source_file(request, job_dir)
             app = self._new_app(job_dir, self.definition.output_type)
-            self._write_records(
-                app,
-                [
-                    [
-                        ColumnData.char(""),
-                        ColumnData.file(str(source)),
-                        ColumnData.char(str(split_length)),
-                    ]
-                ],
-                request,
-            )
             output = job_dir / OUTPUT_VIEW_NAME
+            try:
+                self._write_records(
+                    app,
+                    [
+                        [
+                            ColumnData.char(""),
+                            ColumnData.file(str(source)),
+                            ColumnData.char(str(split_length)),
+                        ]
+                    ],
+                    request,
+                )
+            except WorkflowError:
+                # 途中まで登録された行を残すと、再試行のたびに重複する
+                partial = output.read_text(encoding="utf-8") if output.exists() else ""
+                self._remove_partial_rows(
+                    {c.file_id for c in parse_adapter_tsv(partial, str(source))},
+                    request,
+                )
+                raise
             text = output.read_text(encoding="utf-8") if output.exists() else ""
-        chunks = parse_adapter_tsv(text)
+        chunks = parse_adapter_tsv(text, str(source))
         if not chunks:
             raise WorkflowError(NO_ROWS_MESSAGE)
         upload = request.inputs.get(SLOT_FILE)
@@ -400,14 +416,14 @@ class EmbeddingWorkflow:
         logical_path : str
             書き込むパス。
 
-        Raises
-        ------
-        WorkflowError
-            DB を更新できないとき。
+        パスは見た目の情報で、`filepath` 列がない既存テーブルなどでは更新できない。
+        学習した行はすでに登録済みのため、更新に失敗しても学習は成功のままにする。
         """
         config = self._vector_db_config()
-        table = _quote_table(config)
+        if not config.is_postgre_sql_provider():
+            return
         try:
+            table = _quote_table(config)
             connection = self._open_connection(config)
             try:
                 connection.execute(
@@ -416,8 +432,8 @@ class EmbeddingWorkflow:
                 )
             finally:
                 connection.close()
-        except Exception as e:
-            raise WorkflowError(f"{ADAPTER_FAILED_PREFIX}: {e}") from e
+        except Exception as e:  # noqa: BLE001 - 見た目の補正なので何が起きても学習は成功にする
+            logger.warning("failed to relabel source path: %s", type(e).__name__)
 
     def _split_length(self, request: WorkflowRequest) -> int:
         """execute の splitLength（空なら定義の既定）を数値にする。
@@ -540,6 +556,30 @@ class EmbeddingWorkflow:
             len(ids),
             len(file_ids),
         )
+        self._remove_files(config, file_ids, request)
+        return ""
+
+    def _remove_files(
+        self, config: VectorDBConfig, file_ids: list[str], request: WorkflowRequest
+    ) -> None:
+        """ファイル ID の行を、アダプタ（出力モード 2）で削除する。
+
+        Parameters
+        ----------
+        config : VectorDBConfig
+            ベクトルDB の設定。
+        file_ids : list[str]
+            削除するファイル ID。
+        request : WorkflowRequest
+            入力（ログ用）。
+
+        Raises
+        ------
+        WorkflowError
+            アダプタが失敗したとき。
+        """
+        if not file_ids:
+            return
         with tempfile.TemporaryDirectory(prefix=JOB_DIR_PREFIX) as directory:
             job_dir = Path(directory)
             app = self._new_app(job_dir, OUTPUT_TYPE_VDB_DELETE)
@@ -549,10 +589,33 @@ class EmbeddingWorkflow:
                 for fid in file_ids
             ]
             self._write_records(app, records, request)
-        return ""
+
+    def _remove_partial_rows(
+        self, file_ids: set[str], request: WorkflowRequest
+    ) -> None:
+        """学習が途中で失敗したとき、登録済みの行を片付ける（できなくても続ける）。
+
+        Parameters
+        ----------
+        file_ids : set[str]
+            出力 TSV に残っていた、登録済みのファイル ID。
+        request : WorkflowRequest
+            入力（ログ用）。
+        """
+        if not file_ids:
+            return
+        try:
+            self._remove_files(self._vector_db_config(), sorted(file_ids), request)
+            logger.info("removed partial rows after failure: fileIds=%d", len(file_ids))
+        except WorkflowError:
+            logger.warning(
+                "failed to remove partial rows: serviceId=%s, fileIds=%d",
+                request.service_id,
+                len(file_ids),
+            )
 
     def _resolve_file_ids(self, config: VectorDBConfig, ids: list[str]) -> list[str]:
-        """パート ID（行 ID）から、ファイル ID の一覧を引く。
+        """パート ID（行 ID）またはファイル ID から、ファイル ID の一覧を引く。
 
         Parameters
         ----------
@@ -564,7 +627,8 @@ class EmbeddingWorkflow:
         Returns
         -------
         list[str]
-            重複を除いたファイル ID（行 ID に当たらなかったものはそのまま）。
+            重複を除いたファイル ID。行 ID にもファイル ID にも当たらない ID
+            （削除済みなど）は飛ばす。
 
         Raises
         ------
@@ -575,18 +639,22 @@ class EmbeddingWorkflow:
         try:
             connection = self._open_connection(config)
             try:
-                found: dict[str, str] = {}
                 rows = connection.execute(
-                    f"SELECT id::text, fileid FROM {table} WHERE id::text = ANY(%s)",
-                    (ids,),
+                    f"SELECT id::text, fileid FROM {table} "
+                    "WHERE id::text = ANY(%s) OR fileid = ANY(%s)",
+                    (ids, ids),
                 ).fetchall()
-                for row_id, file_id in rows:
-                    found[row_id] = file_id
             finally:
                 connection.close()
         except Exception as e:
             raise WorkflowError(f"{ADAPTER_FAILED_PREFIX}: {e}") from e
-        return list(dict.fromkeys(found.get(i, i) for i in ids))
+        file_ids = list(dict.fromkeys(file_id for _row_id, file_id in rows))
+        known = {row_id for row_id, _file_id in rows} | set(file_ids)
+        skipped = [i for i in ids if i not in known]
+        if skipped:
+            # 削除済みのパート ID が再び来ても失敗にしない（server-local は DB 側を消す）
+            logger.warning("delete: ids not found in vector db: %d", len(skipped))
+        return file_ids
 
     def _ensure_graphrag_schema(self, config: VectorDBConfig) -> None:
         """削除が参照する GraphRAG のスキーマがなければ作る（エミュレーターの補い）。

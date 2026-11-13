@@ -6,6 +6,7 @@
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
@@ -49,6 +50,25 @@ LINE_SEPARATOR = "\n"
 EMPTY_FILE_PATH_MESSAGE = "ファイルパスが取得できませんでした。"
 FILE_NOT_FOUND_MESSAGE = "ファイルが存在しません: "
 FILE_UNIQUE_ID_BLANK_MESSAGE = "fileUniqueId must not be blank"
+
+
+@dataclass
+class _ChunkState:
+    """チャンクを順に書くときの途中の状態。
+
+    Attributes
+    ----------
+    response : str
+        直前に書いたチャンクのベクトルDB の行 ID。
+    chunk_sequence : int
+        Graph に書いたチャンクの連番。
+    previous_vector_row_id : str | None
+        Graph に書いた直前のチャンクの行 ID。
+    """
+
+    response: str = ""
+    chunk_sequence: int = 0
+    previous_vector_row_id: str | None = None
 
 
 def java_split_lines(text: str) -> list[str]:
@@ -230,68 +250,58 @@ class EmbeddingController:
         file_unique_id = create_unique_id()
         media_text = self._preprocess(path)
         lines = java_split_lines(media_text)
-        sentence = ""
-        response = ""
         header = f'"{path}"\t"'
-        chunk_sequence = 0
-        previous_vector_row_id: str | None = None
+        state = _ChunkState()
         buffer_success_tsv = self._should_buffer_success_tsv(output_type)
         buffered: list[str] = []
         to_vdb = output_type in (OUTPUT_TYPE_VDB_ADD, OUTPUT_TYPE_VDB_NEW)
 
         with open(output_path, "a", encoding="utf-8", newline="") as writer:
 
-            def emit(line: str) -> None:
-                """成功行を出力する（バッファ指定なら溜める）。
+            def write_chunk(sentence: str, message: str) -> None:
+                """1 チャンクをベクトルDB（と Graph）に書き、成功 TSV に出す。
+
+                本文が空のチャンクは書かない（移植元は先頭の行が分割文字数より長いと
+                空のチャンクを作り、埋め込み API やグラフ書き込みが失敗する）。
 
                 Parameters
                 ----------
-                line : str
-                    TSV の 1 行（改行なし）。
+                sentence : str
+                    チャンクの本文。
+                message : str
+                    ログに出す説明。
                 """
-                if buffer_success_tsv:
-                    buffered.append(line)
-                else:
-                    writer.write(line + "\n")
-
-            for str_line in lines:
-                if len(sentence + str_line) > split_length:
-                    if to_vdb:
-                        response = self.import_embedding(
-                            sentence, id, file_unique_id, input_file_path
-                        )
-                        if self._write_graph_chunk_if_needed(
-                            output_type,
-                            file_unique_id,
-                            str(path),
-                            response,
-                            chunk_sequence,
-                            sentence,
-                            previous_vector_row_id,
-                        ):
-                            previous_vector_row_id = response
-                            chunk_sequence += 1
-                    emit(_success_line(header, sentence, response, file_unique_id))
-                    logger.info("分割された文を出力しました: %s", sentence)
-                    sentence = ""
-                sentence += str_line + "\n"
-            if sentence != "":
+                if sentence == "":
+                    return
                 if to_vdb:
-                    response = self.import_embedding(
+                    state.response = self.import_embedding(
                         sentence, id, file_unique_id, input_file_path
                     )
                     if self._write_graph_chunk_if_needed(
                         output_type,
                         file_unique_id,
                         str(path),
-                        response,
-                        chunk_sequence,
+                        state.response,
+                        state.chunk_sequence,
                         sentence,
-                        previous_vector_row_id,
+                        state.previous_vector_row_id,
                     ):
-                        previous_vector_row_id = response
-                emit(_success_line(header, sentence, response, file_unique_id))
-                logger.info("最後の文を出力しました: %s", sentence)
+                        state.previous_vector_row_id = state.response
+                        state.chunk_sequence += 1
+                line = _success_line(header, sentence, state.response, file_unique_id)
+                if buffer_success_tsv:
+                    buffered.append(line)
+                else:
+                    writer.write(line + "\n")
+                logger.info("%s: %s", message, sentence)
+
+            sentence = ""
+            for str_line in lines:
+                if len(sentence + str_line) > split_length:
+                    write_chunk(sentence, "分割された文を出力しました")
+                    sentence = ""
+                sentence += str_line + "\n"
+            write_chunk(sentence, "最後の文を出力しました")
             self._flush_buffered_success_tsv(
                 buffer_success_tsv, buffered, writer, input_file_path
             )

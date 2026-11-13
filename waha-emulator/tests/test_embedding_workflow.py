@@ -210,7 +210,11 @@ class FakeConnection:
         if "ANY(%s)" in sql:
             wanted = set(params[0])
             return FakeCursor(
-                [(r["id"], r["fileid"]) for r in self._db.rows if r["id"] in wanted]
+                [
+                    (r["id"], r["fileid"])
+                    for r in self._db.rows
+                    if r["id"] in wanted or r["fileid"] in wanted
+                ]
             )
         offset, limit = params
         ordered = sorted(self._db.rows, key=lambda r: (r["fileid"], r["id"]))
@@ -641,3 +645,105 @@ def test_example_config_defines_learn_sync_and_delete_services() -> None:
         "kb-sync": "sync",
         "kb-delete": "delete",
     }
+
+
+async def test_delete_accepts_file_ids_and_skips_unknown_ids() -> None:
+    """削除はファイル ID でも消せ、どちらにも当たらない ID は飛ばして成功にすること"""
+    db = FakeVectorDb()
+    workflow = StubbedEmbeddingWorkflow(definition("learn"), db)
+    await learn(workflow, TEXT)
+    file_id = db.rows[0]["fileid"]
+    delete_workflow = StubbedEmbeddingWorkflow(definition("delete"), db)
+
+    await delete_workflow.run(
+        request(upload=("ids.txt", f"{file_id}\nalready-deleted-part\n".encode()))
+    )
+
+    assert db.rows == []
+
+
+async def test_delete_with_only_unknown_ids_deletes_nothing() -> None:
+    """どの行にも当たらない ID だけの削除は、何も消さず成功にすること"""
+    db = FakeVectorDb()
+    await learn(StubbedEmbeddingWorkflow(definition("learn"), db), TEXT)
+    count = len(db.rows)
+    delete_workflow = StubbedEmbeddingWorkflow(definition("delete"), db)
+
+    await delete_workflow.run(request(upload=("ids.txt", b"no-such-id\n")))
+
+    assert len(db.rows) == count
+    assert delete_workflow.schema_calls == 0
+
+
+async def test_learn_removes_partial_rows_when_adapter_fails_midway() -> None:
+    """学習が途中で失敗したら、登録済みの行を消して再試行で重複しないようにすること"""
+    db = FakeVectorDb()
+
+    class FailingStore(FakeStore):
+        """2 件目の追加で失敗するストア。"""
+
+        def add(self, embedding: Embedding) -> str:
+            """1 件目は追加し、2 件目は失敗する。
+
+            Parameters
+            ----------
+            embedding : Embedding
+                追加するチャンク。
+
+            Returns
+            -------
+            str
+                行 ID。
+
+            Raises
+            ------
+            RuntimeError
+                2 件目のとき。
+            """
+            if len(self._db.rows) >= 1:
+                raise RuntimeError("embedding api down")
+            return super().add(embedding)
+
+    class FailingWorkflow(StubbedEmbeddingWorkflow):
+        """FailingStore を差し込むワークフロー。"""
+
+        def _new_app(self, job_dir: Path, output_type: int) -> App:
+            """失敗するストアを差し込んだ App を作る。
+
+            Parameters
+            ----------
+            job_dir : Path
+                ジョブのディレクトリ。
+            output_type : int
+                出力モード。
+
+            Returns
+            -------
+            App
+                アダプタ。
+            """
+            app = EmbeddingWorkflow._new_app(self, job_dir, output_type)
+            app.embedding_controller = EmbeddingController(
+                "",
+                app.proxy_setting,
+                app.access_credential,
+                app.vector_db_config,
+                app.image_explanation_mode,
+                embedding_model=FakeModel(),
+                vector_db_model=FailingStore(self.db),
+            )
+            return app
+
+    workflow = FailingWorkflow(definition("learn"), db)
+    with pytest.raises(WorkflowError, match="embedding api down"):
+        await learn(workflow, TEXT, "10")
+
+    assert db.rows == []
+
+
+def test_parse_adapter_tsv_reads_paths_with_quotes_when_source_is_known() -> None:
+    """入力ファイルのパスが分かっていれば、`"` を含むパスの行も読めること"""
+    path = '/in/a"b.txt'
+    text = f'"{path}"\t"本文\n"\t"p1"\t"f1"\n'
+    assert parse_adapter_tsv(text)[0].path != path
+    assert [c.part_id for c in parse_adapter_tsv(text, path)] == ["p1"]
