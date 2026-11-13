@@ -300,14 +300,21 @@ class LibraryRepository:
             保存後のライブラリ。
         """
         session.add(library)
-        # ORMの関連を定義していないため、外部キーの親を先にINSERTさせる
-        await session.flush()
-        session.add(
-            LibraryContent(
-                library_id=library.id, tenant_id=library.tenant_id, content=content
+        try:
+            # ORMの関連を定義していないため、外部キーの親を先にINSERTさせる
+            await session.flush()
+            session.add(
+                LibraryContent(
+                    library_id=library.id,
+                    tenant_id=library.tenant_id,
+                    content=content,
+                )
             )
-        )
-        await session.commit()
+            await session.commit()
+        except Exception:
+            # flush済みのライブラリだけが残る（本文の無いスタブ状態になる）のを防ぐ
+            await session.rollback()
+            raise
         await session.refresh(library)
         return library
 

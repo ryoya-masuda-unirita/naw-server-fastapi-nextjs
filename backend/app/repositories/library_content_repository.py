@@ -56,7 +56,10 @@ class LibraryContentRepository:
         bool
             本文が存在する場合True。
         """
-        found = await LibraryContentRepository.find_by_library_id_and_tenant_id(
-            library_id, tenant_id, session
+        # 存在確認だけのため、本文（大きなテキスト）は読み込まず主キーだけを取得する
+        stmt = select(LibraryContent.library_id).where(
+            LibraryContent.library_id == library_id,
+            LibraryContent.tenant_id == tenant_id,
         )
-        return found is not None
+        result = await session.execute(stmt)
+        return result.first() is not None

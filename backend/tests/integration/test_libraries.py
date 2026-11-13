@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -1159,6 +1160,32 @@ class TestCreateWithContent:
         assert content_row is not None
         assert content_row.content == "# 生成本文"
         assert content_row.tenant_id == lib_tenant.id
+
+    async def test_rolls_back_when_saving_content_fails(
+        self, lib_tenant, owner_user, message
+    ):
+        """本文の保存（コミット）に失敗したらロールバックして例外を伝えること"""
+        failing_session = MagicMock()
+        failing_session.flush = AsyncMock()
+        failing_session.commit = AsyncMock(side_effect=RuntimeError("commit failed"))
+        failing_session.rollback = AsyncMock()
+
+        with pytest.raises(RuntimeError, match="commit failed"):
+            await LibraryRepository.create_with_content(
+                Library(
+                    tenant_id=lib_tenant.id,
+                    message_id=message.id,
+                    user_id=owner_user.id,
+                    title="失敗するタイトル",
+                ),
+                "# 本文",
+                failing_session,
+            )
+
+        failing_session.flush.assert_awaited_once()
+        failing_session.rollback.assert_awaited_once()
+        # ライブラリと本文の両方をセッションに追加してからコミットを試みている
+        assert failing_session.add.call_count == 2
 
 
 @pytest.mark.asyncio
