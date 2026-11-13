@@ -167,7 +167,12 @@ function useOptimisticFilePatch(indexId: string) {
   const queryClient = useQueryClient();
   const prefix = filesKeyPrefix(indexId);
 
-  const apply = (fileId: string, change: Partial<TrainingDataFile>): FilesSnapshot => {
+  const apply = async (
+    fileId: string,
+    change: Partial<TrainingDataFile>,
+  ): Promise<FilesSnapshot> => {
+    // 取得中の古い応答が、書き換えた行を上書きしないようにする
+    await queryClient.cancelQueries({ queryKey: prefix });
     const snapshot = queryClient.getQueriesData<TrainingDataFileApiResponse>({ queryKey: prefix });
     queryClient.setQueriesData<TrainingDataFileApiResponse>({ queryKey: prefix }, (current) =>
       current
@@ -234,7 +239,8 @@ export function useAddTrainingFiles(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (entries: TrainingFileUploadEntry[]) => uploadFiles(id, entries),
-    onSuccess: () => refetchFiles(queryClient, id),
+    // 途中のファイルで失敗しても、登録できた分を一覧に出すため成否を問わず読み直す
+    onSettled: () => refetchFiles(queryClient, id),
   });
 }
 
@@ -246,7 +252,8 @@ export function useDeleteTrainingFiles(id: string) {
       Promise.all(
         fileIds.map((fileId) => apiClient.delete(API_PATHS.INDEXES.FILE(id, fileId))),
       ),
-    onSuccess: () => refetchFiles(queryClient, id),
+    // 一部だけ失敗しても、削除できた分を一覧から消すため成否を問わず読み直す
+    onSettled: () => refetchFiles(queryClient, id),
   });
 }
 

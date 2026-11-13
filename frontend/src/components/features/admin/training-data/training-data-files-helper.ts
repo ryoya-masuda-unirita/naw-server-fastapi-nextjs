@@ -99,14 +99,20 @@ export function resolveFileUpdatedByNames(
   });
 }
 
+/** ダウンロードの開始を待ってから URL を失効させるまでの時間 */
+const REVOKE_DELAY_MS = 1000;
+
 /** ブラウザのダウンロードを起こす */
 export function triggerBlobDownload(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
+  // 古いブラウザは DOM に無いリンクのクリックを無視し、開始前に URL を失効させるとダウンロードが空になる
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
 
 /** 追加ではスイッチを表示しないため、ファイルが無いときは学習に使う状態（オン）で登録する */
