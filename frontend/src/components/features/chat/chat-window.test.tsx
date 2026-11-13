@@ -103,6 +103,21 @@ describe('ChatWindow', () => {
     expect(screen.getByText('notes.txt')).toBeInTheDocument();
   });
 
+  test('「＋」メニューの添付項目で、ドロップ領域のファイル選択 input を開き、選んだファイルをチップに出すこと', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    renderWindow();
+    const user = userEvent.setup();
+    const input = screen.getByTestId<HTMLInputElement>('chat-attach-file-input');
+    const clickSpy = vi.spyOn(input, 'click');
+
+    await user.click(screen.getByTestId('chat-attach-button'));
+    await user.click(screen.getByTestId('chat-attach-menu-item'));
+    expect(clickSpy).toHaveBeenCalled();
+
+    await user.upload(input, new File(['x'], 'memo.txt', { type: 'text/plain' }));
+    expect(screen.getByText('memo.txt')).toBeInTheDocument();
+  });
+
   test('モバイルではメニューからビューワーを開き、背景を押すと閉じること', async () => {
     Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
     act(() => {

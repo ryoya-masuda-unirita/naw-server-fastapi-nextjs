@@ -111,16 +111,32 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 
 | 口 | 位置 | 担当 |
 |---|---|---|
-| `renderMention`・`onTextareaKeyDown` | textarea の上（候補パネル）・キー入力 | #286 |
-| `renderToolbar` | 送信ボタンの左（有効な機能ウィジェット・アシスタント選択） | #286 |
-| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286（添付の項目は、入力欄内の `input[type=file]` を `click()` する） |
+| `renderMention`・`onTextareaKeyDown` | textarea の上（候補パネル）・キー入力 | #286（実装済み） |
+| `renderToolbar` | 送信ボタンの左（有効な機能ウィジェット・アシスタント選択） | #286（実装済み） |
+| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286（実装済み。添付の項目は入力欄内の `input[type=file]` を `click()` する） |
 | `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287（実装済み。`ChatWindow` が `chatAttachmentSlots` を既定で渡す） |
 | `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287（実装済み。未指定なら `useChatRoomDialogs` の共有・評価ダイアログを開く） |
 | `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288 |
 
 - 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
 - `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
+- `AdminChatRoomPage` はサイドバーのルーム一覧（#285）が未移植の間、一覧がなければ読み込む（ヘッダーのルーム名のため）
 - ルーム一覧（ヘッダーのルーム名の元）はサイドバー（`components/layouts/sidebar.tsx`、#285）がマウント時に読み込む。`AdminChatRoomPage` は読み込まない
+
+### アシスタント選択・メンション・「＋」メニュー・試験（#286）
+
+`components/features/chat/chat-input-slots.tsx` の `CHAT_INPUT_SLOTS`（`renderMention`・`renderAddMenu`・`renderToolbar`・`onTextareaKeyDown`）を、`ChatWindow` が `ChatInput` に既定で渡す。`inputSlots` に同じ名前を渡すとそのスロットだけ上書きする（添付など別のスロットを足すだけなら、触らなくてよい）。
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| アシスタント選択 | `chat-assistant-selector.tsx` | `chat-assistant-selector` |
+| メンション候補・キー処理 | `chat-mention.tsx`・`chat-assistant-mention-panel.tsx`・`lib/chat/mention-key-handler.ts` | `chat-assistant-mention-panel`・`chat-input` の `handleKeyDown` |
+| 「＋」メニュー・テンプレート選択 | `chat-add-menu.tsx`・`template-selector.tsx`・`hooks/use-prompt-templates.ts` | `chat-input`・`template-selector` |
+| 有効な機能 | `active-features-widget.tsx`・`chat-input-toolbar.tsx` | `active-features-widget` |
+| アシスタント試験（`/chat/assistant`） | `chat-assistant-exam.tsx`・`routes/chat/chat-assistant.tsx`（`ChatWindow` の `isChatExamList`） | `chat-assistant-exam`・`ChatAssistantComponent` |
+
+- メンション候補・ウィジェットのパネルなど、スロットをまたぐ UI 状態は `store/chat-input-ui-store.ts`
+- 「＋」メニューの添付項目は、入力欄内の `input[type=file]`（#287 が `renderDropzone` に置く）をクリックする
 
 ## 添付・評価・検索・共有（#287）
 
@@ -134,7 +150,7 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 | 共有 API・チーム一覧 | `store/shares-store.ts`・`store/teams-store.ts` | `SharesService`・`TeamsService` |
 | 添付ファイル・共有ルームの文脈 | `store/chat-store.ts`（`attachedFiles`・`sharedRoomContext`・`openSharedRoom`・`clearSharedRoomContext`） | `ChatService` |
 
-- **＋メニュー（#286）**: 添付の項目は、ドロップ領域の中の `input[type=file]`（`data-testid="chat-attach-file-input"`、`id="chat-file-upload"`）を `click()` する
+- `renderDropzone` に、移植元と同じ `<input type="file" id="chat-file-upload" data-testid="chat-attach-file-input">` を置く（#286 の「＋」メニューの添付項目がこれを `click()` する）
 - **共有閲覧画面（#288）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
 - `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
 

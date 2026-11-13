@@ -24,7 +24,7 @@ import type { TrainingDataApiResponse, TrainingDataFilter } from '@/types/traini
 // 移植元 training-data の TrainingApiService（一覧・作成・接続先候補・グループ）と
 // TrainingFolderModalService の通信部分。
 
-const TRAINING_DATA_QUERY_KEY = 'admin-training-data';
+export const TRAINING_DATA_QUERY_KEY = 'admin-training-data';
 
 /** 移植元 `TRAINING_FOLDER_GROUP_PAGE_SIZE` */
 const GROUP_PAGE_SIZE = 100;
@@ -144,6 +144,7 @@ export interface FolderEndpointState {
 /** 移植元 `TrainingFolderModalService.loadEndpointsForType` */
 export async function loadEndpointsForType(
   folderType: TrainingFolderType,
+  existingEndpointIds?: string[],
 ): Promise<FolderEndpointState> {
   if (folderType === 'SAAS_GLOBAL') {
     const [vdbEndpoints, embeddingEndpoints] = await Promise.all(
@@ -152,6 +153,7 @@ export async function loadEndpointsForType(
     const endpointIds = resolveSaasGlobalEndpointIds(
       toEndpointSelectOptions(vdbEndpoints),
       toEndpointSelectOptions(embeddingEndpoints),
+      existingEndpointIds,
     );
     return {
       options: [],
@@ -162,7 +164,7 @@ export async function loadEndpointsForType(
   }
 
   const options = toEndpointSelectOptions(await listEndpointsByType(LOCAL_FOLDER_ENDPOINT_TYPE));
-  const localEndpointId = resolveInitialEndpointId(options);
+  const localEndpointId = resolveInitialEndpointId(options, existingEndpointIds?.[0]);
   return {
     options,
     selectedEndpointIds: localEndpointId ? [localEndpointId] : [],

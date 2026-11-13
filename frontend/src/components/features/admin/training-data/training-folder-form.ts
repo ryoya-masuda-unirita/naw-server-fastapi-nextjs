@@ -1,7 +1,7 @@
 import type { SelectOption } from '@/components/shared/types';
 
-// 移植元 training-data/utils/training-folder-form.helper.ts のうち、フォルダの新規作成で使う分。
-// 既存フォルダの編集（既存のエンドポイントを選んだままにする処理）は詳細画面（#290）で足す。
+// 移植元 training-data/utils/training-folder-form.helper.ts。
+// 新規作成（一覧）と、既存フォルダの編集（詳細）で使う。
 
 export type TrainingFolderType = 'SAAS_GLOBAL' | 'LOCAL';
 export type TenantEndpointType = 'LOCAL_SERVER' | 'VDB' | 'AZURE_OPENAI_EMBEDDING';
@@ -43,18 +43,41 @@ export function toEndpointSelectOptions(endpoints: TenantEndpointOption[]): Sele
   return endpoints.map((endpoint) => ({ value: endpoint.id, label: endpoint.endpointName }));
 }
 
-/** 選択肢の先頭の ID（移植元 `resolveInitialEndpointId` の、既存の ID を指定しない場合）。空なら null */
-export function resolveInitialEndpointId(options: SelectOption[]): string | null {
-  return options.length === 0 ? null : String(options[0].value);
+/**
+ * 選択肢のうち使う ID。既存の ID が選択肢にあればそれ、なければ先頭。選択肢が空なら null
+ * （移植元 `resolveInitialEndpointId`）
+ */
+export function resolveInitialEndpointId(
+  options: SelectOption[],
+  existingEndpointId?: string,
+): string | null {
+  if (options.length === 0) return null;
+  if (existingEndpointId && options.some((option) => option.value === existingEndpointId)) {
+    return existingEndpointId;
+  }
+  return String(options[0].value);
 }
 
-/** クラウド接続で使う [ベクトル DB の ID, 埋め込みモデルの ID]（それぞれ先頭）。どちらかが空なら null */
+/**
+ * クラウド接続で使う [ベクトル DB の ID, 埋め込みモデルの ID]。
+ * 既存の ID が選択肢にあればそれを、なければそれぞれ先頭を使う。どちらかの選択肢が空なら null
+ */
 export function resolveSaasGlobalEndpointIds(
   vdbOptions: SelectOption[],
   embeddingOptions: SelectOption[],
+  existingEndpointIds?: string[],
 ): string[] | null {
-  const vdbId = resolveInitialEndpointId(vdbOptions);
-  const embeddingId = resolveInitialEndpointId(embeddingOptions);
+  if (vdbOptions.length === 0 || embeddingOptions.length === 0) return null;
+
+  const existingVdb = existingEndpointIds?.find((id) =>
+    vdbOptions.some((option) => option.value === id),
+  );
+  const existingEmbedding = existingEndpointIds?.find((id) =>
+    embeddingOptions.some((option) => option.value === id),
+  );
+
+  const vdbId = resolveInitialEndpointId(vdbOptions, existingVdb);
+  const embeddingId = resolveInitialEndpointId(embeddingOptions, existingEmbedding);
   if (!vdbId || !embeddingId) return null;
   return [vdbId, embeddingId];
 }
