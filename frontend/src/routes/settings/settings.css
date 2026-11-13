@@ -1,0 +1,117 @@
+/* 移植元 features/admin/settings の component styles。Angular のスコープの代わりに .settings-page 配下に限定する */
+.settings-page h1 {
+  margin: 0 0 0.5rem;
+}
+
+.settings-page > p {
+  color: #64748b;
+  margin: 0 0 2rem;
+}
+
+.settings-page .settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 800px;
+}
+
+.settings-page .settings-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.settings-page .settings-card h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-page .setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-page .setting-item:last-child {
+  border-bottom: none;
+}
+
+.settings-page .setting-info h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.settings-page .setting-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.settings-page .toggle {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.settings-page .toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-page .toggle__slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #e2e8f0;
+  border-radius: 24px;
+  transition: 0.3s;
+}
+
+.settings-page .toggle__slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.settings-page .toggle input:checked + .toggle__slider {
+  background: #6366f1;
+}
+
+.settings-page .toggle input:checked + .toggle__slider::before {
+  transform: translateX(24px);
+}
+
+.settings-page .btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settings-page .btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.settings-page .btn-secondary:hover {
+  background: #e2e8f0;
+}
