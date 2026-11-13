@@ -2144,6 +2144,21 @@ class TestGroupMembersSort:
         ids = await _add_categorized_assistants(
             session, tenant.id, admin_user.id, group.id
         )
+        # 絞り込みで除外されることを確かめるため、別種別のアシスタントを所属させる
+        secure = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SECURE,
+            name="secure",
+            include_history=False,
+        )
+        session.add(secure)
+        await session.flush()
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=secure.id
+            )
+        )
+        await session.commit()
 
         async with client as c:
             response = await c.get(
@@ -2158,6 +2173,7 @@ class TestGroupMembersSort:
             ids["a2"],
             ids["a1"],
         ]
+        assert response.json()["totalElements"] == 3
 
     async def test_prompt_templates_sort_by_added_at_reverses_rows_with_same_timestamp(
         self,
