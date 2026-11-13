@@ -1,4 +1,4 @@
-import { persistTenantId } from '@/lib/api-client';
+import { clearTenantId, persistTenantId, resolveTenantId } from '@/lib/api-client';
 
 // 移植元 core/initializers/login-key.initializer.ts。
 // URL クエリ `loginkey` があれば、ルーティング・セッション確認より前に `POST /auth/login-key` で認証する。
@@ -10,7 +10,7 @@ const TENANT_ID_QUERY = 'tenantId';
 export interface LoginKeyInitializerDeps {
   loginWithKey: (loginKey: string) => Promise<boolean>;
   /** 認証に失敗したとき（移植元はトーストで翻訳キー AUTH.LOGIN_KEY.ERROR の文言を出す） */
-  onError?: () => void;
+  onError?: () => void | Promise<void>;
 }
 
 // 認証中にもう一度呼ばれたら同じ処理を待たせる。React の StrictMode（開発時）は初期化の effect を2回走らせ、
@@ -32,6 +32,8 @@ async function authenticateWithLoginKey(deps: LoginKeyInitializerDeps): Promise<
   if (!loginKey) return;
 
   const tenantId = params.get(TENANT_ID_QUERY);
+  // 認証に失敗したとき、ログイン中のセッションが使っているテナントIDに戻すために控える
+  const previousTenantId = resolveTenantId();
   if (tenantId) {
     persistTenantId(tenantId);
   }
@@ -44,6 +46,13 @@ async function authenticateWithLoginKey(deps: LoginKeyInitializerDeps): Promise<
 
   const ok = await deps.loginWithKey(loginKey);
   if (!ok) {
-    deps.onError?.();
+    // URL の tenantId で上書きした分を戻す。ログイン中なら続くセッション確認（GET /api/auth）が元のテナントで通り、
+    // 未ログインなら誤ったテナントIDを残さない
+    if (previousTenantId) {
+      persistTenantId(previousTenantId);
+    } else {
+      clearTenantId();
+    }
+    await deps.onError?.();
   }
 }

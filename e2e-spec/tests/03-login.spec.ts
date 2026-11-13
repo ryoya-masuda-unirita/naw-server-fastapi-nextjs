@@ -249,6 +249,7 @@ test.describe('03_ログイン', () => {
     await expect.soft(page).not.toHaveURL(new RegExp(LOGIN_PATH));
     expect.soft((await getSessionUser(page.request))?.id, 'セッションがログイン中のユーザーのまま').toBe(current.loginId);
     // アラート（トースト）が表示される
-    await expect.soft(page.getByRole('alert').or(page.getByText('不正なログインキーです'))).toBeVisible();
+    // トーストは role=alert の div とその中の文言の 2 要素に一致するため、先頭だけを見る（strict mode 対策）
+    await expect.soft(page.getByRole('alert').or(page.getByText('不正なログインキーです')).first()).toBeVisible();
   });
 });

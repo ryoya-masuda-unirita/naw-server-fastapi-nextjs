@@ -10,7 +10,8 @@ import { routes } from '@/routes/index';
 import { DropdownBackdrop } from '@/components/shared/dropdown-backdrop';
 import { ToastContainer } from '@/components/shared/toast-container';
 import { showErrorToast } from '@/components/shared/toast-store';
-import '@/lib/i18n';
+import i18n from '@/lib/i18n';
+import { notifyLoginKeyError } from '@/lib/initializers/login-key-error';
 // フォントは index.css の @import ではなくここで読み込む（Tailwind の @import 展開では url() が解決できないため）。
 // 移植元 styles.css の先頭の @import と同じ並び
 import '@fontsource/noto-sans-jp/400.css';
@@ -34,7 +35,11 @@ function App() {
 
   React.useEffect(() => {
     // URL の loginkey での認証を、セッション確認より前に済ませる（移植元 login-key.initializer）
-    runLoginKeyInitializer({ loginWithKey })
+    runLoginKeyInitializer({
+      loginWithKey,
+      // 移植元と同じく、認証に失敗したら AUTH.LOGIN_KEY.ERROR のトーストを出す
+      onError: () => notifyLoginKeyError(i18n, showErrorToast),
+    })
       .then(() => ensureInitialized())
       .finally(() => {
         setIsReady(true);
