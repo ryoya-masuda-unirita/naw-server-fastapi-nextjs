@@ -5,9 +5,11 @@ from fastapi import Query
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.validation_messages import RequestModel, ValidationMessages
+from app.schemas.message import EndpointResponse
 
 NAME_MAX_LENGTH = 255
 _NAME_REQUIRED_MESSAGE = "ライブラリ名は必須です"
+_MESSAGE_ID_REQUIRED_MESSAGE = "メッセージIDは必須です"
 PAGE_SIZE_MIN = 1
 PAGE_SIZE_MAX = 100
 
@@ -50,14 +52,89 @@ class LibraryUpdateRequest(RequestModel):
     def _validate_name_not_blank(cls, value: str) -> str:
         """ライブラリ名が空白のみでないことを検証する。
 
-        Args:
-            value: 検証対象のライブラリ名。`Field()`の長さ制約を通過済み。
+        Parameters
+        ----------
+        value : str
+            検証対象のライブラリ名。`Field()`の長さ制約を通過済み。
 
-        Returns:
+        Returns
+        -------
+        str
             検証済みのライブラリ名。
 
-        Raises:
-            ValueError: 空白のみの場合。
+        Raises
+        ------
+        ValueError
+            空白のみの場合。
+        """
+        if not value.strip():
+            raise ValueError(_NAME_REQUIRED_MESSAGE)
+        return value
+
+
+class LibraryCreateRequest(RequestModel):
+    """ライブラリスタブ作成リクエスト（移植元`LibraryCreateRequest`）。"""
+
+    messageId: Annotated[
+        str, ValidationMessages(not_blank=_MESSAGE_ID_REQUIRED_MESSAGE)
+    ]
+
+    @field_validator("messageId")
+    @classmethod
+    def _validate_message_id_not_blank(cls, value: str) -> str:
+        """メッセージIDが空白のみでないことを検証する。
+
+        Parameters
+        ----------
+        value : str
+            検証対象のメッセージID。
+
+        Returns
+        -------
+        str
+            検証済みのメッセージID。
+
+        Raises
+        ------
+        ValueError
+            空白のみの場合。
+        """
+        if not value.strip():
+            raise ValueError(_MESSAGE_ID_REQUIRED_MESSAGE)
+        return value
+
+
+class LibraryTitleUpdateRequest(RequestModel):
+    """ライブラリタイトル更新リクエスト（移植元`LibraryTitleUpdateRequest`）。"""
+
+    title: Annotated[
+        str,
+        Field(max_length=NAME_MAX_LENGTH),
+        ValidationMessages(
+            not_blank=_NAME_REQUIRED_MESSAGE,
+            size=f"ライブラリ名は{NAME_MAX_LENGTH}文字以内で入力してください",
+        ),
+    ]
+
+    @field_validator("title")
+    @classmethod
+    def _validate_title_not_blank(cls, value: str) -> str:
+        """タイトルが空白のみでないことを検証する。
+
+        Parameters
+        ----------
+        value : str
+            検証対象のタイトル。
+
+        Returns
+        -------
+        str
+            検証済みのタイトル。
+
+        Raises
+        ------
+        ValueError
+            空白のみの場合。
         """
         if not value.strip():
             raise ValueError(_NAME_REQUIRED_MESSAGE)
@@ -65,18 +142,25 @@ class LibraryUpdateRequest(RequestModel):
 
 
 class LibraryTagInfo(BaseModel):
+    """ライブラリに付与されたタグの情報。"""
+
     id: str
     name: str
 
 
 class LibrarySharedGroupInfo(BaseModel):
+    """ライブラリの共有先グループの情報。"""
+
     id: str
     name: str
 
 
 class LibraryPageItemResponse(BaseModel):
+    """ライブラリ一覧（ページ）の1件分のレスポンス。"""
+
     id: str
-    title: str
+    # 一覧にはタイトル未確定のスタブを含めないため実際にはNoneにならない
+    title: str | None
     userId: str
     createdAt: datetime
     updatedAt: datetime
@@ -85,6 +169,8 @@ class LibraryPageItemResponse(BaseModel):
 
 
 class LibraryPageResponse(BaseModel):
+    """ライブラリ一覧（ページ）のレスポンス。"""
+
     content: list[LibraryPageItemResponse]
     totalElements: int
     number: int
@@ -92,13 +178,33 @@ class LibraryPageResponse(BaseModel):
 
 
 class LibraryListItemResponse(BaseModel):
+    """ルームのライブラリ一覧の1件分のレスポンス。"""
+
     id: str
-    title: str
+    title: str | None
+
+
+class LibraryAssistantResponse(BaseModel):
+    """ライブラリ詳細の本文の取得先を決めるためのアシスタント情報。"""
+
+    id: str
+    type: str
+    includeHistory: bool
+    model: str | None
+    endpoints: list[EndpointResponse]
 
 
 class LibraryGetResponse(BaseModel):
-    title: str
-    data: str | None
+    """ライブラリ詳細（GET /api/libraries/{libraryId}）のレスポンス。"""
+
+    id: str
+    title: str | None
+    messageId: str
+    userId: str
+    createdAt: datetime
+    updatedAt: datetime
+    assistant: LibraryAssistantResponse | None
+    hasNawContent: bool
 
 
 class LibraryContentResponse(BaseModel):
@@ -108,4 +214,6 @@ class LibraryContentResponse(BaseModel):
 
 
 class LibraryUpdateResponse(BaseModel):
+    """ライブラリID（作成・更新の共通レスポンス）。"""
+
     id: str
