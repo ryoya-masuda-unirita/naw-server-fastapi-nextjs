@@ -13,6 +13,12 @@ from app.services.auth_service import (
     LOGIN_LOCKED_MESSAGE,
     PASSWORD_RESET_LOCKED_MESSAGE,
 )
+from typing import Any
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from fakeredis.aioredis import FakeRedis
+from app.models.tenant import Tenant
+from app.models.user import User
 
 # conftest の test_user_with_login_key が保存しているキー（DB にはハッシュだけを入れる）
 LOGIN_KEY = "test-login-key-1234"
@@ -37,8 +43,11 @@ class TestAuthAPI:
     """認証 API エンドポイントテスト"""
 
     async def test_post_auth_login_success(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/login 成功ケース"""
         async with client as c:
             response = await c.post(
@@ -55,8 +64,8 @@ class TestAuthAPI:
         assert response.json()["token"] is not None
 
     async def test_post_auth_login_missing_header(
-        self, client, test_user_with_password
-    ):
+        self, client: AsyncClient, test_user_with_password: dict[str, Any]
+    ) -> None:
         """POST /auth/login X-Tenant-ID ヘッダーなし"""
         async with client as c:
             response = await c.post(
@@ -70,8 +79,8 @@ class TestAuthAPI:
         assert response.status_code == 400
 
     async def test_post_auth_login_key_success(
-        self, client, test_tenant, test_user_with_login_key
-    ):
+        self, client: AsyncClient, test_tenant: Tenant, test_user_with_login_key: User
+    ) -> None:
         """POST /auth/login-key 成功ケース"""
         async with client as c:
             response = await c.post(
@@ -85,7 +94,9 @@ class TestAuthAPI:
         assert response.json()["id"] == test_user_with_login_key.login_id
         assert response.json()["token"] is not None
 
-    async def test_post_auth_login_key_with_nonexistent_key(self, client, test_tenant):
+    async def test_post_auth_login_key_with_nonexistent_key(
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """POST /auth/login-key 存在しないログインキー"""
         async with client as c:
             response = await c.post(
@@ -97,8 +108,11 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_post_auth_login_key_with_different_tenant(
-        self, client, test_other_tenant, test_user_with_login_key
-    ):
+        self,
+        client: AsyncClient,
+        test_other_tenant: Tenant,
+        test_user_with_login_key: User,
+    ) -> None:
         """POST /auth/login-key 別テナントのログインキーは存在しない場合と同じ401になること"""
         async with client as c:
             response = await c.post(
@@ -110,8 +124,8 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_post_auth_login_key_missing_header(
-        self, client, test_user_with_login_key
-    ):
+        self, client: AsyncClient, test_user_with_login_key: User
+    ) -> None:
         """POST /auth/login-key X-Tenant-ID ヘッダーなし"""
         async with client as c:
             response = await c.post(
@@ -122,8 +136,12 @@ class TestAuthAPI:
         assert response.status_code == 400
 
     async def test_post_auth_login_key_sets_session_cookie_and_creates_session(
-        self, client, fake_redis, test_tenant, test_user_with_login_key
-    ):
+        self,
+        client: AsyncClient,
+        fake_redis: FakeRedis,
+        test_tenant: Tenant,
+        test_user_with_login_key: User,
+    ) -> None:
         """POST /auth/login-key 成功時にsession_id Cookieが発行され、Redisにセッションが作られること"""
         async with client as c:
             response = await c.post(
@@ -140,7 +158,7 @@ class TestAuthAPI:
         assert payload["login_id"] == test_user_with_login_key.login_id
         assert payload["tenant_id"] == test_tenant.id
 
-    async def test_post_auth_logout(self, client):
+    async def test_post_auth_logout(self, client: AsyncClient) -> None:
         """POST /auth/logout"""
         async with client as c:
             response = await c.post("/auth/logout")
@@ -149,8 +167,11 @@ class TestAuthAPI:
         assert "Logout successful" in response.json()["message"]
 
     async def test_post_auth_password_reset_success(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 成功ケース"""
         async with client as c:
             response = await c.post(
@@ -168,8 +189,11 @@ class TestAuthAPI:
         assert response.json()["token"] is not None
 
     async def test_post_auth_password_reset_with_username_key(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset ログインIDを username キーで送っても更新・セッション発行まで行われること"""
         login_id = test_user_with_password["user"].login_id
         new_password = "NewPassword123!"
@@ -203,8 +227,11 @@ class TestAuthAPI:
         assert second_response.status_code == 200
 
     async def test_post_auth_password_reset_with_username_key_and_invalid_old_password(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset username キーで旧パスワード誤りなら 400 ではなく 403 になること"""
         async with client as c:
             response = await c.post(
@@ -220,7 +247,9 @@ class TestAuthAPI:
         assert response.status_code == 403
         assert response.json()["message"] == INVALID_CREDENTIALS_MESSAGE
 
-    async def test_post_auth_password_reset_without_login_id(self, client, test_tenant):
+    async def test_post_auth_password_reset_without_login_id(
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """POST /auth/password/reset loginId・username のどちらもなければ 400 になること"""
         async with client as c:
             response = await c.post(
@@ -236,8 +265,8 @@ class TestAuthAPI:
         assert response.json()["message"] == "ログインIDの入力は必須です。"
 
     async def test_post_auth_password_reset_with_blank_login_id(
-        self, client, test_tenant
-    ):
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """POST /auth/password/reset 空のログインIDは 400 と移植元の必須メッセージになること"""
         async with client as c:
             response = await c.post(
@@ -254,8 +283,11 @@ class TestAuthAPI:
         assert response.json()["message"] == "ログインIDの入力は必須です。"
 
     async def test_post_auth_password_reset_same_response_for_unknown_user_and_wrong_password(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 存在しないログインIDと旧パスワード誤りで同じ応答になること"""
         async with client as c:
             unknown_response = await c.post(
@@ -279,8 +311,8 @@ class TestAuthAPI:
         )
 
     async def test_post_auth_password_reset_does_not_lock_unknown_user(
-        self, client, test_tenant
-    ):
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """POST /auth/password/reset 存在しないログインIDの失敗は数えずロックしないこと"""
         async with client as c:
             responses = [
@@ -295,8 +327,11 @@ class TestAuthAPI:
         assert [r.status_code for r in responses] == [403] * (MAX_FAILURE_ATTEMPTS + 1)
 
     async def test_post_auth_password_reset_locks_after_max_failed_attempts(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 旧パスワードを上限回数誤ると、上限回目で 429 になること"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -315,8 +350,11 @@ class TestAuthAPI:
         assert responses[-1].json()["message"] == PASSWORD_RESET_LOCKED_MESSAGE
 
     async def test_post_auth_password_reset_rejects_correct_password_while_locked(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset ロック中は正しい旧パスワードでも 429 で再設定されないこと"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -337,8 +375,11 @@ class TestAuthAPI:
         assert SESSION_COOKIE_NAME not in response.cookies
 
     async def test_post_auth_password_reset_success_resets_failure_count(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 成功すると失敗回数がリセットされること"""
         login_id = test_user_with_password["user"].login_id
         new_password = "NewPassword123!"
@@ -372,8 +413,11 @@ class TestAuthAPI:
         )
 
     async def test_post_auth_password_reset_rejects_password_violating_policy(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 複雑性ポリシー違反（数字のみ）は 400 になりパスワードは更新されないこと"""
         login_id = test_user_with_password["user"].login_id
         plain_password = test_user_with_password["plain_password"]
@@ -403,8 +447,11 @@ class TestAuthAPI:
         assert retry_response.status_code == 200
 
     async def test_post_auth_password_reset_rejects_password_without_valid_symbol(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/password/reset 使用可能な記号を含まない新パスワードは 400 になること"""
         async with client as c:
             response = await c.post(
@@ -423,7 +470,9 @@ class TestAuthAPI:
             f"{test_tenant.pw_policy_valid_symbols}"
         )
 
-    async def test_get_api_auth_success(self, client, test_tenant, valid_jwt_token):
+    async def test_get_api_auth_success(
+        self, client: AsyncClient, test_tenant: Tenant, valid_jwt_token: str
+    ) -> None:
         """GET /api/auth 成功ケース"""
         async with client as c:
             response = await c.get(
@@ -438,7 +487,9 @@ class TestAuthAPI:
         assert "loginStatus" not in response.json()
         assert response.json()["token"] is not None
 
-    async def test_get_api_auth_without_token(self, client, test_tenant):
+    async def test_get_api_auth_without_token(
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """GET /api/auth Authorization ヘッダーなし"""
         async with client as c:
             response = await c.get(
@@ -449,8 +500,8 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_get_api_auth_with_expired_token(
-        self, client, test_tenant, expired_jwt_token
-    ):
+        self, client: AsyncClient, test_tenant: Tenant, expired_jwt_token: str
+    ) -> None:
         """GET /api/auth JWT 有効期限切れ"""
         async with client as c:
             response = await c.get(
@@ -464,8 +515,8 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_get_api_auth_with_invalid_token(
-        self, client, test_tenant, invalid_jwt_token
-    ):
+        self, client: AsyncClient, test_tenant: Tenant, invalid_jwt_token: str
+    ) -> None:
         """GET /api/auth JWT が不正"""
         async with client as c:
             response = await c.get(
@@ -479,8 +530,12 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_post_auth_login_sets_session_cookie_and_creates_session(
-        self, client, fake_redis, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        fake_redis: FakeRedis,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """POST /auth/login 成功時にsession_id Cookieが発行され、Redisにセッションが作られること"""
         async with client as c:
             response = await c.post(
@@ -501,8 +556,11 @@ class TestAuthAPI:
         assert payload["tenant_id"] == test_tenant.id
 
     async def test_post_auth_login_requires_password_reset_does_not_create_session(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """初回パスワードリセットが必要な場合はsession_id Cookieもセッションも作られないこと"""
         test_user_with_password["user"].is_required_password_reset = True
 
@@ -523,8 +581,12 @@ class TestAuthAPI:
         assert "groups" not in response.json()
 
     async def test_post_auth_login_returns_group_memberships(
-        self, client, session, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """ログイン応答の groups が所属グループの groupId・groupAdmin であること"""
         user = test_user_with_password["user"]
         group_admin = Group(id="g-admin", tenant_id=test_tenant.id, name="Admin G")
@@ -566,8 +628,13 @@ class TestAuthAPI:
         ]
 
     async def test_get_api_auth_returns_group_memberships(
-        self, client, session, test_tenant, test_user, valid_jwt_token
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        test_tenant: Tenant,
+        test_user: User,
+        valid_jwt_token: str,
+    ) -> None:
         """GET /api/auth の groups も所属グループを返し、グループが無ければ空配列であること"""
         headers = {
             "Authorization": f"Bearer {valid_jwt_token}",
@@ -592,7 +659,9 @@ class TestAuthAPI:
         assert empty.json()["groups"] == []
         assert joined.json()["groups"] == [{"groupId": "g-one", "groupAdmin": True}]
 
-    async def test_post_auth_login_key_blank_returns_401(self, client, test_tenant):
+    async def test_post_auth_login_key_blank_returns_401(
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """loginKey が null・空白でも 400 ではなく 401 になること（移植元と同じ）"""
         async with client as c:
             null_key = await c.post(
@@ -610,8 +679,12 @@ class TestAuthAPI:
         assert blank_key.status_code == 401
 
     async def test_post_auth_logout_deletes_session_and_clears_cookie(
-        self, client, fake_redis, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        fake_redis: FakeRedis,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """ログアウトでRedis上のセッションが削除され、Cookieが失効すること"""
         async with client as c:
             login_response = await c.post(
@@ -631,8 +704,11 @@ class TestAuthAPI:
         assert f"{SESSION_COOKIE_NAME}=" in set_cookie_header
 
     async def test_get_api_auth_with_session_cookie_only(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """session_id Cookieのみで保護APIを認証できること"""
         async with client as c:
             login_response = await c.post(
@@ -652,8 +728,12 @@ class TestAuthAPI:
         assert response.status_code == 200
 
     async def test_get_api_auth_after_session_deleted_returns_401(
-        self, client, fake_redis, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        fake_redis: FakeRedis,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """Redis上のセッションが失効した場合、同じCookieでは401になること"""
         async with client as c:
             login_response = await c.post(
@@ -675,8 +755,8 @@ class TestAuthAPI:
         assert response.status_code == 401
 
     async def test_get_api_auth_with_bearer_fallback_when_no_session_cookie(
-        self, client, test_tenant, valid_jwt_token
-    ):
+        self, client: AsyncClient, test_tenant: Tenant, valid_jwt_token: str
+    ) -> None:
         """session_id CookieなしでもAuthorizationヘッダーのJWTで認証できること（フォールバック）"""
         async with client as c:
             response = await c.get(
@@ -690,8 +770,12 @@ class TestAuthAPI:
         assert response.status_code == 200
 
     async def test_post_auth_login_uses_configured_same_site(
-        self, client, monkeypatch, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """COOKIE_SAME_SITE環境変数で設定した値がSet-CookieのSameSite属性に反映されること"""
         from app.core import config
 
@@ -714,8 +798,8 @@ class TestAuthAPI:
         assert "samesite=none" in set_cookie_header.lower()
 
     async def test_get_api_auth_without_cookie_or_header_returns_401(
-        self, client, test_tenant
-    ):
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """GET /api/auth をCookie・Authorizationヘッダーどちらも無しで呼ぶと401になること"""
         async with client as c:
             response = await c.get(
@@ -736,8 +820,11 @@ class TestAuthLoginLockout:
     """POST /auth/login の失敗回数ロック（移植元 LoginAttemptService）のテスト"""
 
     async def test_post_auth_login_unknown_user_and_wrong_password_return_same_response(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """存在しないログインIDとパスワード誤りが同じ 403・同じ文言になること"""
         headers = {"X-Tenant-ID": test_tenant.id}
         async with client as c:
@@ -762,8 +849,8 @@ class TestAuthLoginLockout:
         )
 
     async def test_post_auth_login_does_not_lock_unknown_user(
-        self, client, test_tenant
-    ):
+        self, client: AsyncClient, test_tenant: Tenant
+    ) -> None:
         """存在しないログインIDの失敗は数えずロックしないこと"""
         async with client as c:
             responses = [
@@ -780,8 +867,11 @@ class TestAuthLoginLockout:
         )
 
     async def test_post_auth_login_locks_on_sixth_failed_attempt(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """パスワードを続けて誤ると、上限回目で 429 になること"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -800,8 +890,11 @@ class TestAuthLoginLockout:
         assert responses[-1].json()["message"] == LOGIN_LOCKED_MESSAGE
 
     async def test_post_auth_login_rejects_correct_password_while_locked(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """ロック中は正しいパスワードでも 429 になりセッションが発行されないこと"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -822,8 +915,11 @@ class TestAuthLoginLockout:
         assert SESSION_COOKIE_NAME not in response.cookies
 
     async def test_post_auth_login_success_resets_failure_count(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """ログインに成功すると失敗回数がリセットされること"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -854,8 +950,11 @@ class TestAuthLoginLockout:
         )
 
     async def test_post_auth_password_reset_counts_login_failures(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """ログインの失敗もパスワード再設定のロックに数えること"""
         login_id = test_user_with_password["user"].login_id
         async with client as c:
@@ -875,8 +974,11 @@ class TestAuthLoginLockout:
         assert response.json()["message"] == PASSWORD_RESET_LOCKED_MESSAGE
 
     async def test_post_auth_login_counts_password_reset_failures(
-        self, client, test_tenant, test_user_with_password
-    ):
+        self,
+        client: AsyncClient,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+    ) -> None:
         """パスワード再設定の失敗もログインのロックに数えること"""
         login_id = test_user_with_password["user"].login_id
         reset_failures = min(MAX_FAILURE_ATTEMPTS, LOGIN_FAILURE_THRESHOLD) - 1
@@ -902,8 +1004,12 @@ class TestAuthLoginLockout:
         ) + [429]
 
     async def test_post_auth_login_key_not_locked_by_login_failures(
-        self, client, fake_redis, test_tenant, test_user_with_login_key
-    ):
+        self,
+        client: AsyncClient,
+        fake_redis: FakeRedis,
+        test_tenant: Tenant,
+        test_user_with_login_key: User,
+    ) -> None:
         """移植元どおり、ログインキーでのログインは失敗回数ロックの対象外であること"""
         for _ in range(LOGIN_FAILURE_THRESHOLD):
             await password_mismatch_store.record_login_failure_and_check_lockout(

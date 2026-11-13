@@ -9,9 +9,22 @@ from app.models.ai_model import AIModel, AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.schemas.llm import LlmEmbeddingRequest
 from app.services.llm_embedding_service import LlmEmbeddingService
+from app.models.user import User
 
 
 def _ai_model(token_weight: str = "1.0") -> AIModel:
+    """埋め込みモデルのテスト用 AIModel を生成する。
+
+    Parameters
+    ----------
+    token_weight : str
+        トークン重みの文字列表現。
+
+    Returns
+    -------
+    AIModel
+        テスト用の埋め込みモデル。
+    """
     return AIModel(
         id=1,
         endpoint_type=AIModelEndpointType.AZURE_OPENAI_EMBEDDING,
@@ -22,6 +35,13 @@ def _ai_model(token_weight: str = "1.0") -> AIModel:
 
 
 def _tenant_endpoint() -> TenantEndpoint:
+    """テスト用の埋め込みエンドポイントを生成する。
+
+    Returns
+    -------
+    TenantEndpoint
+        テスト用のテナントエンドポイント。
+    """
     return TenantEndpoint(
         id="endpoint-1",
         tenant_id="tenant-1",
@@ -44,8 +64,8 @@ class TestCreateEmbedding:
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_ai_model_not_found(
-        self, mock_find_model, mock_enforce, test_user
-    ):
+        self, mock_find_model: MagicMock, mock_enforce: MagicMock, test_user: User
+    ) -> None:
         """指定deployNameのAIモデルが存在しない場合400になること"""
         mock_find_model.return_value = None
 
@@ -72,8 +92,12 @@ class TestCreateEmbedding:
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_no_tenant_endpoint(
-        self, mock_find_model, mock_find_endpoints, mock_enforce, test_user
-    ):
+        self,
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        test_user: User,
+    ) -> None:
         """テナントにAzure OpenAI Embeddingエンドポイントが存在しない場合400になること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = []
@@ -105,12 +129,12 @@ class TestCreateEmbedding:
     )
     async def test_returns_embedding_and_persists_usage(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_create_embedding,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_create_embedding: MagicMock,
+        test_user: User,
+    ) -> None:
         """埋め込みベクトルを返却し、トークン使用量を永続化すること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]

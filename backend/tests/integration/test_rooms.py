@@ -13,10 +13,12 @@ from app.models.room import Room, RoomPin, RoomRating
 from app.models.share import Share, ShareRoom
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-async def rooms_tenant(session):
+async def rooms_tenant(session: AsyncSession) -> Tenant:
+    """ルームのテスト用テナントを用意する。"""
     tenant = Tenant(
         id="tenant-rooms-test",
         name="Rooms Test Tenant",
@@ -37,7 +39,8 @@ async def rooms_tenant(session):
 
 
 @pytest.fixture
-async def room_owner_user(session, rooms_tenant):
+async def room_owner_user(session: AsyncSession, rooms_tenant: Tenant) -> User:
+    """ルームの所有者となる一般ユーザーを用意する。"""
     user = User(
         id=uuid4(),
         tenant_id=rooms_tenant.id,
@@ -53,7 +56,8 @@ async def room_owner_user(session, rooms_tenant):
 
 
 @pytest.fixture
-async def another_user_same_tenant(session, rooms_tenant):
+async def another_user_same_tenant(session: AsyncSession, rooms_tenant: Tenant) -> User:
+    """同じテナントに属する別の一般ユーザーを用意する。"""
     user = User(
         id=uuid4(),
         tenant_id=rooms_tenant.id,
@@ -69,7 +73,8 @@ async def another_user_same_tenant(session, rooms_tenant):
 
 
 @pytest.fixture
-async def admin_user(session, rooms_tenant):
+async def admin_user(session: AsyncSession, rooms_tenant: Tenant) -> User:
+    """テナント管理者ユーザーを用意する。"""
     user = User(
         id=uuid4(),
         tenant_id=rooms_tenant.id,
@@ -85,7 +90,8 @@ async def admin_user(session, rooms_tenant):
 
 
 @pytest.fixture
-async def group_admin_user(session, rooms_tenant):
+async def group_admin_user(session: AsyncSession, rooms_tenant: Tenant) -> User:
+    """グループ管理者となる一般ユーザーを用意する。"""
     user = User(
         id=uuid4(),
         tenant_id=rooms_tenant.id,
@@ -101,7 +107,8 @@ async def group_admin_user(session, rooms_tenant):
 
 
 @pytest.fixture
-async def room_assistant(session, rooms_tenant):
+async def room_assistant(session: AsyncSession, rooms_tenant: Tenant) -> Assistant:
+    """ルームの既定アシスタントを用意する。"""
     assistant = Assistant(
         tenant_id=rooms_tenant.id,
         type=AssistantType.SAAS_CHAT,
@@ -115,7 +122,10 @@ async def room_assistant(session, rooms_tenant):
 
 
 @pytest.fixture
-async def secondary_room_assistant(session, rooms_tenant):
+async def secondary_room_assistant(
+    session: AsyncSession, rooms_tenant: Tenant
+) -> Assistant:
+    """ルームの既定アシスタント変更先となる別のアシスタントを用意する。"""
     assistant = Assistant(
         tenant_id=rooms_tenant.id,
         type=AssistantType.SECURE,
@@ -129,7 +139,8 @@ async def secondary_room_assistant(session, rooms_tenant):
 
 
 @pytest.fixture
-async def other_tenant_assistant(session):
+async def other_tenant_assistant(session: AsyncSession) -> Assistant:
+    """別テナントに属するアシスタントを用意する。"""
     tenant = Tenant(
         id="tenant-rooms-other",
         name="Other Rooms Tenant",
@@ -159,7 +170,13 @@ async def other_tenant_assistant(session):
 
 
 @pytest.fixture
-async def owned_room(session, rooms_tenant, room_owner_user, room_assistant):
+async def owned_room(
+    session: AsyncSession,
+    rooms_tenant: Tenant,
+    room_owner_user: User,
+    room_assistant: Assistant,
+) -> Room:
+    """所有者のルームを用意する。"""
     room = Room(
         tenant_id=rooms_tenant.id,
         name="Owner Room",
@@ -174,8 +191,12 @@ async def owned_room(session, rooms_tenant, room_owner_user, room_assistant):
 
 @pytest.fixture
 async def other_users_room(
-    session, rooms_tenant, another_user_same_tenant, room_assistant
-):
+    session: AsyncSession,
+    rooms_tenant: Tenant,
+    another_user_same_tenant: User,
+    room_assistant: Assistant,
+) -> Room:
+    """同じテナントの別ユーザーが所有するルームを用意する。"""
     room = Room(
         tenant_id=rooms_tenant.id,
         name="Other User Room",
@@ -189,7 +210,12 @@ async def other_users_room(
 
 
 @pytest.fixture
-async def shared_room(session, rooms_tenant, room_owner_user, room_assistant):
+async def shared_room(
+    session: AsyncSession,
+    rooms_tenant: Tenant,
+    room_owner_user: User,
+    room_assistant: Assistant,
+) -> Room:
     """共有リンクで他ユーザーに共有されるルーム（room_owner_userが所有）"""
     room = Room(
         tenant_id=rooms_tenant.id,
@@ -204,7 +230,9 @@ async def shared_room(session, rooms_tenant, room_owner_user, room_assistant):
 
 
 @pytest.fixture
-async def share_target_group(session, rooms_tenant, another_user_same_tenant):
+async def share_target_group(
+    session: AsyncSession, rooms_tenant: Tenant, another_user_same_tenant: User
+) -> Group:
     """another_user_same_tenantが所属する共有先グループ"""
     group = Group(tenant_id=rooms_tenant.id, name="Share Target Group")
     session.add(group)
@@ -223,7 +251,12 @@ async def share_target_group(session, rooms_tenant, another_user_same_tenant):
 
 
 @pytest.fixture
-async def shared_room_share(session, rooms_tenant, shared_room, share_target_group):
+async def shared_room_share(
+    session: AsyncSession,
+    rooms_tenant: Tenant,
+    shared_room: Room,
+    share_target_group: Group,
+) -> Share:
     """shared_roomをshare_target_groupに共有する共有リンク"""
     share = Share(tenant_id=rooms_tenant.id, room_id=shared_room.id)
     session.add(share)
@@ -242,40 +275,67 @@ async def shared_room_share(session, rooms_tenant, shared_room, share_target_gro
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証済みリクエスト用のヘッダーを組み立てる。
+
+    Parameters
+    ----------
+    login_id : str
+        アクセストークンの対象ユーザーのログインID。
+    tenant_id : str
+        テナントID。`X-Tenant-ID` ヘッダーにも設定する。
+
+    Returns
+    -------
+    dict[str, str]
+        `Authorization` と `X-Tenant-ID` を持つヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
-def room_owner_headers(room_owner_user, rooms_tenant):
+def room_owner_headers(room_owner_user: User, rooms_tenant: Tenant) -> dict[str, str]:
+    """ルーム所有者の認証ヘッダーを用意する。"""
     return _headers(room_owner_user.login_id, rooms_tenant.id)
 
 
 @pytest.fixture
-def other_user_headers(another_user_same_tenant, rooms_tenant):
+def other_user_headers(
+    another_user_same_tenant: User, rooms_tenant: Tenant
+) -> dict[str, str]:
+    """同じテナントの別ユーザーの認証ヘッダーを用意する。"""
     return _headers(another_user_same_tenant.login_id, rooms_tenant.id)
 
 
 @pytest.fixture
-def admin_headers(admin_user, rooms_tenant):
+def admin_headers(admin_user: User, rooms_tenant: Tenant) -> dict[str, str]:
+    """テナント管理者の認証ヘッダーを用意する。"""
     return _headers(admin_user.login_id, rooms_tenant.id)
 
 
 @pytest.fixture
-def group_admin_headers(group_admin_user, rooms_tenant):
+def group_admin_headers(group_admin_user: User, rooms_tenant: Tenant) -> dict[str, str]:
+    """グループ管理者の認証ヘッダーを用意する。"""
     return _headers(group_admin_user.login_id, rooms_tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
+    """テスト用アプリに接続する `AsyncClient` を用意する。"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.mark.asyncio
 class TestGetRooms:
+    """ルーム一覧取得のテスト。"""
+
     async def test_get_rooms_returns_only_owned_rooms(
-        self, client, room_owner_headers, owned_room, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        owned_room: Room,
+        other_users_room: Room,
+    ) -> None:
         """自ユーザー所有のルームだけが返ること"""
         async with client as c:
             response = await c.get("/api/rooms", headers=room_owner_headers)
@@ -287,12 +347,12 @@ class TestGetRooms:
 
     async def test_get_rooms_includes_shared_room_for_group_member(
         self,
-        client,
-        other_user_headers,
-        other_users_room,
-        shared_room,
-        shared_room_share,
-    ):
+        client: AsyncClient,
+        other_user_headers: dict[str, str],
+        other_users_room: Room,
+        shared_room: Room,
+        shared_room_share: Share,
+    ) -> None:
         """共有先グループのメンバーの一覧には自分のルームと共有ルームの両方が含まれ、
         共有されていない他人のルームは含まれないこと"""
         async with client as c:
@@ -307,13 +367,13 @@ class TestGetRooms:
 
     async def test_get_rooms_orders_pinned_first_then_updated_at_desc(
         self,
-        client,
-        session,
-        rooms_tenant,
-        room_owner_user,
-        room_assistant,
-        room_owner_headers,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        room_assistant: Assistant,
+        room_owner_headers: dict[str, str],
+    ) -> None:
         """固定済みを先頭にし、その中で更新日時降順になること"""
         older_pinned = Room(
             tenant_id=rooms_tenant.id,
@@ -375,8 +435,12 @@ class TestAdminRoomHistories:
     """GET /api/admin/histories"""
 
     async def test_admin_histories_returns_page_shape(
-        self, client, admin_headers, owned_room, room_owner_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        owned_room: Room,
+        room_owner_user: User,
+    ) -> None:
         """テナント管理者はルーム履歴一覧をPage形式で取得できること"""
         async with client as c:
             response = await c.get("/api/admin/histories", headers=admin_headers)
@@ -391,8 +455,8 @@ class TestAdminRoomHistories:
         assert room["indexIds"] == []
 
     async def test_admin_history_detail_returns_room(
-        self, client, admin_headers, owned_room
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """テナント管理者はルーム履歴1件を取得できること"""
         async with client as c:
             response = await c.get(
@@ -403,8 +467,13 @@ class TestAdminRoomHistories:
         assert response.json()["id"] == owned_room.id
 
     async def test_admin_histories_filters_by_user_id(
-        self, client, admin_headers, owned_room, other_users_room, room_owner_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        owned_room: Room,
+        other_users_room: Room,
+        room_owner_user: User,
+    ) -> None:
         """userId指定時、指定ユーザーのルームのみ返ること"""
         async with client as c:
             response = await c.get(
@@ -419,8 +488,13 @@ class TestAdminRoomHistories:
         assert other_users_room.id not in ids
 
     async def test_admin_histories_filters_unrated_rooms(
-        self, client, admin_headers, owned_room, other_users_room, session
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        owned_room: Room,
+        other_users_room: Room,
+        session: AsyncSession,
+    ) -> None:
         """roomRate=unRated指定時、未評価ルームのみ返ること"""
         owned_room.rating = RoomRating.GOOD
         session.add(owned_room)
@@ -439,8 +513,12 @@ class TestAdminRoomHistories:
         assert other_users_room.id in ids
 
     async def test_admin_histories_filters_by_name(
-        self, client, admin_headers, owned_room, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        owned_room: Room,
+        other_users_room: Room,
+    ) -> None:
         """name指定時、ルーム名の部分一致で絞り込まれること"""
         async with client as c:
             response = await c.get(
@@ -455,8 +533,12 @@ class TestAdminRoomHistories:
         assert other_users_room.id not in ids
 
     async def test_admin_histories_orders_by_name_desc(
-        self, client, admin_headers, owned_room, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        owned_room: Room,
+        other_users_room: Room,
+    ) -> None:
         """orderBy=name&reverse=true指定時、名前降順で返ること"""
         async with client as c:
             response = await c.get(
@@ -471,15 +553,15 @@ class TestAdminRoomHistories:
 
     async def test_group_admin_sees_managed_assistant_rooms_only(
         self,
-        client,
-        group_admin_headers,
-        session,
-        rooms_tenant,
-        group_admin_user,
-        room_owner_user,
-        room_assistant,
-        secondary_room_assistant,
-    ):
+        client: AsyncClient,
+        group_admin_headers: dict[str, str],
+        session: AsyncSession,
+        rooms_tenant: Tenant,
+        group_admin_user: User,
+        room_owner_user: User,
+        room_assistant: Assistant,
+        secondary_room_assistant: Assistant,
+    ) -> None:
         """グループ管理者は管理グループに紐づくアシスタントのルームのみ取得できること"""
         group = Group(tenant_id=rooms_tenant.id, name="Managed Group")
         session.add(group)
@@ -524,15 +606,17 @@ class TestAdminRoomHistories:
         assert hidden_room.id not in ids
 
     async def test_general_user_cannot_access_admin_histories(
-        self, client, other_user_headers
-    ):
+        self, client: AsyncClient, other_user_headers: dict[str, str]
+    ) -> None:
         """管理者でもグループ管理者でもないユーザーは403になること"""
         async with client as c:
             response = await c.get("/api/admin/histories", headers=other_user_headers)
 
         assert response.status_code == 403
 
-    async def test_invalid_created_at_returns_400(self, client, admin_headers):
+    async def test_invalid_created_at_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """createdAtFromが日時でない場合400になること"""
         async with client as c:
             response = await c.get(
@@ -543,7 +627,9 @@ class TestAdminRoomHistories:
 
         assert response.status_code == 400
 
-    async def test_date_only_created_at_returns_400(self, client, admin_headers):
+    async def test_date_only_created_at_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """createdAtFromが時刻を持たない日付の場合400になること"""
         async with client as c:
             response = await c.get(
@@ -560,13 +646,13 @@ class TestAdminRoomHistories:
 
     async def test_admin_histories_filter_by_created_at_range_excludes_end(
         self,
-        client,
-        session,
-        admin_headers,
-        rooms_tenant,
-        room_owner_user,
-        room_assistant,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        room_assistant: Assistant,
+    ) -> None:
         """作成日時は開始の時刻以上・終了の時刻より前のルームだけが返ること"""
         created = {}
         for label, created_at in [
@@ -607,13 +693,13 @@ class TestAdminRoomHistories:
 
     async def test_get_rooms_filters_by_name_case_insensitive(
         self,
-        client,
-        session,
-        rooms_tenant,
-        room_owner_user,
-        room_assistant,
-        room_owner_headers,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        room_assistant: Assistant,
+        room_owner_headers: dict[str, str],
+    ) -> None:
         """ルーム名の部分一致検索が大文字小文字を区別しないこと"""
         session.add_all(
             [
@@ -642,8 +728,8 @@ class TestAdminRoomHistories:
         assert [room["name"] for room in response.json()["content"]] == ["Alpha room"]
 
     async def test_get_rooms_returns_400_when_page_is_negative(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """pageが負数の場合400になること"""
         async with client as c:
             response = await c.get(
@@ -656,8 +742,8 @@ class TestAdminRoomHistories:
         )
 
     async def test_get_rooms_returns_400_when_size_is_out_of_range(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """sizeが上限超過の場合400になること"""
         async with client as c:
             response = await c.get(
@@ -670,8 +756,8 @@ class TestAdminRoomHistories:
         )
 
     async def test_get_rooms_returns_403_when_tenant_header_mismatches_token(
-        self, client, rooms_tenant, room_owner_user
-    ):
+        self, client: AsyncClient, rooms_tenant: Tenant, room_owner_user: User
+    ) -> None:
         """JWTと異なるX-Tenant-IDは403になること"""
         headers = _headers(room_owner_user.login_id, rooms_tenant.id)
         headers["X-Tenant-ID"] = "another-tenant"
@@ -684,9 +770,11 @@ class TestAdminRoomHistories:
 
 @pytest.mark.asyncio
 class TestGetRoom:
+    """ルーム詳細取得のテスト。"""
+
     async def test_get_room_returns_owned_room(
-        self, client, room_owner_headers, owned_room
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """所有ルームの詳細を取得できること"""
         async with client as c:
             response = await c.get(
@@ -697,8 +785,11 @@ class TestGetRoom:
         assert response.json()["id"] == owned_room.id
 
     async def test_get_room_returns_403_for_other_users_room(
-        self, client, room_owner_headers, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_users_room: Room,
+    ) -> None:
         """共有されていない他ユーザー所有ルームは403になること"""
         async with client as c:
             response = await c.get(
@@ -708,8 +799,8 @@ class TestGetRoom:
         assert response.status_code == 403
 
     async def test_get_room_returns_404_for_unknown_room(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """存在しないルームは404になること"""
         async with client as c:
             response = await c.get("/api/rooms/unknown", headers=room_owner_headers)
@@ -717,8 +808,12 @@ class TestGetRoom:
         assert response.status_code == 404
 
     async def test_get_room_with_shared_group_member_returns_200(
-        self, client, other_user_headers, shared_room, shared_room_share
-    ):
+        self,
+        client: AsyncClient,
+        other_user_headers: dict[str, str],
+        shared_room: Room,
+        shared_room_share: Share,
+    ) -> None:
         """共有リンクを持つ共有先グループのメンバーはルームを取得できること"""
         async with client as c:
             response = await c.get(
@@ -731,9 +826,16 @@ class TestGetRoom:
 
 @pytest.mark.asyncio
 class TestCreateRoom:
+    """ルーム作成のテスト。"""
+
     async def test_create_room_succeeds(
-        self, client, room_owner_headers, rooms_tenant, room_owner_user, room_assistant
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        room_assistant: Assistant,
+    ) -> None:
         """ルームを作成できること"""
         async with client as c:
             response = await c.post(
@@ -749,8 +851,11 @@ class TestCreateRoom:
         assert body["defaultAssistantId"] == room_assistant.id
 
     async def test_create_room_truncates_name_over_255_chars(
-        self, client, room_owner_headers, room_assistant
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        room_assistant: Assistant,
+    ) -> None:
         """255文字超の名前は切り詰めて保存されること"""
         long_name = "a" * 300
         async with client as c:
@@ -764,8 +869,8 @@ class TestCreateRoom:
         assert len(response.json()["name"]) == 255
 
     async def test_create_room_returns_400_for_invalid_assistant_id(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """不存在アシスタントIDは400になること"""
         async with client as c:
             response = await c.post(
@@ -777,8 +882,11 @@ class TestCreateRoom:
         assert response.status_code == 400
 
     async def test_create_room_returns_400_for_other_tenant_assistant(
-        self, client, room_owner_headers, other_tenant_assistant
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_tenant_assistant: Assistant,
+    ) -> None:
         """他テナントのアシスタントIDは400になること"""
         async with client as c:
             response = await c.post(
@@ -790,8 +898,8 @@ class TestCreateRoom:
         assert response.status_code == 400
 
     async def test_create_room_returns_401_without_authentication(
-        self, client, rooms_tenant, room_assistant
-    ):
+        self, client: AsyncClient, rooms_tenant: Tenant, room_assistant: Assistant
+    ) -> None:
         """未認証は401になること"""
         async with client as c:
             response = await c.post(
@@ -805,7 +913,11 @@ class TestCreateRoom:
 
 @pytest.mark.asyncio
 class TestUpdateRoom:
-    async def test_update_room_succeeds(self, client, room_owner_headers, owned_room):
+    """ルーム更新のテスト。"""
+
+    async def test_update_room_succeeds(
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """所有ルームの名前を更新できること"""
         async with client as c:
             response = await c.patch(
@@ -818,8 +930,8 @@ class TestUpdateRoom:
         assert response.json()["name"] == "Updated Room"
 
     async def test_update_room_truncates_name_over_255_chars(
-        self, client, room_owner_headers, owned_room
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """更新時も255文字超は切り詰められること"""
         async with client as c:
             response = await c.patch(
@@ -832,8 +944,11 @@ class TestUpdateRoom:
         assert len(response.json()["name"]) == 255
 
     async def test_update_room_returns_404_for_other_users_room(
-        self, client, room_owner_headers, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_users_room: Room,
+    ) -> None:
         """他ユーザー所有ルームは更新できないこと"""
         async with client as c:
             response = await c.patch(
@@ -845,8 +960,12 @@ class TestUpdateRoom:
         assert response.status_code == 404
 
     async def test_update_room_with_shared_group_member_returns_404(
-        self, client, other_user_headers, shared_room, shared_room_share
-    ):
+        self,
+        client: AsyncClient,
+        other_user_headers: dict[str, str],
+        shared_room: Room,
+        shared_room_share: Share,
+    ) -> None:
         """共有先グループのメンバーは書き込み系（更新）を行えず404になること
         （書き込み系は引き続き所有者限定のため、_get_owned_room_or_404の挙動どおり）"""
         async with client as c:
@@ -861,7 +980,11 @@ class TestUpdateRoom:
 
 @pytest.mark.asyncio
 class TestDeleteRoom:
-    async def test_delete_room_succeeds(self, client, room_owner_headers, owned_room):
+    """ルーム削除のテスト。"""
+
+    async def test_delete_room_succeeds(
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """所有ルームを削除できること"""
         async with client as c:
             response = await c.delete(
@@ -872,13 +995,13 @@ class TestDeleteRoom:
 
     async def test_delete_room_deletes_related_room_pin_by_cascade(
         self,
-        client,
-        session,
-        room_owner_headers,
-        rooms_tenant,
-        room_owner_user,
-        owned_room,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        room_owner_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        owned_room: Room,
+    ) -> None:
         """ルーム削除時に関連する固定レコードも削除されること"""
         session.add(
             RoomPin(
@@ -899,9 +1022,9 @@ class TestDeleteRoom:
             (
                 await session.execute(
                     select(RoomPin).where(
-                        RoomPin.user_id == room_owner_user.id,
-                        RoomPin.tenant_id == rooms_tenant.id,
-                        RoomPin.room_id == owned_room.id,
+                        RoomPin.user_id == room_owner_user.id,  # type: ignore[arg-type]
+                        RoomPin.tenant_id == rooms_tenant.id,  # type: ignore[arg-type]
+                        RoomPin.room_id == owned_room.id,  # type: ignore[arg-type]
                     )
                 )
             )
@@ -911,8 +1034,11 @@ class TestDeleteRoom:
         assert room_pin is None
 
     async def test_delete_room_returns_404_for_other_users_room(
-        self, client, room_owner_headers, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_users_room: Room,
+    ) -> None:
         """他ユーザー所有ルームは削除できないこと"""
         async with client as c:
             response = await c.delete(
@@ -924,15 +1050,17 @@ class TestDeleteRoom:
 
 @pytest.mark.asyncio
 class TestPinRoom:
+    """ルームのピン留めのテスト。"""
+
     async def test_pin_room_succeeds(
         self,
-        client,
-        session,
-        room_owner_headers,
-        rooms_tenant,
-        room_owner_user,
-        owned_room,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        room_owner_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        owned_room: Room,
+    ) -> None:
         """ルームを固定できること"""
         async with client as c:
             response = await c.post(
@@ -944,9 +1072,9 @@ class TestPinRoom:
             (
                 await session.execute(
                     select(RoomPin).where(
-                        RoomPin.user_id == room_owner_user.id,
-                        RoomPin.tenant_id == rooms_tenant.id,
-                        RoomPin.room_id == owned_room.id,
+                        RoomPin.user_id == room_owner_user.id,  # type: ignore[arg-type]
+                        RoomPin.tenant_id == rooms_tenant.id,  # type: ignore[arg-type]
+                        RoomPin.room_id == owned_room.id,  # type: ignore[arg-type]
                     )
                 )
             )
@@ -957,13 +1085,13 @@ class TestPinRoom:
 
     async def test_pin_room_is_idempotent(
         self,
-        client,
-        session,
-        room_owner_headers,
-        rooms_tenant,
-        room_owner_user,
-        owned_room,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        room_owner_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        owned_room: Room,
+    ) -> None:
         """同じルームを複数回固定しても1件のまま成功すること"""
         async with client as c:
             first_response = await c.post(
@@ -979,9 +1107,9 @@ class TestPinRoom:
             (
                 await session.execute(
                     select(RoomPin).where(
-                        RoomPin.user_id == room_owner_user.id,
-                        RoomPin.tenant_id == rooms_tenant.id,
-                        RoomPin.room_id == owned_room.id,
+                        RoomPin.user_id == room_owner_user.id,  # type: ignore[arg-type]
+                        RoomPin.tenant_id == rooms_tenant.id,  # type: ignore[arg-type]
+                        RoomPin.room_id == owned_room.id,  # type: ignore[arg-type]
                     )
                 )
             )
@@ -991,8 +1119,11 @@ class TestPinRoom:
         assert len(room_pins) == 1
 
     async def test_pin_room_returns_404_for_other_users_room(
-        self, client, room_owner_headers, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_users_room: Room,
+    ) -> None:
         """他ユーザー所有ルームは固定できないこと"""
         async with client as c:
             response = await c.post(
@@ -1002,8 +1133,8 @@ class TestPinRoom:
         assert response.status_code == 404
 
     async def test_pin_room_returns_404_for_unknown_room(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """存在しないルームは固定できないこと"""
         async with client as c:
             response = await c.post(
@@ -1015,15 +1146,17 @@ class TestPinRoom:
 
 @pytest.mark.asyncio
 class TestUnpinRoom:
+    """ルームのピン留め解除のテスト。"""
+
     async def test_unpin_room_succeeds(
         self,
-        client,
-        session,
-        room_owner_headers,
-        rooms_tenant,
-        room_owner_user,
-        owned_room,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        room_owner_headers: dict[str, str],
+        rooms_tenant: Tenant,
+        room_owner_user: User,
+        owned_room: Room,
+    ) -> None:
         """固定済みルームを解除できること"""
         session.add(
             RoomPin(
@@ -1044,9 +1177,9 @@ class TestUnpinRoom:
             (
                 await session.execute(
                     select(RoomPin).where(
-                        RoomPin.user_id == room_owner_user.id,
-                        RoomPin.tenant_id == rooms_tenant.id,
-                        RoomPin.room_id == owned_room.id,
+                        RoomPin.user_id == room_owner_user.id,  # type: ignore[arg-type]
+                        RoomPin.tenant_id == rooms_tenant.id,  # type: ignore[arg-type]
+                        RoomPin.room_id == owned_room.id,  # type: ignore[arg-type]
                     )
                 )
             )
@@ -1056,8 +1189,8 @@ class TestUnpinRoom:
         assert room_pin is None
 
     async def test_unpin_room_returns_404_when_room_is_not_pinned(
-        self, client, room_owner_headers, owned_room
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """未固定ルームの解除は404になること"""
         async with client as c:
             response = await c.delete(
@@ -1067,8 +1200,8 @@ class TestUnpinRoom:
         assert response.status_code == 404
 
     async def test_unpin_room_returns_404_for_unknown_room(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """存在しないルームの解除は404になること"""
         async with client as c:
             response = await c.delete(
@@ -1080,9 +1213,15 @@ class TestUnpinRoom:
 
 @pytest.mark.asyncio
 class TestFeedbackRoom:
+    """ルームへのフィードバックのテスト。"""
+
     async def test_feedback_room_updates_rating(
-        self, client, session, room_owner_headers, owned_room
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        room_owner_headers: dict[str, str],
+        owned_room: Room,
+    ) -> None:
         """ルーム所有者が満足度評価を登録できること"""
         async with client as c:
             response = await c.post(
@@ -1095,7 +1234,9 @@ class TestFeedbackRoom:
         await session.refresh(owned_room)
         assert owned_room.rating == RoomRating.EXCELLENT
 
-    async def test_feedback_room_returns_401_without_token(self, client, owned_room):
+    async def test_feedback_room_returns_401_without_token(
+        self, client: AsyncClient, owned_room: Room
+    ) -> None:
         """未ログインでは満足度評価を登録できないこと"""
         async with client as c:
             response = await c.post(
@@ -1106,8 +1247,8 @@ class TestFeedbackRoom:
         assert response.status_code == 401
 
     async def test_feedback_room_returns_404_for_unknown_room(
-        self, client, room_owner_headers
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str]
+    ) -> None:
         """存在しないルームには満足度評価を登録できないこと"""
         async with client as c:
             response = await c.post(
@@ -1119,8 +1260,11 @@ class TestFeedbackRoom:
         assert response.status_code == 404
 
     async def test_feedback_room_returns_404_for_other_users_room(
-        self, client, room_owner_headers, other_users_room
-    ):
+        self,
+        client: AsyncClient,
+        room_owner_headers: dict[str, str],
+        other_users_room: Room,
+    ) -> None:
         """他ユーザー所有ルームには満足度評価を登録できないこと"""
         async with client as c:
             response = await c.post(
@@ -1132,8 +1276,8 @@ class TestFeedbackRoom:
         assert response.status_code == 404
 
     async def test_feedback_room_returns_400_for_invalid_rating(
-        self, client, room_owner_headers, owned_room
-    ):
+        self, client: AsyncClient, room_owner_headers: dict[str, str], owned_room: Room
+    ) -> None:
         """不正なratingでは満足度評価を登録できないこと"""
         async with client as c:
             response = await c.post(

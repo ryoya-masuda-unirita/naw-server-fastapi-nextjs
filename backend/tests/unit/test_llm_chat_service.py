@@ -13,6 +13,9 @@ from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.schemas.message import ToolConfig
 from app.services.llm_chat_service import LlmChatService
+from app.models.user import User
+from collections.abc import AsyncIterator
+from collections.abc import Iterator
 
 
 def _ai_model(
@@ -49,7 +52,7 @@ def _tenant_endpoint(
     )
 
 
-def _request(**overrides) -> LlmChatRequest:
+def _request(**overrides: Any) -> LlmChatRequest:
     """テスト用のリクエストを作る（`overrides` で既定値を上書きする）。"""
     defaults = {
         "deployName": "gpt-4o",
@@ -66,17 +69,17 @@ class _AsyncChunkIterator:
         """返すチャンク列を受け取る。"""
         self._chunks = chunks
 
-    def __aiter__(self):
+    def __aiter__(self) -> AsyncIterator[Any]:
         """非同期イテレータを返す。"""
         return self._gen()
 
-    async def _gen(self):
+    async def _gen(self) -> AsyncIterator[Any]:
         """チャンクを順に返す。"""
         for chunk in self._chunks:
             yield chunk
 
 
-async def _consume(streaming_response) -> list[bytes]:
+async def _consume(streaming_response: Any) -> list[bytes]:
     """ストリーミングレスポンスの本文チャンクをすべて読む。"""
     return [chunk async for chunk in streaming_response.body_iterator]
 
@@ -103,14 +106,17 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_ai_model_not_found(
-        self, mock_find_model, mock_enforce, test_user
-    ):
+        self, mock_find_model: MagicMock, mock_enforce: MagicMock, test_user: User
+    ) -> None:
         """指定deployNameのAIモデルが存在しない場合400になること"""
         mock_find_model.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
-                "tenant-1", test_user, _request(), session=None
+                "tenant-1",
+                test_user,
+                _request(),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 400
@@ -125,15 +131,22 @@ class TestStreamChat:
         new_callable=AsyncMock,
     )
     async def test_raises_400_when_no_tenant_endpoint(
-        self, mock_find_model, mock_find_endpoints, mock_enforce, test_user
-    ):
+        self,
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        test_user: User,
+    ) -> None:
         """テナントにAzure OpenAI Chatエンドポイントが存在しない場合400になること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = []
 
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
-                "tenant-1", test_user, _request(), session=None
+                "tenant-1",
+                test_user,
+                _request(),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 400
@@ -153,12 +166,12 @@ class TestStreamChat:
     )
     async def test_raises_404_when_message_not_found(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_find_message,
-        mock_enforce,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_find_message: MagicMock,
+        mock_enforce: MagicMock,
+        test_user: User,
+    ) -> None:
         """指定messageIdのメッセージが存在しない場合404になること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -166,7 +179,10 @@ class TestStreamChat:
 
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
-                "tenant-1", test_user, _request(messageId="msg-1"), session=None
+                "tenant-1",
+                test_user,
+                _request(messageId="msg-1"),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -187,13 +203,13 @@ class TestStreamChat:
     )
     async def test_raises_403_when_message_room_not_owned(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_find_message,
-        mock_require_owned_room,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_find_message: MagicMock,
+        mock_require_owned_room: MagicMock,
+        test_user: User,
+    ) -> None:
         """指定messageIdが他ユーザーのルームに属する場合403になること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -204,7 +220,10 @@ class TestStreamChat:
 
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
-                "tenant-1", test_user, _request(messageId="msg-1"), session=None
+                "tenant-1",
+                test_user,
+                _request(messageId="msg-1"),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 403
@@ -225,13 +244,13 @@ class TestStreamChat:
     )
     async def test_streams_text_delta_then_message_stop_and_persists_usage(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """text_deltaを順に送出し、完了後message_stopイベントを送出しトークン使用量を永続化すること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -252,7 +271,10 @@ class TestStreamChat:
         mock_get_session_maker.return_value = mock_session_maker
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
@@ -278,16 +300,16 @@ class TestStreamChat:
     )
     async def test_emits_error_event_when_azure_call_fails(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """Azure呼び出し中に例外が発生した場合、errorイベントを送出し例外を伝播しないこと"""
 
-        async def _raise(*args, **kwargs):
+        async def _raise(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
             """最初に例外を送出する非同期ジェネレータ。"""
             raise RuntimeError("azure error")
             yield  # pragma: no cover - ジェネレータにするためのダミー
@@ -303,21 +325,26 @@ class TestStreamChat:
         mock_get_session_maker.return_value = mock_session_maker
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
 
         assert _sse_events(body) == [{"type": "error", "message": "azure error"}]
 
-    async def test_raises_400_when_create_library_without_message_id(self, test_user):
+    async def test_raises_400_when_create_library_without_message_id(
+        self, test_user: User
+    ) -> None:
         """createLibrary=trueかつmessageId未指定の場合400になること"""
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
                 "tenant-1",
                 test_user,
                 _request(createLibrary=True),
-                session=None,
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 400
@@ -335,13 +362,13 @@ class TestStreamChat:
     )
     async def test_passes_tools_to_llm_client(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """toolsを指定した場合、AzureLlmChatClient.stream_chatへ変換済みtoolsが渡ること"""
         from app.schemas.message import ToolConfig
 
@@ -359,7 +386,7 @@ class TestStreamChat:
             "tenant-1",
             test_user,
             _request(tools=[ToolConfig(name="web_search")]),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -382,13 +409,13 @@ class TestStreamChat:
     )
     async def test_tools_none_by_default(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """tools未指定時はAzureLlmChatClient.stream_chatへtools=Noneが渡ること"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -401,7 +428,10 @@ class TestStreamChat:
         mock_get_session_maker.return_value = mock_session_maker
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -421,13 +451,13 @@ class TestStreamChat:
     )
     async def test_passes_response_format_and_prepends_instruction_when_specified(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """responseFormat指定時、JSON指示のsystemメッセージを前置しresponse_formatを渡すこと"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -443,7 +473,7 @@ class TestStreamChat:
             "tenant-1",
             test_user,
             _request(responseFormat={"type": "json_object"}),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -468,13 +498,13 @@ class TestStreamChat:
     )
     async def test_does_not_pass_response_format_when_not_specified(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """responseFormat未指定時、response_formatを渡さずJSON指示文も前置しないこと"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -487,7 +517,10 @@ class TestStreamChat:
         mock_get_session_maker.return_value = mock_session_maker
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -514,13 +547,13 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_dispatches_to_bedrock_client_for_bedrock_model(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_bedrock_stream,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_bedrock_stream: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """BedrockのAIモデルが解決された場合、BedrockLlmChatClientが呼ばれること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -545,7 +578,7 @@ class TestStreamChatBedrockDispatch:
             "tenant-1",
             test_user,
             _request(deployName="anthropic.claude-sonnet-5"),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -568,12 +601,12 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_raises_400_when_tools_specified_for_bedrock(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_bedrock_stream,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_bedrock_stream: MagicMock,
+        test_user: User,
+    ) -> None:
         """Bedrockのモデルでtoolsを指定すると、ストリーミング開始前に400になりクライアントを呼ばないこと"""
         mock_find_model.return_value = _ai_model(
             name="anthropic.claude-sonnet-5",
@@ -591,7 +624,7 @@ class TestStreamChatBedrockDispatch:
                     deployName="anthropic.claude-sonnet-5",
                     tools=[ToolConfig(name="web_search")],
                 ),
-                session=None,
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 400
@@ -613,12 +646,12 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_message_not_found_takes_precedence_over_bedrock_tools_error(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_find_message,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_find_message: MagicMock,
+        test_user: User,
+    ) -> None:
         """Bedrockでtoolsを指定しても、messageIdが存在しない場合はtoolsの400より404を優先すること"""
         mock_find_model.return_value = _ai_model(
             name="anthropic.claude-sonnet-5",
@@ -638,7 +671,7 @@ class TestStreamChatBedrockDispatch:
                     tools=[ToolConfig(name="web_search")],
                     messageId="missing",
                 ),
-                session=None,
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -656,13 +689,13 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_caps_max_tokens_for_bedrock(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_bedrock_stream,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_bedrock_stream: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """BedrockでmaxTokensがAIモデルの上限を超える場合、上限に切り詰めて呼び出すこと"""
         mock_find_model.return_value = _ai_model(
             name="anthropic.claude-sonnet-5",
@@ -678,7 +711,7 @@ class TestStreamChatBedrockDispatch:
             "tenant-1",
             test_user,
             _request(deployName="anthropic.claude-sonnet-5", maxTokens=10000),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -702,15 +735,15 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_caps_max_tokens_for_azure(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_azure_stream,
-        mock_get_session_maker,
-        requested,
-        expected,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_azure_stream: MagicMock,
+        mock_get_session_maker: MagicMock,
+        requested: int | None,
+        expected: int | None,
+        test_user: User,
+    ) -> None:
         """Azure OpenAIでmaxTokensをAIモデルの上限で切り詰め、未指定ならNoneのまま呼び出すこと"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -718,7 +751,10 @@ class TestStreamChatBedrockDispatch:
         mock_get_session_maker.return_value = MagicMock()
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(maxTokens=requested), session=None
+            "tenant-1",
+            test_user,
+            _request(maxTokens=requested),
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -737,13 +773,13 @@ class TestStreamChatBedrockDispatch:
     )
     async def test_still_dispatches_to_azure_client_for_azure_model(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_azure_stream,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_azure_stream: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """Azure OpenAIのAIモデルが解決された場合、従来通りAzureLlmChatClientが呼ばれること（回帰確認）"""
         mock_find_model.return_value = _ai_model()
         mock_find_endpoints.return_value = [_tenant_endpoint()]
@@ -756,7 +792,10 @@ class TestStreamChatBedrockDispatch:
         mock_get_session_maker.return_value = mock_session_maker
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -771,8 +810,8 @@ class TestStreamChatBedrockDispatch:
     )
     @patch("app.services.llm_chat_service.enforce_within_quota", new_callable=AsyncMock)
     async def test_raises_400_for_unsupported_endpoint_type(
-        self, mock_enforce, mock_find_model, test_user
-    ):
+        self, mock_enforce: MagicMock, mock_find_model: MagicMock, test_user: User
+    ) -> None:
         """チャット用の種別（Azure OpenAI/Bedrock）に絞ってモデルを検索し、該当しなければ400になること"""
         # 未対応種別（例: GEMINI_CHAT）のみで登録されたモデル名は、リポジトリの絞り込みで
         # 見つからない扱いになる。
@@ -780,7 +819,10 @@ class TestStreamChatBedrockDispatch:
 
         with pytest.raises(HTTPException) as exc_info:
             await LlmChatService.stream_chat(
-                "tenant-1", test_user, _request(deployName="gemini-pro"), session=None
+                "tenant-1",
+                test_user,
+                _request(deployName="gemini-pro"),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 400
@@ -824,17 +866,17 @@ class TestStreamChatCreateLibrary:
     )
     async def test_streams_library_title_and_content_delta_then_persists_library(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_find_message,
-        mock_require_owned_room,
-        mock_stream_chat,
-        mock_find_prompt,
-        mock_save_library,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_find_message: MagicMock,
+        mock_require_owned_room: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_find_prompt: MagicMock,
+        mock_save_library: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """createLibrary=trueの場合、library_title_delta/library_content_deltaを配信しライブラリを永続化すること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -860,7 +902,7 @@ class TestStreamChatCreateLibrary:
             "tenant-1",
             test_user,
             _request(messageId="msg-1", createLibrary=True),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         chunks = await _consume(response)
         body = b"".join(chunks).decode()
@@ -890,12 +932,12 @@ class TestStreamChatCreateLibrary:
 class TestApplyAdditionalPrompt:
     """LlmChatService._apply_additional_prompt のテスト"""
 
-    def test_returns_as_is_when_no_additional_prompt(self):
+    def test_returns_as_is_when_no_additional_prompt(self) -> None:
         """additionalPrompt未指定ならそのまま返すこと"""
         messages = [ChatMessage(role="user", content="こんにちは")]
         assert LlmChatService._apply_additional_prompt(messages, None) == messages
 
-    def test_prepends_to_last_user_turn(self):
+    def test_prepends_to_last_user_turn(self) -> None:
         """末尾がuserロールの場合、その発話に前置すること"""
         messages = [
             ChatMessage(role="system", content="system prompt"),
@@ -906,7 +948,7 @@ class TestApplyAdditionalPrompt:
         assert result[0] == messages[0]
         assert result[1] == ChatMessage(role="user", content="追加指示\n\n質問1")
 
-    def test_skips_trailing_non_user_turns_to_find_last_user_turn(self):
+    def test_skips_trailing_non_user_turns_to_find_last_user_turn(self) -> None:
         """末尾がuser以外のロールでも、遡って最後のuser発話に前置すること"""
         messages = [
             ChatMessage(role="user", content="質問1"),
@@ -917,7 +959,7 @@ class TestApplyAdditionalPrompt:
         assert result[0] == ChatMessage(role="user", content="追加指示\n\n質問1")
         assert result[1] == messages[1]
 
-    def test_returns_as_is_when_no_user_turn_exists(self):
+    def test_returns_as_is_when_no_user_turn_exists(self) -> None:
         """user発話が存在しない場合は何もしないこと"""
         messages = [ChatMessage(role="assistant", content="回答のみ")]
         assert LlmChatService._apply_additional_prompt(messages, "追加指示") == messages
@@ -937,14 +979,14 @@ class TestApplyAttachmentFiles:
         messages = [ChatMessage(role=t.role, content=t.content) for t in turns]
         return LlmChatService._apply_attachment_files(messages, turns, files)
 
-    def test_returns_as_is_when_no_attachments(self):
+    def test_returns_as_is_when_no_attachments(self) -> None:
         """発話にattachmentsがない場合、ファイルがあってもそのまま返すこと"""
         turns = [LlmChatTurn(role="user", content="こんにちは")]
         result = self._apply(turns, [self._file()])
 
         assert result == [ChatMessage(role="user", content="こんにちは")]
 
-    def test_attaches_files_to_each_user_turn_by_name(self):
+    def test_attaches_files_to_each_user_turn_by_name(self) -> None:
         """各user発話に、attachmentsのファイル名と一致するファイルだけを付与すること"""
         turns = [
             LlmChatTurn(role="system", content="system prompt"),
@@ -968,7 +1010,7 @@ class TestApplyAttachmentFiles:
             "image_url",
         ]
 
-    def test_trims_role_when_judging_user_turn(self):
+    def test_trims_role_when_judging_user_turn(self) -> None:
         """前後に空白があるroleでもuser発話として添付すること"""
         turns = [LlmChatTurn(role=" user ", content="質問", attachments=["a.png"])]
         result = self._apply(turns, [self._file("a.png")])
@@ -976,7 +1018,7 @@ class TestApplyAttachmentFiles:
         assert isinstance(result[0].content, list)
         assert result[0].content[1]["type"] == "image_url"
 
-    def test_ignores_attachments_on_non_user_turns(self):
+    def test_ignores_attachments_on_non_user_turns(self) -> None:
         """system/assistant発話のattachmentsは無視し、エラーにもしないこと"""
         turns = [
             LlmChatTurn(role="system", content="指示", attachments=["missing.png"]),
@@ -989,7 +1031,7 @@ class TestApplyAttachmentFiles:
             ChatMessage(role="assistant", content="回答"),
         ]
 
-    def test_raises_400_when_attachment_name_not_found(self):
+    def test_raises_400_when_attachment_name_not_found(self) -> None:
         """attachmentsにアップロードされていないファイル名がある場合400になること"""
         turns = [LlmChatTurn(role="user", content="質問", attachments=["x.png"])]
 
@@ -1001,7 +1043,7 @@ class TestApplyAttachmentFiles:
             "messages 内の添付ファイル名に一致するファイルがありません: x.png"
         )
 
-    def test_skips_empty_files_when_indexing(self):
+    def test_skips_empty_files_when_indexing(self) -> None:
         """空のファイルは突き合わせの対象にせず、指定されると400になること"""
         turns = [LlmChatTurn(role="user", content="質問", attachments=["empty.png"])]
 
@@ -1010,7 +1052,7 @@ class TestApplyAttachmentFiles:
 
         assert exc_info.value.status_code == 400
 
-    def test_does_not_attach_to_system_turn_downgraded_to_user(self):
+    def test_does_not_attach_to_system_turn_downgraded_to_user(self) -> None:
         """ライブラリ生成でuserへ降格したsystem発話には添付しないこと"""
         turns = [
             LlmChatTurn(role="system", content="指示", attachments=["a.png"]),
@@ -1045,13 +1087,13 @@ class TestStreamChatWithAttachmentFiles:
     )
     async def test_passes_multimodal_content_to_azure_when_attachment_files_present(
         self,
-        mock_find_model,
-        mock_find_endpoints,
-        mock_enforce,
-        mock_stream_chat,
-        mock_get_session_maker,
-        test_user,
-    ):
+        mock_find_model: MagicMock,
+        mock_find_endpoints: MagicMock,
+        mock_enforce: MagicMock,
+        mock_stream_chat: MagicMock,
+        mock_get_session_maker: MagicMock,
+        test_user: User,
+    ) -> None:
         """発話のattachmentsで指定した添付ファイルが、そのuser発話にマルチモーダル形式で渡されること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -1078,7 +1120,10 @@ class TestStreamChatWithAttachmentFiles:
             ],
         )
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, req, session=None
+            "tenant-1",
+            test_user,
+            req,
+            session=None,  # type: ignore[arg-type]
         )
         await _consume(response)
 
@@ -1091,7 +1136,7 @@ class TestStreamChatPersistFailure:
     """LlmChatService.stream_chat の保存処理が失敗した場合のテスト（Issue #254）"""
 
     @pytest.fixture
-    def stream_mocks(self):
+    def stream_mocks(self) -> Iterator[dict[str, MagicMock]]:
         """ストリーミング開始前のDB検証・LLM呼び出し・保存処理をモックする。"""
         prefix = "app.services.llm_chat_service"
         with (
@@ -1132,8 +1177,8 @@ class TestStreamChatPersistFailure:
             }
 
     async def test_closes_stream_normally_when_persist_token_usage_fails(
-        self, stream_mocks, test_user
-    ):
+        self, stream_mocks: dict[str, MagicMock], test_user: User
+    ) -> None:
         """トークン使用量の保存で例外が起きても、送信済みのイベントのあとストリームを正常に閉じること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -1146,7 +1191,10 @@ class TestStreamChatPersistFailure:
         stream_mocks["persist_usage"].side_effect = RuntimeError("db error")
 
         response = await LlmChatService.stream_chat(
-            "tenant-1", test_user, _request(), session=None
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
         )
         body = b"".join(await _consume(response)).decode()
 
@@ -1159,8 +1207,8 @@ class TestStreamChatPersistFailure:
         stream_mocks["persist_usage"].assert_awaited_once()
 
     async def test_persists_token_usage_even_when_persist_library_fails(
-        self, stream_mocks, test_user
-    ):
+        self, stream_mocks: dict[str, MagicMock], test_user: User
+    ) -> None:
         """ライブラリの保存で例外が起きても、トークン使用量を保存しストリームを正常に閉じること"""
         from app.core.llm_client import ChatStreamChunk
 
@@ -1177,7 +1225,7 @@ class TestStreamChatPersistFailure:
             "tenant-1",
             test_user,
             _request(messageId="msg-1", createLibrary=True),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
         events = _sse_events(b"".join(await _consume(response)).decode())
 

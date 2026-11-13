@@ -54,10 +54,38 @@ _PERIOD = {"from": "2026-01-01T00:00:00Z", "to": "2026-01-02T00:00:00Z"}
 
 
 def _without(data: dict[str, Any], key: str) -> dict[str, Any]:
+    """辞書から指定したキーを除いた新しい辞書を返す。
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        元の辞書。
+    key : str
+        除くキー。
+
+    Returns
+    -------
+    dict[str, Any]
+        キーを除いた辞書。
+    """
     return {k: v for k, v in data.items() if k != key}
 
 
 def _first_message(model: type[BaseModel], data: dict[str, Any]) -> str:
+    """検証エラーになるデータを渡し、最初のエラーメッセージを返す。
+
+    Parameters
+    ----------
+    model : type[BaseModel]
+        検証するモデル。
+    data : dict[str, Any]
+        検証するデータ。
+
+    Returns
+    -------
+    str
+        最初のエラーのメッセージ。
+    """
     with pytest.raises(ValidationError) as exc_info:
         model.model_validate(data)
     return validation_error_message(exc_info.value.errors())
@@ -461,7 +489,9 @@ def test_returns_source_message(
 
 
 class TestBackendOnlyConstraints:
-    def test_chat_content_empty_keeps_default_message(self):
+    """backend 独自の制約のテスト"""
+
+    def test_chat_content_empty_keeps_default_message(self) -> None:
         """チャットのcontentの空文字はbackend独自の制約のため、文言を置き換えないこと"""
         message = _first_message(
             LlmChatRequest, {**_CHAT, "messages": [{"role": "user", "content": ""}]}
@@ -469,7 +499,7 @@ class TestBackendOnlyConstraints:
 
         assert message == "String should have at least 1 character"
 
-    def test_tenant_name_too_long_keeps_default_message(self):
+    def test_tenant_name_too_long_keeps_default_message(self) -> None:
         """テナント名の32文字以内はbackend独自の制約のため、文言を置き換えないこと"""
         message = _first_message(TenantAdminPatchRequest, {"tenantName": "a" * 33})
 
@@ -477,7 +507,9 @@ class TestBackendOnlyConstraints:
 
 
 class TestConstraintsUnchanged:
-    def test_message_content_empty_user_input_is_accepted(self):
+    """変更していない制約のテスト"""
+
+    def test_message_content_empty_user_input_is_accepted(self) -> None:
         """回答の生成のuserInputは移植元と同じく空文字を受け付けること（issue-245）"""
         request = MessageContentCreateRequest.model_validate(
             {"messageId": "message-1", "userInput": ""}
@@ -485,19 +517,19 @@ class TestConstraintsUnchanged:
 
         assert request.userInput == ""
 
-    def test_category_name_at_max_length_is_accepted(self):
+    def test_category_name_at_max_length_is_accepted(self) -> None:
         """カテゴリ名16文字ちょうどは受け付けること"""
         request = AssistantCategoryCreateRequest.model_validate({"name": "あ" * 16})
 
         assert request.name == "あ" * 16
 
-    def test_token_usage_list_bounds_are_accepted(self):
+    def test_token_usage_list_bounds_are_accepted(self) -> None:
         """トークン使用量のページ番号0・件数100は受け付けること"""
         query = TokenUsageListQuery.model_validate({**_PERIOD, "page": 0, "size": 100})
 
         assert (query.page, query.size) == (0, 100)
 
-    def test_chat_temperature_bounds_are_accepted(self):
+    def test_chat_temperature_bounds_are_accepted(self) -> None:
         """チャットのtemperature 0.0・1.0は受け付けること"""
         for temperature in (0.0, 1.0):
             request = LlmChatRequest.model_validate(

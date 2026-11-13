@@ -17,12 +17,18 @@ from app.main import app
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.password_history import PasswordHistory
+from sqlalchemy.ext.asyncio import AsyncEngine
+from collections.abc import AsyncIterator
+from fakeredis.aioredis import FakeRedis
+from collections.abc import Iterator
+import asyncio
+from typing import Any
 
 DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(scope="session")
-def event_loop():
+def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     """Session-scoped event loop for async tests"""
     import asyncio
 
@@ -32,13 +38,13 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-async def engine():
+async def engine() -> AsyncIterator[AsyncEngine]:
     """インメモリ SQLite DB エンジン"""
     _engine = create_async_engine(DATABASE_URL, echo=False)
 
     # SQLite はデフォルトで外部キー制約を無効にするため接続ごとに有効化する
     @event.listens_for(_engine.sync_engine, "connect")
-    def set_sqlite_pragma(dbapi_conn, _):
+    def set_sqlite_pragma(dbapi_conn: Any, _: Any) -> None:
         """SQLite の接続ごとに外部キー制約を有効にする。"""
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
@@ -53,9 +59,9 @@ async def engine():
 
 
 @pytest.fixture
-async def session(engine):
+async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     """DB セッション"""
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)  # type: ignore[call-overload]
     async with async_session() as sess:
         yield sess
 
@@ -107,7 +113,7 @@ async def session(engine):
 
 
 @pytest.fixture
-def override_get_session(session):
+def override_get_session(session: AsyncSession) -> Iterator[None]:
     """get_session の依存性をオーバーライド"""
     app.dependency_overrides[get_session] = lambda: session
     yield
@@ -115,7 +121,7 @@ def override_get_session(session):
 
 
 @pytest.fixture
-async def fake_redis():
+async def fake_redis() -> AsyncIterator[FakeRedis]:
     """fakeredis によるインメモリ Redis（テスト用）"""
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     yield redis
@@ -124,7 +130,7 @@ async def fake_redis():
 
 
 @pytest.fixture
-def override_get_redis_client(fake_redis):
+def override_get_redis_client(fake_redis: FakeRedis) -> Iterator[None]:
     """get_redis_client の依存性をオーバーライド"""
     app.dependency_overrides[get_redis_client] = lambda: fake_redis
     yield
@@ -132,13 +138,13 @@ def override_get_redis_client(fake_redis):
 
 
 @pytest.fixture
-def client(override_get_session, override_get_redis_client):
+def client(override_get_session: None, override_get_redis_client: None) -> AsyncClient:
     """ASGITransport を利用したテストクライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.fixture
-async def test_tenant(session):
+async def test_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = Tenant(
         id="test-tenant",
@@ -158,7 +164,7 @@ async def test_tenant(session):
 
 
 @pytest.fixture
-async def test_user(session, test_tenant):
+async def test_user(session: AsyncSession, test_tenant: Tenant) -> User:
     """テスト用ユーザー（パスワード未設定）"""
     user = User(
         id=uuid4(),
@@ -179,7 +185,9 @@ _EXISTING_PASSWORD_AGE_DAYS = 1
 
 
 @pytest.fixture
-async def test_user_with_password(session, test_tenant, test_user):
+async def test_user_with_password(
+    session: AsyncSession, test_tenant: Tenant, test_user: User
+) -> dict[str, Any]:
     """テスト用ユーザー（パスワード設定済み）"""
     plain_password = "TestPassword123!"
     hashed_password = hash_password(plain_password)
@@ -205,7 +213,7 @@ async def test_user_with_password(session, test_tenant, test_user):
 
 
 @pytest.fixture
-async def test_user_with_login_key(session, test_tenant):
+async def test_user_with_login_key(session: AsyncSession, test_tenant: Tenant) -> User:
     """テスト用ユーザー（ログインキー設定済み）"""
     user = User(
         id=uuid4(),
@@ -223,7 +231,7 @@ async def test_user_with_login_key(session, test_tenant):
 
 
 @pytest.fixture
-async def test_other_tenant(session):
+async def test_other_tenant(session: AsyncSession) -> Tenant:
     """別テナント検証用のテスト用テナント"""
     tenant = Tenant(
         id="test-other-tenant",
@@ -243,13 +251,13 @@ async def test_other_tenant(session):
 
 
 @pytest.fixture
-def valid_jwt_token(test_user, test_tenant):
+def valid_jwt_token(test_user: User, test_tenant: Tenant) -> str:
     """有効な JWT トークン"""
     return create_access_token(test_user.login_id, test_tenant.id)
 
 
 @pytest.fixture
-def expired_jwt_token(test_user, test_tenant):
+def expired_jwt_token(test_user: User, test_tenant: Tenant) -> str:
     """有効期限切れ JWT"""
     payload = {
         "sub": test_user.login_id,
@@ -261,7 +269,7 @@ def expired_jwt_token(test_user, test_tenant):
 
 
 @pytest.fixture
-def invalid_jwt_token(test_tenant):
+def invalid_jwt_token(test_tenant: Tenant) -> str:
     """不正な JWT（異なる秘密鍵で生成）"""
     payload = {
         "sub": "testuser",

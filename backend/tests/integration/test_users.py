@@ -17,10 +17,11 @@ from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
 from app.models.password_history import PasswordHistory
 from app.schemas.user import LEGACY_LOGIN_KEY_REMOVED_MESSAGE
+from uuid import UUID
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-users-test",
@@ -42,7 +43,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用管理者ユーザー"""
     u = User(
         id=uuid4(),
@@ -66,7 +67,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def normal_user(session, tenant):
+async def normal_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー"""
     u = User(
         id=uuid4(),
@@ -90,37 +91,37 @@ async def normal_user(session, tenant):
 
 
 @pytest.fixture
-def admin_token(admin_user, tenant):
+def admin_token(admin_user: User, tenant: Tenant) -> str:
     """管理者のアクセストークン"""
     return create_access_token(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def user_token(normal_user, tenant):
+def user_token(normal_user: User, tenant: Tenant) -> str:
     """一般ユーザーのアクセストークン"""
     return create_access_token(normal_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def admin_headers(admin_token, tenant):
+def admin_headers(admin_token: str, tenant: Tenant) -> dict[str, str]:
     """管理者の認証ヘッダー"""
     return {"Authorization": f"Bearer {admin_token}", "X-Tenant-ID": tenant.id}
 
 
 @pytest.fixture
-def user_headers(user_token, tenant):
+def user_headers(user_token: str, tenant: Tenant) -> dict[str, str]:
     """一般ユーザーの認証ヘッダー"""
     return {"Authorization": f"Bearer {user_token}", "X-Tenant-ID": tenant.id}
 
 
 @pytest.fixture
-def client(override_get_session, override_get_redis_client):
+def client(override_get_session: None, override_get_redis_client: None) -> AsyncClient:
     """テスト用の HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.fixture
-async def credit_plan(session):
+async def credit_plan(session: AsyncSession) -> Plan:
     """テスト用プラン（NAW-1172: includeUsage検証用）"""
     plan = Plan(
         id="plan-users-usage-test",
@@ -134,7 +135,9 @@ async def credit_plan(session):
     return plan
 
 
-async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
+async def _create_active_subscription(
+    session: AsyncSession, tenant_id: str, plan_id: str
+) -> None:
     """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する。
 
     請求期間解決ロジックはUTCの日付で判定するため、契約開始日もUTCの日付で作る
@@ -154,7 +157,7 @@ async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> 
 
 def _token_usage(
     tenant_id: str,
-    user_id,
+    user_id: UUID,
     input_credits: int = 0,
     output_credits: int = 0,
     embedding_credits: int = 0,
@@ -196,8 +199,8 @@ class TestGetUsersWithUsage:
     """GET /api/admin/users?includeUsage=true (NAW-1172)"""
 
     async def test_include_usage_false_omits_total_credits(
-        self, client, admin_headers, admin_user
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """includeUsage未指定時はtotalCreditsがレスポンスに含まれないこと"""
         async with client as c:
             response = await c.get("/api/admin/users", headers=admin_headers)
@@ -207,14 +210,14 @@ class TestGetUsersWithUsage:
 
     async def test_include_usage_true_returns_total_credits(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        credit_plan,
-        admin_user,
-        normal_user,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        credit_plan: Plan,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """includeUsage=trueの場合、請求期間内のtotalCreditsが返ること"""
         await _create_active_subscription(session, tenant.id, credit_plan.id)
         session.add(
@@ -241,8 +244,8 @@ class TestGetUsersWithUsage:
         assert body[normal_user.login_id] == 0
 
     async def test_include_usage_true_without_subscription_omits_total_credits(
-        self, client, admin_headers, admin_user
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """有効なサブスクリプションがない場合、totalCreditsがレスポンスに含まれないこと
 
         （None値はレスポンスからexclude_noneで除外されるため、キー自体が存在しない）
@@ -258,8 +261,8 @@ class TestGetUsersWithUsage:
         assert "totalCredits" not in response.json()["content"][0]
 
     async def test_sort_total_credits_without_include_usage_returns_400(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """includeUsage未指定でsort=totalCreditsを指定すると400になること"""
         async with client as c:
             response = await c.get(
@@ -272,14 +275,14 @@ class TestGetUsersWithUsage:
 
     async def test_sort_total_credits_orders_by_credit_amount(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        credit_plan,
-        admin_user,
-        normal_user,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        credit_plan: Plan,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """includeUsage=trueかつsort=totalCreditsで利用クレジット降順に並ぶこと"""
         await _create_active_subscription(session, tenant.id, credit_plan.id)
         session.add(_token_usage(tenant.id, admin_user.id, input_credits=5))
@@ -300,8 +303,14 @@ class TestGetUsersWithUsage:
         )
 
     async def test_expired_subscription_is_treated_as_no_usage(
-        self, client, admin_headers, session, tenant, credit_plan, admin_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        credit_plan: Plan,
+        admin_user: User,
+    ) -> None:
         """期限切れサブスクリプションの場合、有効な契約なしとしてtotalCreditsが省略されること"""
         today_utc = datetime.now(timezone.utc).date()
         session.add(
@@ -329,7 +338,9 @@ class TestGetUsersWithUsage:
 class TestGetUsers:
     """GET /api/admin/users のテスト"""
 
-    async def test_admin_can_get_users(self, client, admin_headers, admin_user):
+    async def test_admin_can_get_users(
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """管理者がユーザー一覧を取得できること"""
         async with client as c:
             response = await c.get("/api/admin/users", headers=admin_headers)
@@ -340,8 +351,12 @@ class TestGetUsers:
         assert body["totalElements"] >= 1
 
     async def test_page_fields_follow_spring_page(
-        self, client, admin_headers, admin_user, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """ページ情報が移植元（Spring の Page）と同じ number などで返ること（Issue #309）"""
         async with client as c:
             response = await c.get(
@@ -360,14 +375,18 @@ class TestGetUsers:
         assert body["last"] is False
         assert body["empty"] is False
 
-    async def test_user_gets_403(self, client, user_headers):
+    async def test_user_gets_403(
+        self, client: AsyncClient, user_headers: dict[str, str]
+    ) -> None:
         """一般ユーザーは 403 になること"""
         async with client as c:
             response = await c.get("/api/admin/users", headers=user_headers)
 
         assert response.status_code == 403
 
-    async def test_tenant_header_mismatch_gets_403(self, client, admin_token):
+    async def test_tenant_header_mismatch_gets_403(
+        self, client: AsyncClient, admin_token: str
+    ) -> None:
         """JWT と異なる X-Tenant-ID を指定すると 403 になること"""
         headers = {
             "Authorization": f"Bearer {admin_token}",
@@ -383,8 +402,12 @@ class TestGetUsersSearchAndSort:
     """GET /api/admin/users の検索・並べ替えのテスト"""
 
     async def test_percent_in_search_text_is_treated_as_literal(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """検索文字列中の%がワイルドカードとして機能しないこと"""
         literal_user = User(
             id=uuid4(),
@@ -416,8 +439,12 @@ class TestGetUsersSearchAndSort:
         assert "abc" not in names
 
     async def test_sort_by_camel_case_field(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """移植元フロントエンドが実際に送信するキャメルケースのsort値でソートできること"""
         user_a = User(
             id=uuid4(),
@@ -448,8 +475,13 @@ class TestGetUsersSearchAndSort:
         assert names.index("Alpha") < names.index("Zulu")
 
     async def test_sort_direction_reverses_rows_with_same_sort_key(
-        self, client, admin_headers, session, tenant, admin_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+    ) -> None:
         """更新日時が同値のユーザーでも昇順と降順で並びが完全に反転すること"""
         same_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         admin_user.updated_at = same_time
@@ -488,8 +520,13 @@ class TestGetUsersSearchAndSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_sort_by_role_switches_first_row_by_direction(
-        self, client, admin_headers, session, tenant, admin_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+    ) -> None:
         """権限順の昇順は管理者が先頭、降順は一般ユーザーが先頭になり並びが反転すること"""
         for i in range(3):
             session.add(
@@ -523,8 +560,12 @@ class TestGetUsersSearchAndSort:
         )
 
     async def test_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """ソート方向を大文字(DESC)で指定しても降順になること"""
         session.add_all(
             [
@@ -550,7 +591,9 @@ class TestGetUsersSearchAndSort:
         names = [u["name"] for u in response.json()["content"]]
         assert names.index("Zulu") < names.index("Alpha")
 
-    async def test_sort_with_disallowed_column_falls_back(self, client, admin_headers):
+    async def test_sort_with_disallowed_column_falls_back(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """許可リスト外のsort値を指定してもエラーにならず既定列にフォールバックすること"""
         async with client as c:
             response = await c.get(
@@ -566,8 +609,13 @@ class TestGetUsersExcludesSystemRole:
     """GET /api/admin/users が SYSTEM ロールを除くことのテスト"""
 
     async def test_excludes_system_role_users(
-        self, client, admin_headers, session, tenant, admin_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+    ) -> None:
         """SYSTEMロールのユーザーが一覧・件数から除外されること"""
         system_user = User(
             id=uuid4(),
@@ -590,8 +638,13 @@ class TestGetUsersExcludesSystemRole:
         assert body["totalElements"] == 1
 
     async def test_role_filter_with_system_returns_empty(
-        self, client, admin_headers, session, tenant, admin_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+    ) -> None:
         """role=SYSTEMを指定しても除外条件が外れず0件になること"""
         system_user = User(
             id=uuid4(),
@@ -634,8 +687,14 @@ class TestGetUsersExcludeGroup:
     """GET /api/admin/users の excludeGroupId のテスト"""
 
     async def test_excludes_members_of_group(
-        self, client, admin_headers, session, tenant, admin_user, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """excludeGroupIdのグループに所属するユーザーだけが除外され、件数にも反映されること"""
         excluded_group = await _create_group(
             session, tenant.id, "Excluded", [normal_user]
@@ -657,14 +716,14 @@ class TestGetUsersExcludeGroup:
 
     async def test_excludes_members_with_usage_and_credit_sort(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        credit_plan,
-        admin_user,
-        normal_user,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        credit_plan: Plan,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """利用量の付与・利用クレジット順の並べ替えと併用しても所属ユーザーが除外されること"""
         await _create_active_subscription(session, tenant.id, credit_plan.id)
         excluded_group = await _create_group(
@@ -688,8 +747,12 @@ class TestGetUsersExcludeGroup:
         assert body["totalElements"] == 1
 
     async def test_unknown_group_id_excludes_nobody(
-        self, client, admin_headers, admin_user, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """存在しないグループIDを指定しても、移植元と同じくエラーにならず誰も除外されないこと"""
         async with client as c:
             response = await c.get(
@@ -703,8 +766,13 @@ class TestGetUsersExcludeGroup:
         assert login_ids == {admin_user.login_id, normal_user.login_id}
 
     async def test_other_tenant_group_id_excludes_nobody(
-        self, client, admin_headers, session, admin_user, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
         """他テナントのグループIDを指定しても、エラーにならず自テナントの誰も除外されないこと"""
         other_tenant = Tenant(id="tenant-users-other", name="Other", owner="admin")
         session.add(other_tenant)
@@ -737,14 +805,14 @@ class TestGetUsersExcludeGroup:
     @pytest.mark.parametrize("exclude_group_id", ["", "  "])
     async def test_blank_group_id_excludes_nobody(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        admin_user,
-        normal_user,
-        exclude_group_id,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        normal_user: User,
+        exclude_group_id: str,
+    ) -> None:
         """excludeGroupIdが空文字・空白だけの場合は除外しないこと"""
         await _create_group(session, tenant.id, "Group", [normal_user])
 
@@ -763,7 +831,9 @@ class TestGetUsersExcludeGroup:
 class TestCreateUser:
     """POST /api/admin/users のテスト"""
 
-    async def test_creates_user_with_initial_password(self, client, admin_headers):
+    async def test_creates_user_with_initial_password(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """ユーザーを作成でき initialPassword が返ること"""
         async with client as c:
             response = await c.post(
@@ -778,8 +848,8 @@ class TestCreateUser:
         assert body["initialPassword"] is not None
 
     async def test_raises_400_on_duplicate_login_id(
-        self, client, admin_headers, admin_user
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """重複 loginId で 400 になること"""
         async with client as c:
             response = await c.post(
@@ -794,7 +864,9 @@ class TestCreateUser:
 class TestUpdateUser:
     """PATCH /api/admin/users/{userId} のテスト"""
 
-    async def test_updates_user(self, client, admin_headers, normal_user):
+    async def test_updates_user(
+        self, client: AsyncClient, admin_headers: dict[str, str], normal_user: User
+    ) -> None:
         """ユーザーを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -806,7 +878,9 @@ class TestUpdateUser:
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Name"
 
-    async def test_resets_password(self, client, admin_headers, normal_user):
+    async def test_resets_password(
+        self, client: AsyncClient, admin_headers: dict[str, str], normal_user: User
+    ) -> None:
         """resetPassword=true でパスワードリセットできること"""
         async with client as c:
             response = await c.patch(
@@ -822,7 +896,9 @@ class TestUpdateUser:
 class TestDeleteUser:
     """DELETE /api/admin/users/{userId} のテスト"""
 
-    async def test_deletes_user(self, client, admin_headers, normal_user):
+    async def test_deletes_user(
+        self, client: AsyncClient, admin_headers: dict[str, str], normal_user: User
+    ) -> None:
         """ユーザーを削除できること"""
         async with client as c:
             response = await c.delete(
@@ -836,7 +912,9 @@ class TestDeleteUser:
 class TestProfile:
     """GET・PATCH /api/users/profile のテスト"""
 
-    async def test_get_profile(self, client, user_headers, normal_user):
+    async def test_get_profile(
+        self, client: AsyncClient, user_headers: dict[str, str], normal_user: User
+    ) -> None:
         """認証ユーザーが自分のプロフィールを取得できること"""
         async with client as c:
             response = await c.get("/api/users/profile", headers=user_headers)
@@ -844,7 +922,9 @@ class TestProfile:
         assert response.status_code == 200
         assert response.json()["loginId"] == normal_user.login_id
 
-    async def test_update_profile_password(self, client, user_headers, normal_user):
+    async def test_update_profile_password(
+        self, client: AsyncClient, user_headers: dict[str, str], normal_user: User
+    ) -> None:
         """パスワードを変更できること"""
         async with client as c:
             response = await c.patch(
@@ -855,7 +935,9 @@ class TestProfile:
 
         assert response.status_code == 200
 
-    async def test_get_profile_with_cookie_only(self, client, tenant, normal_user):
+    async def test_get_profile_with_cookie_only(
+        self, client: AsyncClient, tenant: Tenant, normal_user: User
+    ) -> None:
         """GET /api/users/profile をセッションCookieのみで認証できること"""
         async with client as c:
             login_response = await c.post(
@@ -879,7 +961,7 @@ STORED_LOGIN_KEY = "stored-login-key-309"
 class TestLoginKeyIsNotExposed:
     """ログインキーを応答に出さないこと（Issue #309、移植元 NAW-1342 AC-03）"""
 
-    async def _set_login_key(self, session, user: User) -> None:
+    async def _set_login_key(self, session: AsyncSession, user: User) -> None:
         """ユーザーにログインキーを保存する。
 
         Parameters
@@ -894,8 +976,12 @@ class TestLoginKeyIsNotExposed:
         await session.commit()
 
     async def test_profile_returns_has_login_key_only(
-        self, client, session, user_headers, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        user_headers: dict[str, str],
+        normal_user: User,
+    ) -> None:
         """プロフィールは loginKey を返さず hasLoginKey だけを返し、null の totalCredits を省くこと"""
         await self._set_login_key(session, normal_user)
 
@@ -909,7 +995,9 @@ class TestLoginKeyIsNotExposed:
         assert "totalCredits" not in body
         assert STORED_LOGIN_KEY not in response.text
 
-    async def test_profile_without_login_key(self, client, user_headers, normal_user):
+    async def test_profile_without_login_key(
+        self, client: AsyncClient, user_headers: dict[str, str], normal_user: User
+    ) -> None:
         """ログインキーが無いユーザーのプロフィールは hasLoginKey が false になること"""
         async with client as c:
             response = await c.get("/api/users/profile", headers=user_headers)
@@ -918,8 +1006,12 @@ class TestLoginKeyIsNotExposed:
         assert response.json()["hasLoginKey"] is False
 
     async def test_admin_user_list_does_not_return_login_key(
-        self, client, session, admin_headers, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        normal_user: User,
+    ) -> None:
         """ユーザー一覧の行は loginKey を返さず hasLoginKey を返すこと"""
         await self._set_login_key(session, normal_user)
 
@@ -934,8 +1026,8 @@ class TestLoginKeyIsNotExposed:
         assert STORED_LOGIN_KEY not in response.text
 
     async def test_create_with_issue_login_key_returns_plain_key_once(
-        self, client, session, admin_headers
-    ):
+        self, client: AsyncClient, session: AsyncSession, admin_headers: dict[str, str]
+    ) -> None:
         """issueLoginKey=true の作成は平文のキーを返し、DB にはハッシュだけを保存すること"""
         async with client as c:
             response = await c.post(
@@ -958,7 +1050,7 @@ class TestLoginKeyIsNotExposed:
         assert body["hasLoginKey"] is True
         assert "totalCredits" not in body
         stored = (
-            (await session.execute(select(User).where(User.login_id == "key-user")))
+            (await session.execute(select(User).where(User.login_id == "key-user")))  # type: ignore[arg-type]
             .scalars()
             .one()
         )
@@ -966,8 +1058,8 @@ class TestLoginKeyIsNotExposed:
         assert issued not in str(stored.login_key_hash)
 
     async def test_create_without_issue_login_key_has_no_key(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """issueLoginKey を省略した作成は loginKey が null・hasLoginKey が false になること"""
         async with client as c:
             response = await c.post(
@@ -982,8 +1074,8 @@ class TestLoginKeyIsNotExposed:
         assert body["hasLoginKey"] is False
 
     async def test_create_with_legacy_login_key_returns_400(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """廃止した loginKey を付けた作成は 400 とあわせて置き換え先を案内すること"""
         async with client as c:
             response = await c.post(
@@ -1001,8 +1093,8 @@ class TestLoginKeyIsNotExposed:
         assert response.json()["message"] == LEGACY_LOGIN_KEY_REMOVED_MESSAGE
 
     async def test_update_with_null_legacy_login_key_is_accepted(
-        self, client, admin_headers, normal_user
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], normal_user: User
+    ) -> None:
         """loginKey を明示的に null で送っても通ること（移植元の @Null と同じ）"""
         async with client as c:
             response = await c.patch(
@@ -1014,8 +1106,8 @@ class TestLoginKeyIsNotExposed:
         assert response.status_code == 200
 
     async def test_update_with_legacy_login_key_returns_400(
-        self, client, admin_headers, normal_user
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], normal_user: User
+    ) -> None:
         """廃止した loginKey を付けた更新は 400 になること"""
         async with client as c:
             response = await c.patch(
@@ -1028,8 +1120,12 @@ class TestLoginKeyIsNotExposed:
         assert response.json()["message"] == LEGACY_LOGIN_KEY_REMOVED_MESSAGE
 
     async def test_update_reissue_returns_new_key_and_replaces_hash(
-        self, client, session, admin_headers, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        normal_user: User,
+    ) -> None:
         """REISSUE は新しいキーを返し、保存済みのハッシュを置き換えること"""
         await self._set_login_key(session, normal_user)
 
@@ -1050,8 +1146,12 @@ class TestLoginKeyIsNotExposed:
         assert normal_user.login_key_hash == hash_login_key(body["loginKey"])
 
     async def test_update_revoke_clears_key(
-        self, client, session, admin_headers, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        normal_user: User,
+    ) -> None:
         """REVOKE はキーを無効にし、loginKey は null・hasLoginKey は false になること"""
         await self._set_login_key(session, normal_user)
 
@@ -1068,7 +1168,9 @@ class TestLoginKeyIsNotExposed:
         await session.refresh(normal_user)
         assert normal_user.login_key_hash is None
 
-    async def test_issued_key_can_log_in(self, client, admin_headers, tenant):
+    async def test_issued_key_can_log_in(
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """発行したキーで POST /auth/login-key のログインができること"""
         async with client as c:
             created = await c.post(
@@ -1090,7 +1192,7 @@ class TestLoginKeyIsNotExposed:
         assert login.status_code == 200
         assert login.json()["id"] == "login-by-key"
 
-    async def test_generate_login_key_is_random_alphanumeric(self):
+    async def test_generate_login_key_is_random_alphanumeric(self) -> None:
         """発行するキーが英数字 32 文字で、毎回異なること"""
         keys = {generate_login_key() for _ in range(20)}
 
@@ -1098,8 +1200,12 @@ class TestLoginKeyIsNotExposed:
         assert all(len(k) == 32 and k.isalnum() for k in keys)
 
     async def test_update_does_not_return_stored_key(
-        self, client, session, admin_headers, normal_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        normal_user: User,
+    ) -> None:
         """キーを設定しない更新は保存済みのキーを返さず、Cache-Control: no-store を付けること"""
         await self._set_login_key(session, normal_user)
 
@@ -1121,14 +1227,18 @@ class TestLoginKeyIsNotExposed:
 class TestGetUsersPageSize:
     """GET /api/admin/users のページサイズ上限（issue-154）"""
 
-    async def test_size_1000_is_accepted(self, client, admin_headers, admin_user):
+    async def test_size_1000_is_accepted(
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """size=1000（frontendが送る全件取得サイズ）が200で受理されること"""
         async with client as c:
             response = await c.get("/api/admin/users?size=1000", headers=admin_headers)
 
         assert response.status_code == 200
 
-    async def test_size_over_limit_returns_400(self, client, admin_headers, admin_user):
+    async def test_size_over_limit_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str], admin_user: User
+    ) -> None:
         """上限（1000）を超えるsize=1001は400になること"""
         async with client as c:
             response = await c.get("/api/admin/users?size=1001", headers=admin_headers)
@@ -1141,7 +1251,9 @@ class TestGetUsersRoleFilterAndMultiSort:
     """GET /api/admin/users の権限の絞り込みと複数の並べ替え指定（Issue #225）"""
 
     @pytest.mark.parametrize("role", ["foo", "admin"])
-    async def test_unknown_role_returns_400(self, client, admin_headers, role):
+    async def test_unknown_role_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str], role: str
+    ) -> None:
         """未定義の権限・小文字の権限名は500ではなく400になること（移植元と同じ）"""
         async with client as c:
             response = await c.get(
@@ -1152,8 +1264,12 @@ class TestGetUsersRoleFilterAndMultiSort:
         assert response.json()["message"] == f"不正なroleです: {role}"
 
     async def test_blank_role_is_not_filtered(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """空白のみの権限指定は絞り込みなしとして扱われること（移植元と同じ）"""
         session.add(
             User(
@@ -1177,8 +1293,12 @@ class TestGetUsersRoleFilterAndMultiSort:
         assert roles == {"ADMIN", "USER"}
 
     async def test_multiple_sort_params_are_applied_in_order(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """sortを複数指定すると、権限順で同値の行を表示名の降順で並べること"""
         specs = [("u-a", "a", UserRole.USER), ("u-b", "b", UserRole.USER)]
         specs.append(("a-x", "x", UserRole.ADMIN))

@@ -9,9 +9,26 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
 from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 
 def _tenant(tenant_id: str, max_usage_based_credits_per_month: int = 0) -> Tenant:
+    """テスト用のテナントを組み立てる。
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    max_usage_based_credits_per_month : int
+        月あたりの従量課金クレジット上限。
+
+    Returns
+    -------
+    Tenant
+        未登録のテナント。
+    """
     return Tenant(
         id=tenant_id,
         name=tenant_id,
@@ -29,12 +46,27 @@ def _tenant(tenant_id: str, max_usage_based_credits_per_month: int = 0) -> Tenan
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証ヘッダーとテナントIDヘッダーを組み立てる。
+
+    Parameters
+    ----------
+    login_id : str
+        ログインID。
+    tenant_id : str
+        テナントID。
+
+    Returns
+    -------
+    dict[str, str]
+        `Authorization` と `X-Tenant-ID` を含むヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
-async def credit_usage_tenant(session):
+async def credit_usage_tenant(session: AsyncSession) -> Tenant:
+    """クレジット使用状況テスト用のテナントを登録して返す。"""
     tenant = _tenant("tenant-credit-usage-test", max_usage_based_credits_per_month=500)
     session.add(tenant)
     await session.commit()
@@ -43,7 +75,8 @@ async def credit_usage_tenant(session):
 
 
 @pytest.fixture
-async def credit_usage_user(session, credit_usage_tenant):
+async def credit_usage_user(session: AsyncSession, credit_usage_tenant: Tenant) -> User:
+    """クレジット使用状況テスト用の一般ユーザーを登録して返す。"""
     user = User(
         id=uuid4(),
         tenant_id=credit_usage_tenant.id,
@@ -59,7 +92,8 @@ async def credit_usage_user(session, credit_usage_tenant):
 
 
 @pytest.fixture
-async def other_user(session, credit_usage_tenant):
+async def other_user(session: AsyncSession, credit_usage_tenant: Tenant) -> User:
+    """同一テナントに属する別の一般ユーザーを登録して返す。"""
     user = User(
         id=uuid4(),
         tenant_id=credit_usage_tenant.id,
@@ -75,12 +109,16 @@ async def other_user(session, credit_usage_tenant):
 
 
 @pytest.fixture
-def credit_usage_headers(credit_usage_user, credit_usage_tenant):
+def credit_usage_headers(
+    credit_usage_user: User, credit_usage_tenant: Tenant
+) -> dict[str, str]:
+    """クレジット使用状況テスト用ユーザーのリクエスト用ヘッダーを返す。"""
     return _headers(credit_usage_user.login_id, credit_usage_tenant.id)
 
 
 @pytest.fixture
-async def credit_usage_plan(session):
+async def credit_usage_plan(session: AsyncSession) -> Plan:
+    """クレジット使用状況テスト用のプランを登録して返す。"""
     plan = Plan(
         id="plan-credit-usage-test",
         name="Standard",
@@ -94,7 +132,7 @@ async def credit_usage_plan(session):
 
 
 async def _create_active_subscription(
-    session, tenant_id: str, plan_id: str
+    session: AsyncSession, tenant_id: str, plan_id: str
 ) -> Subscription:
     """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する（常にテスト実行時点で有効になる）。"""
     subscription = Subscription(
@@ -112,11 +150,31 @@ async def _create_active_subscription(
 
 def _token_usage(
     tenant_id: str,
-    user_id,
+    user_id: UUID,
     input_credits: int = 0,
     output_credits: int = 0,
     embedding_credits: int = 0,
 ) -> TokenUsage:
+    """テスト用のトークン使用量レコードを組み立てる。
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    user_id : UUID
+        ユーザーID。
+    input_credits : int
+        入力トークンのクレジット。
+    output_credits : int
+        出力トークンのクレジット。
+    embedding_credits : int
+        埋め込みのクレジット。
+
+    Returns
+    -------
+    TokenUsage
+        未登録のトークン使用量。
+    """
     return TokenUsage(
         tenant_id=tenant_id,
         user_id=user_id,
@@ -131,17 +189,21 @@ def _token_usage(
 
 
 class TestCreditUsageRouter:
+    """クレジット使用状況APIのテスト。"""
+
     class TestGetMyCreditUsage:
+        """自分のクレジット使用状況取得APIのテスト。"""
+
         async def test_get_my_credit_usage_with_active_subscription(
             self,
-            client,
-            session,
-            credit_usage_tenant,
-            credit_usage_plan,
-            credit_usage_user,
-            other_user,
-            credit_usage_headers,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            credit_usage_tenant: Tenant,
+            credit_usage_plan: Plan,
+            credit_usage_user: User,
+            other_user: User,
+            credit_usage_headers: dict[str, str],
+        ) -> None:
             """有効サブスクリプションと自分の利用実績がある場合、totalCredits等が正しく返ること"""
             await _create_active_subscription(
                 session, credit_usage_tenant.id, credit_usage_plan.id
@@ -174,8 +236,8 @@ class TestCreditUsageRouter:
             assert "nextBillingResetAt" in body
 
         async def test_get_my_credit_usage_without_active_subscription(
-            self, client, credit_usage_headers
-        ):
+            self, client: AsyncClient, credit_usage_headers: dict[str, str]
+        ) -> None:
             """有効サブスクリプションがない場合、空の{}が返ること"""
             async with client as ac:
                 response = await ac.get(
@@ -186,8 +248,8 @@ class TestCreditUsageRouter:
             assert response.json() == {}
 
         async def test_get_my_credit_usage_without_tenant_header(
-            self, client, credit_usage_user
-        ):
+            self, client: AsyncClient, credit_usage_user: User
+        ) -> None:
             """X-Tenant-ID未指定でエラーになること"""
             token = create_access_token(
                 credit_usage_user.login_id, credit_usage_user.tenant_id
@@ -201,8 +263,8 @@ class TestCreditUsageRouter:
             assert response.status_code == 400
 
         async def test_get_my_credit_usage_without_authentication(
-            self, client, credit_usage_tenant
-        ):
+            self, client: AsyncClient, credit_usage_tenant: Tenant
+        ) -> None:
             """未認証で401になること"""
             async with client as ac:
                 response = await ac.get(
@@ -213,16 +275,18 @@ class TestCreditUsageRouter:
             assert response.status_code == 401
 
     class TestGetWorkspaceCreditUsage:
+        """ワークスペースのクレジット使用状況取得APIのテスト。"""
+
         async def test_get_workspace_credit_usage_with_active_subscription(
             self,
-            client,
-            session,
-            credit_usage_tenant,
-            credit_usage_plan,
-            credit_usage_user,
-            other_user,
-            credit_usage_headers,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            credit_usage_tenant: Tenant,
+            credit_usage_plan: Plan,
+            credit_usage_user: User,
+            other_user: User,
+            credit_usage_headers: dict[str, str],
+        ) -> None:
             """有効サブスクリプションがある場合、テナント全体のtotalCreditsとcreditLimitが正しく返ること"""
             await _create_active_subscription(
                 session, credit_usage_tenant.id, credit_usage_plan.id
@@ -249,8 +313,12 @@ class TestCreditUsageRouter:
             assert body["creditLimit"] == 1500
 
         async def test_get_workspace_credit_usage_credit_limit_omitted_when_plan_limit_is_null(
-            self, client, session, credit_usage_tenant, credit_usage_headers
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            credit_usage_tenant: Tenant,
+            credit_usage_headers: dict[str, str],
+        ) -> None:
             """Plan.maxCreditsPerMonthがNULLの場合、creditLimitがレスポンスに含まれないこと"""
             plan = Plan(
                 id="plan-null-limit",
@@ -273,8 +341,8 @@ class TestCreditUsageRouter:
             assert "creditLimit" not in body
 
         async def test_get_workspace_credit_usage_without_active_subscription(
-            self, client, credit_usage_headers
-        ):
+            self, client: AsyncClient, credit_usage_headers: dict[str, str]
+        ) -> None:
             """有効サブスクリプションがない場合、空の{}が返ること"""
             async with client as ac:
                 response = await ac.get(
@@ -286,12 +354,12 @@ class TestCreditUsageRouter:
 
         async def test_get_workspace_credit_usage_expired_subscription_is_treated_as_inactive(
             self,
-            client,
-            session,
-            credit_usage_tenant,
-            credit_usage_plan,
-            credit_usage_headers,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            credit_usage_tenant: Tenant,
+            credit_usage_plan: Plan,
+            credit_usage_headers: dict[str, str],
+        ) -> None:
             """end_dateが過去のサブスクリプションは有効として扱われず空レスポンスになること"""
             today_utc = datetime.now(timezone.utc).date()
             subscription = Subscription(

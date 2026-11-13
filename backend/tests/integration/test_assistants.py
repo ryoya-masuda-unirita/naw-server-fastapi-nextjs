@@ -19,10 +19,12 @@ from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-assistants-test",
@@ -44,7 +46,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def member_user(session, tenant):
+async def member_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー（グループ所属想定）"""
     u = User(
         id=uuid4(),
@@ -61,7 +63,7 @@ async def member_user(session, tenant):
 
 
 @pytest.fixture
-async def unaffiliated_user(session, tenant):
+async def unaffiliated_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー（どのグループにも未所属）"""
     u = User(
         id=uuid4(),
@@ -78,7 +80,7 @@ async def unaffiliated_user(session, tenant):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用テナント管理者"""
     u = User(
         id=uuid4(),
@@ -95,7 +97,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def group_admin_user(session, tenant):
+async def group_admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用グループ管理者（テナント管理者ロールではない）"""
     u = User(
         id=uuid4(),
@@ -112,7 +114,7 @@ async def group_admin_user(session, tenant):
 
 
 @pytest.fixture
-async def assistant(session, tenant):
+async def assistant(session: AsyncSession, tenant: Tenant) -> Assistant:
     """テスト用アシスタント"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -127,7 +129,9 @@ async def assistant(session, tenant):
 
 
 @pytest.fixture
-async def group_with_assistant(session, tenant, member_user, assistant):
+async def group_with_assistant(
+    session: AsyncSession, tenant: Tenant, member_user: User, assistant: Assistant
+) -> Group:
     """member_userが所属し、assistantが紐づくグループ"""
     g = Group(tenant_id=tenant.id, name="Group1")
     session.add(g)
@@ -147,7 +151,9 @@ async def group_with_assistant(session, tenant, member_user, assistant):
 
 
 @pytest.fixture
-async def managed_group(session, tenant, group_admin_user, assistant):
+async def managed_group(
+    session: AsyncSession, tenant: Tenant, group_admin_user: User, assistant: Assistant
+) -> Group:
     """group_admin_userがグループ内管理者として所属し、assistantが紐づくグループ"""
     g = Group(tenant_id=tenant.id, name="ManagedGroup")
     session.add(g)
@@ -170,7 +176,9 @@ async def managed_group(session, tenant, group_admin_user, assistant):
 
 
 @pytest.fixture
-async def assistant_category(session, tenant, admin_user):
+async def assistant_category(
+    session: AsyncSession, tenant: Tenant, admin_user: User
+) -> AssistantCategory:
     """テスト用アシスタントカテゴリ"""
     c = AssistantCategory(
         tenant_id=tenant.id,
@@ -185,7 +193,7 @@ async def assistant_category(session, tenant, admin_user):
 
 
 @pytest.fixture
-async def ai_model(session):
+async def ai_model(session: AsyncSession) -> AIModel:
     """テスト用AIモデル"""
     m = AIModel(
         endpoint_type=AIModelEndpointType.OPENAI_CHAT,
@@ -200,7 +208,7 @@ async def ai_model(session):
 
 
 @pytest.fixture
-async def tenant_endpoint(session, tenant):
+async def tenant_endpoint(session: AsyncSession, tenant: Tenant) -> TenantEndpoint:
     """テスト用テナントエンドポイント"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
@@ -216,7 +224,12 @@ async def tenant_endpoint(session, tenant):
 
 
 @pytest.fixture
-async def assistant_with_endpoint(session, tenant, assistant, tenant_endpoint):
+async def assistant_with_endpoint(
+    session: AsyncSession,
+    tenant: Tenant,
+    assistant: Assistant,
+    tenant_endpoint: TenantEndpoint,
+) -> Assistant:
     """assistantにtenant_endpointを紐付ける"""
     ae = AssistantEndpoint(
         assistant_id=assistant.id,
@@ -229,7 +242,7 @@ async def assistant_with_endpoint(session, tenant, assistant, tenant_endpoint):
     return assistant
 
 
-def _headers(login_id, tenant_id):
+def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
     """認証済みリクエスト用のヘッダーを作る
 
     Parameters
@@ -249,31 +262,31 @@ def _headers(login_id, tenant_id):
 
 
 @pytest.fixture
-def member_headers(member_user, tenant):
+def member_headers(member_user: User, tenant: Tenant) -> dict[str, str]:
     """一般メンバーの認証ヘッダー"""
     return _headers(member_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def unaffiliated_headers(unaffiliated_user, tenant):
+def unaffiliated_headers(unaffiliated_user: User, tenant: Tenant) -> dict[str, str]:
     """グループに所属しないユーザーの認証ヘッダー"""
     return _headers(unaffiliated_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def admin_headers(admin_user, tenant):
+def admin_headers(admin_user: User, tenant: Tenant) -> dict[str, str]:
     """テナント管理者の認証ヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def group_admin_headers(group_admin_user, tenant):
+def group_admin_headers(group_admin_user: User, tenant: Tenant) -> dict[str, str]:
     """グループ管理者の認証ヘッダー"""
     return _headers(group_admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
     """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -283,8 +296,12 @@ class TestGetAssistants:
     """GET /api/assistants"""
 
     async def test_returns_assistant_belonging_to_users_group(
-        self, client, member_headers, group_with_assistant, assistant
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+    ) -> None:
         """所属グループに紐づくアシスタントが返ること"""
         async with client as c:
             response = await c.get("/api/assistants", headers=member_headers)
@@ -299,8 +316,11 @@ class TestGetAssistants:
         assert body[0]["groups"] == [group_with_assistant.id]
 
     async def test_returns_empty_when_no_group_membership(
-        self, client, unaffiliated_headers, group_with_assistant
-    ):
+        self,
+        client: AsyncClient,
+        unaffiliated_headers: dict[str, str],
+        group_with_assistant: Group,
+    ) -> None:
         """どのグループにも所属していない場合空配列が返ること"""
         async with client as c:
             response = await c.get("/api/assistants", headers=unaffiliated_headers)
@@ -310,14 +330,14 @@ class TestGetAssistants:
 
     async def test_deduplicates_assistant_shared_by_two_groups(
         self,
-        client,
-        session,
-        tenant,
-        member_headers,
-        member_user,
-        assistant,
-        group_with_assistant,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        member_headers: dict[str, str],
+        member_user: User,
+        assistant: Assistant,
+        group_with_assistant: Group,
+    ) -> None:
         """同じアシスタントが2つのグループ経由で見えても重複排除されること"""
         second_group = Group(tenant_id=tenant.id, name="Group2")
         session.add(second_group)
@@ -350,8 +370,13 @@ class TestGetAssistants:
         )
 
     async def test_excludes_assistant_from_unrelated_group(
-        self, client, session, tenant, member_headers, group_with_assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+    ) -> None:
         """所属していないグループに紐づくアシスタントは含まれないこと"""
         other_group = Group(tenant_id=tenant.id, name="OtherGroup")
         session.add(other_group)
@@ -383,7 +408,9 @@ class TestGetAssistants:
         ids = [a["id"] for a in response.json()]
         assert other_assistant.id not in ids
 
-    async def test_unauthenticated_returns_401(self, client, tenant):
+    async def test_unauthenticated_returns_401(
+        self, client: AsyncClient, tenant: Tenant
+    ) -> None:
         """未認証は401になること"""
         async with client as c:
             response = await c.get(
@@ -399,12 +426,12 @@ class TestGetAssistantsEndpoints:
 
     async def test_returns_endpoint_details(
         self,
-        client,
-        member_headers,
-        group_with_assistant,
-        assistant_with_endpoint,
-        tenant_endpoint,
-    ):
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant_with_endpoint: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """紐づくエンドポイント情報が返ること"""
         async with client as c:
             response = await c.get("/api/assistants", headers=member_headers)
@@ -422,8 +449,11 @@ class TestGetAssistantsEndpoints:
         assert "apiKey" not in endpoints[0]
 
     async def test_returns_empty_endpoints_when_not_linked(
-        self, client, member_headers, group_with_assistant
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+    ) -> None:
         """エンドポイントが紐づいていない場合は空配列が返ること（issue-26の既存挙動を維持）"""
         async with client as c:
             response = await c.get("/api/assistants", headers=member_headers)
@@ -433,14 +463,14 @@ class TestGetAssistantsEndpoints:
 
     async def test_returns_multiple_endpoints(
         self,
-        client,
-        session,
-        tenant,
-        member_headers,
-        group_with_assistant,
-        assistant,
-        tenant_endpoint,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """複数エンドポイントが紐づく場合すべて返ること"""
         second_endpoint = TenantEndpoint(
             tenant_id=tenant.id,
@@ -477,8 +507,14 @@ class TestGetAssistantsEndpoints:
         assert len(response.json()[0]["endpoints"]) == 2
 
     async def test_excludes_endpoint_belonging_to_different_tenant(
-        self, client, session, tenant, member_headers, group_with_assistant, assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+    ) -> None:
         """assistants_endpointsのtenant_idとtenant_endpointsのtenant_idが食い違う場合、
         他テナントのエンドポイントが結果に含まれないこと（テナント分離の防御的チェック）"""
         other_tenant = Tenant(
@@ -531,14 +567,14 @@ class TestGetAssistantsCategory:
 
     async def test_returns_linked_category(
         self,
-        client,
-        session,
-        tenant,
-        member_headers,
-        group_with_assistant,
-        assistant,
-        assistant_category,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        member_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+        assistant_category: AssistantCategory,
+    ) -> None:
         """紐づくカテゴリが実データとして返ること"""
         session.add(
             AssistantCategoryMapping(
@@ -564,8 +600,11 @@ class TestCreateAssistant:
     """POST /api/admin/assistants"""
 
     async def test_create_assistant_as_tenant_admin_succeeds(
-        self, client, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """テナント管理者がアシスタントを作成できること"""
         async with client as c:
             response = await c.post(
@@ -586,8 +625,12 @@ class TestCreateAssistant:
         assert body["endpoints"][0]["id"] == tenant_endpoint.id
 
     async def test_create_assistant_as_group_admin_succeeds(
-        self, client, group_admin_headers, tenant_endpoint, managed_group
-    ):
+        self,
+        client: AsyncClient,
+        group_admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+        managed_group: Group,
+    ) -> None:
         """テナント管理者でないグループ管理者もアシスタントを作成できること"""
         async with client as c:
             response = await c.post(
@@ -604,8 +647,11 @@ class TestCreateAssistant:
         assert response.status_code == 200
 
     async def test_create_assistant_as_normal_user_returns_403(
-        self, client, member_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """管理者権限もグループ管理者権限もない一般ユーザーは403になること"""
         async with client as c:
             response = await c.post(
@@ -622,8 +668,8 @@ class TestCreateAssistant:
         assert response.status_code == 403
 
     async def test_create_assistant_without_endpoints_returns_400(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """エンドポイントが1件もない場合400になること"""
         async with client as c:
             response = await c.post(
@@ -640,8 +686,11 @@ class TestCreateAssistant:
         assert response.status_code == 400
 
     async def test_create_assistant_with_blank_name_returns_400(
-        self, client, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """名前が空白のみの場合400になること"""
         async with client as c:
             response = await c.post(
@@ -658,8 +707,11 @@ class TestCreateAssistant:
         assert response.status_code == 400
 
     async def test_create_secure_assistant_with_non_local_server_endpoint_returns_400(
-        self, client, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """SECUREアシスタントにLOCAL_SERVER以外のエンドポイントを指定すると400になること"""
         async with client as c:
             response = await c.post(
@@ -676,8 +728,13 @@ class TestCreateAssistant:
         assert response.status_code == 400
 
     async def test_create_saas_rag_assistant_with_two_endpoints_returns_400(
-        self, client, session, tenant, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """SAAS_RAGアシスタントにチャット用エンドポイントを2件指定すると400になること"""
         second_endpoint = TenantEndpoint(
             tenant_id=tenant.id,
@@ -709,12 +766,12 @@ class TestCreateAssistant:
 
     async def test_create_assistant_saves_category_and_group(
         self,
-        client,
-        admin_headers,
-        tenant_endpoint,
-        assistant_category,
-        group_with_assistant,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+        assistant_category: AssistantCategory,
+        group_with_assistant: Group,
+    ) -> None:
         """カテゴリ・グループを指定して作成できること"""
         async with client as c:
             response = await c.post(
@@ -741,8 +798,12 @@ class TestUpdateAssistant:
     """PATCH /api/admin/assistants/{id}"""
 
     async def test_update_name_and_description(
-        self, client, admin_headers, assistant, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """名前・説明を更新できること"""
         async with client as c:
             response = await c.patch(
@@ -763,8 +824,12 @@ class TestUpdateAssistant:
         assert body["description"] == "new desc"
 
     async def test_update_without_name_keeps_existing_name(
-        self, client, admin_headers, assistant, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """nameを送信しない場合、既存の名前が維持されること"""
         async with client as c:
             response = await c.patch(
@@ -781,8 +846,12 @@ class TestUpdateAssistant:
         assert response.json()["name"] == assistant.name
 
     async def test_update_with_empty_name_keeps_existing_name(
-        self, client, admin_headers, assistant, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """nameを空文字で送信した場合も、既存の名前が維持されること（移植元isNotBlank相当）"""
         async with client as c:
             response = await c.patch(
@@ -800,8 +869,12 @@ class TestUpdateAssistant:
         assert response.json()["name"] == assistant.name
 
     async def test_update_with_empty_description_keeps_existing_description(
-        self, client, admin_headers, assistant, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """descriptionを空文字で送信した場合、既存の説明が維持されること（移植元isNotBlank相当）"""
         async with client as c:
             response = await c.patch(
@@ -819,8 +892,12 @@ class TestUpdateAssistant:
         assert response.json()["description"] == assistant.description
 
     async def test_update_with_duplicate_endpoint_ids_returns_400(
-        self, client, admin_headers, assistant, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """同じテナントエンドポイントIDを重複して指定すると400になること"""
         async with client as c:
             response = await c.patch(
@@ -840,14 +917,14 @@ class TestUpdateAssistant:
 
     async def test_update_with_empty_category_ids_clears_categories(
         self,
-        client,
-        session,
-        tenant,
-        admin_headers,
-        assistant,
-        tenant_endpoint,
-        assistant_category,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        tenant_endpoint: TenantEndpoint,
+        assistant_category: AssistantCategory,
+    ) -> None:
         """categoryIdsを空配列で送信すると既存のカテゴリ紐付けが解除されること"""
         session.add(
             AssistantCategoryMapping(
@@ -874,8 +951,11 @@ class TestUpdateAssistant:
         assert response.json()["categories"] == []
 
     async def test_update_not_found_returns_404(
-        self, client, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """存在しないアシスタントIDの場合404になること"""
         async with client as c:
             response = await c.patch(
@@ -897,13 +977,13 @@ class TestDeleteAssistant:
 
     async def test_delete_assistant_returns_409_when_used_as_default_assistant_of_room(
         self,
-        client,
-        session,
-        admin_headers,
-        tenant,
-        member_user,
-        assistant,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        member_user: User,
+        assistant: Assistant,
+    ) -> None:
         """デフォルトアシスタントとして参照中のルームがある場合409になること"""
         session.add(
             Room(
@@ -927,8 +1007,8 @@ class TestDeleteAssistant:
         )
 
     async def test_delete_assistant_succeeds_when_no_room_references_it(
-        self, client, admin_headers, assistant
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], assistant: Assistant
+    ) -> None:
         """参照されていないアシスタントは削除できること"""
         async with client as c:
             response = await c.delete(
@@ -939,13 +1019,13 @@ class TestDeleteAssistant:
 
     async def test_delete_assistant_keeps_messages_and_sets_assistant_id_null(
         self,
-        client,
-        session,
-        admin_headers,
-        tenant,
-        member_user,
-        assistant,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        member_user: User,
+        assistant: Assistant,
+    ) -> None:
         """アシスタント削除時、そのアシスタントを使用したメッセージは削除されず、assistant_idがNULLになること（NAW-1192）"""
         # メッセージのルームは削除対象と別のアシスタントをデフォルトにし、
         # rooms.default_assistant_id の RESTRICT 制約で削除自体がブロックされないようにする。
@@ -990,7 +1070,9 @@ class TestDeleteAssistant:
 
     """DELETE /api/admin/assistants/{id}"""
 
-    async def test_delete_assistant_succeeds(self, client, admin_headers, assistant):
+    async def test_delete_assistant_succeeds(
+        self, client: AsyncClient, admin_headers: dict[str, str], assistant: Assistant
+    ) -> None:
         """アシスタントを削除できること"""
         async with client as c:
             response = await c.delete(
@@ -999,7 +1081,9 @@ class TestDeleteAssistant:
 
         assert response.status_code == 204
 
-    async def test_delete_not_found_returns_404(self, client, admin_headers):
+    async def test_delete_not_found_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないアシスタントIDの場合404になること"""
         async with client as c:
             response = await c.delete(
@@ -1014,8 +1098,12 @@ class TestListAdminAssistants:
     """GET /api/admin/assistants"""
 
     async def test_endpoints_include_label(
-        self, client, admin_headers, assistant_with_endpoint, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        assistant_with_endpoint: Assistant,
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """管理者向け一覧の endpoints[].label にテナントエンドポイント名が入ること（Issue #309）"""
         async with client as c:
             response = await c.get("/api/admin/assistants", headers=admin_headers)
@@ -1026,8 +1114,13 @@ class TestListAdminAssistants:
         assert endpoint["id"] == tenant_endpoint.id
 
     async def test_tenant_admin_sees_all_assistants(
-        self, client, session, tenant, admin_headers, assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+    ) -> None:
         """テナント管理者は全アシスタントを取得できること"""
         other = Assistant(
             tenant_id=tenant.id,
@@ -1047,13 +1140,13 @@ class TestListAdminAssistants:
 
     async def test_group_admin_sees_only_managed_group_assistants(
         self,
-        client,
-        session,
-        tenant,
-        group_admin_headers,
-        managed_group,
-        assistant,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        group_admin_headers: dict[str, str],
+        managed_group: Group,
+        assistant: Assistant,
+    ) -> None:
         """テナント管理者でないグループ管理者は、自分の管理グループのアシスタントのみ取得できること"""
         unmanaged = Assistant(
             tenant_id=tenant.id,
@@ -1072,7 +1165,9 @@ class TestListAdminAssistants:
         assert body["totalElements"] == 1
         assert body["content"][0]["id"] == assistant.id
 
-    async def test_normal_user_returns_403(self, client, member_headers):
+    async def test_normal_user_returns_403(
+        self, client: AsyncClient, member_headers: dict[str, str]
+    ) -> None:
         """管理者権限もグループ管理者権限もない一般ユーザーは403になること"""
         async with client as c:
             response = await c.get("/api/admin/assistants", headers=member_headers)
@@ -1081,13 +1176,13 @@ class TestListAdminAssistants:
 
     async def test_filters_by_category_id_none(
         self,
-        client,
-        session,
-        tenant,
-        admin_headers,
-        assistant,
-        assistant_category,
-    ):
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+        assistant_category: AssistantCategory,
+    ) -> None:
         """categoryId=NONEでカテゴリ未設定のアシスタントのみに絞り込めること"""
         categorized = Assistant(
             tenant_id=tenant.id,
@@ -1120,8 +1215,13 @@ class TestListAdminAssistants:
         assert categorized.id not in ids
 
     async def test_search_by_name(
-        self, client, session, tenant, admin_headers, assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+    ) -> None:
         """名前の部分一致検索ができること"""
         other = Assistant(
             tenant_id=tenant.id,
@@ -1146,8 +1246,13 @@ class TestListAdminAssistants:
         assert other.id not in ids
 
     async def test_search_by_description_case_insensitive(
-        self, client, session, tenant, admin_headers, assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+    ) -> None:
         """説明の部分一致検索が大文字小文字を区別せずにできること"""
         described = Assistant(
             tenant_id=tenant.id,
@@ -1173,8 +1278,13 @@ class TestListAdminAssistants:
         assert assistant.id not in ids
 
     async def test_search_empty_returns_all(
-        self, client, session, tenant, admin_headers, assistant
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        assistant: Assistant,
+    ) -> None:
         """searchが空文字の場合は絞り込まれず全件取得できること"""
         other = Assistant(
             tenant_id=tenant.id,
@@ -1198,7 +1308,9 @@ class TestListAdminAssistants:
         assert assistant.id in ids
         assert other.id in ids
 
-    async def test_legacy_q_param_is_ignored(self, client, admin_headers, assistant):
+    async def test_legacy_q_param_is_ignored(
+        self, client: AsyncClient, admin_headers: dict[str, str], assistant: Assistant
+    ) -> None:
         """移植元に存在しない旧パラメータ名qでは絞り込まれないこと"""
         async with client as c:
             response = await c.get(
@@ -1213,8 +1325,12 @@ class TestListAdminAssistants:
         assert assistant.id in ids
 
     async def test_sort_by_assistant_type_alias(
-        self, client, session, tenant, admin_headers
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+    ) -> None:
         """フロントエンド（secuaigent-client）が送信するsort=assistantTypeで種別ソートできること。
 
         SECUREを先に作成（updated_atが古い）、SAAS_CHATを後に作成（updated_atが新しい）することで、
@@ -1258,8 +1374,13 @@ class TestGetAssistantEndpoints:
     """GET /api/admin/assistants/endpoints/{type}"""
 
     async def test_secure_returns_local_server_only(
-        self, client, session, tenant, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """SECURE種別ではLOCAL_SERVERエンドポイントのみ返ること"""
         local_server = TenantEndpoint(
             tenant_id=tenant.id,
@@ -1281,8 +1402,11 @@ class TestGetAssistantEndpoints:
         assert types == {"LOCAL_SERVER"}
 
     async def test_saas_chat_returns_chat_types_only(
-        self, client, admin_headers, tenant_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant_endpoint: TenantEndpoint,
+    ) -> None:
         """SAAS_CHAT種別ではチャット系エンドポイントのみ返ること"""
         async with client as c:
             response = await c.get(
@@ -1299,7 +1423,9 @@ class TestGetAssistantEndpoints:
 class TestGetAIModels:
     """GET /api/admin/assistants/AIModels"""
 
-    async def test_returns_all_ai_models(self, client, admin_headers, ai_model):
+    async def test_returns_all_ai_models(
+        self, client: AsyncClient, admin_headers: dict[str, str], ai_model: AIModel
+    ) -> None:
         """AIモデル一覧が返ること"""
         async with client as c:
             response = await c.get(
@@ -1312,7 +1438,9 @@ class TestGetAIModels:
         assert body[0]["name"] == "gpt-4o"
 
 
-async def _add_assistants(session, tenant_id, specs):
+async def _add_assistants(
+    session: AsyncSession, tenant_id: str, specs: list[tuple[str, AssistantType]]
+) -> None:
     """(名前, 種別) の組からアシスタントを作成する。"""
     for name, assistant_type in specs:
         session.add(
@@ -1326,7 +1454,9 @@ async def _add_assistants(session, tenant_id, specs):
     await session.commit()
 
 
-async def _list_admin_assistants(c, headers, sort):
+async def _list_admin_assistants(
+    c: AsyncClient, headers: dict[str, str], sort: str | list[str]
+) -> list[dict[str, Any]]:
     """管理者向けアシスタント一覧を取得して content を返す
 
     Parameters
@@ -1335,7 +1465,7 @@ async def _list_admin_assistants(c, headers, sort):
         テスト用の HTTP クライアント
     headers : dict[str, str]
         認証ヘッダー
-    sort : str
+    sort : str | list[str]
         sort クエリパラメータの値
 
     Returns
@@ -1355,8 +1485,12 @@ class TestListAdminAssistantsSort:
     """GET /api/admin/assistants の並べ替え（Issue #225）"""
 
     async def test_sort_by_name_reverses_rows_with_same_name(
-        self, client, session, tenant, admin_headers
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+    ) -> None:
         """同名のアシスタントがいても昇順と降順で並びが完全に反転すること"""
         await _add_assistants(
             session, tenant.id, [("Same", AssistantType.SAAS_CHAT)] * 3
@@ -1371,8 +1505,12 @@ class TestListAdminAssistantsSort:
         assert [a["id"] for a in desc] == list(reversed(asc_ids))
 
     async def test_sort_direction_is_case_insensitive(
-        self, client, session, tenant, admin_headers
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+    ) -> None:
         """ソート方向を大文字(DESC)で指定しても降順になること"""
         await _add_assistants(
             session,
@@ -1386,8 +1524,12 @@ class TestListAdminAssistantsSort:
         assert [a["name"] for a in content] == ["zulu", "alpha"]
 
     async def test_multiple_sort_params_are_applied_in_order(
-        self, client, session, tenant, admin_headers
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_headers: dict[str, str],
+    ) -> None:
         """sortを複数指定すると、第1キーが同値の行を第2キーで並べること"""
         await _add_assistants(
             session,

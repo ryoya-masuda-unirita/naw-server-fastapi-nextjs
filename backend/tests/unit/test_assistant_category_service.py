@@ -14,6 +14,7 @@ from app.schemas.assistant_category import (
     AssistantCategoryUpdateRequest,
 )
 from app.services.assistant_category_service import AssistantCategoryService
+from unittest.mock import MagicMock
 
 _REPOSITORY = "app.services.assistant_category_service.AssistantCategoryRepository"
 
@@ -78,7 +79,9 @@ class TestCreateAssistantCategory:
     """AssistantCategoryService.create_assistant_category のテスト"""
 
     @patch(f"{_REPOSITORY}.create", new_callable=AsyncMock)
-    async def test_create_assistant_category_sets_updated_user_id(self, mock_create):
+    async def test_create_assistant_category_sets_updated_user_id(
+        self, mock_create: MagicMock
+    ) -> None:
         """同名の事前チェックをせずに保存し、current_user.idがupdated_user_idに設定されること"""
         user = _user()
 
@@ -110,7 +113,7 @@ class TestCreateAssistantCategory:
             "tenant-1",
             user,
             AssistantCategoryCreateRequest(name="cat", description="d"),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         mock_create.assert_awaited_once()
@@ -119,7 +122,9 @@ class TestCreateAssistantCategory:
         assert result.name == "cat"
 
     @patch(f"{_REPOSITORY}.create", new_callable=AsyncMock)
-    async def test_create_converts_integrity_error_to_500(self, mock_create):
+    async def test_create_converts_integrity_error_to_500(
+        self, mock_create: MagicMock
+    ) -> None:
         """一意制約違反はロールバックして移植元と同じ500に変換されること"""
         mock_create.side_effect = _integrity_error()
         session = AsyncMock()
@@ -142,13 +147,17 @@ class TestGetAssistantCategory:
     """AssistantCategoryService.get_assistant_category のテスト"""
 
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
-    async def test_get_assistant_category_raises_404_when_not_found(self, mock_find):
+    async def test_get_assistant_category_raises_404_when_not_found(
+        self, mock_find: MagicMock
+    ) -> None:
         """存在しないIDの場合404が送出されること"""
         mock_find.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await AssistantCategoryService.get_assistant_category(
-                "not-exist", "tenant-1", session=None
+                "not-exist",
+                "tenant-1",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -162,8 +171,8 @@ class TestUpdateAssistantCategory:
     @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
     async def test_update_assistant_category_raises_404_when_not_found(
-        self, mock_find, mock_update
-    ):
+        self, mock_find: MagicMock, mock_update: MagicMock
+    ) -> None:
         """更新対象が存在しない場合404が送出されること"""
         mock_find.return_value = None
 
@@ -173,7 +182,7 @@ class TestUpdateAssistantCategory:
                 "tenant-1",
                 _user(),
                 AssistantCategoryUpdateRequest(name="new"),
-                session=None,
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -184,8 +193,8 @@ class TestUpdateAssistantCategory:
     @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
     async def test_update_assistant_category_sets_updated_user_id(
-        self, mock_find, mock_update
-    ):
+        self, mock_find: MagicMock, mock_update: MagicMock
+    ) -> None:
         """同名の事前チェックをせずに保存し、current_user.idがupdated_user_idに更新されること"""
         existing = _category("tenant-1", uuid4())
         mock_find.return_value = existing
@@ -197,7 +206,7 @@ class TestUpdateAssistantCategory:
             "tenant-1",
             user,
             AssistantCategoryUpdateRequest(name="new", description="new-desc"),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         mock_update.assert_awaited_once()
@@ -208,8 +217,8 @@ class TestUpdateAssistantCategory:
     @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
     async def test_update_keeps_description_when_blank(
-        self, mock_find, mock_update, description
-    ):
+        self, mock_find: MagicMock, mock_update: MagicMock, description: None | str
+    ) -> None:
         """説明がNone・空文字・空白だけの場合、元の説明が残ること"""
         existing = _category("tenant-1", uuid4())
         mock_find.return_value = existing
@@ -220,7 +229,7 @@ class TestUpdateAssistantCategory:
             "tenant-1",
             _user(),
             AssistantCategoryUpdateRequest(name="new", description=description),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.name == "new"
@@ -229,8 +238,8 @@ class TestUpdateAssistantCategory:
     @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
     async def test_update_overwrites_description_when_not_blank(
-        self, mock_find, mock_update
-    ):
+        self, mock_find: MagicMock, mock_update: MagicMock
+    ) -> None:
         """説明が空白でない場合、前後の空白も含めてそのまま上書きされること"""
         existing = _category("tenant-1", uuid4())
         mock_find.return_value = existing
@@ -241,14 +250,16 @@ class TestUpdateAssistantCategory:
             "tenant-1",
             _user(),
             AssistantCategoryUpdateRequest(name="new", description=" new desc "),
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.description == " new desc "
 
     @patch(f"{_REPOSITORY}.update", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
-    async def test_update_converts_integrity_error_to_500(self, mock_find, mock_update):
+    async def test_update_converts_integrity_error_to_500(
+        self, mock_find: MagicMock, mock_update: MagicMock
+    ) -> None:
         """一意制約違反はロールバックして移植元と同じ500に変換されること"""
         mock_find.return_value = _category("tenant-1", uuid4())
         mock_update.side_effect = _integrity_error()
@@ -275,14 +286,16 @@ class TestDeleteAssistantCategory:
     @patch(f"{_REPOSITORY}.delete", new_callable=AsyncMock)
     @patch(f"{_REPOSITORY}.find_by_id_and_tenant_id", new_callable=AsyncMock)
     async def test_delete_assistant_category_raises_404_when_not_found(
-        self, mock_find, mock_delete
-    ):
+        self, mock_find: MagicMock, mock_delete: MagicMock
+    ) -> None:
         """削除対象が存在しない場合404が送出されること"""
         mock_find.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await AssistantCategoryService.delete_assistant_category(
-                "not-exist", "tenant-1", session=None
+                "not-exist",
+                "tenant-1",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404

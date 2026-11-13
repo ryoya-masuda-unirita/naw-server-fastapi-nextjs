@@ -24,6 +24,7 @@ from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
 from app.repositories.library_repository import LibraryRepository
+from typing import Any
 
 LIBRARY_CONTENT = "# 契約書まとめ\n本文"
 
@@ -57,7 +58,7 @@ def _tenant(tenant_id: str) -> Tenant:
 
 
 @pytest.fixture
-async def lib_tenant(session):
+async def lib_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = _tenant("tenant-libraries-test")
     session.add(tenant)
@@ -67,7 +68,7 @@ async def lib_tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """他テナント（テナント分離確認用）"""
     tenant = _tenant("tenant-libraries-other")
     session.add(tenant)
@@ -91,7 +92,7 @@ def _user(
 
 
 @pytest.fixture
-async def owner_user(session, lib_tenant):
+async def owner_user(session: AsyncSession, lib_tenant: Tenant) -> User:
     """ライブラリ・ルームの所有者ユーザー"""
     user = _user(lib_tenant.id, "lib-owner", "Owner")
     session.add(user)
@@ -101,7 +102,7 @@ async def owner_user(session, lib_tenant):
 
 
 @pytest.fixture
-async def group_member_user(session, lib_tenant):
+async def group_member_user(session: AsyncSession, lib_tenant: Tenant) -> User:
     """所有者の所属グループとは別に、共有先グループに所属するユーザー"""
     user = _user(lib_tenant.id, "lib-group-member", "Group Member")
     session.add(user)
@@ -111,7 +112,7 @@ async def group_member_user(session, lib_tenant):
 
 
 @pytest.fixture
-async def unrelated_user(session, lib_tenant):
+async def unrelated_user(session: AsyncSession, lib_tenant: Tenant) -> User:
     """所有者でも共有先グループメンバーでもないユーザー"""
     user = _user(lib_tenant.id, "lib-unrelated", "Unrelated")
     session.add(user)
@@ -121,7 +122,7 @@ async def unrelated_user(session, lib_tenant):
 
 
 @pytest.fixture
-async def admin_user(session, lib_tenant):
+async def admin_user(session: AsyncSession, lib_tenant: Tenant) -> User:
     """テナント管理者ユーザー"""
     user = _user(lib_tenant.id, "lib-admin", "Admin", role=UserRole.ADMIN)
     session.add(user)
@@ -131,7 +132,7 @@ async def admin_user(session, lib_tenant):
 
 
 @pytest.fixture
-async def system_user(session, lib_tenant):
+async def system_user(session: AsyncSession, lib_tenant: Tenant) -> User:
     """SYSTEMロールユーザー（ADMIN同様のルーム閲覧バイパス対象）"""
     user = _user(lib_tenant.id, "lib-system", "System", role=UserRole.SYSTEM)
     session.add(user)
@@ -141,7 +142,7 @@ async def system_user(session, lib_tenant):
 
 
 @pytest.fixture
-async def assistant(session, lib_tenant):
+async def assistant(session: AsyncSession, lib_tenant: Tenant) -> Assistant:
     """テスト用のアシスタント"""
     a = Assistant(
         tenant_id=lib_tenant.id,
@@ -156,7 +157,9 @@ async def assistant(session, lib_tenant):
 
 
 @pytest.fixture
-async def room(session, lib_tenant, owner_user, assistant):
+async def room(
+    session: AsyncSession, lib_tenant: Tenant, owner_user: User, assistant: Assistant
+) -> Room:
     """所有者が所有するルーム"""
     r = Room(
         tenant_id=lib_tenant.id,
@@ -171,7 +174,7 @@ async def room(session, lib_tenant, owner_user, assistant):
 
 
 @pytest.fixture
-async def message(session, lib_tenant, room):
+async def message(session: AsyncSession, lib_tenant: Tenant, room: Room) -> Message:
     """ルームに紐づくメッセージ"""
     m = Message(tenant_id=lib_tenant.id, room_id=room.id, is_create_library=True)
     session.add(m)
@@ -181,7 +184,9 @@ async def message(session, lib_tenant, room):
 
 
 @pytest.fixture
-async def library(session, lib_tenant, owner_user, message):
+async def library(
+    session: AsyncSession, lib_tenant: Tenant, owner_user: User, message: Message
+) -> Library:
     """所有者が作成したライブラリ"""
     lib = Library(
         tenant_id=lib_tenant.id,
@@ -202,7 +207,9 @@ async def library(session, lib_tenant, owner_user, message):
 
 
 @pytest.fixture
-async def stub_library(session, lib_tenant, owner_user, message):
+async def stub_library(
+    session: AsyncSession, lib_tenant: Tenant, owner_user: User, message: Message
+) -> Library:
     """タイトル・本文の無いライブラリ（スタブ）"""
     lib = Library(
         tenant_id=lib_tenant.id,
@@ -217,7 +224,9 @@ async def stub_library(session, lib_tenant, owner_user, message):
 
 
 @pytest.fixture
-async def group(session, lib_tenant, group_member_user):
+async def group(
+    session: AsyncSession, lib_tenant: Tenant, group_member_user: User
+) -> Group:
     """ライブラリ・ルームの共有先グループ。group_member_userが所属する。"""
     g = Group(tenant_id=lib_tenant.id, name="Target Group")
     session.add(g)
@@ -231,7 +240,7 @@ async def group(session, lib_tenant, group_member_user):
 
 
 @pytest.fixture
-async def library_tag(session, lib_tenant):
+async def library_tag(session: AsyncSession, lib_tenant: Tenant) -> LibraryTag:
     """テスト用のライブラリタグ"""
     tag = LibraryTag(tenant_id=lib_tenant.id, name="契約書")
     session.add(tag)
@@ -241,7 +250,9 @@ async def library_tag(session, lib_tenant):
 
 
 @pytest.fixture
-async def other_tenant_library_tag(session, other_tenant):
+async def other_tenant_library_tag(
+    session: AsyncSession, other_tenant: Tenant
+) -> LibraryTag:
     """他テナントのライブラリタグ"""
     tag = LibraryTag(tenant_id=other_tenant.id, name="他テナントタグ")
     session.add(tag)
@@ -270,31 +281,31 @@ def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
 
 
 @pytest.fixture
-def owner_headers(owner_user, lib_tenant):
+def owner_headers(owner_user: User, lib_tenant: Tenant) -> dict[str, str]:
     """ライブラリ所有者のリクエストヘッダー"""
     return _headers(owner_user.login_id, lib_tenant.id)
 
 
 @pytest.fixture
-def group_member_headers(group_member_user, lib_tenant):
+def group_member_headers(group_member_user: User, lib_tenant: Tenant) -> dict[str, str]:
     """共有先グループのメンバーのリクエストヘッダー"""
     return _headers(group_member_user.login_id, lib_tenant.id)
 
 
 @pytest.fixture
-def unrelated_headers(unrelated_user, lib_tenant):
+def unrelated_headers(unrelated_user: User, lib_tenant: Tenant) -> dict[str, str]:
     """無関係なユーザーのリクエストヘッダー"""
     return _headers(unrelated_user.login_id, lib_tenant.id)
 
 
 @pytest.fixture
-def admin_headers(admin_user, lib_tenant):
+def admin_headers(admin_user: User, lib_tenant: Tenant) -> dict[str, str]:
     """テナント管理者のリクエストヘッダー"""
     return _headers(admin_user.login_id, lib_tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
     """ASGITransport を利用したテストクライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -329,8 +340,12 @@ class TestListLibraries:
     """GET /api/libraries"""
 
     async def test_list_excludes_stub_libraries(
-        self, client, owner_headers, library, stub_library
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        stub_library: Library,
+    ) -> None:
         """タイトルが未確定のスタブは一覧に含まれないこと"""
         async with client as c:
             response = await c.get("/api/libraries", headers=owner_headers)
@@ -340,7 +355,9 @@ class TestListLibraries:
         assert body["totalElements"] == 1
         assert [item["id"] for item in body["content"]] == [str(library.id)]
 
-    async def test_list_own_libraries(self, client, owner_headers, library):
+    async def test_list_own_libraries(
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """自身が作成したライブラリが一覧に含まれること"""
         async with client as c:
             response = await c.get("/api/libraries", headers=owner_headers)
@@ -351,8 +368,8 @@ class TestListLibraries:
         assert body["totalElements"] == 1
 
     async def test_list_excludes_unrelated_libraries(
-        self, client, unrelated_headers, library
-    ):
+        self, client: AsyncClient, unrelated_headers: dict[str, str], library: Library
+    ) -> None:
         """所有でも共有先でもないライブラリは一覧に含まれないこと"""
         async with client as c:
             response = await c.get("/api/libraries", headers=unrelated_headers)
@@ -361,8 +378,14 @@ class TestListLibraries:
         assert response.json()["data"]["content"] == []
 
     async def test_list_includes_shared_via_group(
-        self, session, client, group_member_headers, library, group, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+        group: Group,
+        lib_tenant: Tenant,
+    ) -> None:
         """所属グループに共有されたライブラリが一覧に含まれること"""
         session.add(
             ShareLibrary(
@@ -378,7 +401,9 @@ class TestListLibraries:
         body = response.json()["data"]
         assert [item["id"] for item in body["content"]] == [str(library.id)]
 
-    async def test_list_filters_by_title(self, client, owner_headers, library):
+    async def test_list_filters_by_title(
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """titleで部分一致するもののみ返ること"""
         async with client as c:
             response = await c.get(
@@ -389,8 +414,12 @@ class TestListLibraries:
         assert response.json()["data"]["content"] == []
 
     async def test_list_filters_by_created_by(
-        self, client, owner_headers, library, owner_user
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        owner_user: User,
+    ) -> None:
         """createdByで作成者を絞り込めること"""
         async with client as c:
             response = await c.get(
@@ -403,8 +432,12 @@ class TestListLibraries:
         assert len(response.json()["data"]["content"]) == 1
 
     async def test_list_excludes_by_exclude_created_by(
-        self, client, owner_headers, library, owner_user
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        owner_user: User,
+    ) -> None:
         """excludeCreatedByで指定した作成者のものが除外されること"""
         async with client as c:
             response = await c.get(
@@ -417,8 +450,14 @@ class TestListLibraries:
         assert response.json()["data"]["content"] == []
 
     async def test_list_filters_by_tag_ids(
-        self, session, client, owner_headers, library, library_tag, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+        lib_tenant: Tenant,
+    ) -> None:
         """tagIdsで指定したタグが付与されたもののみ返ること"""
         session.add(
             LibraryTagMapping(
@@ -444,8 +483,14 @@ class TestListLibraries:
         ]
 
     async def test_list_filters_by_tag_ids_in_hyphenated_uuid_format(
-        self, session, client, owner_headers, library, library_tag, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+        lib_tenant: Tenant,
+    ) -> None:
         """ハイフン付きUUID形式のtagIdsでも絞り込めること"""
         session.add(
             LibraryTagMapping(
@@ -469,15 +514,15 @@ class TestListLibraries:
 
     async def test_list_filters_by_tag_ids_excludes_libraries_with_other_tags(
         self,
-        session,
-        client,
-        owner_headers,
-        library,
-        library_tag,
-        lib_tenant,
-        owner_user,
-        message,
-    ):
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+        lib_tenant: Tenant,
+        owner_user: User,
+        message: Message,
+    ) -> None:
         """指定外のタグのみが付与されたライブラリは返らないこと"""
         other_tag = LibraryTag(tenant_id=lib_tenant.id, name="議事録")
         other_library = Library(
@@ -525,8 +570,12 @@ class TestListLibraries:
         ],
     )
     async def test_list_with_invalid_page_returns_400(
-        self, client, owner_headers, params, expected
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        params: dict[str, Any],
+        expected: str,
+    ) -> None:
         """ページ番号・件数が範囲外だと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.get(
@@ -536,7 +585,9 @@ class TestListLibraries:
         assert response.status_code == 400
         assert response.json()["message"] == expected
 
-    async def test_list_with_invalid_tag_id_returns_400(self, client, owner_headers):
+    async def test_list_with_invalid_tag_id_returns_400(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """UUIDとして不正なtagIdsは400になること"""
         async with client as c:
             response = await c.get(
@@ -548,8 +599,14 @@ class TestListLibraries:
         assert response.status_code == 400
 
     async def test_list_pagination(
-        self, session, client, owner_headers, lib_tenant, owner_user, message
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        lib_tenant: Tenant,
+        owner_user: User,
+        message: Message,
+    ) -> None:
         """ページング指定でtotalElements・件数が正しいこと"""
         for i in range(3):
             session.add(
@@ -575,8 +632,14 @@ class TestListLibraries:
         assert body["size"] == 2
 
     async def test_list_sort_by_title(
-        self, session, client, owner_headers, lib_tenant, owner_user, message
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        lib_tenant: Tenant,
+        owner_user: User,
+        message: Message,
+    ) -> None:
         """sortBy=titleでタイトル昇順に並ぶこと"""
         for title in ["b-lib", "a-lib"]:
             session.add(
@@ -601,8 +664,8 @@ class TestListLibraries:
         assert titles == ["a-lib", "b-lib"]
 
     async def test_list_invalid_sort_params_fallback_to_default(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """不正なsortBy/sortDirでもエラーにならずデフォルトにフォールバックすること"""
         async with client as c:
             response = await c.get(
@@ -619,8 +682,13 @@ class TestListLibrariesByRoom:
     """GET /api/libraries/{roomId}/list"""
 
     async def test_list_by_room_excludes_stub_libraries(
-        self, client, owner_headers, room, library, stub_library
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        room: Room,
+        library: Library,
+        stub_library: Library,
+    ) -> None:
         """タイトルが未確定のスタブはルームの一覧に含まれないこと"""
         async with client as c:
             response = await c.get(
@@ -630,7 +698,13 @@ class TestListLibrariesByRoom:
         assert response.status_code == 200
         assert [item["id"] for item in response.json()["data"]] == [str(library.id)]
 
-    async def test_list_by_room_as_owner(self, client, owner_headers, room, library):
+    async def test_list_by_room_as_owner(
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        room: Room,
+        library: Library,
+    ) -> None:
         """ルーム所有者が一覧を取得できること"""
         async with client as c:
             response = await c.get(
@@ -642,8 +716,15 @@ class TestListLibrariesByRoom:
         assert body == [{"id": str(library.id), "title": library.title}]
 
     async def test_list_by_room_as_shared_group_member(
-        self, session, client, group_member_headers, room, library, group, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        room: Room,
+        library: Library,
+        group: Group,
+        lib_tenant: Tenant,
+    ) -> None:
         """共有グループ経由でルームにアクセス可能なユーザーが一覧を取得できること"""
         from app.models.share import Share, ShareRoom
 
@@ -670,8 +751,12 @@ class TestListLibrariesByRoom:
         assert len(response.json()["data"]) == 1
 
     async def test_list_by_room_as_tenant_admin(
-        self, client, admin_headers, room, library
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        room: Room,
+        library: Library,
+    ) -> None:
         """テナント管理者(ADMIN)は所有者でなくても一覧を取得できること"""
         async with client as c:
             response = await c.get(
@@ -682,8 +767,13 @@ class TestListLibrariesByRoom:
         assert len(response.json()["data"]) == 1
 
     async def test_list_by_room_as_system_role(
-        self, client, system_user, lib_tenant, room, library
-    ):
+        self,
+        client: AsyncClient,
+        system_user: User,
+        lib_tenant: Tenant,
+        room: Room,
+        library: Library,
+    ) -> None:
         """SYSTEMロールも所有者でなくても一覧を取得できること（ADMIN同様のバイパス対象）"""
         system_headers = _headers(system_user.login_id, lib_tenant.id)
         async with client as c:
@@ -695,8 +785,12 @@ class TestListLibrariesByRoom:
         assert len(response.json()["data"]) == 1
 
     async def test_list_by_room_without_access_returns_403(
-        self, client, unrelated_headers, room, library
-    ):
+        self,
+        client: AsyncClient,
+        unrelated_headers: dict[str, str],
+        room: Room,
+        library: Library,
+    ) -> None:
         """アクセス権のないユーザーは403になること"""
         async with client as c:
             response = await c.get(
@@ -705,7 +799,9 @@ class TestListLibrariesByRoom:
 
         assert response.status_code == 403
 
-    async def test_list_by_room_not_found_returns_404(self, client, owner_headers):
+    async def test_list_by_room_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないルームIDは404になること"""
         async with client as c:
             response = await c.get(
@@ -719,7 +815,9 @@ class TestListLibrariesByRoom:
 class TestGetLibrary:
     """GET /api/libraries/{libraryId}"""
 
-    async def test_get_library_as_room_owner(self, client, owner_headers, library):
+    async def test_get_library_as_room_owner(
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """ルーム所有者がコンテンツを取得できること"""
         async with client as c:
             response = await c.get(
@@ -747,8 +845,14 @@ class TestGetLibrary:
         assert body["assistant"] is None
 
     async def test_get_library_returns_assistant_with_secure_api_key(
-        self, session, client, owner_headers, library, message, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        message: Message,
+        lib_tenant: Tenant,
+    ) -> None:
         """SECUREアシスタントではLOCAL_SERVERのAPIキーだけを返し、modelは先頭のエンドポイントのものになること"""
         secure = Assistant(
             tenant_id=lib_tenant.id,
@@ -808,8 +912,8 @@ class TestGetLibrary:
         }
 
     async def test_get_stub_library_returns_null_title_without_naw_content(
-        self, client, owner_headers, stub_library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], stub_library: Library
+    ) -> None:
         """スタブはタイトルがnull・本文なし（hasNawContent=false）で取得できること"""
         async with client as c:
             response = await c.get(
@@ -822,8 +926,14 @@ class TestGetLibrary:
         assert body["hasNawContent"] is False
 
     async def test_get_library_shared_via_library_group(
-        self, session, client, group_member_headers, library, group, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+        group: Group,
+        lib_tenant: Tenant,
+    ) -> None:
         """ルームへのアクセス権はないが、ライブラリ自体の共有先グループに所属していれば取得できること"""
         session.add(
             ShareLibrary(
@@ -840,8 +950,8 @@ class TestGetLibrary:
         assert response.status_code == 200
 
     async def test_get_library_without_access_returns_404(
-        self, client, unrelated_headers, library
-    ):
+        self, client: AsyncClient, unrelated_headers: dict[str, str], library: Library
+    ) -> None:
         """どちらの条件も満たさない場合404になること"""
         async with client as c:
             response = await c.get(
@@ -850,7 +960,9 @@ class TestGetLibrary:
 
         assert response.status_code == 404
 
-    async def test_get_library_not_found_returns_404(self, client, owner_headers):
+    async def test_get_library_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないlibraryIdは404になること"""
         async with client as c:
             response = await c.get(f"/api/libraries/{uuid4()}", headers=owner_headers)
@@ -858,8 +970,8 @@ class TestGetLibrary:
         assert response.status_code == 404
 
     async def test_get_library_other_tenant_returns_404(
-        self, client, admin_headers, library
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], library: Library
+    ) -> None:
         """他テナントのユーザーからは404になること（テナント分離）"""
         # admin_headers は同一テナントの管理者。可視性を持たないため404になることの確認。
         async with client as c:
@@ -875,7 +987,9 @@ class TestGetLibrary:
 class TestGetLibraryContent:
     """GET /api/libraries/{libraryId}/content"""
 
-    async def test_get_content_as_room_owner(self, client, owner_headers, library):
+    async def test_get_content_as_room_owner(
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """ルーム所有者が本文を{"data": 本文}で取得できること"""
         async with client as c:
             response = await c.get(
@@ -886,8 +1000,14 @@ class TestGetLibraryContent:
         assert response.json() == {"data": LIBRARY_CONTENT}
 
     async def test_get_content_shared_via_library_group(
-        self, session, client, group_member_headers, library, group, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+        group: Group,
+        lib_tenant: Tenant,
+    ) -> None:
         """ルームへのアクセス権はないが、ライブラリの共有先グループに所属していれば取得できること"""
         session.add(
             ShareLibrary(
@@ -905,8 +1025,8 @@ class TestGetLibraryContent:
         assert response.json() == {"data": LIBRARY_CONTENT}
 
     async def test_get_content_without_access_returns_404(
-        self, client, unrelated_headers, library
-    ):
+        self, client: AsyncClient, unrelated_headers: dict[str, str], library: Library
+    ) -> None:
         """閲覧できないユーザーは404 Library not foundになること"""
         async with client as c:
             response = await c.get(
@@ -916,7 +1036,9 @@ class TestGetLibraryContent:
         assert response.status_code == 404
         assert response.json()["message"] == "Library not found"
 
-    async def test_get_content_not_found_returns_404(self, client, owner_headers):
+    async def test_get_content_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないlibraryIdは404 Library not foundになること"""
         async with client as c:
             response = await c.get(
@@ -926,7 +1048,9 @@ class TestGetLibraryContent:
         assert response.status_code == 404
         assert response.json()["message"] == "Library not found"
 
-    async def test_get_content_invalid_id_returns_404(self, client, owner_headers):
+    async def test_get_content_invalid_id_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """UUID形式でないlibraryIdは404 Library not foundになること"""
         async with client as c:
             response = await c.get(
@@ -937,8 +1061,8 @@ class TestGetLibraryContent:
         assert response.json()["message"] == "Library not found"
 
     async def test_get_content_without_content_returns_404(
-        self, client, owner_headers, stub_library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], stub_library: Library
+    ) -> None:
         """本文の行が無いライブラリは404 Library content not foundになること"""
         async with client as c:
             response = await c.get(
@@ -949,8 +1073,12 @@ class TestGetLibraryContent:
         assert response.json()["message"] == "Library content not found"
 
     async def test_get_content_with_empty_content_returns_empty_string(
-        self, session, client, owner_headers, library
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """本文が空文字のライブラリは200で空文字を返すこと"""
         content_row = await session.get(LibraryContent, library.id)
         assert content_row is not None
@@ -966,7 +1094,9 @@ class TestGetLibraryContent:
         assert response.status_code == 200
         assert response.json() == {"data": ""}
 
-    async def test_get_content_without_auth_returns_401(self, client, library):
+    async def test_get_content_without_auth_returns_401(
+        self, client: AsyncClient, library: Library
+    ) -> None:
         """未ログインでは取得できないこと"""
         async with client as c:
             response = await c.get(f"/api/libraries/{library.id}/content")
@@ -979,8 +1109,13 @@ class TestCreateLibraryStub:
     """POST /api/libraries"""
 
     async def test_create_stub_as_room_owner(
-        self, session, client, owner_headers, message, owner_user
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        message: Message,
+        owner_user: User,
+    ) -> None:
         """ルーム所有者がタイトル・本文なしのスタブを作成できること"""
         async with client as c:
             response = await c.post(
@@ -1001,8 +1136,8 @@ class TestCreateLibraryStub:
         assert await session.get(LibraryContent, library_id) is None
 
     async def test_create_stub_with_unknown_message_returns_404(
-        self, client, owner_headers
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないメッセージIDは404 Message not foundになること"""
         async with client as c:
             response = await c.post(
@@ -1015,8 +1150,11 @@ class TestCreateLibraryStub:
         assert response.json()["message"] == "Message not found"
 
     async def test_create_stub_as_non_owner_returns_403(
-        self, client, group_member_headers, message
-    ):
+        self,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        message: Message,
+    ) -> None:
         """ルームの所有者以外は作成できないこと"""
         async with client as c:
             response = await c.post(
@@ -1029,8 +1167,8 @@ class TestCreateLibraryStub:
 
     @pytest.mark.parametrize("body", [{"messageId": ""}, {"messageId": "  "}, {}])
     async def test_create_stub_without_message_id_returns_400(
-        self, client, owner_headers, body
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], body: dict[str, Any]
+    ) -> None:
         """メッセージIDが空・空白・欠落なら400になること"""
         async with client as c:
             response = await c.post("/api/libraries", json=body, headers=owner_headers)
@@ -1038,7 +1176,9 @@ class TestCreateLibraryStub:
         assert response.status_code == 400
         assert response.json()["message"] == "メッセージIDは必須です"
 
-    async def test_create_stub_without_auth_returns_401(self, client, message):
+    async def test_create_stub_without_auth_returns_401(
+        self, client: AsyncClient, message: Message
+    ) -> None:
         """未ログインでは作成できないこと"""
         async with client as c:
             response = await c.post("/api/libraries", json={"messageId": message.id})
@@ -1051,8 +1191,8 @@ class TestUpdateLibraryTitle:
     """PATCH /api/libraries/{libraryId}/title"""
 
     async def test_update_title_makes_stub_visible_in_list(
-        self, client, owner_headers, stub_library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], stub_library: Library
+    ) -> None:
         """スタブのタイトルを更新でき、一覧に出るようになること"""
         async with client as c:
             response = await c.patch(
@@ -1067,7 +1207,9 @@ class TestUpdateLibraryTitle:
         titles = [item["title"] for item in listed.json()["data"]["content"]]
         assert titles == ["確定タイトル"]
 
-    async def test_update_title_not_found_returns_404(self, client, owner_headers):
+    async def test_update_title_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないlibraryIdは404 Library not foundになること"""
         async with client as c:
             response = await c.patch(
@@ -1080,8 +1222,8 @@ class TestUpdateLibraryTitle:
         assert response.json()["message"] == "Library not found"
 
     async def test_update_title_with_invalid_id_returns_404(
-        self, client, owner_headers
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """UUID形式でないlibraryIdは404 Library not foundになること"""
         async with client as c:
             response = await c.patch(
@@ -1094,8 +1236,11 @@ class TestUpdateLibraryTitle:
         assert response.json()["message"] == "Library not found"
 
     async def test_update_title_as_non_owner_returns_403(
-        self, client, group_member_headers, library
-    ):
+        self,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """ルームの所有者以外はタイトルを更新できないこと"""
         async with client as c:
             response = await c.patch(
@@ -1107,8 +1252,8 @@ class TestUpdateLibraryTitle:
         assert response.status_code == 403
 
     async def test_update_title_with_blank_title_returns_400(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """タイトルが空白のみなら400になること"""
         async with client as c:
             response = await c.patch(
@@ -1121,8 +1266,8 @@ class TestUpdateLibraryTitle:
         assert response.json()["message"] == "ライブラリ名は必須です"
 
     async def test_update_title_with_256_chars_returns_400(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """タイトルが256文字なら400になること"""
         async with client as c:
             response = await c.patch(
@@ -1142,8 +1287,12 @@ class TestCreateWithContent:
     """LibraryRepository.create_with_content"""
 
     async def test_saves_library_and_content_together(
-        self, session, lib_tenant, owner_user, message
-    ):
+        self,
+        session: AsyncSession,
+        lib_tenant: Tenant,
+        owner_user: User,
+        message: Message,
+    ) -> None:
         """ライブラリと本文が同時に保存されること"""
         saved = await LibraryRepository.create_with_content(
             Library(
@@ -1162,8 +1311,8 @@ class TestCreateWithContent:
         assert content_row.tenant_id == lib_tenant.id
 
     async def test_rolls_back_when_saving_content_fails(
-        self, lib_tenant, owner_user, message
-    ):
+        self, lib_tenant: Tenant, owner_user: User, message: Message
+    ) -> None:
         """本文の保存（コミット）に失敗したらロールバックして例外を伝えること"""
         failing_session = MagicMock()
         failing_session.flush = AsyncMock()
@@ -1192,7 +1341,13 @@ class TestCreateWithContent:
 class TestUpdateLibrary:
     """PUT /api/libraries/{libraryId}"""
 
-    async def test_update_keeps_content(self, session, client, owner_headers, library):
+    async def test_update_keeps_content(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """名前を更新しても本文はそのまま残ること"""
         async with client as c:
             response = await c.put(
@@ -1207,8 +1362,13 @@ class TestUpdateLibrary:
         assert content_row.content == LIBRARY_CONTENT
 
     async def test_update_as_owner(
-        self, client, owner_headers, library, group, library_tag
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        group: Group,
+        library_tag: LibraryTag,
+    ) -> None:
         """所有者が名前・グループ・タグを更新できること"""
         async with client as c:
             response = await c.put(
@@ -1225,8 +1385,15 @@ class TestUpdateLibrary:
         assert response.json()["data"]["id"] == str(library.id)
 
     async def test_update_with_empty_groups_and_tags_clears_all(
-        self, session, client, owner_headers, library, group, library_tag, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        group: Group,
+        library_tag: LibraryTag,
+        lib_tenant: Tenant,
+    ) -> None:
         """空配列を指定すると既存の共有・タグが全解除されること"""
         session.add(
             ShareLibrary(
@@ -1255,8 +1422,8 @@ class TestUpdateLibrary:
         assert check.json()["data"]["content"][0]["tags"] == []
 
     async def test_update_with_nonexistent_group_returns_400(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """存在しないグループIDを指定すると400になること"""
         async with client as c:
             response = await c.put(
@@ -1268,8 +1435,8 @@ class TestUpdateLibrary:
         assert response.status_code == 400
 
     async def test_update_with_nonexistent_tag_returns_400(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """存在しないタグIDを指定すると400になること"""
         async with client as c:
             response = await c.put(
@@ -1282,8 +1449,13 @@ class TestUpdateLibrary:
         assert response.json()["message"] == "指定されたタグが存在しません"
 
     async def test_update_with_hyphenated_tag_id(
-        self, session, client, owner_headers, library, library_tag
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+    ) -> None:
         """ハイフン付き（UUID標準形式）のタグIDでも付与でき、保存形式で保存されること"""
         async with client as c:
             response = await c.put(
@@ -1296,8 +1468,13 @@ class TestUpdateLibrary:
         assert await _mapped_tag_ids(session, library.id) == [library_tag.id]
 
     async def test_update_with_same_tag_in_different_formats(
-        self, session, client, owner_headers, library, library_tag
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+    ) -> None:
         """同じタグを表記違いで重複指定しても1件として付与されること"""
         async with client as c:
             response = await c.put(
@@ -1313,8 +1490,12 @@ class TestUpdateLibrary:
         assert await _mapped_tag_ids(session, library.id) == [library_tag.id]
 
     async def test_update_with_other_tenant_tag_returns_400(
-        self, client, owner_headers, library, other_tenant_library_tag
-    ):
+        self,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        other_tenant_library_tag: LibraryTag,
+    ) -> None:
         """他テナントのタグIDはハイフン付きで指定しても400になること"""
         async with client as c:
             response = await c.put(
@@ -1330,8 +1511,14 @@ class TestUpdateLibrary:
         assert response.json()["message"] == "指定されたタグが存在しません"
 
     async def test_update_with_invalid_tag_id_format_returns_400(
-        self, session, client, owner_headers, library, library_tag, lib_tenant
-    ):
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+        library_tag: LibraryTag,
+        lib_tenant: Tenant,
+    ) -> None:
         """不正な形式のタグIDを指定すると400になり、何も更新されないこと"""
         session.add(
             LibraryTagMapping(
@@ -1358,14 +1545,17 @@ class TestUpdateLibrary:
         # テストはアプリと同じセッションを使うため、閉じたときと同じ状態に戻してから確かめる。
         await session.rollback()
         title = await session.execute(
-            select(Library.title).where(Library.id == library_id)
+            select(Library.title).where(Library.id == library_id)  # type: ignore[call-overload]
         )
         assert title.scalar_one() == "契約書まとめ"
         assert await _mapped_tag_ids(session, library_id) == [library_tag_id]
 
     async def test_update_with_invalid_tag_id_as_non_owner_returns_403(
-        self, client, group_member_headers, library
-    ):
+        self,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """所有者以外が不正な形式のタグIDを指定した場合、形式より先に権限で403になること"""
         async with client as c:
             response = await c.put(
@@ -1377,8 +1567,11 @@ class TestUpdateLibrary:
         assert response.status_code == 403
 
     async def test_update_as_non_owner_returns_403(
-        self, client, group_member_headers, library
-    ):
+        self,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """所有者以外（共有グループメンバー含む）は更新できないこと"""
         async with client as c:
             response = await c.put(
@@ -1389,7 +1582,9 @@ class TestUpdateLibrary:
 
         assert response.status_code == 403
 
-    async def test_update_not_found_returns_404(self, client, owner_headers):
+    async def test_update_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないlibraryIdは404になること"""
         async with client as c:
             response = await c.put(
@@ -1401,8 +1596,8 @@ class TestUpdateLibrary:
         assert response.status_code == 404
 
     async def test_update_with_blank_name_returns_400(
-        self, client, owner_headers, library
-    ):
+        self, client: AsyncClient, owner_headers: dict[str, str], library: Library
+    ) -> None:
         """名前が空白のみだと400になること"""
         async with client as c:
             response = await c.put(
@@ -1418,7 +1613,13 @@ class TestUpdateLibrary:
 class TestDeleteLibrary:
     """DELETE /api/libraries/{libraryId}"""
 
-    async def test_delete_as_owner(self, session, client, owner_headers, library):
+    async def test_delete_as_owner(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        owner_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """所有者が削除でき、本文も一緒に消えること"""
         library_id = library.id
         async with client as c:
@@ -1431,8 +1632,11 @@ class TestDeleteLibrary:
         assert await session.get(LibraryContent, library_id) is None
 
     async def test_delete_as_non_owner_returns_403(
-        self, client, group_member_headers, library
-    ):
+        self,
+        client: AsyncClient,
+        group_member_headers: dict[str, str],
+        library: Library,
+    ) -> None:
         """所有者以外は削除できないこと"""
         async with client as c:
             response = await c.delete(
@@ -1441,7 +1645,9 @@ class TestDeleteLibrary:
 
         assert response.status_code == 403
 
-    async def test_delete_not_found_returns_404(self, client, owner_headers):
+    async def test_delete_not_found_returns_404(
+        self, client: AsyncClient, owner_headers: dict[str, str]
+    ) -> None:
         """存在しないlibraryIdは404になること"""
         async with client as c:
             response = await c.delete(

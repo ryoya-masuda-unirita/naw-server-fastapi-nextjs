@@ -15,10 +15,12 @@ from app.models.user import User, UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
 from app.services.user_import_service import REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE
 from app.services.user_import_listener import UserImportListener
+from sqlalchemy.ext.asyncio import AsyncSession
+from collections.abc import Iterator
 
 
 @pytest.fixture
-async def import_tenant(session):
+async def import_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = Tenant(
         id="tenant-user-import-test",
@@ -40,7 +42,7 @@ async def import_tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """別テナント（テナント分離の確認用）"""
     tenant = Tenant(
         id="tenant-user-import-other",
@@ -62,7 +64,7 @@ async def other_tenant(session):
 
 
 @pytest.fixture
-async def import_admin_user(session, import_tenant):
+async def import_admin_user(session: AsyncSession, import_tenant: Tenant) -> User:
     """インポートを実行する管理者ユーザー"""
     user = User(
         id=uuid4(),
@@ -79,7 +81,7 @@ async def import_admin_user(session, import_tenant):
 
 
 @pytest.fixture
-async def import_normal_user(session, import_tenant):
+async def import_normal_user(session: AsyncSession, import_tenant: Tenant) -> User:
     """管理者ではない一般ユーザー"""
     user = User(
         id=uuid4(),
@@ -96,21 +98,21 @@ async def import_normal_user(session, import_tenant):
 
 
 @pytest.fixture
-def admin_headers(import_admin_user, import_tenant):
+def admin_headers(import_admin_user: User, import_tenant: Tenant) -> dict[str, str]:
     """管理者の認証ヘッダー"""
     token = create_access_token(import_admin_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
-def user_headers(import_normal_user, import_tenant):
+def user_headers(import_normal_user: User, import_tenant: Tenant) -> dict[str, str]:
     """一般ユーザーの認証ヘッダー"""
     token = create_access_token(import_normal_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
     """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -174,7 +176,7 @@ class _FakeUserImportStorage:
 
 
 @pytest.fixture
-def mock_user_import_infra():
+def mock_user_import_infra() -> Iterator[list[str]]:
     """S3アップロード・SQS送信をモック化し、送信したメッセージ本文を記録する。"""
     fake_storage = _FakeUserImportStorage()
     sent_messages: list[str] = []
@@ -221,7 +223,9 @@ def mock_user_import_infra():
         yield sent_messages
 
 
-def _csv_file(content: str, filename: str = "users.csv"):
+def _csv_file(
+    content: str, filename: str = "users.csv"
+) -> dict[str, tuple[str, bytes, str]]:
     """CSV アップロード用の multipart 送信内容を作る
 
     Parameters
@@ -244,8 +248,12 @@ class TestUserImport:
     """ユーザーインポート API のテスト"""
 
     async def test_import_users_creates_user_and_job(
-        self, client, admin_headers, session, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        mock_user_import_infra: list[str],
+    ) -> None:
         """CSVインポートの受付がPENDINGになり、キュー受信処理後にユーザーとCOMPLETEDのジョブが作成されること"""
         csv_content = (
             "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
@@ -271,7 +279,7 @@ class TestUserImport:
             )
 
         created = (
-            (await session.execute(select(User).where(User.login_id == "new-import")))
+            (await session.execute(select(User).where(User.login_id == "new-import")))  # type: ignore[arg-type]
             .scalars()
             .one()
         )
@@ -280,7 +288,7 @@ class TestUserImport:
 
         password_history_count = (
             await session.execute(
-                select(func.count()).where(PasswordHistory.user_id == created.id)
+                select(func.count()).where(PasswordHistory.user_id == created.id)  # type: ignore[arg-type]
             )
         ).scalar_one()
         assert password_history_count == 1
@@ -290,8 +298,13 @@ class TestUserImport:
         assert detail.json()["fileName"] == "users.csv"
 
     async def test_import_users_updates_existing_user_without_password_change(
-        self, client, admin_headers, session, import_tenant, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        import_tenant: Tenant,
+        mock_user_import_infra: list[str],
+    ) -> None:
         """既存ユーザーの更新時は名前・ロールのみ更新されパスワードは変更されないこと"""
         user = User(
             id=uuid4(),
@@ -334,14 +347,19 @@ class TestUserImport:
 
         password_history_count = (
             await session.execute(
-                select(func.count()).where(PasswordHistory.user_id == user.id)
+                select(func.count()).where(PasswordHistory.user_id == user.id)  # type: ignore[arg-type]
             )
         ).scalar_one()
         assert password_history_count == 1
 
     async def test_import_users_replaces_group_memberships(
-        self, client, admin_headers, session, import_tenant, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        import_tenant: Tenant,
+        mock_user_import_infra: list[str],
+    ) -> None:
         """CSVのgroupIdsで既存のグループ所属がCSV指定の内容に置き換わること"""
         old_group = Group(tenant_id=import_tenant.id, name="Old Group")
         new_group = Group(tenant_id=import_tenant.id, name="New Group")
@@ -384,7 +402,7 @@ class TestUserImport:
         group_ids = (
             (
                 await session.execute(
-                    select(GroupUser.group_id).where(GroupUser.user_id == user.id)
+                    select(GroupUser.group_id).where(GroupUser.user_id == user.id)  # type: ignore[call-overload]
                 )
             )
             .scalars()
@@ -393,8 +411,11 @@ class TestUserImport:
         assert group_ids == [new_group.id]
 
     async def test_import_users_returns_failed_job_for_invalid_csv(
-        self, client, admin_headers, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        mock_user_import_infra: list[str],
+    ) -> None:
         """必須カラムが欠けたCSVの場合、アップロード前検証の時点でジョブがFAILEDになりエラー内容が記録されること"""
         csv_content = "login_id,name,password\nmissing-role,Missing Role,Pass123!\n"
 
@@ -418,8 +439,8 @@ class TestUserImport:
         assert "必須カラム 'role' が存在しません" in detail.json()["errorDetails"]
 
     async def test_import_users_deletes_uploaded_file_when_queue_send_fails(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """SQS送信が失敗した場合、アップロード済みファイルがS3上に孤立しないよう削除されること"""
         fake_storage = _FakeUserImportStorage()
         csv_content = (
@@ -454,7 +475,9 @@ class TestUserImport:
         # アップロードされたファイルがどこからも参照されないままS3上に残らないこと
         assert fake_storage._objects == {}
 
-    async def test_general_user_cannot_import_users(self, client, user_headers):
+    async def test_general_user_cannot_import_users(
+        self, client: AsyncClient, user_headers: dict[str, str]
+    ) -> None:
         """一般ユーザーはユーザー一括インポートAPIを利用できないこと"""
         csv_content = "login_id,name,password,role\nblocked,Blocked,Pass123!,USER\n"
 
@@ -468,8 +491,11 @@ class TestUserImport:
         assert response.status_code == 403
 
     async def test_import_users_rejects_removed_create_login_key_column(
-        self, client, admin_headers, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        mock_user_import_infra: list[str],
+    ) -> None:
         """廃止した createLoginKey 列があるCSVは、移植元と同じメッセージでジョブがFAILEDになること"""
         csv_content = (
             "login_id,name,password,role,createLoginKey\n"
@@ -491,8 +517,13 @@ class TestUserImport:
         assert REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE in detail.json()["errorDetails"]
 
     async def test_import_users_preserves_login_key_when_column_omitted(
-        self, client, admin_headers, session, import_tenant, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        import_tenant: Tenant,
+        mock_user_import_infra: list[str],
+    ) -> None:
         """createLoginKey列がないCSVで既存ユーザーを更新してもlogin_keyが維持されること"""
         user = User(
             id=uuid4(),
@@ -527,8 +558,13 @@ class TestUserImport:
         assert user.login_key_hash == "existing-login-key-hash"
 
     async def test_import_users_records_row_error_for_duplicate_group_id_and_continues(
-        self, client, admin_headers, session, import_tenant, mock_user_import_infra
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        import_tenant: Tenant,
+        mock_user_import_infra: list[str],
+    ) -> None:
         """行内でグループIDが重複していても他の行の処理は継続されること"""
         group = Group(tenant_id=import_tenant.id, name="Dup Group")
         session.add(group)
@@ -562,22 +598,26 @@ class TestUserImport:
         assert "行3" in detail.json()["errorDetails"]
 
         ok_user = (
-            (await session.execute(select(User).where(User.login_id == "import-ok")))
+            (await session.execute(select(User).where(User.login_id == "import-ok")))  # type: ignore[arg-type]
             .scalars()
             .one_or_none()
         )
         assert ok_user is not None
 
         dup_user = (
-            (await session.execute(select(User).where(User.login_id == "import-dup")))
+            (await session.execute(select(User).where(User.login_id == "import-dup")))  # type: ignore[arg-type]
             .scalars()
             .one_or_none()
         )
         assert dup_user is None
 
     async def test_get_import_job_returns_404_for_other_tenant(
-        self, client, admin_headers, session, other_tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        other_tenant: Tenant,
+    ) -> None:
         """別テナントのインポートジョブは404になること"""
         job = UserImportJob(
             tenant_id=other_tenant.id,

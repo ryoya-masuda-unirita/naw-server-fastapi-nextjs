@@ -161,14 +161,16 @@ def _reflect(connection: sa.Connection, name: str) -> sa.Table:
 class TestMigrationIssue307:
     """マイグレーション issue307 のテスト"""
 
-    def test_revision_follows_head_023(self):
+    def test_revision_follows_head_023(self) -> None:
         """revision が issue307、down_revision が 023 であること"""
         migration = _load_migration()
 
         assert migration.revision == "issue307"
         assert migration.down_revision == "023"
 
-    def test_upgrade_moves_content_to_library_contents(self, connection):
+    def test_upgrade_moves_content_to_library_contents(
+        self, connection: sa.Connection
+    ) -> None:
         """本文のあるライブラリだけが本文テーブルへ移り、列の定義が変わること"""
         libraries = _create_pre_migration_libraries(connection)
         with_content = _insert_library(connection, libraries, "あり", "# 本文")
@@ -200,7 +202,7 @@ class TestMigrationIssue307:
         assert "content" not in migrated.c
         assert migrated.c.title.nullable is True
 
-    def test_upgrade_allows_null_title(self, connection):
+    def test_upgrade_allows_null_title(self, connection: sa.Connection) -> None:
         """移行後はタイトルが NULL のライブラリ（スタブ）を入れられること"""
         _create_pre_migration_libraries(connection)
 
@@ -215,7 +217,9 @@ class TestMigrationIssue307:
             == 1
         )
 
-    def test_downgrade_restores_content_and_fills_null_title(self, connection):
+    def test_downgrade_restores_content_and_fills_null_title(
+        self, connection: sa.Connection
+    ) -> None:
         """戻すと本文が列に戻り、スタブのタイトルは既定値になり、本文テーブルが消えること"""
         libraries = _create_pre_migration_libraries(connection)
         with_content = _insert_library(connection, libraries, "あり", "# 本文")
@@ -239,7 +243,7 @@ class TestMigrationIssue307:
         assert restored.c.title.nullable is False
         assert "library_contents" not in sa.inspect(connection).get_table_names()
 
-    def test_upgrade_then_downgrade_keeps_data(self, connection):
+    def test_upgrade_then_downgrade_keeps_data(self, connection: sa.Connection) -> None:
         """upgrade してから downgrade しても本文・タイトルが移行前と同じであること"""
         libraries = _create_pre_migration_libraries(connection)
         expected = {

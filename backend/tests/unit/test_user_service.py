@@ -22,7 +22,7 @@ REPO_PATH = "app.services.user_service.PasswordHistoryRepository"
 
 
 @pytest.fixture
-def admin_user(test_tenant):
+def admin_user(test_tenant: Tenant) -> User:
     """テスト用管理者ユーザー（DB なし）"""
     return User(
         id=uuid4(),
@@ -37,7 +37,9 @@ def admin_user(test_tenant):
 class TestGetUsers:
     """UserService.get_users のテスト"""
 
-    async def test_returns_paged_users(self, test_tenant, test_user):
+    async def test_returns_paged_users(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """テナント内ユーザーを返すこと"""
         session = AsyncMock()
 
@@ -62,7 +64,9 @@ class TestGetUsers:
         assert len(result.content) == 1
         assert result.content[0].loginId == test_user.login_id
 
-    async def test_filters_by_search_text(self, test_tenant, test_user):
+    async def test_filters_by_search_text(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """searchText で login_id / name を部分一致検索できること"""
         session = AsyncMock()
 
@@ -85,7 +89,7 @@ class TestGetUsers:
 
         assert result.totalElements == 1
 
-    async def test_filters_by_role(self, test_tenant, test_user):
+    async def test_filters_by_role(self, test_tenant: Tenant, test_user: User) -> None:
         """role でフィルタできること"""
         session = AsyncMock()
 
@@ -112,7 +116,9 @@ class TestGetUsers:
 class TestCreateUser:
     """UserService.create_user のテスト"""
 
-    async def test_creates_user_with_initial_password(self, test_tenant):
+    async def test_creates_user_with_initial_password(
+        self, test_tenant: Tenant
+    ) -> None:
         """ユーザーを作成し初期パスワードが返ること"""
         session = AsyncMock()
 
@@ -135,7 +141,9 @@ class TestCreateUser:
         assert result.loginKey is None
         assert result.hasLoginKey is False
 
-    async def test_issues_login_key_and_stores_only_hash(self, test_tenant):
+    async def test_issues_login_key_and_stores_only_hash(
+        self, test_tenant: Tenant
+    ) -> None:
         """issueLoginKey=true で発行したキーを返し、ユーザーにはハッシュだけを持たせること"""
         session = AsyncMock()
 
@@ -163,7 +171,9 @@ class TestCreateUser:
         saved = session.add.call_args_list[0].args[0]
         assert saved.login_key_hash == hash_login_key(result.loginKey)
 
-    async def test_raises_400_on_duplicate_login_id(self, test_tenant, test_user):
+    async def test_raises_400_on_duplicate_login_id(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """同一 loginId が存在する場合 400 を返すこと"""
         session = AsyncMock()
 
@@ -180,7 +190,7 @@ class TestCreateUser:
 
         assert exc_info.value.status_code == 400
 
-    async def test_raises_400_when_tenant_not_found(self):
+    async def test_raises_400_when_tenant_not_found(self) -> None:
         """テナントが存在しない場合 400 を返すこと"""
         session = AsyncMock()
 
@@ -201,7 +211,9 @@ class TestCreateUser:
 class TestUpdateUser:
     """UserService.update_user のテスト"""
 
-    async def test_updates_name_and_role(self, test_tenant, test_user):
+    async def test_updates_name_and_role(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """name・role・loginKey を更新できること"""
         session = AsyncMock()
 
@@ -217,7 +229,9 @@ class TestUpdateUser:
         assert test_user.name == "Updated Name"
         assert test_user.role == UserRole.ADMIN
 
-    async def test_does_not_return_stored_login_key(self, test_tenant, test_user):
+    async def test_does_not_return_stored_login_key(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """ログインキーを設定しない更新では保存済みのキーを返さず hasLoginKey だけ返すこと"""
         test_user.login_key_hash = hash_login_key("stored-key")
         session = AsyncMock()
@@ -236,8 +250,8 @@ class TestUpdateUser:
         assert result.hasLoginKey is True
 
     async def test_reissue_replaces_hash_and_returns_new_key(
-        self, test_tenant, test_user
-    ):
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """REISSUE で新しいキーを発行してハッシュを置き換え、平文を返すこと"""
         session = AsyncMock()
 
@@ -258,7 +272,9 @@ class TestUpdateUser:
         assert test_user.login_key_hash == hash_login_key(result.loginKey)
         assert result.hasLoginKey is True
 
-    async def test_revoke_clears_hash(self, test_tenant, test_user):
+    async def test_revoke_clears_hash(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """REVOKE でハッシュを消し、hasLoginKey が false になること"""
         test_user.login_key_hash = hash_login_key("stored-key")
         session = AsyncMock()
@@ -279,7 +295,9 @@ class TestUpdateUser:
         assert result.loginKey is None
         assert result.hasLoginKey is False
 
-    async def test_resets_password_when_flag_is_true(self, test_tenant, test_user):
+    async def test_resets_password_when_flag_is_true(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """resetPassword=true でパスワードリセットし initialPassword が返ること"""
         session = AsyncMock()
 
@@ -302,7 +320,7 @@ class TestUpdateUser:
         assert result.passwordExpiredAt is not None
         assert test_user.is_required_password_reset is True
 
-    async def test_raises_404_when_user_not_found(self, test_tenant):
+    async def test_raises_404_when_user_not_found(self, test_tenant: Tenant) -> None:
         """存在しないユーザーは 404 を返すこと"""
         session = AsyncMock()
 
@@ -321,7 +339,9 @@ class TestUpdateUser:
 class TestDeleteUser:
     """UserService.delete_user のテスト"""
 
-    async def test_deletes_existing_user(self, test_tenant, test_user):
+    async def test_deletes_existing_user(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """存在するユーザーを削除できること"""
         session = AsyncMock()
 
@@ -335,7 +355,9 @@ class TestDeleteUser:
         session.delete.assert_called_once_with(test_user)
         session.commit.assert_called_once()
 
-    async def test_does_not_raise_when_user_not_found(self, test_tenant):
+    async def test_does_not_raise_when_user_not_found(
+        self, test_tenant: Tenant
+    ) -> None:
         """存在しないユーザーでもエラーにならないこと（冪等）"""
         session = AsyncMock()
 
@@ -351,7 +373,9 @@ class TestDeleteUser:
 class TestGetProfile:
     """UserService.get_profile のテスト"""
 
-    async def test_returns_user_profile(self, test_tenant, test_user):
+    async def test_returns_user_profile(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """自分のプロフィールを取得できること"""
         session = AsyncMock()
 
@@ -365,7 +389,7 @@ class TestGetProfile:
 
         assert result.loginId == test_user.login_id
 
-    async def test_raises_404_when_user_not_found(self, test_tenant):
+    async def test_raises_404_when_user_not_found(self, test_tenant: Tenant) -> None:
         """存在しないユーザーは 404 を返すこと"""
         session = AsyncMock()
 
@@ -382,7 +406,9 @@ class TestGetProfile:
 class TestUpdateProfile:
     """UserService.update_profile のテスト"""
 
-    async def test_updates_password_and_clears_reset_flag(self, test_tenant, test_user):
+    async def test_updates_password_and_clears_reset_flag(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """パスワード変更後 is_required_password_reset が false になること"""
         session = AsyncMock()
         test_user.is_required_password_reset = True
@@ -411,8 +437,8 @@ class TestUpdateProfile:
         assert test_user.is_required_password_reset is False
 
     async def test_returns_user_without_update_when_password_is_none(
-        self, test_tenant, test_user
-    ):
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """password が None の場合ユーザー情報をそのまま返すこと"""
         session = AsyncMock()
 
@@ -428,7 +454,9 @@ class TestUpdateProfile:
         assert result.loginId == test_user.login_id
         session.commit.assert_not_called()
 
-    async def test_raises_400_when_password_too_short(self, test_tenant, test_user):
+    async def test_raises_400_when_password_too_short(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """最小長未満のパスワードは HTTPException 400 を返すこと"""
         session = AsyncMock()
 
@@ -447,7 +475,9 @@ class TestUpdateProfile:
 
         assert exc_info.value.status_code == 400
 
-    async def test_raises_400_when_password_reused(self, test_tenant, test_user):
+    async def test_raises_400_when_password_reused(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """過去パスワードを再利用した場合 HTTPException 400 を返すこと"""
         session = AsyncMock()
 
@@ -474,12 +504,12 @@ class TestUpdateProfile:
 class TestGenerateInitialPassword:
     """初期パスワード生成のテスト"""
 
-    def test_meets_policy_length(self, test_tenant):
+    def test_meets_policy_length(self, test_tenant: Tenant) -> None:
         """生成パスワードがポリシーの最小長を満たすこと"""
         password = UserService._generate_initial_password(test_tenant)
         assert len(password) >= test_tenant.pw_policy_min_length
 
-    def test_raises_when_no_policy(self):
+    def test_raises_when_no_policy(self) -> None:
         """全ポリシーが無効な場合 ValueError を返すこと"""
         tenant = Tenant(
             id="t",
@@ -498,17 +528,17 @@ class TestGenerateInitialPassword:
 class TestEscapeLikePattern:
     """LIKE パターンのエスケープのテスト"""
 
-    def test_escapes_percent(self):
+    def test_escapes_percent(self) -> None:
         """%をエスケープすること"""
         result = UserService._escape_like_pattern("100%")
         assert result == "%100\\%%"
 
-    def test_escapes_underscore(self):
+    def test_escapes_underscore(self) -> None:
         """_をエスケープすること"""
         result = UserService._escape_like_pattern("a_b")
         assert result == "%a\\_b%"
 
-    def test_escapes_backslash(self):
+    def test_escapes_backslash(self) -> None:
         """\\を二重にエスケープすること（バックスラッシュを最初に処理し二重エスケープを防ぐ）"""
         result = UserService._escape_like_pattern("a\\b")
         assert result == "%a\\\\b%"
@@ -517,15 +547,15 @@ class TestEscapeLikePattern:
 class TestSortableColumns:
     """並べ替えできる列の解決のテスト"""
 
-    def test_resolves_snake_case(self):
+    def test_resolves_snake_case(self) -> None:
         """スネークケースの許可列名を解決できること"""
         assert UserService._SORTABLE_COLUMNS["created_at"] is User.created_at
 
-    def test_resolves_camel_case(self):
+    def test_resolves_camel_case(self) -> None:
         """キャメルケースの許可列名（フロントエンドが実際に送信する形式）を解決できること"""
         assert UserService._SORTABLE_COLUMNS["updatedAt"] is User.updated_at
 
-    def test_role_sort_column_is_cast_to_string_on_postgresql(self):
+    def test_role_sort_column_is_cast_to_string_on_postgresql(self) -> None:
         """権限順ソートがPostgreSQL上でenumの宣言順ではなく文字列順になるようキャストされること"""
         col = UserService._SORTABLE_COLUMNS["role"]
 
@@ -538,17 +568,17 @@ class TestParseRole:
     """ロール文字列の解釈のテスト"""
 
     @pytest.mark.parametrize("role", ["USER", "ADMIN", "SYSTEM"])
-    def test_returns_user_role_for_valid_value(self, role):
+    def test_returns_user_role_for_valid_value(self, role: str) -> None:
         """定義済みの権限名はUserRoleに変換されること"""
         assert UserService._parse_role(role) is UserRole(role)
 
     @pytest.mark.parametrize("role", [None, "", "   "])
-    def test_returns_none_when_blank(self, role):
+    def test_returns_none_when_blank(self, role: None | str) -> None:
         """未指定・空文字・空白のみは絞り込みなし（None）になること（移植元と同じ）"""
         assert UserService._parse_role(role) is None
 
     @pytest.mark.parametrize("role", ["foo", "admin"])
-    def test_raises_400_for_unknown_value(self, role):
+    def test_raises_400_for_unknown_value(self, role: str) -> None:
         """未定義の値・小文字の権限名は400になること（移植元のvalueOfと同じく大文字小文字を区別）"""
         with pytest.raises(HTTPException) as exc_info:
             UserService._parse_role(role)
@@ -560,7 +590,9 @@ class TestParseRole:
 class TestIssueInitialPassword:
     """初期パスワード発行のテスト"""
 
-    async def test_generates_password_and_saves_history(self, test_tenant, test_user):
+    async def test_generates_password_and_saves_history(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """初期パスワードを生成し、パスワード履歴が1回保存されること"""
         session = AsyncMock()
 

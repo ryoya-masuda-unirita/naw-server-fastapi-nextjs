@@ -25,6 +25,8 @@ from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 _TENANT_ID = "tenant-llm-chat-test"
 _AZURE_MODEL = "gpt-4o"
@@ -40,7 +42,8 @@ _PNG = bytes.fromhex(
 
 
 @pytest.fixture
-async def llm_chat_user(session) -> User:
+async def llm_chat_user(session: AsyncSession) -> User:
+    """汎用チャットAPIのテスト用に、テナントと一般ユーザーを登録して返す。"""
     session.add(
         Tenant(
             id=_TENANT_ID,
@@ -72,7 +75,7 @@ async def llm_chat_user(session) -> User:
 
 
 @pytest.fixture
-async def chat_models(session, llm_chat_user) -> None:
+async def chat_models(session: AsyncSession, llm_chat_user: User) -> None:
     """Azure OpenAI・Bedrockのチャット用AIモデルとテナントエンドポイント一式"""
     session.add_all(
         [
@@ -108,7 +111,8 @@ async def chat_models(session, llm_chat_user) -> None:
 
 
 @pytest.fixture
-def headers(llm_chat_user) -> dict[str, str]:
+def headers(llm_chat_user: User) -> dict[str, str]:
+    """テスト用ユーザーのリクエスト用ヘッダーを返す。"""
     token = create_access_token(llm_chat_user.login_id, _TENANT_ID)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": _TENANT_ID}
 
@@ -127,17 +131,36 @@ def _patched_llm(
 ) -> Iterator[_LlmCalls]:
     """Azure・BedrockのLLM呼び出しを固定応答に差し替え、トークン使用量の保存先をテスト用DBにする。
 
-    Args:
-        engine: テスト用DBエンジン。
-        answer: LLMが返す回答テキストの差分。
-        error: 指定した場合、応答の代わりにこの例外を送出する。
+    Parameters
+    ----------
+    engine : AsyncEngine
+        テスト用DBエンジン。
+    answer : list[str]
+        LLMが返す回答テキストの差分。
+    error : Exception | None
+        指定した場合、応答の代わりにこの例外を送出する。
 
-    Yields:
+    Yields
+    ------
+    _LlmCalls
         LLM呼び出しに渡された会話履歴の記録。
     """
     calls = _LlmCalls()
 
     def _fake(recorded: list[list[ChatMessage]]) -> Any:
+        """会話履歴を記録する偽のLLMストリーム関数を組み立てる。
+
+        Parameters
+        ----------
+        recorded : list[list[ChatMessage]]
+            呼び出しごとの会話履歴の記録先。
+
+        Returns
+        -------
+        Any
+            差し替え用のストリーム関数。
+        """
+
         async def _stream(
             endpoint: str,
             api_key: str,
@@ -146,6 +169,33 @@ def _patched_llm(
             *args: Any,
             **kwargs: Any,
         ) -> AsyncIterator[ChatStreamChunk]:
+            """会話履歴を記録し、固定の回答を逐次返す。
+
+            Parameters
+            ----------
+            endpoint : str
+                エンドポイント。
+            api_key : str
+                APIキー。
+            model : str
+                モデル名。
+            messages : list[ChatMessage]
+                LLMに渡された会話履歴。
+            *args : Any
+                使用しない位置引数。
+            **kwargs : Any
+                使用しないキーワード引数。
+
+            Yields
+            ------
+            ChatStreamChunk
+                回答の差分、最後にトークン数。
+
+            Raises
+            ------
+            Exception
+                `error` が指定されている場合、その例外を送出する。
+            """
             recorded.append(messages)
             if error is not None:
                 raise error
@@ -175,11 +225,16 @@ def _form(
 
     移植元のクライアントと同じく、`textData`を`application/json`のBlobとして送る。
 
-    Args:
-        text_data: `textData`パートに入れるリクエスト本体。
-        attachment_files: `attachmentFiles`パート（ファイル名・内容・Content-Type）。
+    Parameters
+    ----------
+    text_data : dict[str, Any]
+        `textData`パートに入れるリクエスト本体。
+    attachment_files : list[tuple[str, bytes, str]] | None
+        `attachmentFiles`パート(ファイル名・内容・Content-Type)。
 
-    Returns:
+    Returns
+    -------
+    list[tuple[str, tuple[str, str | bytes, str]]]
         httpxの`files`引数に渡すmultipartパートの一覧。
     """
     parts: list[tuple[str, tuple[str, str | bytes, str]]] = [
@@ -193,10 +248,14 @@ def _form(
 def _sse_events(body: str) -> list[dict[str, Any]]:
     """SSE本文の`data:`行をJSONとして読み、イベントの一覧へ変換する。
 
-    Args:
-        body: SSEレスポンスの本文。
+    Parameters
+    ----------
+    body : str
+        SSEレスポンスの本文。
 
-    Returns:
+    Returns
+    -------
+    list[dict[str, Any]]
         イベント(JSON)の一覧。
     """
     return [
@@ -225,8 +284,15 @@ class TestLlmChat:
         ids=["azure", "bedrock"],
     )
     async def test_streams_events_in_source_format(
-        self, client, session, engine, headers, chat_models, deploy_name, provider
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        engine: AsyncEngine,
+        headers: dict[str, str],
+        chat_models: None,
+        deploy_name: Any,
+        provider: str,
+    ) -> None:
         """移植元と同じdata: {"type": ...}形式でtext_delta→message_stopを返し、トークン使用量を保存すること"""
         text_data = {
             "deployName": deploy_name,
@@ -259,8 +325,13 @@ class TestLlmChat:
         ]
 
     async def test_bedrock_with_tools_returns_400(
-        self, client, session, engine, headers, chat_models
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        engine: AsyncEngine,
+        headers: dict[str, str],
+        chat_models: None,
+    ) -> None:
         """Bedrockのモデルでtoolsを指定すると、SSEを始めずに400になりLLM呼び出し・使用量の記録をしないこと"""
         text_data = {
             "deployName": _BEDROCK_MODEL,
@@ -283,8 +354,14 @@ class TestLlmChat:
         ids=["azure", "bedrock"],
     )
     async def test_attaches_files_to_each_user_turn(
-        self, client, engine, headers, chat_models, deploy_name, provider
-    ):
+        self,
+        client: AsyncClient,
+        engine: AsyncEngine,
+        headers: dict[str, str],
+        chat_models: None,
+        deploy_name: Any,
+        provider: str,
+    ) -> None:
         """発話ごとのattachmentsで指定した画像だけが、そのuser発話に添付されてLLMへ渡ること"""
         other_png = _PNG + b"\x00"
         text_data = {
@@ -313,8 +390,12 @@ class TestLlmChat:
         assert sent[1] == ChatMessage(role="assistant", content="回答")
 
     async def test_accepts_text_data_as_form_field(
-        self, client, engine, headers, chat_models
-    ):
+        self,
+        client: AsyncClient,
+        engine: AsyncEngine,
+        headers: dict[str, str],
+        chat_models: None,
+    ) -> None:
         """textDataを通常のフォーム値で送っても受け付けること"""
         text_data = {
             "deployName": _AZURE_MODEL,
@@ -330,7 +411,9 @@ class TestLlmChat:
         assert response.status_code == 200
         assert _sse_events(response.text)[-1]["type"] == "message_stop"
 
-    async def test_rejects_json_body(self, client, headers, chat_models):
+    async def test_rejects_json_body(
+        self, client: AsyncClient, headers: dict[str, str], chat_models: None
+    ) -> None:
         """移植元と異なるJSONボディでの送信は400になること"""
         response = await client.post(
             "/api/llm/chat",
@@ -344,8 +427,8 @@ class TestLlmChat:
         assert response.status_code == 400
 
     async def test_rejects_text_data_without_deploy_name(
-        self, client, headers, chat_models
-    ):
+        self, client: AsyncClient, headers: dict[str, str], chat_models: None
+    ) -> None:
         """textDataにdeployNameが無いと400になり、移植元と同じ文言が返ること"""
         response = await client.post(
             "/api/llm/chat",
@@ -356,7 +439,9 @@ class TestLlmChat:
         assert response.status_code == 400
         assert response.json()["message"] == "deployName は必須です"
 
-    async def test_rejects_invalid_text_data_json(self, client, headers, chat_models):
+    async def test_rejects_invalid_text_data_json(
+        self, client: AsyncClient, headers: dict[str, str], chat_models: None
+    ) -> None:
         """textDataがJSONとして解釈できない場合は400になること"""
         response = await client.post(
             "/api/llm/chat",
@@ -368,8 +453,8 @@ class TestLlmChat:
         assert response.json()["message"].startswith("Invalid JSON")
 
     async def test_returns_400_when_attachment_not_uploaded(
-        self, client, headers, chat_models
-    ):
+        self, client: AsyncClient, headers: dict[str, str], chat_models: None
+    ) -> None:
         """attachmentsにアップロードされていないファイル名がある場合は400になること"""
         text_data = {
             "deployName": _AZURE_MODEL,
@@ -389,8 +474,8 @@ class TestLlmChat:
         )
 
     async def test_rejects_duplicate_attachment_file_names(
-        self, client, headers, chat_models
-    ):
+        self, client: AsyncClient, headers: dict[str, str], chat_models: None
+    ) -> None:
         """同じファイル名の添付ファイルが複数ある場合は400になること"""
         text_data = {
             "deployName": _AZURE_MODEL,
@@ -408,8 +493,12 @@ class TestLlmChat:
         assert response.status_code == 400
 
     async def test_streams_error_event_when_llm_fails(
-        self, client, engine, headers, chat_models
-    ):
+        self,
+        client: AsyncClient,
+        engine: AsyncEngine,
+        headers: dict[str, str],
+        chat_models: None,
+    ) -> None:
         """LLM呼び出し中に例外が発生した場合、移植元と同じ形式のerrorイベントを返すこと"""
         text_data = {
             "deployName": _AZURE_MODEL,
@@ -423,7 +512,9 @@ class TestLlmChat:
         assert response.status_code == 200
         assert _sse_events(response.text) == [{"type": "error", "message": "llm error"}]
 
-    async def test_requires_authentication(self, client, chat_models):
+    async def test_requires_authentication(
+        self, client: AsyncClient, chat_models: None
+    ) -> None:
         """認証なしの場合は401になること"""
         text_data = {
             "deployName": _AZURE_MODEL,

@@ -45,8 +45,14 @@ async def _create_files(session: AsyncSession) -> dict[FileStatus, str]:
 
 
 class TestFileRepository:
+    """ファイルリポジトリのテスト。"""
+
     class TestFindNotDeletedByIdsAndTenantId:
-        async def test_find_not_deleted_by_ids_excludes_deleted_files(self, session):
+        """ID群とテナントIDによる未削除ファイル検索のテスト。"""
+
+        async def test_find_not_deleted_by_ids_excludes_deleted_files(
+            self, session: AsyncSession
+        ) -> None:
             """論理削除済みのファイルを除き、学習中・停止中のファイルだけを返すこと"""
             file_ids = await _create_files(session)
 
@@ -60,8 +66,8 @@ class TestFileRepository:
             }
 
         async def test_find_not_deleted_by_ids_returns_empty_for_empty_ids(
-            self, session
-        ):
+            self, session: AsyncSession
+        ) -> None:
             """ファイルID一覧が空なら空の一覧を返すこと"""
             files = await FileRepository.find_not_deleted_by_ids_and_tenant_id(
                 [], TENANT_ID, session

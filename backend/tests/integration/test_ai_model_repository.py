@@ -2,11 +2,30 @@ import pytest
 
 from app.models.ai_model import AIModel, AIModelEndpointType
 from app.repositories.ai_model_repository import AIModelRepository
+from sqlalchemy.ext.asyncio import AsyncSession
 
 _CHAT_TYPES = (AIModelEndpointType.AZURE_OPENAI_CHAT, AIModelEndpointType.BEDROCK_CHAT)
 
 
-async def _add_model(session, name: str, endpoint_type: AIModelEndpointType) -> AIModel:
+async def _add_model(
+    session: AsyncSession, name: str, endpoint_type: AIModelEndpointType
+) -> AIModel:
+    """AIモデルを登録する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        DBセッション。
+    name : str
+        モデル名。
+    endpoint_type : AIModelEndpointType
+        エンドポイント種別。
+
+    Returns
+    -------
+    AIModel
+        登録したAIモデル。
+    """
     model = AIModel(endpoint_type=endpoint_type, name=name, max_tokens=8192)
     session.add(model)
     await session.flush()
@@ -15,7 +34,11 @@ async def _add_model(session, name: str, endpoint_type: AIModelEndpointType) -> 
 
 @pytest.mark.asyncio
 class TestFindByNameAndEndpointTypes:
-    async def test_finds_model_of_target_endpoint_type(self, session):
+    """名前とエンドポイント種別によるAIモデル検索のテスト。"""
+
+    async def test_finds_model_of_target_endpoint_type(
+        self, session: AsyncSession
+    ) -> None:
         """指定した種別のいずれかで登録されたモデルを名前で検索できること"""
         await _add_model(
             session, "anthropic.claude-haiku-4-5", AIModelEndpointType.BEDROCK_CHAT
@@ -28,7 +51,9 @@ class TestFindByNameAndEndpointTypes:
         assert found is not None
         assert found.endpoint_type == AIModelEndpointType.BEDROCK_CHAT
 
-    async def test_ignores_model_of_other_endpoint_type(self, session):
+    async def test_ignores_model_of_other_endpoint_type(
+        self, session: AsyncSession
+    ) -> None:
         """同名でも指定外の種別で登録されたモデルは返さないこと"""
         await _add_model(session, "gpt-4o", AIModelEndpointType.OPENAI_CHAT)
         target = await _add_model(
@@ -42,7 +67,9 @@ class TestFindByNameAndEndpointTypes:
         assert found is not None
         assert found.id == target.id
 
-    async def test_returns_smallest_id_when_duplicated(self, session):
+    async def test_returns_smallest_id_when_duplicated(
+        self, session: AsyncSession
+    ) -> None:
         """指定種別内で同名のモデルが複数ある場合はidが最小のものを返すこと"""
         first = await _add_model(session, "dup-model", AIModelEndpointType.BEDROCK_CHAT)
         await _add_model(session, "dup-model", AIModelEndpointType.AZURE_OPENAI_CHAT)
@@ -54,7 +81,9 @@ class TestFindByNameAndEndpointTypes:
         assert found is not None
         assert found.id == first.id
 
-    async def test_returns_none_for_nonexistent_name(self, session):
+    async def test_returns_none_for_nonexistent_name(
+        self, session: AsyncSession
+    ) -> None:
         """存在しないモデル名の場合はNoneを返すこと"""
         found = await AIModelRepository.find_by_name_and_endpoint_types(
             "nonexistent-model", _CHAT_TYPES, session

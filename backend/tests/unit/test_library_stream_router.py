@@ -15,13 +15,29 @@ _FULL = (
 def _collect(
     router: LibraryStreamRouter, kind: str, emitted: list[tuple[str, str]]
 ) -> str:
+    """指定した種別の出力テキストを連結する。
+
+    Parameters
+    ----------
+    router : LibraryStreamRouter
+        検証対象のルーター（使用しない）。
+    kind : str
+        集める出力の種別。
+    emitted : list[tuple[str, str]]
+        (種別, テキスト) の出力一覧。
+
+    Returns
+    -------
+    str
+        指定した種別のテキストを連結した文字列。
+    """
     return "".join(text for k, text in emitted if k == kind)
 
 
 class TestFeed:
     """LibraryStreamRouter.feed のテスト"""
 
-    def test_routes_title_and_content_char_by_char(self):
+    def test_routes_title_and_content_char_by_char(self) -> None:
         """タイトル・本文をまたぐ全文を1文字ずつ供給すると正しく振り分けられること"""
         router = LibraryStreamRouter()
         emitted: list[tuple[str, str]] = []
@@ -37,7 +53,7 @@ class TestFeed:
         assert "<<<" not in title
         assert "##" not in title
 
-    def test_handles_marker_split_across_chunks(self):
+    def test_handles_marker_split_across_chunks(self) -> None:
         """<<<TITLE>>>がチャンク境界で分割されても正しく振り分けられること"""
         router = LibraryStreamRouter()
         emitted: list[tuple[str, str]] = []
@@ -49,7 +65,7 @@ class TestFeed:
         assert _collect(router, "title", emitted).strip() == "タイトルA"
         assert _collect(router, "content", emitted).strip() == "本文B"
 
-    def test_routes_comment_section_to_comment_kind(self):
+    def test_routes_comment_section_to_comment_kind(self) -> None:
         """<<<COMMENT>>>セクションがcomment区分として振り分けられること"""
         router = LibraryStreamRouter()
         emitted: list[tuple[str, str]] = []
@@ -63,7 +79,7 @@ class TestFeed:
         assert _collect(router, "comment", emitted).strip() == "ご確認ください"
         assert "ご確認ください" not in _collect(router, "content", emitted)
 
-    def test_comment_marker_split_across_chunks(self):
+    def test_comment_marker_split_across_chunks(self) -> None:
         """<<<COMMENT>>>マーカーがチャンク境界をまたいでも正しくルーティングされること"""
         router = LibraryStreamRouter()
         emitted: list[tuple[str, str]] = []
@@ -77,7 +93,7 @@ class TestFeed:
         assert "コメントB" not in content
         assert comment.strip() == "コメントB"
 
-    def test_content_deltas_preserve_order(self):
+    def test_content_deltas_preserve_order(self) -> None:
         """本文区間のデルタが分割されても順序通り結合されること"""
         router = LibraryStreamRouter()
         emitted: list[tuple[str, str]] = []
@@ -93,7 +109,7 @@ class TestFeed:
 class TestFinal:
     """LibraryStreamRouter.final_title / final_content / final_comment のテスト"""
 
-    def test_final_title_and_content_return_confirmed_values(self):
+    def test_final_title_and_content_return_confirmed_values(self) -> None:
         """全文供給後、final_title/final_contentが正本を返すこと"""
         router = LibraryStreamRouter()
         router.feed(_FULL)
@@ -103,7 +119,7 @@ class TestFinal:
         assert router.final_content().startswith("## 概要")
         assert "```chart:line" in router.final_content()
 
-    def test_fallback_when_markers_missing(self):
+    def test_fallback_when_markers_missing(self) -> None:
         """マーカーが一切ない全文を供給すると、タイトルは空・本文が全文になること"""
         router = LibraryStreamRouter()
         router.feed("マーカーのない素のテキスト")
@@ -112,7 +128,7 @@ class TestFinal:
         assert router.final_title() == ""
         assert router.final_content() == "マーカーのない素のテキスト"
 
-    def test_final_content_excludes_comment_section(self):
+    def test_final_content_excludes_comment_section(self) -> None:
         """<<<COMMENT>>>がある場合、final_contentはCOMMENT_MARKERより手前までを返すこと"""
         router = LibraryStreamRouter()
         router.feed(
@@ -124,7 +140,7 @@ class TestFinal:
         assert "コメント" not in router.final_content()
         assert "<<<COMMENT>>>" not in router.final_content()
 
-    def test_final_comment_returns_comment_text(self):
+    def test_final_comment_returns_comment_text(self) -> None:
         """final_commentがCOMMENT_MARKER以降のテキストを返すこと"""
         router = LibraryStreamRouter()
         router.feed(
@@ -134,7 +150,7 @@ class TestFinal:
 
         assert router.final_comment() == "追加しますか？"
 
-    def test_final_comment_empty_when_no_marker(self):
+    def test_final_comment_empty_when_no_marker(self) -> None:
         """<<<COMMENT>>>がない場合、final_commentは空文字を返すこと"""
         router = LibraryStreamRouter()
         router.feed("<<<TITLE>>>\nタイトル\n<<<CONTENT>>>\n本文")

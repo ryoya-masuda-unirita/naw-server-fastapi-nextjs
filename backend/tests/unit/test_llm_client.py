@@ -11,24 +11,40 @@ from app.core.llm_client import (
     _build_responses_tool,
     cap_max_tokens,
 )
+from collections.abc import AsyncIterator
+from typing import Any
 
 
 class TestCapMaxTokens:
-    def test_caps_to_model_max_tokens(self):
+    """cap_max_tokens のテスト"""
+
+    def test_caps_to_model_max_tokens(self) -> None:
         """指定値がモデルの上限を超える場合、モデルの上限に切り詰めること"""
         assert cap_max_tokens(10000, 4096) == 4096
 
-    def test_keeps_requested_when_within_limit(self):
+    def test_keeps_requested_when_within_limit(self) -> None:
         """指定値がモデルの上限以下の場合、指定値のままであること"""
         assert cap_max_tokens(100, 4096) == 100
         assert cap_max_tokens(4096, 4096) == 4096
 
-    def test_returns_none_when_not_requested(self):
+    def test_returns_none_when_not_requested(self) -> None:
         """指定がない場合はNoneを返すこと"""
         assert cap_max_tokens(None, 4096) is None
 
 
 def _chat_delta_chunk(content: str | None) -> MagicMock:
+    """Chat Completions のテキスト差分チャンクのモックを作る。
+
+    Parameters
+    ----------
+    content : str | None
+        差分のテキスト。
+
+    Returns
+    -------
+    MagicMock
+        usage を持たない差分チャンク。
+    """
     chunk = MagicMock()
     chunk.usage = None
     delta = MagicMock()
@@ -38,6 +54,20 @@ def _chat_delta_chunk(content: str | None) -> MagicMock:
 
 
 def _chat_usage_chunk(prompt_tokens: int, completion_tokens: int) -> MagicMock:
+    """Chat Completions の使用量チャンクのモックを作る。
+
+    Parameters
+    ----------
+    prompt_tokens : int
+        入力トークン数。
+    completion_tokens : int
+        出力トークン数。
+
+    Returns
+    -------
+    MagicMock
+        choices が空で usage だけを持つチャンク。
+    """
     chunk = MagicMock()
     usage = MagicMock()
     usage.prompt_tokens = prompt_tokens
@@ -51,12 +81,33 @@ class _AsyncChunkIterator:
     """テスト用の非同期チャンクストリーム。"""
 
     def __init__(self, chunks: list) -> None:
+        """返すチャンクの一覧を保持する。
+
+        Parameters
+        ----------
+        chunks : list
+            順に返すチャンク。
+        """
         self._chunks = chunks
 
-    def __aiter__(self):
+    def __aiter__(self) -> AsyncIterator[Any]:
+        """チャンクを順に返す非同期イテレータを返す。
+
+        Returns
+        -------
+        AsyncIterator[Any]
+            チャンクを yield するジェネレータ。
+        """
         return self._gen()
 
-    async def _gen(self):
+    async def _gen(self) -> AsyncIterator[Any]:
+        """保持しているチャンクを順に yield する。
+
+        Returns
+        -------
+        AsyncIterator[Any]
+            チャンクの非同期イテレータ。
+        """
         for chunk in self._chunks:
             yield chunk
 
@@ -68,14 +119,28 @@ def _as_async_context_manager(mock_client: MagicMock) -> None:
     `async with`で使うようになったため、テスト側のモックも非同期コンテキスト
     マネージャとして振る舞う必要がある。
 
-    Args:
-        mock_client: `async with`エントリ時に返すクライアントのモック。
+    Parameters
+    ----------
+    mock_client : MagicMock
+        `async with`エントリ時に返すクライアントのモック。
     """
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
 
 def _responses_text_delta_event(delta: str) -> MagicMock:
+    """Responses API のテキスト差分イベントのモックを作る。
+
+    Parameters
+    ----------
+    delta : str
+        差分のテキスト。
+
+    Returns
+    -------
+    MagicMock
+        response.output_text.delta イベント。
+    """
     event = MagicMock()
     event.type = "response.output_text.delta"
     event.delta = delta
@@ -83,6 +148,20 @@ def _responses_text_delta_event(delta: str) -> MagicMock:
 
 
 def _responses_completed_event(input_tokens: int, output_tokens: int) -> MagicMock:
+    """Responses API の完了イベントのモックを作る。
+
+    Parameters
+    ----------
+    input_tokens : int
+        入力トークン数。
+    output_tokens : int
+        出力トークン数。
+
+    Returns
+    -------
+    MagicMock
+        response.completed イベント。
+    """
     event = MagicMock()
     event.type = "response.completed"
     usage = MagicMock()
@@ -93,6 +172,18 @@ def _responses_completed_event(input_tokens: int, output_tokens: int) -> MagicMo
 
 
 def _responses_error_event(message: str) -> MagicMock:
+    """Responses API のエラーイベントのモックを作る。
+
+    Parameters
+    ----------
+    message : str
+        エラーメッセージ。
+
+    Returns
+    -------
+    MagicMock
+        error イベント。
+    """
     event = MagicMock()
     event.type = "error"
     event.message = message
@@ -100,6 +191,18 @@ def _responses_error_event(message: str) -> MagicMock:
 
 
 def _responses_failed_event(message: str) -> MagicMock:
+    """Responses API の失敗イベントのモックを作る。
+
+    Parameters
+    ----------
+    message : str
+        エラーメッセージ。
+
+    Returns
+    -------
+    MagicMock
+        response.failed イベント。
+    """
     event = MagicMock()
     event.type = "response.failed"
     error = MagicMock()
@@ -111,13 +214,13 @@ def _responses_failed_event(message: str) -> MagicMock:
 class TestBuildResponsesTool:
     """_build_responses_tool のテスト"""
 
-    def test_web_search_tool(self):
+    def test_web_search_tool(self) -> None:
         """web_searchツールをResponses APIの組み込みツール宣言へ変換すること"""
         tool = ToolConfig(name="web_search")
 
         assert _build_responses_tool(tool) == {"type": "web_search"}
 
-    def test_mcp_tool_minimal_fields(self):
+    def test_mcp_tool_minimal_fields(self) -> None:
         """mcpツールを必須項目のみで変換すること"""
         tool = ToolConfig(
             name="mcp", server_label="my-mcp", server_url="https://mcp.example.com"
@@ -129,7 +232,7 @@ class TestBuildResponsesTool:
             "server_url": "https://mcp.example.com",
         }
 
-    def test_mcp_tool_all_fields(self):
+    def test_mcp_tool_all_fields(self) -> None:
         """mcpツールの任意項目をすべて含めて変換すること"""
         tool = ToolConfig(
             name="mcp",
@@ -151,7 +254,7 @@ class TestBuildResponsesTool:
             "require_approval": "never",
         }
 
-    def test_unsupported_tool_name_raises(self):
+    def test_unsupported_tool_name_raises(self) -> None:
         """未対応のツール名を変換しようとするとValueErrorが送出されること"""
         tool = ToolConfig(name="unknown")
 
@@ -165,8 +268,8 @@ class TestAzureLlmChatClient:
     @patch("app.core.llm_client.AsyncAzureOpenAI")
     @patch("app.core.llm_client.get_azure_openai_settings")
     async def test_uses_configured_api_version_for_chat_completions(
-        self, mock_get_settings, mock_client_cls
-    ):
+        self, mock_get_settings: MagicMock, mock_client_cls: MagicMock
+    ) -> None:
         """Chat Completions APIは設定されたAPIバージョンでclientを生成すること"""
         mock_get_settings.return_value = MagicMock(api_version="2026-01-01")
         mock_client = MagicMock()
@@ -195,8 +298,8 @@ class TestAzureLlmChatClient:
     @patch("app.core.llm_client.AsyncAzureOpenAI")
     @patch("app.core.llm_client.get_azure_openai_settings")
     async def test_uses_configured_api_version_for_responses_api(
-        self, mock_get_settings, mock_client_cls
-    ):
+        self, mock_get_settings: MagicMock, mock_client_cls: MagicMock
+    ) -> None:
         """Responses APIは設定されたResponses用APIバージョンでclientを生成すること"""
         mock_get_settings.return_value = MagicMock(
             api_version="unused", responses_api_version="2026-02-01-preview"
@@ -224,7 +327,9 @@ class TestAzureLlmChatClient:
         )
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_yields_text_delta_then_usage(self, mock_client_cls):
+    async def test_yields_text_delta_then_usage(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """テキスト差分を順にyieldし、最後にトークン使用量を持つチャンクをyieldすること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -260,7 +365,9 @@ class TestAzureLlmChatClient:
         assert chunks[-1].output_tokens == 5
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_passes_max_tokens_only_when_specified(self, mock_client_cls):
+    async def test_passes_max_tokens_only_when_specified(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """maxTokens未指定時はcreate呼び出しにmax_tokensを含めないこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -285,7 +392,9 @@ class TestAzureLlmChatClient:
         assert kwargs["stream_options"] == {"include_usage": True}
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_tools_none_uses_chat_completions(self, mock_client_cls):
+    async def test_tools_none_uses_chat_completions(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """tools未指定時はChat Completions APIが呼ばれ、Responses APIは呼ばれないこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -310,7 +419,9 @@ class TestAzureLlmChatClient:
         mock_client.responses.create.assert_not_awaited()
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_omits_response_format_when_not_specified(self, mock_client_cls):
+    async def test_omits_response_format_when_not_specified(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """response_format未指定時はcreate呼び出しにresponse_formatを含めないこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -333,7 +444,9 @@ class TestAzureLlmChatClient:
         assert "response_format" not in kwargs
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_passes_response_format_when_specified(self, mock_client_cls):
+    async def test_passes_response_format_when_specified(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """response_format指定時はcreate呼び出しにそのまま渡すこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -358,7 +471,9 @@ class TestAzureLlmChatClient:
         assert kwargs["response_format"] == {"type": "json_object"}
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_tools_specified_uses_responses_api(self, mock_client_cls):
+    async def test_tools_specified_uses_responses_api(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """tools指定時はResponses APIが呼ばれ、変換済みtoolsが渡ること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -383,7 +498,9 @@ class TestAzureLlmChatClient:
         assert kwargs["input"] == [{"role": "user", "content": "hi"}]
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_responses_api_yields_text_delta_then_usage(self, mock_client_cls):
+    async def test_responses_api_yields_text_delta_then_usage(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """Responses APIのテキスト差分・完了イベントをChatStreamChunkへ変換すること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -420,8 +537,8 @@ class TestAzureLlmChatClient:
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
     async def test_responses_api_passes_max_output_tokens_only_when_specified(
-        self, mock_client_cls
-    ):
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """maxTokens未指定時はResponses API呼び出しにmax_output_tokensを含めないこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -444,7 +561,9 @@ class TestAzureLlmChatClient:
         assert kwargs["temperature"] == 0.5
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_responses_api_raises_on_error_event(self, mock_client_cls):
+    async def test_responses_api_raises_on_error_event(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """Responses APIのerrorイベント受信時は例外を送出すること(web_search/mcp失敗時等)"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -468,7 +587,9 @@ class TestAzureLlmChatClient:
                 pass
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_responses_api_raises_on_failed_event(self, mock_client_cls):
+    async def test_responses_api_raises_on_failed_event(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """Responses APIのresponse.failedイベント受信時は例外を送出すること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -504,8 +625,8 @@ class TestAzureLlmEmbeddingClient:
     @patch("app.core.llm_client.AsyncAzureOpenAI")
     @patch("app.core.llm_client.get_azure_openai_settings")
     async def test_uses_configured_api_version_for_embeddings(
-        self, mock_get_settings, mock_client_cls
-    ):
+        self, mock_get_settings: MagicMock, mock_client_cls: MagicMock
+    ) -> None:
         """Embeddings APIは設定されたAPIバージョンでclientを生成すること"""
         mock_get_settings.return_value = MagicMock(api_version="2026-01-01")
         mock_client = MagicMock()
@@ -531,7 +652,9 @@ class TestAzureLlmEmbeddingClient:
         )
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_returns_embedding_and_tokens(self, mock_client_cls):
+    async def test_returns_embedding_and_tokens(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """埋め込みベクトルと消費トークン数を返すこと"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -555,7 +678,9 @@ class TestAzureLlmEmbeddingClient:
         assert "dimensions" not in kwargs
 
     @patch("app.core.llm_client.AsyncAzureOpenAI")
-    async def test_passes_dimensions_when_specified(self, mock_client_cls):
+    async def test_passes_dimensions_when_specified(
+        self, mock_client_cls: MagicMock
+    ) -> None:
         """dimensions指定時はcreate呼び出しに含めること"""
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
@@ -578,6 +703,18 @@ class TestAzureLlmEmbeddingClient:
 
 
 def _bedrock_content_block_delta_event(text: str) -> MagicMock:
+    """Bedrock(Anthropic) のテキスト差分イベントのモックを作る。
+
+    Parameters
+    ----------
+    text : str
+        差分のテキスト。
+
+    Returns
+    -------
+    MagicMock
+        content_block_delta イベント。
+    """
     event = MagicMock()
     event.type = "content_block_delta"
     event.delta = MagicMock(type="text_delta", text=text)
@@ -585,6 +722,18 @@ def _bedrock_content_block_delta_event(text: str) -> MagicMock:
 
 
 def _bedrock_message_start_event(input_tokens: int) -> MagicMock:
+    """Bedrock(Anthropic) のメッセージ開始イベントのモックを作る。
+
+    Parameters
+    ----------
+    input_tokens : int
+        入力トークン数。
+
+    Returns
+    -------
+    MagicMock
+        message_start イベント。
+    """
     event = MagicMock()
     event.type = "message_start"
     event.message = MagicMock(usage=MagicMock(input_tokens=input_tokens))
@@ -592,6 +741,18 @@ def _bedrock_message_start_event(input_tokens: int) -> MagicMock:
 
 
 def _bedrock_message_delta_event(output_tokens: int) -> MagicMock:
+    """Bedrock(Anthropic) のメッセージ差分イベントのモックを作る。
+
+    Parameters
+    ----------
+    output_tokens : int
+        出力トークン数。
+
+    Returns
+    -------
+    MagicMock
+        message_delta イベント。
+    """
     event = MagicMock()
     event.type = "message_delta"
     event.usage = MagicMock(output_tokens=output_tokens)
@@ -610,7 +771,9 @@ def _mock_bedrock_client(events: list) -> MagicMock:
 
 
 class TestBedrockLlmChatClient:
-    async def test_streams_text_delta_chunks(self):
+    """BedrockLlmChatClient のテスト"""
+
+    async def test_streams_text_delta_chunks(self) -> None:
         """テキスト差分イベントがChatStreamChunkに変換されること"""
         mock_client = _mock_bedrock_client(
             [
@@ -640,7 +803,7 @@ class TestBedrockLlmChatClient:
         assert chunks[0].input_tokens == 10
         assert chunks[-1].output_tokens == 5
 
-    async def test_extracts_system_messages_into_system_param(self):
+    async def test_extracts_system_messages_into_system_param(self) -> None:
         """system役割の発話がsystemパラメータへ変換されること"""
         mock_client = _mock_bedrock_client([])
 
@@ -664,7 +827,7 @@ class TestBedrockLlmChatClient:
         assert kwargs["system"] == "丁寧に回答してください"
         assert kwargs["messages"] == [{"role": "user", "content": "こんにちは"}]
 
-    async def test_omits_system_param_when_no_system_message(self):
+    async def test_omits_system_param_when_no_system_message(self) -> None:
         """system役割の発話がない場合systemパラメータを渡さないこと"""
         mock_client = _mock_bedrock_client([])
 
@@ -684,7 +847,7 @@ class TestBedrockLlmChatClient:
         _, kwargs = mock_client.messages.stream.call_args
         assert "system" not in kwargs
 
-    async def test_passes_max_tokens_to_messages_stream(self):
+    async def test_passes_max_tokens_to_messages_stream(self) -> None:
         """渡したmax_tokensがそのままMessages APIへ渡されること"""
         mock_client = _mock_bedrock_client([])
 
@@ -704,17 +867,17 @@ class TestBedrockLlmChatClient:
         _, kwargs = mock_client.messages.stream.call_args
         assert kwargs["max_tokens"] == 8192
 
-    def test_validate_request_raises_when_tools_specified(self):
+    def test_validate_request_raises_when_tools_specified(self) -> None:
         """toolsを指定するとvalidate_requestがValueErrorを送出すること"""
         with pytest.raises(ValueError, match="web_search/mcp"):
             BedrockLlmChatClient.validate_request([ToolConfig(name="web_search")])
 
-    def test_validate_request_accepts_no_tools(self):
+    def test_validate_request_accepts_no_tools(self) -> None:
         """toolsが未指定・空の場合はvalidate_requestが例外を送出しないこと"""
         BedrockLlmChatClient.validate_request(None)
         BedrockLlmChatClient.validate_request([])
 
-    async def test_raises_value_error_when_tools_specified(self):
+    async def test_raises_value_error_when_tools_specified(self) -> None:
         """toolsを指定した場合ValueErrorが送出されること"""
         with pytest.raises(ValueError):
             async for _ in BedrockLlmChatClient.stream_chat(
@@ -728,7 +891,7 @@ class TestBedrockLlmChatClient:
             ):
                 pass
 
-    async def test_converts_openai_image_parts_to_anthropic_format(self):
+    async def test_converts_openai_image_parts_to_anthropic_format(self) -> None:
         """OpenAI形式の画像パート(data URL)がAnthropic形式のimageパートに変換されること"""
         mock_client = _mock_bedrock_client([])
         openai_parts = [
@@ -746,7 +909,7 @@ class TestBedrockLlmChatClient:
                 "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
                 "dummy-api-key",
                 "anthropic.claude-haiku-4-5",
-                [ChatMessage(role="user", content=openai_parts)],
+                [ChatMessage(role="user", content=openai_parts)],  # type: ignore[arg-type]
                 0.4,
                 1024,
             ):
@@ -770,7 +933,7 @@ class TestBedrockLlmChatClient:
             }
         ]
 
-    async def test_raises_for_non_data_url_image(self):
+    async def test_raises_for_non_data_url_image(self) -> None:
         """base64のdata URLでない画像パートの場合はValueErrorになること"""
         mock_client = _mock_bedrock_client([])
         parts = [
@@ -787,13 +950,13 @@ class TestBedrockLlmChatClient:
                 "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
                 "dummy-api-key",
                 "anthropic.claude-haiku-4-5",
-                [ChatMessage(role="user", content=parts)],
+                [ChatMessage(role="user", content=parts)],  # type: ignore[arg-type]
                 0.4,
                 1024,
             ):
                 pass
 
-    async def test_normalizes_role_to_lowercase(self):
+    async def test_normalizes_role_to_lowercase(self) -> None:
         """大文字を含むroleが小文字に正規化されて渡されること"""
         mock_client = _mock_bedrock_client([])
 

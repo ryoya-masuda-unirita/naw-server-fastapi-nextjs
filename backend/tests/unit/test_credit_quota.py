@@ -17,6 +17,18 @@ from app.models.tenant import Tenant
 
 
 def _tenant(max_usage_based_credits_per_month: int = 100) -> Tenant:
+    """テスト用の `Tenant` を組み立てる。
+
+    Parameters
+    ----------
+    max_usage_based_credits_per_month : int
+        月あたりの従量課金クレジット上限。
+
+    Returns
+    -------
+    Tenant
+        未保存のテナント。
+    """
     return Tenant(
         id="tenant-1",
         name="tenant-1",
@@ -26,6 +38,18 @@ def _tenant(max_usage_based_credits_per_month: int = 100) -> Tenant:
 
 
 def _plan(max_credits_per_month: int | None = 1000) -> Plan:
+    """テスト用の `Plan` を組み立てる。
+
+    Parameters
+    ----------
+    max_credits_per_month : int | None
+        月あたりのクレジット上限。
+
+    Returns
+    -------
+    Plan
+        未保存のプラン。
+    """
     return Plan(
         id="plan-1",
         name="plan-1",
@@ -35,6 +59,13 @@ def _plan(max_credits_per_month: int | None = 1000) -> Plan:
 
 
 def _subscription() -> Subscription:
+    """テスト用の `Subscription` を組み立てる。
+
+    Returns
+    -------
+    Subscription
+        有効状態の未保存のサブスクリプション。
+    """
     return Subscription(
         id="sub-1",
         tenant_id="tenant-1",
@@ -44,7 +75,25 @@ def _subscription() -> Subscription:
     )
 
 
-def _summary_row(input_credits=0, output_credits=0, embedding_credits=0) -> MagicMock:
+def _summary_row(
+    input_credits: int = 0, output_credits: int = 0, embedding_credits: int = 0
+) -> MagicMock:
+    """クレジット集計結果の行を模した `MagicMock` を組み立てる。
+
+    Parameters
+    ----------
+    input_credits : int
+        入力クレジットの合計。
+    output_credits : int
+        出力クレジットの合計。
+    embedding_credits : int
+        埋め込みクレジットの合計。
+
+    Returns
+    -------
+    MagicMock
+        各クレジット属性を持つモック。
+    """
     row = MagicMock()
     row.input_credits = input_credits
     row.output_credits = output_credits
@@ -59,24 +108,28 @@ class TestEnforceWithinQuota:
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    async def test_skips_when_no_active_subscription(self, mock_find_active):
+    async def test_skips_when_no_active_subscription(
+        self, mock_find_active: MagicMock
+    ) -> None:
         """有効なサブスクリプションが存在しない場合チェックをスキップすること"""
         mock_find_active.return_value = None
 
-        await enforce_within_quota("tenant-1", session=None)
+        await enforce_within_quota("tenant-1", session=None)  # type: ignore[arg-type]
 
     @patch(
         "app.core.credit_quota.SubscriptionRepository.find_active_by_tenant_id_with_plan",
         new_callable=AsyncMock,
     )
-    async def test_skips_when_plan_has_no_credit_limit(self, mock_find_active):
+    async def test_skips_when_plan_has_no_credit_limit(
+        self, mock_find_active: MagicMock
+    ) -> None:
         """プランのクレジット枠が未設定の場合チェックをスキップすること"""
         mock_find_active.return_value = (
             _subscription(),
             _plan(max_credits_per_month=None),
         )
 
-        await enforce_within_quota("tenant-1", session=None)
+        await enforce_within_quota("tenant-1", session=None)  # type: ignore[arg-type]
 
     @patch(
         "app.core.credit_quota.TokenUsageRepository.summarize", new_callable=AsyncMock
@@ -87,8 +140,11 @@ class TestEnforceWithinQuota:
         new_callable=AsyncMock,
     )
     async def test_passes_when_usage_below_limit(
-        self, mock_find_active, mock_find_tenant, mock_summarize
-    ):
+        self,
+        mock_find_active: MagicMock,
+        mock_find_tenant: MagicMock,
+        mock_summarize: MagicMock,
+    ) -> None:
         """当月利用量が上限未満の場合チェックを通過すること"""
         mock_find_active.return_value = (
             _subscription(),
@@ -97,7 +153,7 @@ class TestEnforceWithinQuota:
         mock_find_tenant.return_value = _tenant(max_usage_based_credits_per_month=0)
         mock_summarize.return_value = _summary_row(input_credits=500)
 
-        await enforce_within_quota("tenant-1", session=None)
+        await enforce_within_quota("tenant-1", session=None)  # type: ignore[arg-type]
 
     @patch(
         "app.core.credit_quota.TokenUsageRepository.summarize", new_callable=AsyncMock
@@ -108,8 +164,11 @@ class TestEnforceWithinQuota:
         new_callable=AsyncMock,
     )
     async def test_raises_429_when_usage_reaches_limit(
-        self, mock_find_active, mock_find_tenant, mock_summarize
-    ):
+        self,
+        mock_find_active: MagicMock,
+        mock_find_tenant: MagicMock,
+        mock_summarize: MagicMock,
+    ) -> None:
         """当月利用量が上限以上の場合429エラーになること"""
         mock_find_active.return_value = (
             _subscription(),
@@ -119,7 +178,7 @@ class TestEnforceWithinQuota:
         mock_summarize.return_value = _summary_row(input_credits=1000)
 
         with pytest.raises(HTTPException) as exc_info:
-            await enforce_within_quota("tenant-1", session=None)
+            await enforce_within_quota("tenant-1", session=None)  # type: ignore[arg-type]
 
         assert exc_info.value.status_code == 429
         assert exc_info.value.detail == CREDIT_QUOTA_EXCEEDED_MESSAGE
@@ -133,8 +192,11 @@ class TestEnforceWithinQuota:
         new_callable=AsyncMock,
     )
     async def test_treats_missing_tenant_as_no_usage_based_limit(
-        self, mock_find_active, mock_find_tenant, mock_summarize
-    ):
+        self,
+        mock_find_active: MagicMock,
+        mock_find_tenant: MagicMock,
+        mock_summarize: MagicMock,
+    ) -> None:
         """テナントが見つからない場合は利用ベース上限0として計算すること"""
         mock_find_active.return_value = (
             _subscription(),
@@ -144,7 +206,7 @@ class TestEnforceWithinQuota:
         mock_summarize.return_value = _summary_row(input_credits=1000)
 
         with pytest.raises(HTTPException) as exc_info:
-            await enforce_within_quota("tenant-1", session=None)
+            await enforce_within_quota("tenant-1", session=None)  # type: ignore[arg-type]
 
         assert exc_info.value.status_code == 429
 
@@ -152,18 +214,18 @@ class TestEnforceWithinQuota:
 class TestIsSortByTotalCredits:
     """is_sort_by_total_credits のテスト（NAW-1172）"""
 
-    def test_true_when_sort_property_is_total_credits(self):
+    def test_true_when_sort_property_is_total_credits(self) -> None:
         """sort=totalCredits,descの場合Trueを返すこと"""
         assert is_sort_by_total_credits(parse_sort("totalCredits,desc")) is True
 
-    def test_true_when_total_credits_is_not_first(self):
+    def test_true_when_total_credits_is_not_first(self) -> None:
         """複数指定の2番目以降にtotalCreditsがあってもTrueを返すこと（移植元のanyMatchと同じ）"""
         assert (
             is_sort_by_total_credits(parse_sort(["name,asc", "totalCredits,desc"]))
             is True
         )
 
-    def test_false_for_other_sort_property(self):
+    def test_false_for_other_sort_property(self) -> None:
         """totalCredits以外のsortの場合Falseを返すこと"""
         assert is_sort_by_total_credits(parse_sort("name,asc")) is False
 
@@ -171,7 +233,7 @@ class TestIsSortByTotalCredits:
 class TestValidateTotalCreditsSort:
     """validate_total_credits_sort のテスト（NAW-1172）"""
 
-    def test_raises_400_when_sort_total_credits_without_include_usage(self):
+    def test_raises_400_when_sort_total_credits_without_include_usage(self) -> None:
         """sort=totalCreditsかつinclude_usage=Falseの場合400を返すこと"""
         with pytest.raises(HTTPException) as exc_info:
             validate_total_credits_sort(parse_sort("totalCredits,desc"), False)
@@ -179,10 +241,10 @@ class TestValidateTotalCreditsSort:
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "sort=totalCredits requires includeUsage=true"
 
-    def test_allows_sort_total_credits_with_include_usage(self):
+    def test_allows_sort_total_credits_with_include_usage(self) -> None:
         """sort=totalCreditsかつinclude_usage=Trueの場合例外にならないこと"""
         validate_total_credits_sort(parse_sort("totalCredits,desc"), True)
 
-    def test_allows_other_sort_without_include_usage(self):
+    def test_allows_other_sort_without_include_usage(self) -> None:
         """totalCredits以外のsortの場合include_usage=Falseでも例外にならないこと"""
         validate_total_credits_sort(parse_sort("name,asc"), False)
