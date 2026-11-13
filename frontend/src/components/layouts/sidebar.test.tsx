@@ -99,7 +99,7 @@ describe('Sidebar', () => {
 
       await user.click(screen.getByText('SIDEBAR.NEW_CHAT'));
 
-      expect(screen.getByRole('dialog', { name: 'NewChatDialogComponent' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'CHAT.WINDOW.CREATE_ROOM_TITLE' })).toBeInTheDocument();
     });
 
     test('チャット検索をクリックするとチャット検索のダイアログが開くこと', async () => {
@@ -305,7 +305,7 @@ describe('Sidebar', () => {
       await user.click(screen.getByRole('button', { name: 'user-menu' }));
       await user.click(screen.getByText('USER_MENU.CHECK_CREDIT'));
 
-      expect(screen.getByRole('dialog', { name: 'UsageDialogComponent' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'USER_MENU.CHECK_CREDIT' })).toBeInTheDocument();
     });
 
     test('ログアウトを確認ダイアログでキャンセルするとログアウトしないこと', async () => {

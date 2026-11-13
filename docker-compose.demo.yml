@@ -1,0 +1,124 @@
+# 手元のブラウザで管理画面を見るためのデモ環境（既存の docker-compose.yml とは別。コンテナ名・ボリュームは naw-demo で分ける）。
+# ホストに公開するのは画面（既定 5173）と backend（既定 8001）だけ。変えるときは DEMO_FRONTEND_PORT・DEMO_BACKEND_PORT。
+name: naw-demo
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://root:root@postgres:5432/postgres
+  SECRET_KEY: demo-secret-not-for-production
+  REDIS_URL: redis://redis:6379/0
+  CORS_ALLOWED_ORIGINS: http://localhost:${DEMO_FRONTEND_PORT:-5173}
+  COOKIE_SECURE: "false"
+  COOKIE_SAME_SITE: lax
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_REGION: ap-northeast-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_S3_BUCKET_NAME: secuaigent-user-import-jobs-dev-local
+  AWS_SQS_QUEUE_URL: http://localstack:4566/000000000000/secuaigent-user-import-jobs-queue-dev-local
+
+services:
+  # backend の DB（PostgreSQL）
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      TZ: Asia/Tokyo
+      PGDATA: /var/lib/postgresql/18/data
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # ログインセッションの保存先
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # AWS（S3・SQS）の偽物。ユーザーの一括登録で使う
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: s3,sqs
+      DEFAULT_REGION: ap-northeast-1
+    volumes:
+      - ./docker-compose/localstack-init:/etc/localstack/init/ready.d
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  # DB のテーブルを作る（alembic のマイグレーション）
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: naw-demo-backend
+    environment: *backend-env
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 初期データ（ログイン用のテナント・ユーザーとデモデータ）を入れる
+  seed:
+    image: postgres:18
+    environment:
+      PGPASSWORD: root
+    volumes:
+      - ./backend/seed.sql:/seed/seed.sql:ro
+      - ./backend/seed-demo.sql:/seed/seed-demo.sql:ro
+    command: ["sh", "-c", "psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed.sql && psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed-demo.sql"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # FastAPI の backend
+  backend:
+    image: naw-demo-backend
+    environment: *backend-env
+    ports:
+      - "127.0.0.1:${DEMO_BACKEND_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+  # React の画面（Vite の開発サーバー）
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      # ブラウザ（ホスト）から見た backend の URL
+      VITE_API_URL: http://localhost:${DEMO_BACKEND_PORT:-8001}
+    ports:
+      - "127.0.0.1:${DEMO_FRONTEND_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

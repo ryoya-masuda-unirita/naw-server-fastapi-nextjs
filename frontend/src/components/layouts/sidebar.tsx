@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type UIEvent } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
+import { ChatRenameDialog } from '@/components/features/chat/chat-rename-dialog';
+import { CircularLoading } from '@/components/shared/circular-loading';
 import { Dialog } from '@/components/shared/dialog';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import { ChatSearchModal } from '@/components/features/chat/chat-search-modal';
@@ -9,10 +11,16 @@ import { NewChatDialog } from '@/components/features/chat/new-chat-dialog';
 import { SIDEBAR_ITEM_HEIGHT_PX } from '@/lib/constants/layout';
 import { ROUTES } from '@/lib/constants/routes';
 import { useAuthStore } from '@/store/auth-store';
+import { useChatStore } from '@/store/chat-store';
+import { useRoomsStore } from '@/store/rooms-store';
 import { useUiStore } from '@/store/ui-store';
 import type { ActionItem, LayoutConfig, SectionGroup, UserMenuAction } from '@/types/layout';
 import { AdminSidebar } from './sidebar/admin-sidebar';
 import { BackSidebar } from './sidebar/back-sidebar';
+import { ChatContextMenu } from './sidebar/chat-context-menu';
+import { ChatDeleteDialog } from './sidebar/chat-delete-dialog';
+import { ChatRoomMenu } from './sidebar/chat-room-menu';
+import { ChatSortDialog } from './sidebar/chat-sort-dialog';
 import { SidebarHeaderSection } from './sidebar/sidebar-header-section';
 import { SidebarRouteButton } from './sidebar/sidebar-route-button';
 import { UserMenu } from './sidebar/user-menu';
@@ -23,7 +31,29 @@ interface SidebarProps {
   config: LayoutConfig;
 }
 
-type SidebarDialog = 'new-chat' | 'chat-search' | 'usage' | null;
+type SidebarDialog = 'new-chat' | 'chat-search' | 'usage' | 'chat-delete' | 'chat-sort' | null;
+
+interface RoomMenuState {
+  isOpen: boolean;
+  roomId: string | null;
+  topPx: number;
+  triggerTopPx: number;
+  isPinned: boolean;
+}
+
+const CLOSED_ROOM_MENU: RoomMenuState = {
+  isOpen: false,
+  roomId: null,
+  topPx: 0,
+  triggerTopPx: 0,
+  isPinned: false,
+};
+
+const CHAT_SECTION_LABEL_KEY = 'SIDEBAR.CHAT';
+/** メニューの top をボタンの下端からどれだけ下げるか（移植元 rect.bottom + 4） */
+const MENU_OFFSET_PX = 4;
+/** ルーム一覧の末尾までこの距離に近づいたら次のページを読む（移植元 onSidebarScroll） */
+const LOAD_NEXT_THRESHOLD_PX = 80;
 
 const RANABASE_LABEL_KEY = 'SIDEBAR.RANABASE';
 
@@ -44,6 +74,14 @@ export function Sidebar({ config }: SidebarProps) {
     config.sectionGroups.map((section) => ({ ...section }))
   );
   const [openDialog, setOpenDialog] = useState<SidebarDialog>(null);
+  const [chatMenu, setChatMenu] = useState({ isOpen: false, topPx: 0 });
+  const [roomMenu, setRoomMenu] = useState<RoomMenuState>(CLOSED_ROOM_MENU);
+  const [renameRoomId, setRenameRoomId] = useState<string | null>(null);
+  const [deleteRoomId, setDeleteRoomId] = useState<string | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const allRooms = useRoomsStore((s) => s.allRooms);
+  const isRoomsLoading = useRoomsStore((s) => s.isAllRoomsLoading);
+  const isRenamingRoom = useRoomsStore((s) => s.isRenamingRoom);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const mode = resolveSidebarMode(pathname, config);
@@ -68,6 +106,33 @@ export function Sidebar({ config }: SidebarProps) {
     }
   }, [pathname, config, closeMobileSidebar, queryClient]);
 
+  // 移植元はコンストラクタで一覧の 1 ページ目を読む
+  useEffect(() => {
+    useRoomsStore
+      .getState()
+      .getAllRooms()
+      .catch((error: unknown) => {
+        console.error('Load rooms failed', error);
+      });
+  }, []);
+
+  // チャットのセクションはいつも開いている（移植元の chatSectionCollapsed は切り替える手段がない）
+  const chatSection = useMemo<SectionGroup>(
+    () => ({
+      labelKey: CHAT_SECTION_LABEL_KEY,
+      collapsed: false,
+      items: allRooms.map((room) => ({
+        labelKey: room.name,
+        route: config.chatRoomRoute(room.id),
+        hasPin: room.isPinned,
+        hasMenu: true,
+        roomId: room.id,
+      })),
+    }),
+    [allRooms, config]
+  );
+  const allSectionGroups = [...sectionGroups, chatSection];
+
   const toggleSection = (sectionIndex: number) => {
     setSectionGroups((sections) =>
       sections.map((section, index) =>
@@ -78,7 +143,88 @@ export function Sidebar({ config }: SidebarProps) {
 
   const getSectionHeight = (section: SectionGroup): string => {
     const isExpanded = !section.collapsed || sidebarCollapsed;
-    return isExpanded ? `${section.items.length * SIDEBAR_ITEM_HEIGHT_PX}px` : '0';
+    const loadingHeight = showsRoomsLoading(section) ? SIDEBAR_ITEM_HEIGHT_PX : 0;
+    return isExpanded ? `${section.items.length * SIDEBAR_ITEM_HEIGHT_PX + loadingHeight}px` : '0';
+  };
+
+  const showsRoomsLoading = (section: SectionGroup): boolean =>
+    section.labelKey === CHAT_SECTION_LABEL_KEY && isRoomsLoading && !sidebarCollapsed;
+
+  const onSidebarScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (sidebarCollapsed) return;
+    const target = event.currentTarget;
+    const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceToBottom > LOAD_NEXT_THRESHOLD_PX) return;
+
+    useRoomsStore
+      .getState()
+      .loadNextRoomsPage()
+      .catch((error: unknown) => {
+        console.error('Load next rooms page failed', error);
+      });
+  };
+
+  const openRoomMenu = (event: MouseEvent<HTMLElement>, roomId: string, isPinned: boolean) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRoomMenu({
+      isOpen: true,
+      roomId,
+      topPx: rect.bottom + MENU_OFFSET_PX,
+      triggerTopPx: rect.top,
+      isPinned,
+    });
+  };
+
+  const closeRoomMenu = () => setRoomMenu((state) => ({ ...state, isOpen: false }));
+
+  const onTogglePinRoom = () => {
+    const { roomId, isPinned } = roomMenu;
+    if (!roomId) return;
+    useRoomsStore
+      .getState()
+      .togglePinRoom({ id: roomId, isPinned })
+      .catch((error: unknown) => {
+        console.error('Toggle pin room failed', error);
+      });
+  };
+
+  // 表示中のルームを消したら、新規チャットへ移る（移植元 handleDeletedRooms）
+  const handleDeletedRooms = (roomIds: string[]) => {
+    const currentPath = normalizePath(pathname);
+    const isCurrentRoomDeleted = roomIds.some(
+      (roomId) => currentPath === normalizePath(config.chatRoomRoute(roomId))
+    );
+    if (!isCurrentRoomDeleted) return;
+
+    useChatStore.getState().startNewChat();
+    navigate(config.chatNewRoute);
+  };
+
+  const submitRename = async (name: string) => {
+    if (!renameRoomId) return;
+    try {
+      await useRoomsStore.getState().renameRoom(renameRoomId, name);
+      setRenameRoomId(null);
+    } catch (error) {
+      // 失敗したらダイアログを開いたままにする（エラートーストは api-client が出す）
+      console.error('Rename room failed', error);
+    }
+  };
+
+  const confirmDeleteRoom = async () => {
+    if (!deleteRoomId) return;
+    setIsDeletingRoom(true);
+    try {
+      await useRoomsStore.getState().deleteRoom(deleteRoomId);
+      handleDeletedRooms([deleteRoomId]);
+      setDeleteRoomId(null);
+    } catch (error) {
+      console.error('Delete room failed', error);
+    } finally {
+      setIsDeletingRoom(false);
+    }
   };
 
   const onActionItemClick = (item: ActionItem) => {
@@ -226,13 +372,13 @@ export function Sidebar({ config }: SidebarProps) {
               </div>
             </div>
 
-            {/* ルーム一覧（チャットのセクション・スクロールでの追加読み込み）は #285 でここに足す */}
             <div
+              onScroll={onSidebarScroll}
               className={`sidebar-scroll flex-1 overflow-x-hidden overflow-y-auto ${
                 sidebarCollapsed ? 'px-2' : 'px-3'
               }`}
             >
-              {sectionGroups.map((section, sectionIndex) => (
+              {allSectionGroups.map((section, sectionIndex) => (
                 <div key={section.labelKey} className="mb-6">
                   <SidebarHeaderSection
                     section={section}
@@ -242,7 +388,12 @@ export function Sidebar({ config }: SidebarProps) {
 
                   <div
                     className="overflow-hidden transition-all duration-300 ease-in-out"
-                    style={{ height: getSectionHeight(section) }}
+                    style={{
+                      height:
+                        section.labelKey === CHAT_SECTION_LABEL_KEY && sidebarCollapsed
+                          ? '0px'
+                          : getSectionHeight(section),
+                    }}
                   >
                     {section.items.map((item) =>
                       item.labelKey === RANABASE_LABEL_KEY ? (
@@ -277,14 +428,45 @@ export function Sidebar({ config }: SidebarProps) {
                             key={item.roomId ?? item.labelKey}
                             item={{ ...item, route: item.route }}
                             sidebarCollapsed={sidebarCollapsed}
+                            onRoomMenuOpen={openRoomMenu}
                           />
                         )
                       )
+                    )}
+                    {showsRoomsLoading(section) && (
+                      <div className="flex h-9 items-center justify-center">
+                        <CircularLoading className="[&_svg]:h-5 [&_svg]:w-5" />
+                      </div>
                     )}
                   </div>
                 </div>
               ))}
             </div>
+          </>
+        )}
+
+        {!isBackMode && (
+          <>
+            {/* 「選択して削除」メニュー。移植元でも開くボタンがどこにもない（openChatMenu を呼ぶ箇所がない） */}
+            <ChatContextMenu
+              isOpen={chatMenu.isOpen}
+              chatMenuTopPx={chatMenu.topPx}
+              onDeleteSelected={() => {
+                setChatMenu((state) => ({ ...state, isOpen: false }));
+                setOpenDialog('chat-delete');
+              }}
+              onClose={() => setChatMenu((state) => ({ ...state, isOpen: false }))}
+            />
+            <ChatRoomMenu
+              isOpen={roomMenu.isOpen}
+              isPinned={roomMenu.isPinned}
+              topPx={roomMenu.topPx}
+              triggerTopPx={roomMenu.triggerTopPx}
+              onRename={() => setRenameRoomId(roomMenu.roomId)}
+              onTogglePin={onTogglePinRoom}
+              onDelete={() => setDeleteRoomId(roomMenu.roomId)}
+              onClose={closeRoomMenu}
+            />
           </>
         )}
 
@@ -316,6 +498,45 @@ export function Sidebar({ config }: SidebarProps) {
       <NewChatDialog open={openDialog === 'new-chat'} onClose={closeDialog} />
       <ChatSearchModal open={openDialog === 'chat-search'} onClose={closeDialog} />
       <UsageDialog open={openDialog === 'usage'} onClose={closeDialog} />
+      {openDialog === 'chat-delete' && (
+        <ChatDeleteDialog
+          onClose={(deletedRoomIds) => {
+            closeDialog();
+            if (deletedRoomIds?.length) handleDeletedRooms(deletedRoomIds);
+          }}
+        />
+      )}
+      {/* 移植元でも openSortDialog を呼ぶ箇所がない。部品だけ移してある */}
+      {openDialog === 'chat-sort' && <ChatSortDialog onClose={closeDialog} />}
+      {renameRoomId && (
+        <ChatRenameDialog
+          initialName={allRooms.find((room) => room.id === renameRoomId)?.name ?? ''}
+          title={t('SIDEBAR.RENAME_CHAT')}
+          cancelText={t('SIDEBAR.CANCEL')}
+          confirmText={t('SIDEBAR.SAVE')}
+          confirmLoading={isRenamingRoom}
+          onSave={(name) => void submitRename(name)}
+          onCancel={() => setRenameRoomId(null)}
+        />
+      )}
+      {/* 移植元 openConfirmDeleteDialog と同じ指定 */}
+      <Dialog
+        open={deleteRoomId !== null}
+        title={t('SIDEBAR.DELETE_DIALOG.CONFIRM_TITLE')}
+        message={t('SIDEBAR.DELETE_DIALOG.CONFIRM_DESC')}
+        cancelText={t('COMMON.CANCEL')}
+        confirmText={t('COMMON.DELETE')}
+        showCancel
+        showConfirm
+        confirmDanger
+        confirmIcon="delete"
+        confirmLoading={isDeletingRoom}
+        buttonAlign="center"
+        dialogWidth="800px"
+        onConfirm={() => void confirmDeleteRoom()}
+        onCancel={() => setDeleteRoomId(null)}
+        onClose={() => setDeleteRoomId(null)}
+      />
       {/* 移植元 openLogoutConfirmDialog と同じ指定 */}
       <Dialog
         open={logoutConfirmOpen}

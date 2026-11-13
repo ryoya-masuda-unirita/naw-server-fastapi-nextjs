@@ -1,0 +1,81 @@
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { useChatStore } from '@/store/chat-store';
+import { useRoomsStore } from '@/store/rooms-store';
+import type { Message } from '@/types/chat/message.type';
+import { ChatWindow } from './chat-window';
+
+const FIXTURE_MESSAGES: Message[] = [
+  { id: 'm1', messageId: 'm1', role: 'user', status: 'OK', question: '質問A', answer: '', context: '', isRated: false },
+];
+
+function renderWindow(props: Partial<React.ComponentProps<typeof ChatWindow>> = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <ChatWindow messages={FIXTURE_MESSAGES} roomId="r1" {...props} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+const originalInnerWidth = window.innerWidth;
+
+beforeEach(() => {
+  useRoomsStore.setState({
+    allRooms: [{ id: 'r1', name: '部屋1', isPinned: false, category: 'chat' }],
+  });
+  useChatStore.setState({ activeRoomId: 'r1' });
+});
+
+afterEach(() => {
+  useRoomsStore.getState().reset();
+  useChatStore.setState({ activeRoomId: null });
+  Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true });
+});
+
+describe('ChatWindow', () => {
+  test('メッセージ・ヘッダー・入力欄を出すこと', async () => {
+    renderWindow();
+
+    expect(screen.getByText('質問A')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '部屋1' })).toBeInTheDocument();
+    expect(screen.getByTestId('chat-input-textarea')).toBeInTheDocument();
+  });
+
+  test('読み取り専用では入力欄を出さないこと', () => {
+    renderWindow({ isReadOnly: true });
+
+    expect(screen.queryByTestId('chat-input-textarea')).not.toBeInTheDocument();
+  });
+
+  test('showHeader が false のときはルーム名を隠すこと', () => {
+    const { container } = renderWindow({ showHeader: false });
+
+    expect(container.querySelector('.chat-page-header')).toHaveClass('hidden');
+  });
+
+  test('モバイルではメニューからビューワーを開き、背景を押すと閉じること', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    renderWindow({ renderViewer: ({ roomId }) => <div>viewer-{roomId}</div> });
+    const user = userEvent.setup();
+
+    expect(screen.queryByText('viewer-r1')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'HEADER.MORE' }));
+    await user.click(screen.getByRole('menuitem', { name: /HEADER.OPEN_VIEWER/ }));
+    expect(screen.getByText('viewer-r1')).toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    await user.click(screen.getByRole('dialog', { name: 'CHAT.VIEWER.TITLE' }).firstElementChild as HTMLElement);
+
+    expect(screen.queryByText('viewer-r1')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('');
+  });
+});

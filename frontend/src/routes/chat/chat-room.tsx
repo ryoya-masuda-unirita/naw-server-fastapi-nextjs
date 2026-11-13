@@ -1,7 +1,57 @@
-import { NotPortedPage } from '@/components/layouts/not-ported';
+import { useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { ChatDataPanel } from '@/components/features/chat/chat-data-panel';
+import { ChatWindow } from '@/components/features/chat/chat-window';
+import { Loading } from '@/components/shared/loading';
+import { takePendingMessage } from '@/lib/chat/pending-message';
+import { useChatStore } from '@/store/chat-store';
+import { useMessagesStore, useVisibleMessages } from '@/store/messages-store';
 
-// 仮の画面。#284 で移植元 features/admin/chat-room を移植し、このファイルの中身を本物に置き換える（export 名は変えない）。
-// ルート定義（routes/index.tsx）・ルート定数・サイドバーは設定済みのため触らなくてよい
+/**
+ * `/chat/:roomId` のチャットルーム画面（移植元 features/admin/chat-room の AdminChatRoomComponent）。
+ * 新規チャットから移ってきたときは、預かった最初のメッセージを送る（メッセージは読み込まない）。
+ * それ以外はルームのメッセージを読み込む。回答が 1 つでもあれば右にビューワーの枠を出す。
+ *
+ * 送信中に別のルームへ移ったときは、移植元と同じく送信を止めない。メッセージ一覧は移動先のものに入れ替わり、
+ * 送信中だったメッセージの更新は画面に反映されない（サーバー側では完了する）。
+ */
 export function AdminChatRoomPage() {
-  return <NotPortedPage name="AdminChatRoomComponent" issue={284} />;
+  const { roomId = null } = useParams<{ roomId: string }>();
+  const messages = useVisibleMessages();
+  const isLoading = useMessagesStore((s) => s.isLoading);
+  // StrictMode の effect の二重実行で、預かったメッセージを送ったあとに読み込みまで走らないようにする
+  const handledRoomId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!roomId || handledRoomId.current === roomId) return;
+    handledRoomId.current = roomId;
+
+    useChatStore.getState().setActiveRoomId(roomId);
+    const pending = takePendingMessage(roomId);
+    if (pending) {
+      void useMessagesStore
+        .getState()
+        .sendMessage(pending.content, pending.files, roomId, [], pending.options);
+    } else {
+      void useMessagesStore.getState().loadMessagesForRoom(roomId, true);
+    }
+  }, [roomId]);
+
+  // ライブラリ生成中の表示条件（移植元の `isLibraryStreaming && streamingRoomId === roomId`）は、ビューワー（#288）が足す
+  const showViewer = messages.some((message) => message.role === 'assistant');
+
+  return (
+    <div className="flex h-screen! overflow-hidden bg-white w-full">
+      {isLoading ? (
+        <div className="chat-main">
+          <Loading />
+        </div>
+      ) : (
+        <>
+          <ChatWindow isLoading={isLoading} roomId={roomId} messages={messages} />
+          {showViewer && <ChatDataPanel roomId={roomId} />}
+        </>
+      )}
+    </div>
+  );
 }
