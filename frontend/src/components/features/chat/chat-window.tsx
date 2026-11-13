@@ -12,8 +12,10 @@ import { useMessagesStore } from '@/store/messages-store';
 import { useRoomsStore } from '@/store/rooms-store';
 import type { Message } from '@/types/chat/message.type';
 import type { ChatDataPanel } from './chat-data-panel';
+import { ChatAssistantExam } from './chat-assistant-exam';
 import { ChatHeader } from './chat-header';
 import { ChatInput } from './chat-input';
+import { CHAT_INPUT_SLOTS } from './chat-input-slots';
 import { ChatMessageList } from './chat-message-list';
 import { ChatRenameDialog } from './chat-rename-dialog';
 import type { RatingDirection } from './chat-message-item';
@@ -38,6 +40,8 @@ interface ChatWindowProps {
   roomId?: string | null;
   showHeader?: boolean;
   isReadOnly?: boolean;
+  /** アシスタント試験画面（`/chat/assistant`）。メッセージ一覧の代わりに回答の見本を出し、ヘッダーのルーム名を隠す */
+  isChatExamList?: boolean;
   /** ヘッダーの「共有」（共有ダイアログは #287） */
   onShareClick?: () => void;
   /** ヘッダーの「評価」（評価ダイアログは #287） */
@@ -55,6 +59,7 @@ export function ChatWindow({
   roomId = null,
   showHeader = true,
   isReadOnly = false,
+  isChatExamList = false,
   onShareClick,
   onLikeClick,
   inputSlots,
@@ -157,7 +162,7 @@ export function ChatWindow({
         // ルームがないときのタイトルは非表示だが、移植元が日本語をハードコードしているのでそのまま移す
         title={activeRoom ? activeRoom.name : '受信メッセージパターン'}
         isReadOnly={isReadOnly}
-        isHideName={!(showHeader && !!activeRoom)}
+        isHideName={!(showHeader && !!activeRoom) || isChatExamList}
         onRenameClick={() => {
           if (activeRoom) setIsRenameOpen(true);
         }}
@@ -166,23 +171,30 @@ export function ChatWindow({
         onSettingsClick={() => setShowDataPanel((show) => !show)}
       />
 
-      <ChatMessageList
-        messages={messages}
-        isLoading={isLoading}
-        isReadOnly={isReadOnly}
-        isNewChat={!activeRoom}
-        assistantDescription={assistantDescription}
-        onRegenerate={(messageId) => void useMessagesStore.getState().regenerateMessage(messageId)}
-        onDelete={(messageId) => void useMessagesStore.getState().deleteMessage(messageId)}
-        onRate={handleRate}
-        onEditSubmit={handleEditSubmit}
-      />
+      {isChatExamList ? (
+        <div className="chat-page-messages">
+          <ChatAssistantExam />
+        </div>
+      ) : (
+        <ChatMessageList
+          messages={messages}
+          isLoading={isLoading}
+          isReadOnly={isReadOnly}
+          isNewChat={!activeRoom}
+          assistantDescription={assistantDescription}
+          onRegenerate={(messageId) => void useMessagesStore.getState().regenerateMessage(messageId)}
+          onDelete={(messageId) => void useMessagesStore.getState().deleteMessage(messageId)}
+          onRate={handleRate}
+          onEditSubmit={handleEditSubmit}
+        />
+      )}
 
       {!isReadOnly && (
         <ChatInput
           roomId={roomId ?? activeRoom?.id ?? null}
           defaultAssistantId={activeRoom?.defaultAssistantId ?? null}
           onSend={(data) => void handleSend(data)}
+          {...CHAT_INPUT_SLOTS}
           {...inputSlots}
         />
       )}

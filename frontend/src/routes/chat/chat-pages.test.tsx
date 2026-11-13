@@ -173,7 +173,9 @@ describe('チャットルーム画面（/chat/:roomId）', () => {
     renderApp('/chat/r1');
 
     expect(await screen.findByText('CHAT.EMPTY.TITLE')).toBeInTheDocument();
-    expect(await screen.findByText('一般的な質問に答えます')).toBeInTheDocument();
+    // 同じ説明がアシスタント選択の一覧（閉じている）にもあるため、一覧の外にあるものを見る
+    const descriptions = await screen.findAllByText('一般的な質問に答えます');
+    expect(descriptions.some((element) => !element.closest('[role="listbox"]'))).toBe(true);
     expect(screen.queryByRole('complementary', { name: 'ビューワー' })).not.toBeInTheDocument();
   });
 
