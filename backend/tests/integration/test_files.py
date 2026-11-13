@@ -218,7 +218,7 @@ class TestFilesRouter:
             body = response.json()
             assert body["fileName"] == "sample.txt"
             assert body["displayName"] == "サンプル"
-            assert body["status"] == FileStatus.ENABLE.value
+            assert body["status"] == FileStatus.ENABLE.name
             assert body["indexId"] == files_index.id
             assert body["storageUrl"] is not None
 
@@ -751,7 +751,7 @@ class TestFilesRouter:
             body = response.json()
             assert body["displayName"] == "クエリで更新"
             assert body["reference"] == "new-ref"
-            assert body["status"] == FileStatus.DISABLE.value
+            assert body["status"] == FileStatus.DISABLE.name
 
     class TestDelete:
         async def test_soft_delete_marks_status_deleted(
@@ -1027,8 +1027,8 @@ class TestFilesRouter:
 
             asc_statuses = [item["status"] for item in asc_response.json()["content"]]
             desc_statuses = [item["status"] for item in desc_response.json()["content"]]
-            assert asc_statuses == [FileStatus.ENABLE, FileStatus.DISABLE]
-            assert desc_statuses == [FileStatus.DISABLE, FileStatus.ENABLE]
+            assert asc_statuses == [FileStatus.ENABLE.name, FileStatus.DISABLE.name]
+            assert desc_statuses == [FileStatus.DISABLE.name, FileStatus.ENABLE.name]
 
 
 # SQLiteでは型名`UUID`の列がNUMERIC親和性になり、数字のみのUUIDは整数に変換されて

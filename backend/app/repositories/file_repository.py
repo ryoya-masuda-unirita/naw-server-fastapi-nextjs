@@ -21,6 +21,44 @@ _ORDER_BY_COLUMNS: dict[str, InstrumentedAttribute] = {
 
 
 class FileRepository:
+    """ファイルのDBアクセス。"""
+
+    @staticmethod
+    async def find_latest_index_ids_by_room_ids(
+        tenant_id: str, room_ids: Sequence[str], session: AsyncSession
+    ) -> dict[str, str]:
+        """ルームごとに、紐づくファイルのうち最新のもののインデックスIDを1クエリで取得する。
+
+        移植元は `DISTINCT ON (room_id) ... ORDER BY room_id, created_at DESC` で取る。
+        SQLite でも動くよう、並べ替えた結果の先頭だけをPython側で採用する。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        room_ids : Sequence[str]
+            対象のルームID一覧。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        dict[str, str]
+            ルームID -> インデックスID。ファイルが無いルームは含まれない。
+        """
+        if not room_ids:
+            return {}
+        stmt = (
+            select(File.room_id, File.index_id)
+            .where(File.tenant_id == tenant_id, File.room_id.in_(room_ids))
+            .order_by(File.room_id, File.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        latest: dict[str, str] = {}
+        for room_id, index_id in result.all():
+            latest.setdefault(room_id, index_id)
+        return latest
+
     @staticmethod
     async def find_by_id_and_tenant_id(
         file_id: str, tenant_id: str, session: AsyncSession

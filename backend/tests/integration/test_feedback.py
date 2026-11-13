@@ -4,7 +4,13 @@ import pytest
 
 from app.core.security import create_access_token
 from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+from app.models.file import File, FileStatus
 from app.models.group import Group, GroupUser
+from app.models.index import Index, IndexType
 from app.models.message import (
     Message,
     MessageContent,
@@ -447,6 +453,7 @@ class TestFeedbackRouter:
             )
 
             assert responded_item["isResponded"] is True
+            assert responded_item["responded"] is True
             assert responded_item["feedbackMessageCount"] == 1
             assert responded_item["feedbackRoomCount"] == {
                 "excellent": 1,
@@ -476,6 +483,7 @@ class TestFeedbackRouter:
             )
 
             assert unresponded_item["isResponded"] is False
+            assert unresponded_item["responded"] is False
             assert unresponded_item["feedbackMessageCount"] == 0
             assert unresponded_item["feedbackRoomCount"] == {
                 "excellent": 0,
@@ -802,6 +810,55 @@ class TestFeedbackRouter:
             assert response.status_code == 200
 
     class TestGetFeedbackRooms:
+        async def test_returns_latest_index_id_of_room_files(
+            self, client, session, feedback_tenant, admin_headers, feedback_dataset
+        ):
+            """feedbackRoom の indexId がルームに紐づく最新ファイルのインデックスIDになること（Issue #309）"""
+            room = (
+                (
+                    await session.execute(
+                        select(Room).where(Room.name == "Responded Good")
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            old_index = Index(
+                tenant_id=feedback_tenant.id, type=IndexType.SAAS_GLOBAL, name="old"
+            )
+            new_index = Index(
+                tenant_id=feedback_tenant.id, type=IndexType.SAAS_GLOBAL, name="new"
+            )
+            session.add_all([old_index, new_index])
+            await session.commit()
+            now = datetime.now(timezone.utc)
+            for index, created_at in (
+                (old_index, now - timedelta(days=1)),
+                (new_index, now),
+            ):
+                session.add(
+                    File(
+                        tenant_id=feedback_tenant.id,
+                        name=f"{index.name}.txt",
+                        status=FileStatus.ENABLE,
+                        user_id=room.user_id,
+                        index_id=index.id,
+                        room_id=room.id,
+                        created_at=created_at,
+                    )
+                )
+            await session.commit()
+
+            async with client as c:
+                response = await c.get("/api/admin/feedbackRoom", headers=admin_headers)
+
+            items = {
+                item["room"]["name"]: item
+                for item in response.json()["feedbacks"]["content"]
+            }
+            assert items["Responded Good"]["indexId"] == new_index.id
+            assert items["Responded Excellent"]["indexId"] is None
+
         async def test_excludes_unrated_rooms(
             self, client, admin_headers, feedback_dataset
         ):

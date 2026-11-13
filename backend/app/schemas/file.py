@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Form, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, PlainSerializer
 
 from app.models.file import FileStatus
 
@@ -16,7 +16,8 @@ class FileResponse(BaseModel):
     fileName: str
     displayName: str | None
     reference: str | None
-    status: FileStatus
+    # 移植元は enum の名前（ENABLE・DISABLE・DELETED）で返す。DB は序数で保存する。
+    status: Annotated[FileStatus, PlainSerializer(lambda s: s.name, return_type=str)]
     userId: UUID
     indexId: str
     storageUrl: str | None

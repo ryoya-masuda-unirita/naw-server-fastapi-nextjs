@@ -83,7 +83,15 @@ class FeedbackRoomCount(BaseModel):
 
 
 class FeedbackUserItemResponse(BaseModel):
+    """ユーザー別フィードバック集計の1件分。
+
+    移植元 `FeedbackUserResponse` は Lombok の `isResponded` から `responded` として
+    出力する。React の型（移植元 client の複製）は `isResponded` を読むため、
+    互換のため両方を同じ値で返す。
+    """
+
     user: FeedbackUserInfo
+    responded: bool
     isResponded: bool
     feedbackMessageCount: int
     feedbackRoomCount: FeedbackRoomCount
@@ -210,6 +218,8 @@ class RoomInfoResponse(BaseModel):
 
 
 class FeedbackRoomItemResponse(BaseModel):
+    """ルーム評価1件分（移植元 `FeedbackRoomResponse`）。"""
+
     id: str
     tenantId: str
     userId: str
@@ -217,6 +227,8 @@ class FeedbackRoomItemResponse(BaseModel):
     roomId: str
     room: RoomInfoResponse
     rating: RoomRating
+    # ルームに紐づくファイルのうち最新のもののインデックスID。無ければ null。
+    indexId: str | None
     createdAt: datetime
     updatedAt: datetime
 
