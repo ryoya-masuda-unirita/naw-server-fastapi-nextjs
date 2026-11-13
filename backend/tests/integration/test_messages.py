@@ -38,6 +38,18 @@ from app.repositories.assistant_endpoint_repository import AssistantEndpointRepo
 
 
 def _tenant(tenant_id: str) -> Tenant:
+    """テスト用のテナントを作る
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID（名前にも同じ値を使う）
+
+    Returns
+    -------
+    Tenant
+        パスワードポリシーを設定した未保存のテナント
+    """
     return Tenant(
         id=tenant_id,
         name=tenant_id,
@@ -55,6 +67,7 @@ def _tenant(tenant_id: str) -> Tenant:
 
 @pytest.fixture
 async def messages_tenant(session):
+    """テスト用テナント"""
     tenant = _tenant("tenant-messages-test")
     session.add(tenant)
     await session.commit()
@@ -64,6 +77,7 @@ async def messages_tenant(session):
 
 @pytest.fixture
 async def other_tenant(session):
+    """別テナント（テナント分離の確認用）"""
     tenant = _tenant("tenant-messages-other")
     session.add(tenant)
     await session.commit()
@@ -73,6 +87,7 @@ async def other_tenant(session):
 
 @pytest.fixture
 async def message_owner_user(session, messages_tenant):
+    """メッセージを所有するユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=messages_tenant.id,
@@ -89,6 +104,7 @@ async def message_owner_user(session, messages_tenant):
 
 @pytest.fixture
 async def other_user_same_tenant(session, messages_tenant):
+    """同じテナントの別ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=messages_tenant.id,
@@ -105,6 +121,7 @@ async def other_user_same_tenant(session, messages_tenant):
 
 @pytest.fixture
 async def message_assistant(session, messages_tenant):
+    """メッセージ送信先のアシスタント"""
     assistant = Assistant(
         tenant_id=messages_tenant.id,
         type=AssistantType.SAAS_CHAT,
@@ -153,6 +170,7 @@ async def message_chat_endpoint(session, messages_tenant, message_assistant):
 
 @pytest.fixture
 async def owned_room(session, messages_tenant, message_owner_user, message_assistant):
+    """ユーザー自身のルーム"""
     room = Room(
         tenant_id=messages_tenant.id,
         name="Owner Room",
@@ -169,6 +187,7 @@ async def owned_room(session, messages_tenant, message_owner_user, message_assis
 async def other_users_room(
     session, messages_tenant, other_user_same_tenant, message_assistant
 ):
+    """別ユーザーのルーム"""
     room = Room(
         tenant_id=messages_tenant.id,
         name="Other User Room",
@@ -183,6 +202,7 @@ async def other_users_room(
 
 @pytest.fixture
 async def owned_message(session, messages_tenant, owned_room, message_assistant):
+    """ユーザー自身のメッセージ"""
     message = Message(
         tenant_id=messages_tenant.id,
         room_id=owned_room.id,
@@ -198,6 +218,7 @@ async def owned_message(session, messages_tenant, owned_room, message_assistant)
 async def other_users_message(
     session, messages_tenant, other_users_room, message_assistant
 ):
+    """別ユーザーのメッセージ"""
     message = Message(
         tenant_id=messages_tenant.id,
         room_id=other_users_room.id,
@@ -249,6 +270,7 @@ async def shared_room_share(session, messages_tenant, owned_room, share_target_g
 
 @pytest.fixture
 async def owned_message_content(session, messages_tenant, owned_message):
+    """ユーザー自身のメッセージコンテンツ"""
     content = MessageContent(
         tenant_id=messages_tenant.id,
         message_id=owned_message.id,
@@ -275,6 +297,7 @@ async def owned_message_content(session, messages_tenant, owned_message):
 
 @pytest.fixture
 async def other_users_message_content(session, messages_tenant, other_users_message):
+    """別ユーザーのメッセージコンテンツ"""
     content = MessageContent(
         tenant_id=messages_tenant.id,
         message_id=other_users_message.id,
@@ -289,22 +312,39 @@ async def other_users_message_content(session, messages_tenant, other_users_mess
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証済みリクエスト用のヘッダーを作る
+
+    Parameters
+    ----------
+    login_id : str
+        アクセストークンの対象ユーザーのログインID
+    tenant_id : str
+        テナントID（トークンと X-Tenant-ID ヘッダーに使う）
+
+    Returns
+    -------
+    dict[str, str]
+        Authorization と X-Tenant-ID を含むヘッダー
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 def owner_headers(message_owner_user, messages_tenant):
+    """メッセージ所有者の認証ヘッダー"""
     return _headers(message_owner_user.login_id, messages_tenant.id)
 
 
 @pytest.fixture
 def other_user_headers(other_user_same_tenant, messages_tenant):
+    """別ユーザーの認証ヘッダー"""
     return _headers(other_user_same_tenant.login_id, messages_tenant.id)
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -318,12 +358,18 @@ def _content_form(
     移植元クライアント(secuaigent/client)の`buildMessageContentFormData`と同じく、`textData`を
     `application/json`のBlob（ファイル名`blob`）として送る。
 
-    Args:
-        text_data: `textData`パートに入れるリクエスト本体。
-        attachment_files: `attachmentFiles`パート（ファイル名・内容・Content-Type）。
-        history_attachment_files: `historyAttachmentFiles`パート（同上）。
+    Parameters
+    ----------
+    text_data : dict[str, Any]
+        `textData`パートに入れるリクエスト本体。
+    attachment_files : list[tuple[str, bytes, str]] | None
+        `attachmentFiles`パート（ファイル名・内容・Content-Type）。
+    history_attachment_files : list[tuple[str, bytes, str]] | None
+        `historyAttachmentFiles`パート（同上）。
 
-    Returns:
+    Returns
+    -------
+    list[tuple[str, tuple[str, str | bytes, str]]]
         httpxの`files`引数に渡すmultipartパートの一覧。
     """
     parts: list[tuple[str, tuple[str, str | bytes, str]]] = [
@@ -344,12 +390,18 @@ def _patched_llm(
 ) -> Iterator[None]:
     """LLM呼び出しを固定回答に差し替え、ストリーミング後の永続化先をテスト用DBにする。
 
-    Args:
-        engine: テスト用DBエンジン。
-        answer: LLMが返す回答テキスト。
-        sent_messages: 指定した場合、LLMへ渡された会話履歴を呼び出しごとに追記する。
+    Parameters
+    ----------
+    engine : AsyncEngine
+        テスト用DBエンジン。
+    answer : str
+        LLMが返す回答テキスト。
+    sent_messages : list[list[ChatMessage]] | None
+        指定した場合、LLMへ渡された会話履歴を呼び出しごとに追記する。
 
-    Yields:
+    Yields
+    ------
+    Iterator[None]
         差し替えが有効な間の制御を呼び出し元へ渡す。
     """
     # 呼び出し側が会話履歴を位置引数・キーワード引数のどちらで渡しても取り出せるよう、
@@ -359,6 +411,7 @@ def _patched_llm(
     async def _stream_chunks(
         *args: Any, **kwargs: Any
     ) -> AsyncIterator[ChatStreamChunk]:
+        """LLM のストリーミング応答を模したチャンクを返す"""
         if sent_messages is not None:
             bound = stream_chat_signature.bind(*args, **kwargs)
             sent_messages.append(bound.arguments["messages"])
@@ -388,10 +441,14 @@ def _sse_events(body: str) -> list[dict[str, Any]]:
     JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
     サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 
-    Args:
-        body: SSEレスポンスの本文。
+    Parameters
+    ----------
+    body : str
+        SSEレスポンスの本文。
 
-    Returns:
+    Returns
+    -------
+    list[dict[str, Any]]
         `type`を持つイベント(JSON)の一覧。
     """
     events: list[dict[str, Any]] = []
@@ -411,11 +468,16 @@ def _last_visible_message_id(
     移植元クライアント(secuaigent/client)の`buildVisibleThread`/`getLastActiveRecordId`と同じく、親なしの
     メッセージから各階層の最後の兄弟を辿り、本文があるメッセージのうち最後のものを返す。
 
-    Args:
-        records: メッセージ一覧取得APIの`messages`。
-        contents: メッセージ内容一覧取得APIの結果。
+    Parameters
+    ----------
+    records : list[dict[str, Any]]
+        メッセージ一覧取得APIの`messages`。
+    contents : list[dict[str, Any]]
+        メッセージ内容一覧取得APIの結果。
 
-    Returns:
+    Returns
+    -------
+    str | None
         次の送信の親になるメッセージID。本文を持つメッセージがなければNone。
     """
     messages_with_content = {content["messageId"] for content in contents}
@@ -433,7 +495,11 @@ def _last_visible_message_id(
 
 @pytest.mark.asyncio
 class TestMessageRouter:
+    """メッセージ API のテスト"""
+
     class TestCreateMessage:
+        """メッセージ作成のテスト"""
+
         async def test_create_message_without_room_id_creates_new_room(
             self, client, owner_headers, message_assistant
         ):
@@ -573,6 +639,8 @@ class TestMessageRouter:
             assert created["isCreateLibrary"] is True
 
     class TestGetMessages:
+        """メッセージ一覧取得のテスト"""
+
         async def test_get_messages_returns_list_and_assistants(
             self, client, owner_headers, owned_room, owned_message, message_assistant
         ):
@@ -588,6 +656,45 @@ class TestMessageRouter:
             body = response.json()
             assert [m["id"] for m in body["messages"]] == [owned_message.id]
             assert [a["id"] for a in body["assistants"]] == [message_assistant.id]
+
+        async def test_assistants_include_history_and_model(
+            self,
+            client,
+            owner_headers,
+            owned_room,
+            owned_message,
+            message_assistant,
+            message_chat_endpoint,
+        ):
+            """assistants に includeHistory と model（紐づくエンドポイントの model）が入ること（Issue #309）"""
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 200
+            assistant = response.json()["assistants"][0]
+            assert assistant["includeHistory"] is False
+            assert assistant["model"] == "gpt-4o"
+            # 移植元は endpoints[] に model を持たせない（assistant 直下だけ）
+            assert all("model" not in e for e in assistant["endpoints"])
+
+        async def test_assistant_model_is_null_without_endpoints(
+            self, client, owner_headers, owned_room, owned_message, message_assistant
+        ):
+            """エンドポイントが無いアシスタントの model は null になること（キーは出る）"""
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assistant = response.json()["assistants"][0]
+            assert assistant["model"] is None
+            assert assistant["endpoints"] == []
 
         async def test_get_messages_with_shared_group_member_returns_200(
             self,
@@ -637,6 +744,8 @@ class TestMessageRouter:
             assert response.status_code == 404
 
     class TestGetMessageContents:
+        """メッセージコンテンツ取得のテスト"""
+
         async def test_get_message_contents_returns_attachment_and_reference_paths(
             self, client, owner_headers, owned_message, owned_message_content
         ):
@@ -700,6 +809,8 @@ class TestMessageRouter:
             assert response.status_code == 403
 
     class TestCreateMessageContent:
+        """メッセージコンテンツ作成のテスト"""
+
         async def test_streams_sse_and_persists_message_content(
             self,
             client,
@@ -711,6 +822,7 @@ class TestMessageRouter:
             """正常系: SSEでtext_delta・message_stop・message_contentイベントを配信すること"""
 
             async def _stream_chunks(*args, **kwargs):
+                """LLM のストリーミング応答を模したチャンクを返す"""
                 yield ChatStreamChunk(text_delta="こんにちは")
                 yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
@@ -803,6 +915,7 @@ class TestMessageRouter:
             """messageContentId指定時、既存の回答が上書きされ質問文は変更されないこと"""
 
             async def _stream_chunks(*args, **kwargs):
+                """LLM のストリーミング応答を模したチャンクを返す"""
                 yield ChatStreamChunk(text_delta="新しい回答")
                 yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
@@ -901,6 +1014,7 @@ class TestMessageRouter:
             """attachmentFilesをファイルパートで送信した場合、message_filesに永続化されmessage_contentイベントに反映されること"""
 
             async def _stream_chunks(*args, **kwargs):
+                """LLM のストリーミング応答を模したチャンクを返す"""
                 yield ChatStreamChunk(text_delta="こんにちは")
                 yield ChatStreamChunk(input_tokens=10, output_tokens=5)
 
@@ -1294,6 +1408,8 @@ class TestMessageRouter:
             assert parent_by_id[edited_message_id] == owned_message.id
 
     class TestDeleteMessage:
+        """メッセージ削除のテスト"""
+
         async def test_delete_message_removes_message(
             self, client, owner_headers, owned_message
         ):
@@ -1328,6 +1444,8 @@ class TestMessageRouter:
             assert response.status_code == 204
 
     class TestDeleteMessageByContentId:
+        """コンテンツ ID 指定のメッセージ削除のテスト"""
+
         async def test_delete_by_content_id_removes_message(
             self, client, owner_headers, owned_message_content
         ):
@@ -1341,6 +1459,8 @@ class TestMessageRouter:
             assert response.status_code == 204
 
     class TestFeedbackMessage:
+        """メッセージへのフィードバックのテスト"""
+
         async def test_feedback_message_creates_new_feedback(
             self, client, owner_headers, owned_message
         ):
@@ -1401,6 +1521,8 @@ class TestMessageRouter:
             assert response.status_code == 403
 
     class TestTenantIsolation:
+        """テナント分離のテスト"""
+
         async def test_get_messages_on_other_tenant_room_returns_404(
             self,
             client,
@@ -1598,6 +1720,7 @@ class TestCreateMessageContentWithBedrock:
         async def _stream_chunks(
             *args: Any, **kwargs: Any
         ) -> AsyncIterator[ChatStreamChunk]:
+            """LLM のストリーミング応答を模したチャンクを返す"""
             bedrock_calls.append(args)
             yield ChatStreamChunk(input_tokens=10)
             yield ChatStreamChunk(text_delta="Bedrockの回答")

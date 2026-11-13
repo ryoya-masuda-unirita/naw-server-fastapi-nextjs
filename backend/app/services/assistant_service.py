@@ -35,12 +35,33 @@ from app.schemas.assistant import (
 
 
 class AssistantService:
+    """アシスタント管理の業務ロジック。"""
+
     @staticmethod
     def _is_chat_type(endpoint_type: EndpointType) -> bool:
+        """チャット用のエンドポイント種別かどうかを判定する。
+
+        Parameters
+        ----------
+        endpoint_type : EndpointType
+            エンドポイント種別。
+
+        Returns
+        -------
+        bool
+            名前が CHAT で終わる種別なら True。
+        """
         return endpoint_type.name.endswith("CHAT")
 
     @staticmethod
     def _generate_random_icon_color() -> str:
+        """アイコン色をランダムに決める。
+
+        Returns
+        -------
+        str
+            `#RRGGBB` 形式の色。
+        """
         return f"#{random.randint(0, 0xFFFFFF):06X}"
 
     @staticmethod
@@ -49,16 +70,24 @@ class AssistantService:
     ) -> Assistant:
         """IDとテナントIDでアシスタントを取得し、存在しなければ404を送出する。
 
-        Args:
-            assistant_id: アシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            アシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Assistant
             該当するアシスタント。
 
-        Raises:
-            HTTPException: 存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
         """
         assistant = await AssistantRepository.find_by_id_and_tenant_id(
             assistant_id, tenant_id, session
@@ -73,6 +102,27 @@ class AssistantService:
     async def _resolve_endpoint_types(
         endpoints: list[AssistantEndpointInput], tenant_id: str, session: AsyncSession
     ) -> list[EndpointType]:
+        """紐づけるエンドポイントの種別を解決する。
+
+        Parameters
+        ----------
+        endpoints : list[AssistantEndpointInput]
+            紐づけるエンドポイントの指定。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[EndpointType]
+            指定順のエンドポイント種別。
+
+        Raises
+        ------
+        HTTPException
+            IDが重複しているときや、存在しない・別テナントのエンドポイントのとき（400）。
+        """
         ids = [e.id for e in endpoints]
         if len(ids) != len(set(ids)):
             # 重複IDのまま`assistants_endpoints`（PK: assistant_id, endpoint_id）へ
@@ -103,14 +153,21 @@ class AssistantService:
 
         移植元`AssistantCreateRequestValidator`相当。
 
-        Args:
-            assistant_type: アシスタント種別。
-            endpoints: 作成・更新リクエストのエンドポイント一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_type : AssistantType
+            アシスタント種別。
+        endpoints : list[AssistantEndpointInput]
+            作成・更新リクエストのエンドポイント一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: エンドポイント種別がアシスタント種別と整合しない場合400を返す。
+        Raises
+        ------
+        HTTPException
+            エンドポイント種別がアシスタント種別と整合しない場合400を返す。
         """
         types = await AssistantService._resolve_endpoint_types(
             endpoints, tenant_id, session
@@ -148,6 +205,24 @@ class AssistantService:
         groups_map: dict[str, list[str]],
         categories_map: dict[str, list[AssistantCategory]],
     ) -> AssistantGetResponse:
+        """アシスタントとその関連情報から一覧の1件分を組み立てる。
+
+        Parameters
+        ----------
+        assistant : Assistant
+            アシスタント。
+        endpoints_map : dict[str, list[AssistantEndpointItemResponse]]
+            アシスタントID -> エンドポイント。
+        groups_map : dict[str, list[str]]
+            アシスタントID -> グループID。
+        categories_map : dict[str, list[AssistantCategory]]
+            アシスタントID -> カテゴリ。
+
+        Returns
+        -------
+        AssistantGetResponse
+            アシスタントの応答。
+        """
         categories = [
             AssistantCategoryItemResponse(
                 id=c.id, name=c.name, description=c.description
@@ -171,22 +246,33 @@ class AssistantService:
 
     @staticmethod
     async def _build_responses(
-        assistants: list[Assistant], tenant_id: str, session: AsyncSession
+        assistants: list[Assistant],
+        tenant_id: str,
+        session: AsyncSession,
+        include_endpoint_label: bool = False,
     ) -> list[AssistantGetResponse]:
         """アシスタント一覧に紐づくエンドポイント・グループ・カテゴリを1クエリずつ一括取得し、レスポンスを組み立てる。
 
-        Args:
-            assistants: 変換対象のアシスタント一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistants : list[Assistant]
+            変換対象のアシスタント一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        include_endpoint_label : bool
+            Trueのとき`endpoints[].label`を入れる（管理者向け一覧用）。
 
-        Returns:
+        Returns
+        -------
+        list[AssistantGetResponse]
             アシスタントレスポンス一覧。
         """
         assistant_ids = [a.id for a in assistants]
         endpoints_map = (
             await AssistantEndpointRepository.find_endpoints_grouped_by_assistant_id(
-                assistant_ids, tenant_id, session
+                assistant_ids, tenant_id, session, include_label=include_endpoint_label
             )
         )
         groups_map = (
@@ -210,12 +296,18 @@ class AssistantService:
     ) -> list[AssistantGetResponse]:
         """ログインユーザーが所属するGroupに紐づくアシスタント一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AssistantGetResponse]
             アシスタント一覧（重複排除済み）。
         """
         group_ids = await GroupUserRepository.find_belonging_group_ids(
@@ -235,16 +327,24 @@ class AssistantService:
     ) -> AssistantGetResponse:
         """アシスタントを新規作成する。
 
-        Args:
-            tenant_id: テナントID。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        req : AssistantCreateRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantGetResponse
             作成したアシスタント。
 
-        Raises:
-            HTTPException: エンドポイント種別が不正な場合400を返す。
+        Raises
+        ------
+        HTTPException
+            エンドポイント種別が不正な場合400を返す。
         """
         await AssistantService._validate_endpoint_types(
             req.type, req.endpoints, tenant_id, session
@@ -280,17 +380,26 @@ class AssistantService:
     ) -> AssistantGetResponse:
         """アシスタントを更新する（部分更新）。
 
-        Args:
-            assistant_id: 更新対象のアシスタントID。
-            tenant_id: テナントID。
-            req: 更新リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            更新対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        req : AssistantUpdateRequest
+            更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AssistantGetResponse
             更新後のアシスタント。
 
-        Raises:
-            HTTPException: 存在しない場合404、エンドポイント種別が不正な場合400を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404、エンドポイント種別が不正な場合400を返す。
         """
         assistant = await AssistantService._get_assistant_or_404(
             assistant_id, tenant_id, session
@@ -370,14 +479,20 @@ class AssistantService:
         FK制約（`rooms.default_assistant_id` の `ON DELETE RESTRICT`）違反により
         `IntegrityError` が発生するため、これを捕捉してHTTP 409を返す。
 
-        Args:
-            assistant_id: 削除対象のアシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            削除対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 存在しない場合404を返す。
-                いずれかのルームのデフォルトアシスタントとして使用中の場合409を返す。
+        Raises
+        ------
+        HTTPException
+            存在しない場合404を返す。
+            いずれかのルームのデフォルトアシスタントとして使用中の場合409を返す。
         """
         assistant = await AssistantService._get_assistant_or_404(
             assistant_id, tenant_id, session
@@ -410,20 +525,34 @@ class AssistantService:
         テナント管理者でなく、`excludeGroupId`も指定されていない場合は、
         自身がグループ内管理者になっているグループに所属するアシスタントのみに絞り込む。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: 名前・説明の部分一致検索文字列。
-            assistant_type: 種別での絞り込み。
-            category_id: カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
-            group_id: グループでの絞り込み（`"NONE"`は未所属）。
-            exclude_group_id: 指定グループに所属していないものに絞り込む。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        assistant_type : AssistantType | None
+            種別での絞り込み。
+        category_id : str | None
+            カテゴリでの絞り込み（`"NONE"`はカテゴリ未設定）。
+        group_id : str | None
+            グループでの絞り込み（`"NONE"`は未所属）。
+        exclude_group_id : str | None
+            指定グループに所属していないものに絞り込む。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedAssistantResponse
             ページネーション済みアシスタント一覧。
         """
         allowed_group_ids: list[str] | None = None
@@ -448,7 +577,7 @@ class AssistantService:
         )
 
         content = await AssistantService._build_responses(
-            assistants, tenant_id, session
+            assistants, tenant_id, session, include_endpoint_label=True
         )
         return PagedAssistantResponse(
             content=content, totalElements=total, number=page, size=size
@@ -458,6 +587,18 @@ class AssistantService:
     def _required_endpoint_types(assistant_type: AssistantType) -> set[EndpointType]:
         # RAGが必要なEmbeddingエンドポイントはインデックス側で指定するため、
         # VDBエンドポイントを除いたチャット用エンドポイントのみを候補として返す。
+        """アシスタント種別ごとに、紐づけられるエンドポイント種別を返す。
+
+        Parameters
+        ----------
+        assistant_type : AssistantType
+            アシスタント種別。
+
+        Returns
+        -------
+        set[EndpointType]
+            紐づけられるエンドポイント種別。SECURE はローカルサーバーだけ。
+        """
         if assistant_type == AssistantType.SECURE:
             return {EndpointType.LOCAL_SERVER}
         return {t for t in EndpointType if AssistantService._is_chat_type(t)}
@@ -468,12 +609,18 @@ class AssistantService:
     ) -> list[AssistantEndpointResponse]:
         """アシスタント種別に応じて選択可能なテナントエンドポイント一覧を取得する。
 
-        Args:
-            assistant_type: アシスタント種別。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_type : AssistantType
+            アシスタント種別。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AssistantEndpointResponse]
             選択可能なテナントエンドポイント一覧。
         """
         required_types = AssistantService._required_endpoint_types(assistant_type)
@@ -490,10 +637,14 @@ class AssistantService:
     async def get_ai_models(session: AsyncSession) -> list[AIModelResponse]:
         """AIモデル一覧を取得する。
 
-        Args:
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[AIModelResponse]
             AIモデル一覧。
         """
         models = await AIModelRepository.find_all(session)

@@ -1,7 +1,8 @@
 from datetime import datetime
+from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.core.validation_messages import (
     NOT_BLANK_DEFAULT_MESSAGE,
@@ -12,6 +13,42 @@ from app.core.validation_messages import (
 from app.models.user import User, UserRole
 
 
+# 移植元 `LoginKeyRequestMessages.LEGACY_LOGIN_KEY_REMOVED`。古い client が `loginKey` を
+# 送ると、キーを設定したつもりで何も起きないため、黙って無視せず 400 にする。
+LEGACY_LOGIN_KEY_REMOVED_MESSAGE = "loginKey は廃止しました。作成は issueLoginKey、更新は loginKeyAction を使用してください。"
+
+
+class LoginKeyAction(str, Enum):
+    """ユーザー更新でのログインキーの扱い（移植元 `LoginKeyAction`）。"""
+
+    KEEP = "KEEP"
+    REISSUE = "REISSUE"
+    REVOKE = "REVOKE"
+
+
+def _reject_legacy_login_key(value: str | None) -> str | None:
+    """廃止した `loginKey` に値が付いていたら拒否する（移植元 `@Null`）。
+
+    Parameters
+    ----------
+    value : str | None
+        リクエストの `loginKey`。
+
+    Returns
+    -------
+    str | None
+        None（null か省略のときだけ通る）。
+
+    Raises
+    ------
+    ValueError
+        値が付いているとき。
+    """
+    if value is not None:
+        raise ValueError(LEGACY_LOGIN_KEY_REMOVED_MESSAGE)
+    return value
+
+
 class UserCreateRequest(RequestModel):
     """ユーザー作成のリクエスト（移植元 `UserCreateRequest`）。"""
 
@@ -19,7 +56,32 @@ class UserCreateRequest(RequestModel):
     loginId: Annotated[str, ValidationMessages(not_blank=NOT_BLANK_DEFAULT_MESSAGE)]
     name: Annotated[str, ValidationMessages(not_blank=NOT_BLANK_DEFAULT_MESSAGE)]
     role: Annotated[UserRole, ValidationMessages(not_null=NOT_NULL_DEFAULT_MESSAGE)]
+    # true ならログインキーをサーバーで発行する。省略・null は false。
+    issueLoginKey: bool | None = False
+    # 廃止。値を付けると 400。
     loginKey: str | None = None
+
+    @field_validator("loginKey")
+    @classmethod
+    def _validate_login_key(cls, value: str | None) -> str | None:
+        """廃止した loginKey に値が付いていたら拒否する。
+
+        Parameters
+        ----------
+        value : str | None
+            リクエストの `loginKey`。
+
+        Returns
+        -------
+        str | None
+            None。
+
+        Raises
+        ------
+        ValueError
+            値が付いているとき。
+        """
+        return _reject_legacy_login_key(value)
 
 
 class UserUpdateRequest(BaseModel):
@@ -27,8 +89,33 @@ class UserUpdateRequest(BaseModel):
 
     name: str | None = None
     role: UserRole | None = None
+    # 省略も明示的な null も KEEP として扱う。
+    loginKeyAction: LoginKeyAction | None = LoginKeyAction.KEEP
+    # 廃止。値を付けると 400。
     loginKey: str | None = None
     resetPassword: bool | None = None
+
+    @field_validator("loginKey")
+    @classmethod
+    def _validate_login_key(cls, value: str | None) -> str | None:
+        """廃止した loginKey に値が付いていたら拒否する。
+
+        Parameters
+        ----------
+        value : str | None
+            リクエストの `loginKey`。
+
+        Returns
+        -------
+        str | None
+            None。
+
+        Raises
+        ------
+        ValueError
+            値が付いているとき。
+        """
+        return _reject_legacy_login_key(value)
 
 
 class UserProfileUpdateRequest(BaseModel):
@@ -75,7 +162,7 @@ class UserResponse(BaseModel):
             loginId=user.login_id,
             name=user.name,
             role=user.role,
-            hasLoginKey=user.login_key is not None,
+            hasLoginKey=user.login_key_hash is not None,
             isRequiredPasswordReset=user.is_required_password_reset,
             totalCredits=total_credits,
         )
@@ -84,8 +171,9 @@ class UserResponse(BaseModel):
 class _UserMutationResponse(BaseModel):
     """ユーザー作成・更新の応答に共通する項目（移植元 `UserCreateResponse`・`UserUpdateResponse`）。
 
-    `loginKey` には、このリクエストで設定したログインキーだけを入れる。設定していない
-    ときは None にし、保存済みのキーは返さない（移植元 NAW-1342 AC-03）。
+    `loginKey` には、このリクエストでサーバーが発行したログインキー（平文）だけを入れる。
+    発行していないときは None にする。DB にはハッシュ値しか無いため、後から平文は取り出せない
+    （移植元 NAW-1342 AC-03・NAW-1343）。
     """
 
     id: str
@@ -118,7 +206,7 @@ class _UserMutationResponse(BaseModel):
             "name": user.name,
             "role": user.role,
             "loginKey": login_key,
-            "hasLoginKey": user.login_key is not None,
+            "hasLoginKey": user.login_key_hash is not None,
             "isRequiredPasswordReset": user.is_required_password_reset,
         }
 
@@ -202,10 +290,14 @@ class UserUpdateResponse(_UserMutationResponse):
 
 
 class PagedUserResponse(BaseModel):
-    """ユーザー一覧のページ応答。"""
+    """ユーザー一覧のページ応答（移植元は Spring の `Page`。ページ番号は `number`）。"""
 
     content: list[UserResponse]
     totalElements: int
     totalPages: int
-    page: int
+    number: int
     size: int
+    numberOfElements: int
+    first: bool
+    last: bool
+    empty: bool

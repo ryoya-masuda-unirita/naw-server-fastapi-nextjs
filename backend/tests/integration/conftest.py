@@ -9,6 +9,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
+from app.core.login_key import hash_login_key
 from app.core.security import ALGORITHM, SECRET_KEY, create_access_token, hash_password
 from app.core.database import Base, get_session
 from app.core.redis_client import get_redis_client
@@ -212,7 +213,7 @@ async def test_user_with_login_key(session, test_tenant):
         login_id="loginkeyuser",
         name="Login Key User",
         role="USER",
-        login_key="test-login-key-1234",
+        login_key_hash=hash_login_key("test-login-key-1234"),
         is_required_password_reset=False,
     )
     session.add(user)

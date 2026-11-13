@@ -66,6 +66,8 @@ class ToolConfig(RequestModel):
 
 
 class MessageCreateRequest(RequestModel):
+    """メッセージ作成のリクエスト。"""
+
     roomId: str | None = None
     # 移植元は`@NotEmpty`（メッセージ指定なし）のため既定文言を返す。
     assistantId: Annotated[
@@ -81,22 +83,36 @@ class MessageCreateRequest(RequestModel):
 
 
 class MessageCreateResponse(BaseModel):
+    """メッセージ作成の応答（作成したメッセージのID）。"""
+
     id: str
 
 
 class EndpointResponse(BaseModel):
+    """メッセージ一覧に添えるアシスタントのエンドポイント。"""
+
     type: str
     destination: str
     apiKey: str
 
 
 class AssistantResponse(BaseModel):
+    """メッセージ一覧に添える参照アシスタント（移植元 `GetMessagesResponse.AssistantResponse`）。
+
+    `model` は最初に紐づくエンドポイントの model。SECURE ではブラウザがこれを Waha! の
+    サービスIDとして送る。エンドポイントが無いときは null。
+    """
+
     id: str
     type: str
+    includeHistory: bool
+    model: str | None
     endpoints: list[EndpointResponse]
 
 
 class MessageItemResponse(BaseModel):
+    """メッセージ1件分の応答。"""
+
     id: str
     roomId: str
     assistantId: str | None
@@ -109,11 +125,15 @@ class MessageItemResponse(BaseModel):
 
 
 class GetMessagesResponse(BaseModel):
+    """メッセージ一覧の応答（メッセージと、参照するアシスタント）。"""
+
     assistants: list[AssistantResponse]
     messages: list[MessageItemResponse]
 
 
 class MessageContentListRequest(BaseModel):
+    """メッセージ内容の一括取得のリクエスト。"""
+
     messageIds: list[str] = []
 
 
@@ -140,6 +160,8 @@ class MessageContentAttachmentFileResponse(BaseModel):
 
 
 class MessageContentResponse(BaseModel):
+    """メッセージ内容1件分の応答。"""
+
     id: str
     messageId: str
     status: MessageContentStatus
@@ -232,6 +254,18 @@ class MessageContentCreateRequest(RequestModel):
 
     @model_validator(mode="after")
     def _validate_target_specified(self) -> "MessageContentCreateRequest":
+        """messageId か messageContentId のどちらかが指定されていることを検証する。
+
+        Returns
+        -------
+        MessageContentCreateRequest
+            検証済みのリクエスト自身。
+
+        Raises
+        ------
+        ValueError
+            どちらも指定されていないとき。
+        """
         if self.messageId is None and self.messageContentId is None:
             raise ValueError(
                 "messageId または messageContentId のいずれかを指定してください"
@@ -250,17 +284,25 @@ async def parse_message_content_create_form(
     リクエスト本体(JSON)を、`attachmentFiles`・`historyAttachmentFiles`で添付
     ファイルを受け取る。
 
-    Args:
-        textData: リクエスト本体(JSON)。
-        attachmentFiles: 今回の質問に添付するファイル。
-        historyAttachmentFiles: 過去の会話に添付されていたファイル。
+    Parameters
+    ----------
+    textData : Annotated[UploadFile | str, Form()]
+        リクエスト本体(JSON)。
+    attachmentFiles : Annotated[list[UploadFile] | None, File()]
+        今回の質問に添付するファイル。
+    historyAttachmentFiles : Annotated[list[UploadFile] | None, File()]
+        過去の会話に添付されていたファイル。
 
-    Returns:
+    Returns
+    -------
+    MessageContentCreateRequest
         検証済みのメッセージ送信リクエスト。
 
-    Raises:
-        RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
-            場合、または項目の検証に失敗した場合（いずれも400）。
+    Raises
+    ------
+    RequestValidationError
+        `textData`がUTF-8のJSONオブジェクトとして解釈できない
+        場合、または項目の検証に失敗した場合（いずれも400）。
     """
     return await parse_text_data_form(
         MessageContentCreateRequest,
@@ -273,10 +315,14 @@ async def parse_message_content_create_form(
 
 
 class MessageFeedbackCreateRequest(BaseModel):
+    """メッセージ評価作成のリクエスト。"""
+
     rating: MessageRating
 
 
 class MessageFeedbackResponse(BaseModel):
+    """メッセージ評価の応答。"""
+
     id: str
     tenantId: str
     userId: str

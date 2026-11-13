@@ -3,7 +3,6 @@ import csv
 import io
 import json
 import logging
-import uuid
 from datetime import datetime, timedelta, timezone
 
 import aioboto3
@@ -43,11 +42,15 @@ class UserImportListener:
     async def run_forever(session_maker: async_sessionmaker[AsyncSession]) -> None:
         """SQSをロングポーリングし続け、メッセージを受信するたびに処理する。
 
-        Args:
-            session_maker: メッセージ処理ごとに新しいDBセッションを作るためのファクトリ。
+        Parameters
+        ----------
+        session_maker : async_sessionmaker[AsyncSession]
+            メッセージ処理ごとに新しいDBセッションを作るためのファクトリ。
 
-        Raises:
-            RuntimeError: `AWS_SQS_QUEUE_URL`が未設定の場合。
+        Raises
+        ------
+        RuntimeError
+            `AWS_SQS_QUEUE_URL`が未設定の場合。
         """
         aws_settings = get_aws_settings()
         if not aws_settings.aws_sqs_queue_url:
@@ -94,14 +97,19 @@ class UserImportListener:
     async def process_import_message(message_body: str, session: AsyncSession) -> None:
         """SQSメッセージ1件分のユーザーインポート処理を行う。
 
-        Args:
-            message_body: SQSメッセージ本文（`importJobId`/`tenantId`/`storageUrl`を
-                持つJSON文字列）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        message_body : str
+            SQSメッセージ本文（`importJobId`/`tenantId`/`storageUrl`を
+            持つJSON文字列）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            RetryableImportError: ストレージからのダウンロード等、一時的な要因で
-                失敗し、リトライが必要な場合。
+        Raises
+        ------
+        RetryableImportError
+            ストレージからのダウンロード等、一時的な要因で
+            失敗し、リトライが必要な場合。
         """
         message = json.loads(message_body)
         import_job_id = message["importJobId"]
@@ -191,12 +199,18 @@ class UserImportListener:
     ) -> list[str]:
         """検証済みの行データを1行ずつユーザー登録・更新処理にかける。
 
-        Args:
-            rows: CSVから読み込んだ行データ一覧（アップロード時点で検証済み）。
-            tenant: 対象テナント。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        rows : list[dict[str, str]]
+            CSVから読み込んだ行データ一覧（アップロード時点で検証済み）。
+        tenant : Tenant
+            対象テナント。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[str]
             行単位の処理エラー一覧。
         """
         all_group_ids = {
@@ -245,7 +259,6 @@ class UserImportListener:
         name = (row.get("name") or "").strip()
         password = (row.get("password") or "").strip()
         role = UserRole((row.get("role") or "").strip().upper())
-        create_login_key = (row.get("createLoginKey") or "").strip().lower()
 
         try:
             async with session.begin_nested():
@@ -253,18 +266,12 @@ class UserImportListener:
                 if user:
                     user.name = name
                     user.role = role
-                    if create_login_key == "true":
-                        user.login_key = uuid.uuid4().hex
-                    elif create_login_key == "false":
-                        user.login_key = None
                 else:
-                    login_key = uuid.uuid4().hex if create_login_key == "true" else None
                     user = User(
                         login_id=login_id,
                         tenant_id=tenant.id,
                         name=name,
                         role=role,
-                        login_key=login_key,
                         is_required_password_reset=True,
                     )
                     session.add(user)
@@ -310,10 +317,14 @@ def start_listener_task(
 ) -> asyncio.Task | None:
     """設定に応じてリスナーのバックグラウンドタスクを起動する。
 
-    Args:
-        session_maker: メッセージ処理ごとに新しいDBセッションを作るためのファクトリ。
+    Parameters
+    ----------
+    session_maker : async_sessionmaker[AsyncSession]
+        メッセージ処理ごとに新しいDBセッションを作るためのファクトリ。
 
-    Returns:
+    Returns
+    -------
+    asyncio.Task | None
         起動したタスク。`aws_sqs_listener_enabled=false`の場合は起動せず`None`を返す。
     """
     if not get_aws_settings().aws_sqs_listener_enabled:

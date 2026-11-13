@@ -31,7 +31,7 @@ def _user(login_key: str | None) -> User:
         login_id="user-1",
         name="User 1",
         role=UserRole.USER,
-        login_key=login_key,
+        login_key_hash=login_key,
         is_required_password_reset=True,
     )
 

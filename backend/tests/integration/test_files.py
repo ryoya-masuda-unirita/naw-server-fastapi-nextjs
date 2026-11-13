@@ -57,6 +57,7 @@ async def files_admin_user(session, files_tenant):
 
 @pytest.fixture
 def files_admin_headers(files_admin_user, files_tenant):
+    """ファイル管理者の認証ヘッダー"""
     token = create_access_token(files_admin_user.login_id, files_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": files_tenant.id}
 
@@ -94,6 +95,7 @@ async def files_local_index(session, files_tenant):
 
 @pytest.fixture
 def file_storage_root(tmp_path) -> Path:
+    """テスト用ファイルストレージのルートディレクトリ"""
     return tmp_path / "file-storage"
 
 
@@ -102,6 +104,7 @@ def override_file_storage(file_storage_root):
     """ファイルストレージをテスト用一時ディレクトリに差し替える（実ストレージへは接続しない）"""
 
     def _get_storage() -> FileStorage:
+        """テスト用ストレージを返す依存関数"""
         return LocalFileStorage(root=file_storage_root)
 
     app.dependency_overrides[get_file_storage] = _get_storage
@@ -111,6 +114,7 @@ def override_file_storage(file_storage_root):
 
 @pytest.fixture
 async def files_plan(session):
+    """ファイルテスト用のプラン"""
     plan = Plan(
         id="plan-files-test",
         name="Standard",
@@ -158,6 +162,24 @@ def _upload_payload(
     reference: str | None = None,
     content: bytes = b"hello world",
 ):
+    """ファイルアップロード用の multipart 送信内容を作る
+
+    Parameters
+    ----------
+    name : str
+        ファイル名（name フィールド）
+    display_name : str
+        表示名（displayName フィールド）
+    reference : str | None
+        参照情報。None の場合は送信しない
+    content : bytes
+        アップロードするファイルの中身
+
+    Returns
+    -------
+    tuple[dict, dict]
+        files と data（httpx の files・data 引数に渡す）
+    """
     files = {"file": ("sample.txt", content, "text/plain")}
     data = {"name": name, "displayName": display_name}
     if reference is not None:
@@ -195,7 +217,11 @@ async def _list_files(
 
 
 class TestFilesRouter:
+    """ファイル API のテスト"""
+
     class TestUpload:
+        """ファイルアップロードのテスト"""
+
         async def test_upload_file(
             self,
             client,
@@ -218,7 +244,7 @@ class TestFilesRouter:
             body = response.json()
             assert body["fileName"] == "sample.txt"
             assert body["displayName"] == "サンプル"
-            assert body["status"] == FileStatus.ENABLE.value
+            assert body["status"] == FileStatus.ENABLE.name
             assert body["indexId"] == files_index.id
             assert body["storageUrl"] is not None
 
@@ -360,6 +386,8 @@ class TestFilesRouter:
             assert response.json()["displayName"] == "form"
 
     class TestDownload:
+        """ファイルダウンロードのテスト"""
+
         async def test_download_file(
             self,
             client,
@@ -451,6 +479,8 @@ class TestFilesRouter:
             assert response.json()["message"] == "ファイルが存在しません。"
 
     class TestUpdate:
+        """ファイル更新のテスト"""
+
         async def test_update_deleted_file_status_to_enable_returns_400(
             self, client, files_index, files_admin_headers, override_file_storage
         ):
@@ -751,9 +781,11 @@ class TestFilesRouter:
             body = response.json()
             assert body["displayName"] == "クエリで更新"
             assert body["reference"] == "new-ref"
-            assert body["status"] == FileStatus.DISABLE.value
+            assert body["status"] == FileStatus.DISABLE.name
 
     class TestDelete:
+        """ファイル削除のテスト"""
+
         async def test_soft_delete_marks_status_deleted(
             self, client, files_index, files_admin_headers, override_file_storage
         ):
@@ -845,6 +877,8 @@ class TestFilesRouter:
             assert download_response.status_code == 404
 
     class TestList:
+        """ファイル一覧取得のテスト"""
+
         async def test_list_files(
             self, client, files_index, files_admin_headers, override_file_storage
         ):
@@ -1027,8 +1061,8 @@ class TestFilesRouter:
 
             asc_statuses = [item["status"] for item in asc_response.json()["content"]]
             desc_statuses = [item["status"] for item in desc_response.json()["content"]]
-            assert asc_statuses == [FileStatus.ENABLE, FileStatus.DISABLE]
-            assert desc_statuses == [FileStatus.DISABLE, FileStatus.ENABLE]
+            assert asc_statuses == [FileStatus.ENABLE.name, FileStatus.DISABLE.name]
+            assert desc_statuses == [FileStatus.DISABLE.name, FileStatus.ENABLE.name]
 
 
 # SQLiteでは型名`UUID`の列がNUMERIC親和性になり、数字のみのUUIDは整数に変換されて

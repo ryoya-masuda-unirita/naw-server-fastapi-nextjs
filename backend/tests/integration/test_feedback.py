@@ -4,7 +4,13 @@ import pytest
 
 from app.core.security import create_access_token
 from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+from app.models.file import File, FileStatus
 from app.models.group import Group, GroupUser
+from app.models.index import Index, IndexType
 from app.models.message import (
     Message,
     MessageContent,
@@ -19,6 +25,18 @@ from app.models.user import User, UserRole
 
 
 def _tenant(tenant_id: str) -> Tenant:
+    """テスト用のテナントを作る
+
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID（名前にも同じ値を使う）
+
+    Returns
+    -------
+    Tenant
+        パスワードポリシーを設定した未保存のテナント
+    """
     return Tenant(
         id=tenant_id,
         name=tenant_id,
@@ -35,12 +53,27 @@ def _tenant(tenant_id: str) -> Tenant:
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証済みリクエスト用のヘッダーを作る
+
+    Parameters
+    ----------
+    login_id : str
+        アクセストークンの対象ユーザーのログインID
+    tenant_id : str
+        テナントID（トークンと X-Tenant-ID ヘッダーに使う）
+
+    Returns
+    -------
+    dict[str, str]
+        Authorization と X-Tenant-ID を含むヘッダー
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 async def feedback_tenant(session):
+    """テスト用テナント"""
     tenant = _tenant("tenant-feedback-test")
     session.add(tenant)
     await session.commit()
@@ -50,6 +83,7 @@ async def feedback_tenant(session):
 
 @pytest.fixture
 async def other_tenant(session):
+    """別テナント（テナント分離の確認用）"""
     tenant = _tenant("tenant-feedback-other")
     session.add(tenant)
     await session.commit()
@@ -59,6 +93,7 @@ async def other_tenant(session):
 
 @pytest.fixture
 async def tenant_admin_user(session, feedback_tenant):
+    """テナント管理者ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -75,6 +110,7 @@ async def tenant_admin_user(session, feedback_tenant):
 
 @pytest.fixture
 async def group_admin_user(session, feedback_tenant):
+    """グループ管理者ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -91,6 +127,7 @@ async def group_admin_user(session, feedback_tenant):
 
 @pytest.fixture
 async def general_user(session, feedback_tenant):
+    """一般ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -107,6 +144,7 @@ async def general_user(session, feedback_tenant):
 
 @pytest.fixture
 async def responded_user(session, feedback_tenant):
+    """フィードバックに回答済みのユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -123,6 +161,7 @@ async def responded_user(session, feedback_tenant):
 
 @pytest.fixture
 async def heavy_response_user(session, feedback_tenant):
+    """回答数が多いユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -139,6 +178,7 @@ async def heavy_response_user(session, feedback_tenant):
 
 @pytest.fixture
 async def unresponded_user(session, feedback_tenant):
+    """フィードバックに未回答のユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=feedback_tenant.id,
@@ -155,6 +195,7 @@ async def unresponded_user(session, feedback_tenant):
 
 @pytest.fixture
 async def other_tenant_user(session, other_tenant):
+    """別テナントのユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=other_tenant.id,
@@ -171,6 +212,7 @@ async def other_tenant_user(session, other_tenant):
 
 @pytest.fixture
 async def feedback_group(session, feedback_tenant, group_admin_user):
+    """フィードバック集計用のグループ"""
     group = Group(tenant_id=feedback_tenant.id, name="Feedback Admin Group")
     session.add(group)
     await session.commit()
@@ -189,6 +231,7 @@ async def feedback_group(session, feedback_tenant, group_admin_user):
 
 @pytest.fixture
 async def feedback_assistant(session, feedback_tenant):
+    """フィードバック対象のアシスタント"""
     assistant = Assistant(
         tenant_id=feedback_tenant.id,
         type=AssistantType.SAAS_CHAT,
@@ -203,6 +246,7 @@ async def feedback_assistant(session, feedback_tenant):
 
 @pytest.fixture
 async def other_tenant_assistant(session, other_tenant):
+    """別テナントのアシスタント"""
     assistant = Assistant(
         tenant_id=other_tenant.id,
         type=AssistantType.SAAS_CHAT,
@@ -217,6 +261,7 @@ async def other_tenant_assistant(session, other_tenant):
 
 @pytest.fixture
 async def secondary_feedback_assistant(session, feedback_tenant):
+    """2 つ目のフィードバック対象アシスタント"""
     assistant = Assistant(
         tenant_id=feedback_tenant.id,
         type=AssistantType.SECURE,
@@ -246,6 +291,7 @@ async def feedback_dataset(
     other_tenant_assistant,
     secondary_feedback_assistant,
 ):
+    """フィードバック集計テスト用のデータ一式"""
     responded_room_excellent = Room(
         tenant_id=feedback_tenant.id,
         name="Responded Excellent",
@@ -412,22 +458,29 @@ async def feedback_dataset(
 
 @pytest.fixture
 def admin_headers(tenant_admin_user, feedback_tenant):
+    """テナント管理者の認証ヘッダー"""
     return _headers(tenant_admin_user.login_id, feedback_tenant.id)
 
 
 @pytest.fixture
 def group_admin_headers(group_admin_user, feedback_tenant):
+    """グループ管理者の認証ヘッダー"""
     return _headers(group_admin_user.login_id, feedback_tenant.id)
 
 
 @pytest.fixture
 def general_user_headers(general_user, feedback_tenant):
+    """一般ユーザーの認証ヘッダー"""
     return _headers(general_user.login_id, feedback_tenant.id)
 
 
 @pytest.mark.asyncio
 class TestFeedbackRouter:
+    """フィードバック API のテスト"""
+
     class TestGetFeedbackUsers:
+        """フィードバックのユーザー別集計取得のテスト"""
+
         async def test_returns_feedback_message_count_and_room_rating_counts(
             self, client, admin_headers, feedback_dataset
         ):
@@ -447,6 +500,7 @@ class TestFeedbackRouter:
             )
 
             assert responded_item["isResponded"] is True
+            assert responded_item["responded"] is True
             assert responded_item["feedbackMessageCount"] == 1
             assert responded_item["feedbackRoomCount"] == {
                 "excellent": 1,
@@ -476,6 +530,7 @@ class TestFeedbackRouter:
             )
 
             assert unresponded_item["isResponded"] is False
+            assert unresponded_item["responded"] is False
             assert unresponded_item["feedbackMessageCount"] == 0
             assert unresponded_item["feedbackRoomCount"] == {
                 "excellent": 0,
@@ -592,6 +647,8 @@ class TestFeedbackRouter:
             assert body["numberOfElements"] == 1
 
     class TestGetFeedbackUsersPermission:
+        """フィードバックのユーザー別集計取得の権限のテスト"""
+
         async def test_general_user_returns_403(
             self, client, general_user_headers, feedback_dataset
         ):
@@ -617,6 +674,8 @@ class TestFeedbackRouter:
             assert response.status_code == 200
 
     class TestTenantIsolation:
+        """テナント分離のテスト"""
+
         async def test_other_tenant_users_are_excluded(
             self, client, admin_headers, feedback_dataset
         ):
@@ -635,6 +694,8 @@ class TestFeedbackRouter:
             assert feedback_dataset["other_tenant_user"].login_id not in login_ids
 
     class TestGetFeedbackMessages:
+        """フィードバックメッセージ取得のテスト"""
+
         async def test_returns_feedback_message_with_assistant_name_and_content(
             self, client, admin_headers, feedback_dataset
         ):
@@ -777,6 +838,8 @@ class TestFeedbackRouter:
             assert body["numberOfElements"] == 1
 
     class TestGetFeedbackMessagesPermission:
+        """フィードバックメッセージ取得の権限のテスト"""
+
         async def test_general_user_returns_403(
             self, client, general_user_headers, feedback_dataset
         ):
@@ -802,6 +865,57 @@ class TestFeedbackRouter:
             assert response.status_code == 200
 
     class TestGetFeedbackRooms:
+        """フィードバックのルーム評価取得のテスト"""
+
+        async def test_returns_latest_index_id_of_room_files(
+            self, client, session, feedback_tenant, admin_headers, feedback_dataset
+        ):
+            """feedbackRoom の indexId がルームに紐づく最新ファイルのインデックスIDになること（Issue #309）"""
+            room = (
+                (
+                    await session.execute(
+                        select(Room).where(Room.name == "Responded Good")
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            old_index = Index(
+                tenant_id=feedback_tenant.id, type=IndexType.SAAS_GLOBAL, name="old"
+            )
+            new_index = Index(
+                tenant_id=feedback_tenant.id, type=IndexType.SAAS_GLOBAL, name="new"
+            )
+            session.add_all([old_index, new_index])
+            await session.commit()
+            now = datetime.now(timezone.utc)
+            for index, created_at in (
+                (old_index, now - timedelta(days=1)),
+                (new_index, now),
+            ):
+                session.add(
+                    File(
+                        tenant_id=feedback_tenant.id,
+                        name=f"{index.name}.txt",
+                        status=FileStatus.ENABLE,
+                        user_id=room.user_id,
+                        index_id=index.id,
+                        room_id=room.id,
+                        created_at=created_at,
+                    )
+                )
+            await session.commit()
+
+            async with client as c:
+                response = await c.get("/api/admin/feedbackRoom", headers=admin_headers)
+
+            items = {
+                item["room"]["name"]: item
+                for item in response.json()["feedbacks"]["content"]
+            }
+            assert items["Responded Good"]["indexId"] == new_index.id
+            assert items["Responded Excellent"]["indexId"] is None
+
         async def test_excludes_unrated_rooms(
             self, client, admin_headers, feedback_dataset
         ):
@@ -919,6 +1033,8 @@ class TestFeedbackRouter:
             assert "Other Tenant Room" not in room_names
 
     class TestGetFeedbackRoomsPermission:
+        """フィードバックのルーム評価取得の権限のテスト"""
+
         async def test_general_user_returns_403(
             self, client, general_user_headers, feedback_dataset
         ):

@@ -423,7 +423,7 @@ class TestGroupUsers:
         self, client, session, admin_headers, group_with_admin_member, member_user
     ):
         """所属ユーザー一覧はログインキーを返さないこと（Issue #309、移植元 NAW-1342）"""
-        member_user.login_key = "member-secret-key"
+        member_user.login_key_hash = "member-secret-hash"
         session.add(member_user)
         await session.commit()
 
