@@ -18,6 +18,7 @@ import { resolveControlError, type FieldErrors } from '@/lib/utils/form-errors';
 import { scrollToFirstFormError } from '@/lib/utils/scroll-to-error';
 import type { TrainingDataFilter } from '@/types/training-data.types';
 import { buildIndexPayload, type TrainingFolderType } from './training-folder-form';
+import { validateText } from './training-data-validation';
 
 /** 移植元 `openCreateModal` のフォームの Validators */
 const NAME_MAX_LENGTH = 255;
@@ -40,15 +41,6 @@ const SCROLL_FIELDS: { controlName: FieldName; elementId: string }[] = [
   { controlName: 'deleteId', elementId: 'create-folder-delete-id' },
   { controlName: 'learnId', elementId: 'create-folder-learn-id' },
 ];
-
-/** Angular の Validators.required・maxLength と同じ判定（required は空文字だけを弾く） */
-function validateText(value: string, maxLength: number | null, required: boolean): FieldErrors | null {
-  if (required && value.length === 0) return { required: true };
-  if (maxLength !== null && value.length > maxLength) {
-    return { maxlength: { requiredLength: maxLength, actualLength: value.length } };
-  }
-  return null;
-}
 
 interface TrainingFolderAddDialogProps {
   /** 一覧の現在の条件。作成したフォルダをこの一覧の先頭に足す */
