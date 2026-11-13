@@ -8,7 +8,7 @@ from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemR
 
 
 class AssistantEndpointRepository:
-    """アシスタントとテナントエンドポイントの紐付け（`assistants_endpoints`）のDBアクセス。"""
+    """アシスタントとエンドポイントの紐付けのDBアクセスを行うリポジトリ。"""
 
     @staticmethod
     async def find_chat_endpoint(
@@ -115,6 +115,41 @@ class AssistantEndpointRepository:
                 )
             )
         return grouped
+
+    @staticmethod
+    async def find_with_tenant_endpoints_by_assistant_id(
+        assistant_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[tuple[AssistantEndpoint, TenantEndpoint]]:
+        """アシスタントの全エンドポイント（モデル名・APIキーを含む）を取得する。
+
+        移植元は先頭のエンドポイントのモデルを使うため、順序を`endpoint_id`昇順に固定する。
+
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[tuple[AssistantEndpoint, TenantEndpoint]]
+            アシスタントとエンドポイントの紐付け、テナントエンドポイントのタプル一覧。
+        """
+        stmt = (
+            select(AssistantEndpoint, TenantEndpoint)
+            .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
+            .where(
+                AssistantEndpoint.assistant_id == assistant_id,
+                AssistantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.tenant_id == tenant_id,
+            )
+            .order_by(AssistantEndpoint.endpoint_id)
+        )
+        result = await session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
 
     @staticmethod
     async def find_models_by_assistant_id(

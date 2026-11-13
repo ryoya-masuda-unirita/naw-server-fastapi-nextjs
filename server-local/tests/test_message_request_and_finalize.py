@@ -32,12 +32,26 @@ INVALID_UTF8 = b'{"assistantId":"svc","messageId":"m","userInput":"\xff\xfe"}'
 async def get_contents(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> list[MessageContent]:
+    """DB に保存されたメッセージ内容をすべて取り出す。
+
+    Parameters
+    ----------
+    session_factory : async_sessionmaker[AsyncSession]
+        テスト用 DB のセッションファクトリ。
+
+    Returns
+    -------
+    list[MessageContent]
+        保存されているメッセージ内容。
+    """
     async with session_factory() as session:
         result = await session.execute(select(MessageContent))
         return list(result.scalars().all())
 
 
 class TestMessageRequest:
+    """質問 API のリクエスト（textData・添付ファイル）の扱いのテスト。"""
+
     async def test_invalid_utf8_text_data_returns_400(
         self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
     ) -> None:
@@ -80,6 +94,8 @@ class TestMessageRequest:
 
 
 class TestNawStream:
+    """ストリームファイルの読み取りと SSE の確定処理のテスト。"""
+
     async def test_empty_data_line_is_ignored(
         self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
     ) -> None:
@@ -142,8 +158,8 @@ async def test_concurrent_finalize_runs_once(
     fake_naw: FakeNawApiClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """ストリームの監視と結果のポーリングが同時に確定処理に入っても、確定処理（読み残しの
-    処理・outputfile の取得）は 1 回だけ行うこと"""
+    """ストリームの監視と結果のポーリングが同時に確定処理に入っても、確定処理は 1 回だけ行うこと"""
+    # 確定処理 = ストリームの読み残しの処理と outputfile の取得
     service = make_service(settings, session_factory, fake_waha, fake_naw)
     command = CreateMessageContentCommand(
         assistant_id="svc",

@@ -44,10 +44,51 @@ class Library(SQLModel, table=True):
             nullable=False,
         ),
     )
-    title: str = Field(max_length=255)
-    content: str | None = Field(
-        default=None, sa_column=sa.Column(sa.Text, nullable=True)
+    # 移植元はスタブ（ローカルサーバー生成の本文をこれから登録する状態）を
+    # タイトルNULLで表すため、タイトルは任意とする。
+    title: str | None = Field(
+        default=None, sa_column=sa.Column(sa.String(255), nullable=True)
     )
+    created_at: datetime = Field(
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+    )
+    updated_at: datetime = Field(
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+
+
+class LibraryContent(SQLModel, table=True):
+    """ライブラリの本文（移植元の`library_contents`）。ライブラリ1件に対し0〜1件。
+
+    ローカルサーバーで生成したライブラリの本文はNAW本体に置かないため、
+    本文テーブルの行が無いライブラリが存在する。
+    """
+
+    __tablename__ = "library_contents"
+
+    library_id: uuid.UUID = Field(
+        sa_column=sa.Column(
+            sa.UUID,
+            sa.ForeignKey("libraries.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        ),
+    )
+    tenant_id: str = Field(
+        sa_column=sa.Column(
+            sa.String(32),
+            sa.ForeignKey("tenants.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+    )
+    content: str = Field(sa_column=sa.Column(sa.Text, nullable=False))
     created_at: datetime = Field(
         sa_column=sa.Column(
             sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()

@@ -17,7 +17,9 @@ class FileResponse(BaseModel):
     displayName: str | None
     reference: str | None
     # 移植元は enum の名前（ENABLE・DISABLE・DELETED）で返す。DB は序数で保存する。
-    status: Annotated[FileStatus, PlainSerializer(lambda s: s.name, return_type=str)]
+    status: Annotated[
+        FileStatus, PlainSerializer(lambda s: s.name, return_type=str, when_used="json")
+    ]
     userId: UUID
     indexId: str
     storageUrl: str | None

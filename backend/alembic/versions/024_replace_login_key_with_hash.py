@@ -1,7 +1,7 @@
 """users.login_key を login_key_hash（SHA-256）に置き換える
 
 Revision ID: issue309
-Revises: 023
+Revises: issue307
 Create Date: 2026-11-13
 
 移植元 changeset-009-replace-login-key-with-hash.xml に合わせる。DB が漏れてもキーで
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "issue309"
-down_revision: str | None = "023"
+down_revision: str | None = "issue307"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

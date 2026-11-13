@@ -1,0 +1,79 @@
+/*
+ * 移植元の Dialog は Angular Material の MatDialog で表示している。
+ * styles.css（= index.css）の `.mat-mdc-dialog-container .mdc-dialog__surface` などの上書きは
+ * Material の基本スタイルを前提にしているので、そのうち Dialog が使う分をここに移した。
+ * 出典: @angular/material/fesm2022/dialog.mjs の styles（v21）。CDK Overlay 分は cdk-overlay.css。
+ */
+.mat-mdc-dialog-container {
+  width: 100%;
+  height: 100%;
+  display: block;
+  box-sizing: border-box;
+  max-height: inherit;
+  min-height: inherit;
+  min-width: inherit;
+  max-width: inherit;
+  outline: 0;
+}
+
+.cdk-overlay-pane.mat-mdc-dialog-panel {
+  max-width: var(--mat-dialog-container-max-width, 560px);
+  min-width: var(--mat-dialog-container-min-width, 280px);
+}
+
+@media (max-width: 599px) {
+  .cdk-overlay-pane.mat-mdc-dialog-panel {
+    max-width: var(--mat-dialog-container-small-max-width, calc(100vw - 32px));
+  }
+}
+
+.mat-mdc-dialog-inner-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  box-sizing: border-box;
+  height: 100%;
+  opacity: 0;
+  max-height: inherit;
+  min-height: inherit;
+  min-width: inherit;
+  max-width: inherit;
+}
+
+.mdc-dialog--open .mat-mdc-dialog-inner-container {
+  opacity: 1;
+}
+
+.mat-mdc-dialog-surface {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow-y: auto;
+  outline: 0;
+  max-height: inherit;
+  min-height: inherit;
+  min-width: inherit;
+  max-width: inherit;
+  box-shadow: var(--mat-dialog-container-elevation-shadow, none);
+  border-radius: var(--mat-dialog-container-shape, var(--mat-sys-corner-extra-large, 4px));
+  background-color: var(--mat-dialog-container-color, var(--mat-sys-surface, white));
+}
+
+.mat-mdc-dialog-surface::before {
+  position: absolute;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  border: 2px solid rgba(0, 0, 0, 0);
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}

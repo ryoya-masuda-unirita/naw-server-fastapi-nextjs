@@ -308,28 +308,33 @@ describe('Sidebar', () => {
       expect(screen.getByRole('dialog', { name: 'UsageDialogComponent' })).toBeInTheDocument();
     });
 
-    test('ログアウトを確認でキャンセルするとログアウトしないこと', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(false);
+    test('ログアウトを確認ダイアログでキャンセルするとログアウトしないこと', async () => {
       const logoutSpy = vi.spyOn(useAuthStore.getState(), 'logout');
       renderSidebar();
       const user = userEvent.setup();
 
       await user.click(screen.getByRole('button', { name: 'user-menu' }));
       await user.click(screen.getByText('USER_MENU.LOGOUT'));
+      expect(screen.getByRole('dialog', { name: 'USER_MENU.LOGOUT_CONFIRM_TITLE' })).toHaveTextContent(
+        'USER_MENU.LOGOUT_CONFIRM_MESSAGE'
+      );
+      await user.click(screen.getByTestId('dialog-cancel-button'));
 
       expect(logoutSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    test('ログアウトを確認で OK するとログアウトすること', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
+    test('ログアウトを確認ダイアログで確定するとログアウトすること', async () => {
       const logoutSpy = vi.spyOn(useAuthStore.getState(), 'logout').mockResolvedValue(undefined);
       renderSidebar();
       const user = userEvent.setup();
 
       await user.click(screen.getByRole('button', { name: 'user-menu' }));
       await user.click(screen.getByText('USER_MENU.LOGOUT'));
+      await user.click(screen.getByTestId('dialog-confirm-button'));
 
       expect(logoutSpy).toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
+import { Dialog } from '@/components/shared/dialog';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import { ChatSearchModal } from '@/components/features/chat/chat-search-modal';
 import { NewChatDialog } from '@/components/features/chat/new-chat-dialog';
@@ -43,6 +44,7 @@ export function Sidebar({ config }: SidebarProps) {
     config.sectionGroups.map((section) => ({ ...section }))
   );
   const [openDialog, setOpenDialog] = useState<SidebarDialog>(null);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const mode = resolveSidebarMode(pathname, config);
   const isAdminMode = mode === 'admin';
@@ -104,14 +106,7 @@ export function Sidebar({ config }: SidebarProps) {
         navigate(`${ROUTES.AUTH.PW_RESET}?username=${encodeURIComponent(user?.id ?? '')}`);
         break;
       case 'logout':
-        // 移植元は確認ダイアログ。共通 UI（#278）の確認ダイアログができたら置き換える
-        if (
-          window.confirm(
-            `${t('USER_MENU.LOGOUT_CONFIRM_TITLE')}\n${t('USER_MENU.LOGOUT_CONFIRM_MESSAGE')}`
-          )
-        ) {
-          void logout();
-        }
+        setLogoutConfirmOpen(true);
         break;
       case 'switch-role':
         if (isAdminMode) {
@@ -321,6 +316,25 @@ export function Sidebar({ config }: SidebarProps) {
       <NewChatDialog open={openDialog === 'new-chat'} onClose={closeDialog} />
       <ChatSearchModal open={openDialog === 'chat-search'} onClose={closeDialog} />
       <UsageDialog open={openDialog === 'usage'} onClose={closeDialog} />
+      {/* 移植元 openLogoutConfirmDialog と同じ指定 */}
+      <Dialog
+        open={logoutConfirmOpen}
+        title={t('USER_MENU.LOGOUT_CONFIRM_TITLE')}
+        message={t('USER_MENU.LOGOUT_CONFIRM_MESSAGE')}
+        cancelText={t('COMMON.CANCEL')}
+        confirmText={t('USER_MENU.LOGOUT')}
+        showCancel
+        showConfirm
+        confirmDanger
+        confirmIcon="logout"
+        buttonAlign="center"
+        dialogWidth="800px"
+        onConfirm={() => {
+          void logout();
+          setLogoutConfirmOpen(false);
+        }}
+        onClose={() => setLogoutConfirmOpen(false)}
+      />
     </>
   );
 }

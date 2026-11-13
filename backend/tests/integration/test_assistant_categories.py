@@ -1,6 +1,8 @@
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
+from sqlmodel import col
 
 from app.core.security import create_access_token
 from app.models.assistant_category import AssistantCategory
@@ -131,19 +133,63 @@ async def other_tenant_category(session, other_tenant, admin_user):
     return c
 
 
-def _headers(login_id, tenant_id):
+def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証ヘッダーとテナントIDヘッダーを作る。
+
+    Parameters
+    ----------
+    login_id : str
+        ログインID。
+    tenant_id : str
+        テナントID。
+
+    Returns
+    -------
+    dict[str, str]
+        `Authorization` と `X-Tenant-ID` のヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 def admin_headers(admin_user, tenant):
+    """テナント管理者のリクエストヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def member_headers(member_user, tenant):
+    """一般ユーザーのリクエストヘッダー"""
     return _headers(member_user.login_id, tenant.id)
+
+
+async def _count_categories(session, tenant_id: str, name: str) -> int:
+    """テナント内の指定した名前のアシスタントカテゴリ件数を数える。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        非同期DBセッション。
+    tenant_id : str
+        テナントID。
+    name : str
+        カテゴリ名。
+
+    Returns
+    -------
+    int
+        件数。
+    """
+    result = await session.execute(
+        select(func.count())
+        .select_from(AssistantCategory)
+        .where(
+            col(AssistantCategory.tenant_id) == tenant_id,
+            col(AssistantCategory.name) == name,
+        )
+    )
+    return int(result.scalar_one())
 
 
 class TestCreateAssistantCategory:
@@ -225,18 +271,36 @@ class TestCreateAssistantCategory:
 
         assert response.status_code == 403
 
-    async def test_create_with_duplicate_name_returns_400(
-        self, client, admin_headers, category
+    async def test_create_with_duplicate_name_returns_500(
+        self, client, session, admin_headers, category
     ):
-        """同一テナント内に同名のカテゴリが既に存在する場合400になり作成されないこと"""
+        """同一テナント内に同名のカテゴリがあると移植元と同じく一意制約違反の500になり作成されないこと"""
+        # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
+        tenant_id, name = category.tenant_id, category.name
         async with client as c:
             response = await c.post(
                 "/api/admin/assistant-categories",
-                json={"name": category.name, "description": "別の説明"},
+                json={"name": name, "description": "別の説明"},
                 headers=admin_headers,
             )
 
-        assert response.status_code == 400
+        assert response.status_code == 500
+        assert response.json()["message"] == "Internal Server Error"
+        assert await _count_categories(session, tenant_id, name) == 1
+
+    async def test_create_with_other_tenant_category_name_succeeds(
+        self, client, admin_headers, other_tenant_category
+    ):
+        """他テナントのカテゴリと同じ名前なら作成できること"""
+        async with client as c:
+            response = await c.post(
+                "/api/admin/assistant-categories",
+                json={"name": other_tenant_category.name},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 201
+        assert response.json()["name"] == other_tenant_category.name
 
 
 class TestListAssistantCategories:
@@ -384,18 +448,57 @@ class TestUpdateAssistantCategory:
 
         assert response.status_code == 200
 
-    async def test_update_with_duplicate_name_returns_400(
-        self, client, admin_headers, category, second_category
+    async def test_update_with_duplicate_name_returns_500(
+        self, client, session, admin_headers, category, second_category
     ):
-        """更新後の名前が同一テナント内の別カテゴリと重複する場合400になること"""
+        """更新後の名前が別カテゴリと重複すると移植元と同じく一意制約違反の500になり変更されないこと"""
+        # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
+        category_id, tenant_id = category.id, category.tenant_id
+        second_name = second_category.name
         async with client as c:
             response = await c.patch(
-                f"/api/admin/assistant-categories/{category.id}",
-                json={"name": second_category.name},
+                f"/api/admin/assistant-categories/{category_id}",
+                json={"name": second_name},
                 headers=admin_headers,
             )
 
-        assert response.status_code == 400
+        assert response.status_code == 500
+        assert response.json()["message"] == "Internal Server Error"
+        assert await _count_categories(session, tenant_id, "orig") == 1
+        assert await _count_categories(session, tenant_id, second_name) == 1
+
+    async def test_update_without_description_keeps_description(
+        self, client, admin_headers, category
+    ):
+        """説明を送らずに更新すると元の説明が残ること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistant-categories/{category.id}",
+                json={"name": "updated"},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "updated"
+        assert body["description"] == "orig desc"
+
+    @pytest.mark.parametrize("description", [None, "", "   "])
+    async def test_update_with_blank_description_keeps_description(
+        self, client, session, admin_headers, category, description
+    ):
+        """説明がnull・空文字・空白だけなら元の説明がDBに残ること"""
+        async with client as c:
+            response = await c.patch(
+                f"/api/admin/assistant-categories/{category.id}",
+                json={"name": "updated", "description": description},
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 200
+        assert response.json()["description"] == "orig desc"
+        await session.refresh(category)
+        assert category.description == "orig desc"
 
     async def test_update_not_found_returns_404(self, client, admin_headers):
         """存在しないIDだと404になること"""

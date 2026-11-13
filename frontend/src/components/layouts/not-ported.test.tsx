@@ -2,6 +2,7 @@ import { describe, test, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { useUiStore } from '@/store/ui-store';
 import { NotPortedDialog, NotPortedPage } from './not-ported';
 
 describe('NotPortedPage', () => {
@@ -18,6 +19,25 @@ describe('NotPortedPage', () => {
 
     expect(screen.getByText('未移植: ParentComponent（#128）')).toBeInTheDocument();
     expect(screen.getByText('未移植: ChildComponent（#128）')).toBeInTheDocument();
+  });
+
+  test('ページヘッダーを 1 つだけ出し、モバイルのサイドバー開閉ボタンから開けること', async () => {
+    useUiStore.setState({ sidebarMobileOpen: false });
+    render(
+      <MemoryRouter initialEntries={['/parent/child']}>
+        <Routes>
+          <Route path="/parent" element={<NotPortedPage name="ParentComponent" issue={128} />}>
+            <Route path="child" element={<NotPortedPage name="ChildComponent" issue={128} />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    const user = userEvent.setup();
+
+    expect(screen.getAllByRole('banner')).toHaveLength(1);
+    await user.click(screen.getByTitle('HEADER.SIDEBAR_TOGGLE'));
+
+    expect(useUiStore.getState().sidebarMobileOpen).toBe(true);
   });
 });
 

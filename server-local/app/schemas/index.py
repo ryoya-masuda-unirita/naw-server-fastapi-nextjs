@@ -26,6 +26,20 @@ class SyncIndexFilesRequest(BaseModel):
 
 
 def file_part_to_dict(part: FilePart) -> dict[str, Any]:
+    """ファイルのパートを、移植元 FilePart エンティティを Jackson で出力した形にする。
+
+    項目名はキャメルケース、日時は Instant 形式にそろえる。
+
+    Parameters
+    ----------
+    part : FilePart
+        Waha! 側で分割された学習ファイルの断片。
+
+    Returns
+    -------
+    dict[str, Any]
+        応答に入れるパート。
+    """
     return {
         "id": part.id,
         "tenantId": part.tenant_id,
@@ -36,7 +50,22 @@ def file_part_to_dict(part: FilePart) -> dict[str, Any]:
 
 
 def file_to_dict(file: File, parts: list[FilePart]) -> dict[str, Any]:
-    """移植元 File エンティティを Jackson で出力した形（status は名前、日時は Instant）。"""
+    """学習ファイルを、移植元 File エンティティを Jackson で出力した形にする。
+
+    status は列挙型の名前、日時は Instant 形式にし、パートを ``fileParts`` に入れる。
+
+    Parameters
+    ----------
+    file : File
+        学習ファイル。
+    parts : list[FilePart]
+        このファイルのパート。
+
+    Returns
+    -------
+    dict[str, Any]
+        応答に入れる学習ファイル。
+    """
     return {
         "id": file.id,
         "tenantId": file.tenant_id,
@@ -64,7 +93,23 @@ def page_to_dict(
     """Spring Data 3.2 の PageImpl を Jackson でそのまま出力した形。
 
     呼び出し側（管理画面）は `content`・`totalElements` 等を読むため、
-    フィールド構成を移植元と揃える。
+    フィールド構成を移植元と揃える。並べ替えは指定できないため、sort は常に未指定の形。
+
+    Parameters
+    ----------
+    content : list[dict[str, Any]]
+        このページの要素。
+    page : int
+        ページ番号（0 始まり）。
+    size : int
+        1 ページの件数。
+    total : int
+        条件に合う全件数。
+
+    Returns
+    -------
+    dict[str, Any]
+        ``content``・``pageable``・``totalElements``・``totalPages`` などを持つ応答。
     """
     total_pages = math.ceil(total / size) if size > 0 else 0
     return {

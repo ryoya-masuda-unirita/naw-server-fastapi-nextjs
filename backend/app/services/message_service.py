@@ -1571,14 +1571,14 @@ class MessageService:
         """
         session_maker = get_session_maker()
         async with session_maker() as new_session:
-            await LibraryRepository.save(
+            await LibraryRepository.create_with_content(
                 Library(
                     tenant_id=tenant_id,
                     message_id=message_id,
                     user_id=user_id,
                     title=title,
-                    content=content,
                 ),
+                content,
                 new_session,
             )
 

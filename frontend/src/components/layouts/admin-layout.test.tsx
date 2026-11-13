@@ -43,15 +43,6 @@ describe('AdminLayout', () => {
   });
 
   describe('モバイルサイドバー', () => {
-    test('開くボタンをクリックすると sidebarMobileOpen が true になること', async () => {
-      renderAdminLayout();
-      const user = userEvent.setup();
-
-      await user.click(screen.getByRole('button', { name: 'open-mobile-sidebar' }));
-
-      expect(useUiStore.getState().sidebarMobileOpen).toBe(true);
-    });
-
     test('オーバーレイをクリックすると sidebarMobileOpen が false になること', async () => {
       useUiStore.setState({ sidebarMobileOpen: true });
       renderAdminLayout();

@@ -20,9 +20,15 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """file_parts.file_id にインデックス ``file_parts_file_id_idx`` を作る。
+
+    SQLite は外部キー列にインデックスを自動で作らないため、移植元（H2）と同じく
+    ファイル単位のパート取得とカスケード削除が全件走査にならないようにする。
+    """
     # render_as_batch でもインデックスの追加はテーブルを作り直さずに行える
     op.create_index("file_parts_file_id_idx", "file_parts", ["file_id"])
 
 
 def downgrade() -> None:
+    """upgrade で作った ``file_parts_file_id_idx`` を削除する。"""
     op.drop_index("file_parts_file_id_idx", table_name="file_parts")
