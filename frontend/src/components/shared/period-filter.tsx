@@ -150,10 +150,12 @@ export function PeriodFilter({
     setView('main');
   };
 
-  // 移植元の @HostListener('document:click')。部品の外をクリックしたら閉じる
+  // 移植元の @HostListener('document:click')。部品の外をクリックしたら閉じる。
+  // カレンダーの日を押すと React が画面を切り替えて日のボタンを DOM から外した後に document へイベントが届くため、
+  // contains(event.target) では「外」と誤判定する。発火時点の経路を持つ composedPath() で判定する
   useEffect(() => {
     const onDocumentClick = (event: globalThis.MouseEvent) => {
-      if (hostRef.current && !hostRef.current.contains(event.target as Node)) {
+      if (hostRef.current && !event.composedPath().includes(hostRef.current)) {
         setIsOpen(false);
         setView('main');
       }

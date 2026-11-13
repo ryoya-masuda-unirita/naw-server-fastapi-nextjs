@@ -140,6 +140,25 @@ describe('PeriodFilter', () => {
       expect(screen.getByTestId('period-trigger')).toHaveTextContent('2026/10/03 〜 2026/10/09');
     });
 
+    test('カレンダーの日を押しても閉じず、続けて終了日を指定できること', async () => {
+      const user = userEvent.setup();
+      render(<Harness />);
+      await user.click(screen.getByTestId('period-trigger'));
+      await user.click(screen.getByTestId('period-custom'));
+      await user.click(screen.getByTestId('period-from-input'));
+
+      // 実ブラウザでは、日を押すと React が画面を切り替えて日のボタンを DOM から外してから、
+      // イベントが document に届く。jsdom では更新が act に溜まりこの順序にならないため、
+      // ボタン自身のリスナーで DOM から外して同じ状況を作る（React の onClick はそのあと動く）
+      const dayButton = screen.getByRole('button', { name: '3' });
+      dayButton.addEventListener('click', () => dayButton.remove());
+      dayButton.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+
+      expect(await screen.findByTestId('period-from-input')).toHaveValue('2026/10/03');
+      expect(screen.getByTestId('period-to-input')).toBeInTheDocument();
+      expect(screen.getByTestId('period-apply-button')).toBeInTheDocument();
+    });
+
     test('カレンダーは今月を 1 日の曜日から並べ、月を前後に移動できること', async () => {
       const user = userEvent.setup();
       render(<Harness />);
