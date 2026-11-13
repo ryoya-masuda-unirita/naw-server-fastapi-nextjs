@@ -7,16 +7,23 @@ from sqlmodel import Field, SQLModel
 
 
 class UserRole(str, Enum):
+    """ユーザーのロール。"""
+
     USER = "USER"
     ADMIN = "ADMIN"
     SYSTEM = "SYSTEM"
 
 
 class User(SQLModel, table=True):
+    """ユーザーのテーブル（`users`）。ログインキーはハッシュ値（`login_key_hash`）だけを持つ。"""
+
     __tablename__ = "users"
     __table_args__ = (
         sa.UniqueConstraint(
             "login_id", "tenant_id", name="uq_users_login_id_tenant_id"
+        ),
+        sa.UniqueConstraint(
+            "tenant_id", "login_key_hash", name="uq_users_tenant_id_login_key_hash"
         ),
     )
 
@@ -44,7 +51,8 @@ class User(SQLModel, table=True):
             nullable=False,
         ),
     )
-    login_key: str | None = Field(default=None, max_length=32)
+    # ログインキーは平文を持たず SHA-256 のハッシュだけを保存する（移植元 NAW-1343）。
+    login_key_hash: str | None = Field(default=None, max_length=64)
     is_required_password_reset: bool = Field(
         default=True,
         sa_column=sa.Column(sa.Boolean, nullable=False, server_default=sa.true()),

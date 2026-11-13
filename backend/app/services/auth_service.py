@@ -10,10 +10,12 @@ from app.core import password_mismatch_store
 from app.core.config import get_password_reset_settings
 from app.core.password_policy import check_password_not_reused, verify_password_strength
 from app.core.security import create_access_token, hash_password, verify_password_async
+from app.models.user import User
+from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.password_history_repository import PasswordHistoryRepository
 from app.repositories.tenant_repository import TenantRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import AuthResponse
+from app.schemas.auth import AuthGroupResponse, AuthResponse
 
 # 移植元`PasswordResetService.INVALID_CREDENTIALS_MESSAGE`。ユーザーの有無で応答を
 # 変えるとログインIDの存在が分かってしまうため、ユーザー不在・旧パスワード誤りで共通にする。
@@ -31,10 +33,55 @@ LOGIN_FAILED_MESSAGE = "Authentication failed"
 LOGIN_LOCKED_MESSAGE = "Too many failed login attempts"
 
 
+async def build_auth_response(
+    user: User,
+    token: str,
+    tenant_id: str,
+    session: AsyncSession,
+    login_status: str | None = None,
+) -> AuthResponse:
+    """認証成功の応答を作る（移植元 `AuthController.buildAuthResponse`）。
+
+    Parameters
+    ----------
+    user : User
+        認証したユーザー。
+    token : str
+        発行した JWT。
+    tenant_id : str
+        テナントID。
+    session : AsyncSession
+        非同期DBセッション。
+    login_status : str | None
+        `loginStatus` の値。移植元は `/auth/login` の成功時だけ "SUCCESS" を返す。
+
+    Returns
+    -------
+    AuthResponse
+        所属グループ（`groupId`・`groupAdmin`）を含む認証応答。
+    """
+    memberships = await GroupUserRepository.find_memberships_for_user(
+        tenant_id, user.id, session
+    )
+    return AuthResponse(
+        id=user.login_id,
+        name=user.name,
+        role=user.role.value,
+        token=token,
+        groups=[
+            AuthGroupResponse(groupId=group_id, groupAdmin=is_admin)
+            for group_id, is_admin in memberships
+        ],
+        loginStatus=login_status,
+    )
+
+
 def _login_locked_error() -> HTTPException:
     """ログインがロック中であることを表す例外を返す。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         429 の HTTPException。
     """
     return HTTPException(
@@ -45,7 +92,9 @@ def _login_locked_error() -> HTTPException:
 def _login_failed_error() -> HTTPException:
     """ログインの認証失敗を表す例外を返す。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         403 の HTTPException。
     """
     return HTTPException(
@@ -58,13 +107,19 @@ async def _fail_login(
 ) -> NoReturn:
     """ログインの失敗を記録し、認証失敗またはロックの例外を送出する。
 
-    Args:
-        user_id: ユーザーID。
-        tenant_id: テナントID。
-        redis_client: 失敗記録を保存するRedis非同期クライアント。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        ユーザーID。
+    tenant_id : str
+        テナントID。
+    redis_client : redis.Redis
+        失敗記録を保存するRedis非同期クライアント。
 
-    Raises:
-        HTTPException: 今回の失敗でロックの条件を満たしたら 429、満たさなければ 403。
+    Raises
+    ------
+    HTTPException
+        今回の失敗でロックの条件を満たしたら 429、満たさなければ 403。
     """
     if await password_mismatch_store.record_login_failure_and_check_lockout(
         user_id, tenant_id, redis_client
@@ -90,19 +145,29 @@ class AuthService:
         判定し、認証に失敗したら失敗を記録してロックを判定する。成功したら失敗記録を
         すべて消す。失敗記録はパスワード再設定と共有する。
 
-        Args:
-            username: ログインID。
-            password: 平文パスワード。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-            redis_client: 失敗記録を保存するRedis非同期クライアント。
+        Parameters
+        ----------
+        username : str
+            ログインID。
+        password : str
+            平文パスワード。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        redis_client : redis.Redis
+            失敗記録を保存するRedis非同期クライアント。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証結果を含む AuthResponse。
 
-        Raises:
-            HTTPException: ユーザーが存在しない・パスワード履歴がない・パスワード不一致の
-                場合は 403、ロック中または今回の失敗でロックの条件を満たした場合は 429。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない・パスワード履歴がない・パスワード不一致の
+            場合は 403、ロック中または今回の失敗でロックの条件を満たした場合は 429。
         """
         user = await UserRepository.find_by_login_id(username, tenant_id, session)
         if not user:
@@ -132,7 +197,6 @@ class AuthService:
                 id=user.login_id,
                 name=user.name,
                 role=user.role.value,
-                groups=[],
                 loginStatus="REQUIRES_PASSWORD_RESET",
                 reason="EXPIRED",
             )
@@ -142,25 +206,19 @@ class AuthService:
                 id=user.login_id,
                 name=user.name,
                 role=user.role.value,
-                groups=[],
                 loginStatus="REQUIRES_PASSWORD_RESET",
                 reason="INITIAL",
             )
 
         token = create_access_token(user.login_id, tenant_id)
 
-        return AuthResponse(
-            id=user.login_id,
-            name=user.name,
-            role=user.role.value,
-            token=token,
-            groups=[],
-            loginStatus="SUCCESS",
+        return await build_auth_response(
+            user, token, tenant_id, session, login_status="SUCCESS"
         )
 
     @staticmethod
     async def login_with_login_key(
-        login_key: str, tenant_id: str, session: AsyncSession
+        login_key: str | None, tenant_id: str, session: AsyncSession
     ) -> AuthResponse:
         """ログインキーで認証しJWTを含む認証レスポンスを返す。
 
@@ -168,18 +226,31 @@ class AuthService:
         ログインキーの場合と、別テナントのログインキーの場合は同じ401を返す
         （ログインキーの存在有無が外部から推測できないようにするため）。
 
-        Args:
-            login_key: ログインキー。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_key : str | None
+            ログインキー。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証結果を含む AuthResponse。
 
-        Raises:
-            HTTPException: ログインキーが存在しない、または別テナントの場合は401を返す。
+        Raises
+        ------
+        HTTPException
+            ログインキーが存在しない、または別テナントの場合は401を返す。
         """
-        user = await UserRepository.find_by_login_key(login_key, tenant_id, session)
+        # 移植元は null・空白のキーも「ユーザーが見つからない」として扱う
+        user = (
+            await UserRepository.find_by_login_key(login_key, tenant_id, session)
+            if login_key is not None and login_key.strip()
+            else None
+        )
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login key"
@@ -187,14 +258,7 @@ class AuthService:
 
         token = create_access_token(user.login_id, tenant_id)
 
-        return AuthResponse(
-            id=user.login_id,
-            name=user.name,
-            role=user.role.value,
-            token=token,
-            groups=[],
-            loginStatus="SUCCESS",
-        )
+        return await build_auth_response(user, token, tenant_id, session)
 
     @staticmethod
     async def reset_password(
@@ -210,21 +274,32 @@ class AuthService:
         移植元`PasswordResetService.resetPassword`と同じく、旧パスワードの誤りを
         失敗として記録し、ロック時間内の失敗が上限に達したら再設定をロックする。
 
-        Args:
-            login_id: ログインID。
-            old_password: 旧パスワード（初期パスワード）。
-            new_password: 新パスワード。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
-            redis_client: 失敗記録を保存するRedis非同期クライアント。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        old_password : str
+            旧パスワード（初期パスワード）。
+        new_password : str
+            新パスワード。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        redis_client : redis.Redis
+            失敗記録を保存するRedis非同期クライアント。
 
-        Returns:
+        Returns
+        -------
+        AuthResponse
             認証成功レスポンス（新パスワードで発行したJWTを含む）。
 
-        Raises:
-            HTTPException: ユーザーが存在しない・パスワード履歴がない・旧パスワード
-                不一致の場合は 403、ロック中または今回の失敗で上限に達した場合は 429、
-                テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない・パスワード履歴がない・旧パスワード
+            不一致の場合は 403、ロック中または今回の失敗で上限に達した場合は 429、
+            テナントが存在しない場合は 400、パスワードポリシー違反は 400 を返す。
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
@@ -301,11 +376,4 @@ class AuthService:
 
         token = create_access_token(user.login_id, tenant_id)
 
-        return AuthResponse(
-            id=user.login_id,
-            name=user.name,
-            role=user.role.value,
-            token=token,
-            groups=[],
-            loginStatus="SUCCESS",
-        )
+        return await build_auth_response(user, token, tenant_id, session)

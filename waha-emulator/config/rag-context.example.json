@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "query": "社内規程の申請手順を教えて",
+  "generatedAt": "2026-06-29T00:00:00Z",
+  "contexts": [
+    {
+      "sourceFilePath": "/docs/policies/travel-expense.md",
+      "sourceRef": "travel-expense-policy",
+      "chunkId": "chunk-0003",
+      "chunkSequence": 3,
+      "content": "出張旅費の申請は、出張終了後5営業日以内に申請フォームへ領収書を添付して提出する。",
+      "score": 0.82,
+      "retrievalSignals": { "vector": true, "pgroonga": true, "graph": false }
+    }
+  ]
+}

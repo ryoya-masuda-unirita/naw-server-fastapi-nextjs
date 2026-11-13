@@ -1073,3 +1073,18 @@ props は `className` のみ。文言は `CHAT.VIEWER.SAVE_LIBRARY_DIALOG.OPTION
   />
 ))}
 ```
+
+### MarkdownView（Markdown・チャート・mermaid の描画）
+
+移植元: `<markdown mermaid appChartBlocks [data] [disableSanitizer]="true">`（ngx-markdown）+ `shared/directives/chart-block.directive.ts` → `markdown-view.tsx`。使い方は `src/features/chat/README.md`。
+
+| props | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `data` | `string \| null \| undefined` | （必須） | Markdown 本文。ストリーミング中に逐次更新してよい |
+| `className` | `string` | | 移植元と同じく `chat-message-bubble`（チャット）・`chat-message-bubble viewer-markdown`（ビューワー）を渡す |
+| `mermaid` | `boolean` | `true` | ` ```mermaid ` を図に描画する |
+| `chartBlocks` | `boolean` | `true` | ` ```chart:line｜bar｜pie ` を ECharts のグラフに描画する |
+
+```tsx
+<MarkdownView data={message.answer} className="chat-message-bubble" />
+```

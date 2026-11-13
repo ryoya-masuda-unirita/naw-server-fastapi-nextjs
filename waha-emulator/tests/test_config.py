@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -35,3 +37,11 @@ def test_unknown_provider_is_rejected() -> None:
     """未知の LLM_PROVIDER はエラーにすること"""
     with pytest.raises(ValidationError):
         make_settings(LLM_PROVIDER="unknown")
+
+
+def test_blank_workflows_file_is_unset() -> None:
+    """WAHA_WORKFLOWS_FILE が空文字列（compose の未設定）なら未設定になること"""
+    assert make_settings(WAHA_WORKFLOWS_FILE="").workflows_file is None
+    assert make_settings(WAHA_WORKFLOWS_FILE="/app/config/w.json").workflows_file == (
+        Path("/app/config/w.json")
+    )

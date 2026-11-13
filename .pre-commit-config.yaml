@@ -3,10 +3,10 @@ repos:
     rev: v0.15.20
     hooks:
       - id: ruff-format
-        files: ^(backend|server-local|waha-emulator)/
+        files: ^(backend|server-local|waha-emulator|generative-ai-adapter)/
       - id: ruff-check
         args: [--fix]
-        files: ^(backend|server-local|waha-emulator)/
+        files: ^(backend|server-local|waha-emulator|generative-ai-adapter)/
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.97.1
     hooks:

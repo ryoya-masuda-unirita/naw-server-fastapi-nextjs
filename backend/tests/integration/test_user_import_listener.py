@@ -15,6 +15,7 @@ from app.services.user_import_listener import RetryableImportError, UserImportLi
 
 @pytest.fixture
 async def listener_tenant(session):
+    """テスト用テナント"""
     tenant = Tenant(
         id="tenant-listener-test",
         name="Listener Test Tenant",
@@ -36,6 +37,7 @@ async def listener_tenant(session):
 
 @pytest.fixture
 async def listener_job(session, listener_tenant):
+    """処理待ち（PENDING）のインポートジョブ"""
     job = UserImportJob(
         tenant_id=listener_tenant.id,
         status=UserImportJobStatus.PENDING,
@@ -49,6 +51,20 @@ async def listener_job(session, listener_tenant):
 
 
 def _message_body(job: UserImportJob, tenant_id: str | None = None) -> str:
+    """リスナーに渡す SQS メッセージ本文を作る
+
+    Parameters
+    ----------
+    job : UserImportJob
+        対象のインポートジョブ
+    tenant_id : str | None
+        メッセージに入れるテナントID。None の場合はジョブのテナントID
+
+    Returns
+    -------
+    str
+        JSON 形式のメッセージ本文
+    """
     return json.dumps(
         {
             "importJobId": job.id,
@@ -60,13 +76,14 @@ def _message_body(job: UserImportJob, tenant_id: str | None = None) -> str:
 
 @pytest.mark.asyncio
 class TestUserImportListener:
+    """ユーザーインポートリスナーのテスト"""
+
     async def test_process_import_message_completes_job_on_success(
         self, session, listener_tenant, listener_job
     ):
         """正常なメッセージでユーザーが登録されジョブがCOMPLETEDになること"""
         csv_content = (
-            "login_id,name,password,role,createLoginKey\n"
-            "new-import,New Import,Pass123!,USER,true\n"
+            "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
         )
         fake_storage = AsyncMock()
         fake_storage.download.return_value = csv_content.encode()
@@ -88,7 +105,7 @@ class TestUserImportListener:
             .one()
         )
         assert user.name == "New Import"
-        assert user.login_key is not None
+        assert user.login_key_hash is None
         fake_storage.delete.assert_awaited_once_with(listener_job.storage_url)
 
     async def test_process_import_message_fails_job_on_tenant_id_mismatch(

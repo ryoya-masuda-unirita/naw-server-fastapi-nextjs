@@ -11,16 +11,29 @@ from app.models.tenant_endpoint import EndpointType
 
 
 class AssistantEndpointItemResponse(BaseModel):
+    """アシスタントに紐づくエンドポイント1件分（移植元 `AssistantGetResponse.EndpointResponse`）。
+
+    `label`（テナントエンドポイントの名前）は、移植元では管理者向け一覧
+    （GET /api/admin/assistants）だけに入り、それ以外は null。
+    """
+
     id: str
+    label: str | None = None
     model: str
     type: EndpointType
     url: str
 
 
 class AssistantCategoryItemResponse(BaseModel):
+    """アシスタントに付いたカテゴリ1件分（移植元 `AssistantCategoryGetResponse`）。
+
+    `updatedAt` は移植元では値を設定しないため、常に null（項目だけ出す）。
+    """
+
     id: str
     name: str
     description: str | None
+    updatedAt: datetime | None = None
 
 
 class AssistantGetResponse(BaseModel):
@@ -42,6 +55,8 @@ class AssistantGetResponse(BaseModel):
 
 
 class PagedAssistantResponse(BaseModel):
+    """管理者向けアシスタント一覧のページ応答。"""
+
     content: list[AssistantGetResponse]
     totalElements: int
     number: int
@@ -63,6 +78,8 @@ class AssistantEndpointInput(RequestModel):
 
 
 class AssistantRequestBase(RequestModel):
+    """アシスタント作成・更新のリクエストに共通する項目。"""
+
     type: Annotated[
         AssistantType,
         ValidationMessages(not_null="接続サーバー（タイプ）を指定してください。"),
@@ -87,6 +104,8 @@ class AssistantRequestBase(RequestModel):
 
 
 class AssistantCreateRequest(AssistantRequestBase):
+    """アシスタント作成のリクエスト。"""
+
     name: Annotated[
         str,
         Field(max_length=NAME_MAX_LENGTH),
@@ -103,6 +122,8 @@ class AssistantCreateRequest(AssistantRequestBase):
 
 
 class AssistantUpdateRequest(AssistantRequestBase):
+    """アシスタント更新のリクエスト。"""
+
     name: Annotated[
         str | None,
         Field(max_length=NAME_MAX_LENGTH),
@@ -132,6 +153,8 @@ class AssistantEndpointResponse(BaseModel):
 
 
 class AIModelResponse(BaseModel):
+    """AIモデル1件分の応答。"""
+
     id: int
     endpointType: AIModelEndpointType
     name: str

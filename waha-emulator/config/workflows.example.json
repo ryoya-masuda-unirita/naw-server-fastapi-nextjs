@@ -1,0 +1,33 @@
+{
+  "default": {
+    "outputType": 0,
+    "properties": {
+      "VENDOR": "Echo",
+      "URL": "http://echo.invalid",
+      "API_KEY": "echo",
+      "MODEL_NAME": "echo"
+    }
+  },
+  "services": {
+    "echo-plain": {
+      "outputType": 2,
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo"
+      }
+    },
+    "echo-rag": {
+      "outputType": 1,
+      "ragContextJson": "rag-context.example.json",
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo",
+        "RAG_CONTEXT_JSON_ALLOW_ROOT": "/app/config"
+      }
+    }
+  }
+}
