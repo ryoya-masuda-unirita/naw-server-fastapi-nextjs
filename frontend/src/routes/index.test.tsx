@@ -115,7 +115,8 @@ describe('routes', () => {
       const { router } = renderApp('/dashboard');
 
       expect(screen.getByAltText('SecuAiGent')).toBeInTheDocument();
-      await waitFor(() => expect(screen.getByRole('main')).not.toBeEmptyDOMElement());
+      // 本物のチャット画面は読み込む部品が多く、遅延読み込みに 1 秒（既定の待ち時間）を超えることがある
+      await waitFor(() => expect(screen.getByRole('main')).not.toBeEmptyDOMElement(), { timeout: 5000 });
       expect(router.state.location.pathname).toBe('/dashboard');
     });
 

@@ -61,3 +61,13 @@ export function buildFirstMessageRenameName(params: {
 
   return deriveRoomNameFromMessage(params.content);
 }
+
+/** ルーム名の前後の空白を取り除く（移植元 normalizeRoomName） */
+export function normalizeRoomName(roomName: string): string {
+  return roomName.trim();
+}
+
+/** 空白だけでないルーム名か（移植元 isValidRoomName。名前の変更ダイアログの保存可否に使う） */
+export function isValidRoomName(roomName: string): boolean {
+  return normalizeRoomName(roomName).length > 0;
+}

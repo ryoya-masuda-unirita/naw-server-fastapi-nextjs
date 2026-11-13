@@ -1,0 +1,13 @@
+.chat-reasoning-section + .chat-reasoning-section {
+  margin-top: calc(var(--spacing) * 1);
+}
+
+.chat-reasoning-summary {
+  letter-spacing: 0.01em;
+}
+
+.chat-reasoning-detail {
+  max-height: calc(1.5em * 2);
+  line-height: 1.5;
+  scrollbar-width: thin;
+}
