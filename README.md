@@ -2,6 +2,47 @@
 
 # secuaigent-clientのnext.js化
 
+## 画面を見る（デモ環境）
+
+| 項目 | 値 |
+|---|---|
+| URL | http://localhost:5173 |
+| テナント ID | `test-tenant` |
+| ユーザー ID・パスワード | `admin` / `admin@1234`（管理者）。一般ユーザーは `tanaka` / `admin@1234` ほか（下記） |
+
+```bash
+docker compose -f docker-compose.demo.yml up -d --build   # 起動（初回は数分。マイグレーションとデモデータの投入も自動）
+docker compose -f docker-compose.demo.yml down            # 停止（データは残る）。データも消すなら down -v
+```
+
+起動すると、管理者でログインして次の画面を見られる（デモデータは [backend/seed-demo.sql](backend/seed-demo.sql)、ログイン用のテナント・ユーザーは [backend/seed.sql](backend/seed.sql)）。
+
+| 画面 | パス | 見られるもの |
+|---|---|---|
+| ユーザー | `/admin/users` | 営業・開発・管理部門の社員 10 名（`tanaka`・`sato`・`suzuki`・`takahashi`・`ito`・`watanabe`・`yamamoto`・`nakamura`・`kobayashi`・`kato`。パスワードは全員 `admin@1234`） |
+| チーム | `/admin/groups` | 営業部・開発部・管理部・全社共通（所属ユーザー・アシスタント・テンプレート付き） |
+| アシスタント | `/admin/assistants` | 社内ヘルプデスク（RAG）・議事録要約・営業メール作成・翻訳・コードレビュー・営業ナレッジ検索（SECURE） |
+| テンプレート | `/admin/templates` | 議事録・営業メール・翻訳・コードレビュー・障害報告書・FAQ |
+| ライブラリ | `/library` | 管理者が保存した資料 4 件（タグ付き） |
+| 学習データ | `/admin/training-data` | クラウド・ローカルの学習先フォルダと、規程・事例のファイル |
+| フィードバック | `/admin/feedback` | 回答の正確・不正確と満足度の評価、追加学習の設定 |
+| チャット履歴 | `/admin/chat-history` | 社員のチャット 12 件（問い合わせ・議事録・メール作成など） |
+| ワークスペース | `/admin/tenant` | プランとクレジットの利用状況・今月の利用履歴 |
+
+チャットの送信先（Azure OpenAI など）はダミーなので、画面からの新しい質問には答えが返らない。SECURE アシスタントのチャットは、`onprem/` をつなぐと試せる。
+
+```bash
+docker compose -f docker-compose.demo.yml exec -T postgres psql -U root -d postgres < onprem/cloud-seed.sql   # SECURE アシスタントと接続先を登録
+cd onprem && docker compose up -d --build                                                                      # 社内側を起動（詳細は onprem/README.md）
+```
+
+困ったとき:
+
+- ポートが使われている: `DEMO_FRONTEND_PORT=15173 DEMO_BACKEND_PORT=18001 docker compose -f docker-compose.demo.yml up -d --build` のようにポートを変える（既定は画面 5173・backend 8001。ルートの `docker-compose.yml` の backend も 8001 を使う）
+- 起動の状態: `docker compose -f docker-compose.demo.yml ps -a`（`migrate`・`seed` は終了済みで正常。`backend`・`frontend` が healthy になれば完了）
+- 失敗したとき: `docker compose -f docker-compose.demo.yml logs <サービス名>`
+- デモデータを入れ直す: `down -v` のあと、もう一度 `up -d --build`
+
 ## Codex 運用
 
 `Codex` 用のプロジェクト運用ルールはルートの [AGENTS.md](./AGENTS.md) を参照してください。
@@ -102,7 +143,6 @@ backend の動作確認は、自動テスト（`cd backend && uv run pytest`）�
 | ログイン    | `admin` / `admin@1234`（`backend/seed.sql` のシードユーザー）                     |
 
 
-> **現状の制約**: backend の `POST /auth/login`・`GET /api/auth` は `X-Tenant-ID` ヘッダ必須だが、React のログイン画面にはまだテナントID入力欄がない（ログイン後に `GET /api/auth` のレスポンスからテナントIDを得る作りだが、そのリクエスト自体が `X-Tenant-ID` 必須で、レスポンスに `tenant_id` もないため成り立たない）。入力欄を移植するまでは、React の画面からはログインできない。それまでは下の「バックエンド単体」の手順や自動テストで確認する。
 
 
 
@@ -166,7 +206,7 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 
 1. `http://localhost:5173/` を開く
 2. ログイン画面（`/auth/login`）が表示されることを確認
-3. ログイン以降の確認は、ログイン画面のテナントID入力欄の移植後に行う（上記「現状の制約」を参照）
+3. テナント ID（`test-tenant`）・ユーザー ID・パスワード（`admin` / `admin@1234`）でログインし、管理画面が表示されることを確認
 
 #### トラブルシュート
 

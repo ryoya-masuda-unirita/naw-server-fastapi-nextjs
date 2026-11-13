@@ -6,7 +6,6 @@ import { Loading } from '@/components/shared/loading';
 import { takePendingMessage } from '@/lib/chat/pending-message';
 import { useChatStore } from '@/store/chat-store';
 import { useMessagesStore, useVisibleMessages } from '@/store/messages-store';
-import { useRoomsStore } from '@/store/rooms-store';
 
 /**
  * `/chat/:roomId` のチャットルーム画面（移植元 features/admin/chat-room の AdminChatRoomComponent）。
@@ -22,17 +21,6 @@ export function AdminChatRoomPage() {
   const isLoading = useMessagesStore((s) => s.isLoading);
   // StrictMode の effect の二重実行で、預かったメッセージを送ったあとに読み込みまで走らないようにする
   const handledRoomId = useRef<string | null>(null);
-
-  // ヘッダーのルーム名はルーム一覧から引く。移植元ではサイドバーが一覧を読み込むが、
-  // サイドバーのルーム一覧（#285）が未移植の間は、ここで一覧がなければ読み込む
-  useEffect(() => {
-    const { allRooms, isAllRoomsLoading, getAllRooms } = useRoomsStore.getState();
-    if (allRooms.length === 0 && !isAllRoomsLoading) {
-      getAllRooms().catch((error: unknown) => {
-        console.error('Load rooms failed', error);
-      });
-    }
-  }, []);
 
   useEffect(() => {
     if (!roomId || handledRoomId.current === roomId) return;
