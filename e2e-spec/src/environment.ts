@@ -82,8 +82,8 @@ export function assertLocalTarget(): void {
 export async function envUp(log: (message: string) => void): Promise<void> {
   assertLocalTarget();
   log(`専用環境を起動します（プロジェクト名 ${COMPOSE_PROJECT_NAME}・画面 :${FRONTEND_PORT}・API :${BACKEND_PORT}）`);
-  compose(['up', '-d', '--build', '--wait', 'backend', 'frontend']);
-  log('追加の seed（システム管理者）を入れます');
+  compose(['up', '-d', '--build', '--wait', 'backend', 'frontend', 'llm-mock']);
+  log('追加の seed（システム管理者・LLM のモックへの接続先）を入れます');
   compose(
     ['exec', '-T', 'postgres', 'psql', '-U', 'root', '-d', 'postgres', '-q', '-v', 'ON_ERROR_STOP=1'],
     readFileSync(SPEC_SEED_SQL, 'utf-8')
