@@ -23,3 +23,10 @@ WHERE NOT EXISTS (
     SELECT 1 FROM password_histories
     WHERE user_id = '00000000-0000-4000-8000-000000000301'
 );
+
+-- チャットの回答用の LLM をモック（compose の llm-mock サービス。最後のユーザー発話をエコーする）に向ける。
+-- seed の接続先の URL は example.openai.azure.com などのダミーで、そのままでは回答が返らないため
+-- デモのテナント（tenant-demo-a・tenant-demo-b）も同じ。プラン上限の確認（07-46〜55）で、プランを持つ別のテナントを使う
+UPDATE tenant_endpoints
+SET endpoint = 'http://llm-mock:8080'
+WHERE type = 'AZURE_OPENAI_CHAT';
