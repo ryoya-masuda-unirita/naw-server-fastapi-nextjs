@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const VIEWER_WIDTH_EXPANDED = 400;
@@ -33,6 +33,10 @@ export function ChatDataPanel({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [panelWidth, setPanelWidth] = useState(VIEWER_WIDTH_EXPANDED);
   const [isResizing, setIsResizing] = useState(false);
+  /** ドラッグ中の後始末。ドラッグ中にパネルが消えても、リスナーとカーソルを戻すため */
+  const stopResizeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => stopResizeRef.current?.(), []);
 
   const handleCollapseChange = (collapsed: boolean) => {
     setIsCollapsed(collapsed);
@@ -58,7 +62,9 @@ export function ChatDataPanel({
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      stopResizeRef.current = null;
     };
+    stopResizeRef.current = onMouseUp;
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);

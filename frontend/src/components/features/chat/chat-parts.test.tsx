@@ -142,6 +142,19 @@ describe('ChatDataPanel', () => {
   });
 });
 
+describe('ChatDataPanel（ドラッグ中に消えたとき）', () => {
+  test('ドラッグ中にパネルが消えても、カーソルとリスナーを元に戻すこと', () => {
+    const { unmount } = render(<ChatDataPanel roomId="r1" />);
+
+    fireEvent.mouseDown(screen.getByRole('separator'), { clientX: 500 });
+    expect(document.body.style.cursor).toBe('col-resize');
+    unmount();
+
+    expect(document.body.style.cursor).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+  });
+});
+
 describe('ChatClaude', () => {
   test('単一選択の質問で選び、次へ進み、最後に送信すると回答が渡ること', async () => {
     const onSubmit = vi.fn();

@@ -76,7 +76,9 @@ export function ChatWindow({
 
   // モバイルのビューワーを開いている間は背面をスクロールさせない
   useEffect(() => {
-    document.body.style.overflow = showDataPanel ? 'hidden' : '';
+    if (!showDataPanel) return;
+    // ほかのダイアログが背面のスクロールを止めていても壊さないよう、開いている間だけ触る
+    document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
     };

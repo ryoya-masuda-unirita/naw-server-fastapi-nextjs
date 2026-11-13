@@ -155,4 +155,32 @@ describe('ChatInput', () => {
     expect(wrap).toHaveAttribute('data-drag-over', 'false');
     expect(onDropFiles).toHaveBeenCalledWith([file], expect.any(Object));
   });
+
+  test('ルームの既定アシスタントが後から分かったら選び直し、利用者が選んだあとは上書きしないこと', async () => {
+    server.use(
+      http.get(mockPath(API_PATHS.ASSISTANTS.LIST), () =>
+        HttpResponse.json([buildApiAssistant('a1', true), buildApiAssistant('a2')]),
+      ),
+    );
+    const onSend = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (defaultAssistantId: string | null) => (
+      <QueryClientProvider client={queryClient}>
+        <ChatInput roomId="r1" defaultAssistantId={defaultAssistantId} onSend={onSend} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(null));
+    const user = userEvent.setup();
+    const textarea = screen.getByTestId('chat-input-textarea');
+
+    // 一覧が届いた時点では、ルームの既定が未取得なので一覧の既定（a1）になる。その後ルームの既定（a2）が分かる
+    await user.type(textarea, 'x');
+    await waitFor(() => expect(screen.getByTestId('chat-send-button')).toBeEnabled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    rerender(tree('a2'));
+    await user.type(textarea, '{Enter}');
+
+    await waitFor(() => expect(onSend).toHaveBeenCalled());
+    expect(onSend.mock.calls[0][0].assistantId).toBe('a2');
+  });
 });

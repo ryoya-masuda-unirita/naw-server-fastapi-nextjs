@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { ChatWindow } from '@/components/features/chat/chat-window';
 import { Loading } from '@/components/shared/loading';
 import { useChatStore } from '@/store/chat-store';
@@ -13,7 +13,8 @@ export function ChatNewPage() {
   const messages = useVisibleMessages();
   const isLoading = useMessagesStore((s) => s.isLoading);
 
-  useEffect(() => {
+  // 描画の前に空にして、前のルームの会話が一瞬見えないようにする
+  useLayoutEffect(() => {
     useChatStore.getState().startNewChat();
   }, []);
 

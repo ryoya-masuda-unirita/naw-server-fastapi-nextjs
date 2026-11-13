@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAssistants } from '@/hooks/use-assistants';
 import { resolveInitialAssistant } from '@/lib/utils/resolve-initial-assistant';
 import type { Assistant } from '@/types/chat/assistant.type';
@@ -58,26 +58,47 @@ export function useChatInputControls({ roomId, defaultAssistantId }: Params): Ch
   const { data, isPending } = useAssistants();
   const assistants = useMemo(() => data ?? [], [data]);
   const [messageContent, setMessageContent] = useState('');
-  const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
+  const [selectedAssistant, setSelectedAssistantState] = useState<Assistant | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [webSearchActive, setWebSearchActive] = useState(false);
   const [templateActive, setTemplateActive] = useState<ChatInputTemplate | null>(null);
   const [createLibraryActive, setCreateLibraryActive] = useState(false);
   const syncedRoomKey = useRef<string | null>(null);
+  /** 初期アシスタントを決めたときの、ルームの既定アシスタント ID */
+  const syncedDefaultId = useRef<string | null>(null);
+  /** 利用者が（このルームで）自分で選んだか。選んでいれば初期値で上書きしない */
+  const isUserSelected = useRef(false);
+
+  const setSelectedAssistant = useCallback((assistant: Assistant) => {
+    isUserSelected.current = true;
+    setSelectedAssistantState(assistant);
+  }, []);
 
   useEffect(() => {
     if (!assistants.length) return;
 
     const roomKey = roomId ?? NEW_CHAT_ROOM_KEY;
-    if (syncedRoomKey.current === roomKey && selectedAssistant) return;
+    if (syncedRoomKey.current !== roomKey) {
+      isUserSelected.current = false;
+    }
+    // ルームの一覧が遅れて届き、ルームの既定アシスタントが後から分かったときは、選び直す（移植元はサイドバーが先に一覧を読み込むため起きない）
+    const defaultArrivedLate = syncedDefaultId.current !== (roomId ? defaultAssistantId : null);
+    if (
+      syncedRoomKey.current === roomKey &&
+      selectedAssistant &&
+      (isUserSelected.current || !defaultArrivedLate)
+    ) {
+      return;
+    }
 
     const resolved = resolveInitialAssistant(assistants, roomId ? defaultAssistantId : null);
     if (!resolved) return;
 
     // 一覧・ルームが決まった時点で 1 回だけ初期値を入れる（移植元の effect と同じ）
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedAssistant(resolved);
+    setSelectedAssistantState(resolved);
     syncedRoomKey.current = roomKey;
+    syncedDefaultId.current = roomId ? defaultAssistantId : null;
   }, [assistants, roomId, defaultAssistantId, selectedAssistant]);
 
   return {
