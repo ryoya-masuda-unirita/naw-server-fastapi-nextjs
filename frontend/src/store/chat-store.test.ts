@@ -9,7 +9,7 @@ import { useMessagesStore } from './messages-store';
 import { useRoomsStore } from './rooms-store';
 
 beforeEach(() => {
-  useChatStore.setState({ activeRoomId: null });
+  useChatStore.setState({ activeRoomId: null, attachedFiles: [], sharedRoomContext: undefined });
   useMessagesStore.getState().clearMessages();
   useRoomsStore.getState().reset();
 });
@@ -56,6 +56,83 @@ describe('useChatStore', () => {
     expect(useMessagesStore.getState().messages).toEqual([]);
     expect(useMessagesStore.getState().isLoading).toBe(false);
   });
+
+  test('startNewChat は添付ファイルも空にすること', () => {
+    useChatStore.setState({
+      attachedFiles: [{ id: 'f1', name: 'a.txt', type: 'text/plain', size: 1 }],
+    });
+
+    useChatStore.getState().startNewChat();
+
+    expect(useChatStore.getState().attachedFiles).toEqual([]);
+  });
+
+  test('addAttachment と removeAttachment で添付ファイルを増減できること', () => {
+    URL.createObjectURL = () => 'blob:x';
+    useChatStore.getState().addAttachment(new File(['a'], 'a.txt', { type: 'text/plain' }));
+    const [attachment] = useChatStore.getState().attachedFiles;
+
+    expect(attachment).toMatchObject({ name: 'a.txt', type: 'text/plain', size: 1, url: 'blob:x' });
+
+    useChatStore.getState().removeAttachment(attachment.id);
+    expect(useChatStore.getState().attachedFiles).toEqual([]);
+  });
+
+  test('clearAttachments は添付ファイルをすべて外すこと', () => {
+    useChatStore.setState({
+      attachedFiles: [{ id: 'f1', name: 'a.txt', type: 'text/plain', size: 1 }],
+    });
+
+    useChatStore.getState().clearAttachments();
+
+    expect(useChatStore.getState().attachedFiles).toEqual([]);
+  });
+
+  test('openSharedRoom は自分の一覧にないルームを共有情報から文脈として持ち、メッセージを読み込むこと', async () => {
+    let requestedRoomId: string | null = null;
+    server.use(
+      http.get(mockPath(API_PATHS.MESSAGES.LIST), ({ request }) => {
+        requestedRoomId = new URL(request.url).searchParams.get('roomId');
+        return HttpResponse.json({ assistants: [], messages: [] });
+      }),
+    );
+
+    await useChatStore
+      .getState()
+      .openSharedRoom({ roomId: 'r9', roomName: '共有部屋', isReadOnly: true, teamIds: ['g1'] }, 's9');
+
+    expect(useChatStore.getState().activeRoomId).toBe('r9');
+    expect(useChatStore.getState().sharedRoomContext).toMatchObject({
+      id: 'r9',
+      name: '共有部屋',
+      shareId: 's9',
+      teamIds: ['g1'],
+    });
+    expect(requestedRoomId).toBe('r9');
+  });
+
+  test('openSharedRoom は自分の一覧にあるルームなら文脈を持たないこと', async () => {
+    useRoomsStore.setState({
+      allRooms: [{ id: 'r1', name: '部屋1', isPinned: false, category: 'chat' }],
+    });
+
+    await useChatStore
+      .getState()
+      .openSharedRoom({ roomId: 'r1', roomName: '共有部屋', isReadOnly: false, teamIds: [] }, 's1');
+
+    expect(useChatStore.getState().sharedRoomContext).toBeUndefined();
+    expect(useChatStore.getState().activeRoomId).toBe('r1');
+  });
+
+  test('clearSharedRoomContext は共有ルームの文脈を消すこと', () => {
+    useChatStore.setState({
+      sharedRoomContext: { id: 'r9', name: '共有', isPinned: false, category: 'chat' },
+    });
+
+    useChatStore.getState().clearSharedRoomContext();
+
+    expect(useChatStore.getState().sharedRoomContext).toBeUndefined();
+  });
 });
 
 describe('useActiveRoom', () => {
@@ -72,6 +149,29 @@ describe('useActiveRoom', () => {
 
     useChatStore.setState({ activeRoomId: 'missing' });
     rerender();
+    expect(result.current).toBeUndefined();
+  });
+
+  test('一覧になければ共有ルームの文脈を返し、表示中のルームがなければ返さないこと', () => {
+    useChatStore.setState({
+      activeRoomId: 'r9',
+      sharedRoomContext: { id: 'r9', name: '共有部屋', isPinned: false, category: 'chat' },
+    });
+    const { result, rerender } = renderHook(() => useActiveRoom());
+    expect(result.current?.name).toBe('共有部屋');
+
+    useChatStore.setState({ activeRoomId: null });
+    rerender();
+    expect(result.current).toBeUndefined();
+  });
+
+  test('表示中のルームと別の共有ルームの文脈は返さないこと', () => {
+    useChatStore.setState({
+      activeRoomId: 'r2',
+      sharedRoomContext: { id: 'r9', name: '共有部屋', isPinned: false, category: 'chat' },
+    });
+    const { result } = renderHook(() => useActiveRoom());
+
     expect(result.current).toBeUndefined();
   });
 });
