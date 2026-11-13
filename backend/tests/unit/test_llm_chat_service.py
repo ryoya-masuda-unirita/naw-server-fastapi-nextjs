@@ -20,6 +20,7 @@ def _ai_model(
     token_weight: str = "1.0",
     endpoint_type: AIModelEndpointType = AIModelEndpointType.AZURE_OPENAI_CHAT,
 ) -> AIModel:
+    """テスト用のAIモデルを作る。"""
     return AIModel(
         id=1,
         endpoint_type=endpoint_type,
@@ -33,6 +34,7 @@ def _tenant_endpoint(
     endpoint_id: str = "endpoint-1",
     type: EndpointType = EndpointType.AZURE_OPENAI_CHAT,
 ) -> TenantEndpoint:
+    """テスト用のテナントエンドポイントを作る。"""
     return TenantEndpoint(
         id=endpoint_id,
         tenant_id="tenant-1",
@@ -48,6 +50,7 @@ def _tenant_endpoint(
 
 
 def _request(**overrides) -> LlmChatRequest:
+    """テスト用のリクエストを作る（`overrides` で既定値を上書きする）。"""
     defaults = {
         "deployName": "gpt-4o",
         "messages": [LlmChatTurn(role="user", content="こんにちは")],
@@ -57,18 +60,24 @@ def _request(**overrides) -> LlmChatRequest:
 
 
 class _AsyncChunkIterator:
+    """チャンク列を非同期イテレータとして返すテスト用のスタブ。"""
+
     def __init__(self, chunks: list) -> None:
+        """返すチャンク列を受け取る。"""
         self._chunks = chunks
 
     def __aiter__(self):
+        """非同期イテレータを返す。"""
         return self._gen()
 
     async def _gen(self):
+        """チャンクを順に返す。"""
         for chunk in self._chunks:
             yield chunk
 
 
 async def _consume(streaming_response) -> list[bytes]:
+    """ストリーミングレスポンスの本文チャンクをすべて読む。"""
     return [chunk async for chunk in streaming_response.body_iterator]
 
 
@@ -279,6 +288,7 @@ class TestStreamChat:
         """Azure呼び出し中に例外が発生した場合、errorイベントを送出し例外を伝播しないこと"""
 
         async def _raise(*args, **kwargs):
+            """最初に例外を送出する非同期ジェネレータ。"""
             raise RuntimeError("azure error")
             yield  # pragma: no cover - ジェネレータにするためのダミー
 
@@ -785,11 +795,13 @@ class TestStreamChatCreateLibrary:
     """LlmChatService.stream_chat のライブラリ生成(createLibrary)モードのテスト"""
 
     def _library_prompt(self) -> MagicMock:
+        """ライブラリ生成用のシステムプロンプトを模したモックを作る。"""
         return MagicMock(content="ライブラリ生成用システムプロンプト")
 
     @patch("app.services.llm_chat_service.get_session_maker")
     @patch(
-        "app.services.llm_chat_service.LibraryRepository.save", new_callable=AsyncMock
+        "app.services.llm_chat_service.LibraryRepository.create_with_content",
+        new_callable=AsyncMock,
     )
     @patch(
         "app.services.llm_chat_service.SystemPromptTemplateRepository.find_by_type",
@@ -871,7 +883,7 @@ class TestStreamChatCreateLibrary:
         mock_save_library.assert_awaited_once()
         saved_library = mock_save_library.await_args.args[0]
         assert saved_library.title == "タイトルA"
-        assert saved_library.content == "本文B"
+        assert mock_save_library.await_args.args[1] == "本文B"
         assert saved_library.message_id == "msg-1"
 
 
@@ -915,11 +927,13 @@ class TestApplyAttachmentFiles:
     """LlmChatService._apply_attachment_files のテスト"""
 
     def _file(self, name: str = "photo.png", data: bytes = b"data") -> AttachmentFile:
+        """テスト用の添付ファイルを作る。"""
         return AttachmentFile(name=name, type="image/png", data=data)
 
     def _apply(
         self, turns: list[LlmChatTurn], files: list[AttachmentFile]
     ) -> list[ChatMessage]:
+        """ターンを `ChatMessage` に変換して添付ファイルを反映する。"""
         messages = [ChatMessage(role=t.role, content=t.content) for t in turns]
         return LlmChatService._apply_attachment_files(messages, turns, files)
 

@@ -118,11 +118,16 @@ def _apply_additional_prompt(
     `LlmChatService._apply_additional_prompt`と同一ロジックだが、「serviceが別serviceを
     呼ばない」規約により複製している。
 
-    Args:
-        messages: 会話履歴。
-        additional_prompt: 前置きするプロンプト。未指定・空白のみなら何もしない。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴。
+    additional_prompt : str | None
+        前置きするプロンプト。未指定・空白のみなら何もしない。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         追加プロンプト適用後の会話履歴。
     """
     if not additional_prompt or not additional_prompt.strip():
@@ -148,10 +153,14 @@ def _build_llm_response_format(
     常にJSONモード(`{"type": "json_object"}`)として扱う（`docs/issue-100/01_要件定義.md`
     参照）。
 
-    Args:
-        response_format: リクエストのresponseFormat指定。
+    Parameters
+    ----------
+    response_format : ResponseFormatRequest | None
+        リクエストのresponseFormat指定。
 
-    Returns:
+    Returns
+    -------
+    dict | None
         Azure OpenAI呼び出し用のresponse_format辞書。未指定の場合はNone。
     """
     if response_format is None:
@@ -167,11 +176,16 @@ def _prepend_json_response_instruction(
     `llm_chat_service.py`の同名関数と同一ロジックだが、「serviceが別serviceを呼ばない」
     規約により複製している。
 
-    Args:
-        messages: 会話履歴。
-        response_format: リクエストのresponseFormat指定。未指定なら何もしない。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴。
+    response_format : ResponseFormatRequest | None
+        リクエストのresponseFormat指定。未指定なら何もしない。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         指示文を前置した会話履歴。
     """
     if response_format is None:
@@ -189,10 +203,14 @@ def _apply_library_instruction_to_last_user_turn(
     「serviceが別serviceを呼ばない」規約により複製している。`_apply_additional_prompt`で
     結合済みの発話にさらに被せる想定のため、必ずその後に呼ぶこと。
 
-    Args:
-        messages: 会話履歴。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         指示前置後の会話履歴。該当する"user"ロール発話がない場合はそのまま返す。
     """
     for index in range(len(messages) - 1, -1, -1):
@@ -216,11 +234,16 @@ def _apply_attachment_files(
     ファイル名で紐付けるが、本ポートでは複雑さ低減のため`attachmentFiles`は常に最後の
     ユーザー発話（今回のユーザー入力）に一括で適用する（`docs/issue-97/01_要件定義.md`参照）。
 
-    Args:
-        messages: 会話履歴（`_apply_additional_prompt`適用後を想定）。
-        files: 添付ファイル一覧。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴（`_apply_additional_prompt`適用後を想定）。
+    files : list[AttachmentFile]
+        添付ファイル一覧。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         添付ファイル適用後の会話履歴。`files`が空、またはuser発話が存在しない場合は
         そのまま返す。
     """
@@ -248,10 +271,14 @@ def _downgrade_system_turns_to_user(messages: list[ChatMessage]) -> list[ChatMes
     対応する。`llm_chat_service.py`の`LlmChatService._downgrade_system_turns_to_user`と
     同一ロジックだが、「serviceが別serviceを呼ばない」規約により複製している。
 
-    Args:
-        messages: 会話履歴。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         system発話をuserへ降格した会話履歴。
     """
     return [
@@ -267,10 +294,14 @@ def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
 
     authorization/headersは秘密情報のため含めない（ToolConfig側でexclude指定済み）。
 
-    Args:
-        tools: チャット送信時に指定されたツール設定一覧。
+    Parameters
+    ----------
+    tools : list[ToolConfig] | None
+        チャット送信時に指定されたツール設定一覧。
 
-    Returns:
+    Returns
+    -------
+    str | None
         JSON文字列。toolsが空またはNoneの場合はNone。
     """
     if not tools:
@@ -281,10 +312,14 @@ def _serialize_tools(tools: list[ToolConfig] | None) -> str | None:
 def _deserialize_tools(tools_json: str | None) -> list[ToolConfig] | None:
     """toolsのJSON文字列をToolConfigのリストへ変換する。
 
-    Args:
-        tools_json: `_serialize_tools`で保存したJSON文字列。
+    Parameters
+    ----------
+    tools_json : str | None
+        `_serialize_tools`で保存したJSON文字列。
 
-    Returns:
+    Returns
+    -------
+    list[ToolConfig] | None
         ToolConfigのリスト。tools_jsonが空またはNoneの場合はNone。
     """
     if not tools_json:
@@ -301,10 +336,14 @@ def _to_core_tool_configs(
     規約により`LlmChatService`側の実装をインポートできないため、小さな純粋関数として
     このファイル内に複製する。
 
-    Args:
-        tools: リクエストで指定されたツール設定一覧。
+    Parameters
+    ----------
+    tools : list[ToolConfig] | None
+        リクエストで指定されたツール設定一覧。
 
-    Returns:
+    Returns
+    -------
+    list[CoreToolConfig] | None
         LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
     """
     if not tools:
@@ -326,10 +365,14 @@ def _to_core_tool_configs(
 def _split_reference_paths(file_paths: str | None) -> list[str]:
     """参照ファイルパスのカンマ区切り文字列をリストへ変換する。
 
-    Args:
-        file_paths: カンマ区切りの参照ファイルパス文字列。
+    Parameters
+    ----------
+    file_paths : str | None
+        カンマ区切りの参照ファイルパス文字列。
 
-    Returns:
+    Returns
+    -------
+    list[str]
         参照ファイルパスのリスト。file_pathsが空またはNoneの場合は空リスト。
     """
     if not file_paths:
@@ -338,6 +381,8 @@ def _split_reference_paths(file_paths: str | None) -> list[str]:
 
 
 class MessageService:
+    """メッセージの作成・取得・ストリーミング生成を行うサービス。"""
+
     @staticmethod
     async def _resolve_room(
         tenant_id: str,
@@ -347,17 +392,26 @@ class MessageService:
     ) -> Room:
         """roomId未指定なら新規ルームを作成し、指定時は所有ルームを解決する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: メッセージ作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : MessageCreateRequest
+            メッセージ作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Room
             紐づくルーム。
 
-        Raises:
-            HTTPException: roomId指定時、ルームが存在しない場合は404、所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            roomId指定時、ルームが存在しない場合は404、所有者でない場合は403。
         """
         if req.roomId is None:
             room = Room(
@@ -382,18 +436,27 @@ class MessageService:
     ) -> MessageCreateResponse:
         """メッセージ（質問スレッド）を作成する。roomId未指定なら新規ルームも作成する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: メッセージ作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : MessageCreateRequest
+            メッセージ作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageCreateResponse
             作成したメッセージのID。
 
-        Raises:
-            HTTPException: アシスタントIDが不正な場合は400、roomId指定時にルームが
-                存在しない場合は404、所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            アシスタントIDが不正な場合は400、roomId指定時にルームが
+            存在しない場合は404、所有者でない場合は403。
         """
         assistant = await AssistantRepository.find_by_id_and_tenant_id(
             req.assistantId, tenant_id, session
@@ -436,17 +499,26 @@ class MessageService:
     ) -> GetMessagesResponse:
         """指定ルームのメッセージ一覧と、参照アシスタント一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            room_id: 対象ルームID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        room_id : str
+            対象ルームID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        GetMessagesResponse
             メッセージ一覧と参照アシスタント一覧。
 
-        Raises:
-            HTTPException: ルームが存在しない場合は404、閲覧権限がない場合は403。
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合は404、閲覧権限がない場合は403。
         """
         await require_viewable_room(tenant_id, current_user, room_id, session)
 
@@ -511,18 +583,27 @@ class MessageService:
     ) -> list[MessageContentResponse]:
         """メッセージID群に対応するメッセージ内容一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            message_ids: 取得対象のメッセージID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        message_ids : list[str]
+            取得対象のメッセージID一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[MessageContentResponse]
             メッセージ内容一覧。該当するメッセージ内容が存在しない場合は空リスト。
 
-        Raises:
-            HTTPException: 対象メッセージが属するルームが存在しない場合は404、
-                閲覧権限がない場合は403。
+        Raises
+        ------
+        HTTPException
+            対象メッセージが属するルームが存在しない場合は404、
+            閲覧権限がない場合は403。
         """
         contents = await MessageContentRepository.find_by_message_id_in(
             message_ids, tenant_id, session
@@ -593,14 +674,21 @@ class MessageService:
 
         メッセージが見つからない場合は移植元と同様に何もせず成功する（冪等な仕様）。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            message: 削除対象のメッセージ（未解決ならNone）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        message : Message | None
+            削除対象のメッセージ（未解決ならNone）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            メッセージが所属するルームの所有者でない場合は403。
         """
         if message is None:
             return
@@ -613,14 +701,21 @@ class MessageService:
     ) -> None:
         """メッセージを削除する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            message_id: 削除対象のメッセージID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        message_id : str
+            削除対象のメッセージID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            メッセージが所属するルームの所有者でない場合は403。
         """
         message = await MessageRepository.find_by_tenant_id_and_id(
             tenant_id, message_id, session
@@ -638,14 +733,21 @@ class MessageService:
     ) -> None:
         """メッセージ内容IDを指定してメッセージを削除する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            message_content_id: 削除対象のメッセージ内容ID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        message_content_id : str
+            削除対象のメッセージ内容ID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: メッセージが所属するルームの所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            メッセージが所属するルームの所有者でない場合は403。
         """
         message = await MessageRepository.find_by_tenant_id_and_content_id(
             tenant_id, message_content_id, session
@@ -664,18 +766,28 @@ class MessageService:
     ) -> MessageFeedbackResponse:
         """メッセージへの評価を登録・更新する。既存があれば上書きする。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            message_id: 評価対象のメッセージID。
-            req: 評価内容（rating）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        message_id : str
+            評価対象のメッセージID。
+        req : MessageFeedbackCreateRequest
+            評価内容（rating）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageFeedbackResponse
             登録・更新したフィードバック。
 
-        Raises:
-            HTTPException: メッセージが存在しない場合は404、ルームの所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            メッセージが存在しない場合は404、ルームの所有者でない場合は403。
         """
         message = await MessageRepository.find_by_tenant_id_and_id(
             tenant_id, message_id, session
@@ -731,22 +843,31 @@ class MessageService:
         `session`のライフサイクル（StreamingResponse返却後にリクエストのDIスコープが
         終了しうる）とは独立させる必要があるため、新規セッションで行う。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: メッセージ送信リクエスト。
-            session: 非同期DBセッション（呼び出し前のDB検証にのみ使用する）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : MessageContentCreateRequest
+            メッセージ送信リクエスト。
+        session : AsyncSession
+            非同期DBセッション（呼び出し前のDB検証にのみ使用する）。
 
-        Returns:
+        Returns
+        -------
+        StreamingResponse
             `text/event-stream`のストリーミングレスポンス。
 
-        Raises:
-            HTTPException: 指定messageIdのメッセージが存在しない場合は404、所属
-                ルームの所有者でない場合は403、アシスタントが未解決・`SECURE`・
-                チャットエンドポイント（Azure OpenAI/Bedrock）/AIモデルが解決できない・
-                Bedrockで非対応のパラメータ（tools）が指定された場合は400、SAAS_RAGで
-                インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
-                ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
+        Raises
+        ------
+        HTTPException
+            指定messageIdのメッセージが存在しない場合は404、所属
+            ルームの所有者でない場合は403、アシスタントが未解決・`SECURE`・
+            チャットエンドポイント（Azure OpenAI/Bedrock）/AIモデルが解決できない・
+            Bedrockで非対応のパラメータ（tools）が指定された場合は400、SAAS_RAGで
+            インデックス/埋め込みエンドポイント/ベクトルDB接続情報が解決できない・
+            ベクトルDBへの接続に失敗した場合も400、クレジット上限超過時は429。
         """
         existing_content: MessageContent | None = None
         if req.messageContentId is not None:
@@ -1132,20 +1253,29 @@ class MessageService:
         ユーザー入力を埋め込みベクトル化しAzure AI Searchへ類似検索を行い、検索結果の
         `fileUniqueId`メタデータから解決できたファイルのみをコンテキストへ採用する。
 
-        Args:
-            tenant_id: テナントID。
-            assistant: SAAS_RAGアシスタント。
-            user_input: ユーザーの発話（検索クエリとして使う）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        assistant : Assistant
+            SAAS_RAGアシスタント。
+        user_input : str
+            ユーザーの発話（検索クエリとして使う）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[str, list[str], int, float]
             (RAGコンテキスト文字列, 参照ファイルパス一覧, 消費した埋め込みトークン数,
             埋め込みクレジット換算用のtoken_weight) のタプル。
 
-        Raises:
-            HTTPException: インデックスが未紐付け・未検出、埋め込みエンドポイントが
-                見つからない、ベクトルDB接続情報が見つからない、埋め込みAPI呼び出し・
-                ベクトルDBへの接続・検索に失敗した場合は400。
+        Raises
+        ------
+        HTTPException
+            インデックスが未紐付け・未検出、埋め込みエンドポイントが
+            見つからない、ベクトルDB接続情報が見つからない、埋め込みAPI呼び出し・
+            ベクトルDBへの接続・検索に失敗した場合は400。
         """
         if assistant.index_id is None:
             raise HTTPException(
@@ -1283,25 +1413,40 @@ class MessageService:
         `existing_content_id`が指定されている場合は、新規作成ではなく既存の
         `MessageContent`を再生成結果で上書きする（`question`は変更しない）。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 紐づくメッセージID。
-            room_id: 紐づくルームID(更新日時を進める対象)。
-            question: 質問本文(再生成時は元の質問文をそのまま渡すこと)。
-            answer: 回答本文(エラー時は例外メッセージ)。
-            content_status: 永続化するステータス(`OK`/`ERROR`)。
-            attachment_files: 今回のユーザー発話に添付されたファイル一覧。
-            context: RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
-            reference_paths: 参照ファイルパス一覧(SAAS_CHATの場合は空)。
-            existing_content_id: 再生成対象の既存メッセージ内容ID。新規作成の
-                場合はNone。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str
+            紐づくメッセージID。
+        room_id : str
+            紐づくルームID(更新日時を進める対象)。
+        question : str
+            質問本文(再生成時は元の質問文をそのまま渡すこと)。
+        answer : str
+            回答本文(エラー時は例外メッセージ)。
+        content_status : MessageContentStatus
+            永続化するステータス(`OK`/`ERROR`)。
+        attachment_files : list[AttachmentFile]
+            今回のユーザー発話に添付されたファイル一覧。
+        context : str | None
+            RAG検索で構築したコンテキスト文字列(SAAS_CHATの場合はNone)。
+        reference_paths : list[str] | None
+            参照ファイルパス一覧(SAAS_CHATの場合は空)。
+        existing_content_id : str | None
+            再生成対象の既存メッセージ内容ID。新規作成の
+            場合はNone。
 
-        Returns:
+        Returns
+        -------
+        MessageContentResponse
             永続化した内容を表す`message_content`イベント用のレスポンス。
 
-        Raises:
-            ValueError: `existing_content_id`指定時、対象がストリーミング中に
-                削除される等の稀な競合で見つからない場合。
+        Raises
+        ------
+        ValueError
+            `existing_content_id`指定時、対象がストリーミング中に
+            削除される等の稀な競合で見つからない場合。
         """
         reference_paths = reference_paths or []
         file_paths = ",".join(reference_paths) or None
@@ -1405,23 +1550,29 @@ class MessageService:
         `llm_chat_service.LlmChatService._persist_library`と同等のロジックだが、
         「serviceが別serviceを呼ばない」規約により複製している。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 紐づくメッセージID。
-            user_id: 生成したユーザーのID。
-            title: 確定したタイトル(255文字以内に切り詰め済み)。
-            content: 確定した本文(md)。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str
+            紐づくメッセージID。
+        user_id : UUID
+            生成したユーザーのID。
+        title : str
+            確定したタイトル(255文字以内に切り詰め済み)。
+        content : str
+            確定した本文(md)。
         """
         session_maker = get_session_maker()
         async with session_maker() as new_session:
-            await LibraryRepository.save(
+            await LibraryRepository.create_with_content(
                 Library(
                     tenant_id=tenant_id,
                     message_id=message_id,
                     user_id=user_id,
                     title=title,
-                    content=content,
                 ),
+                content,
                 new_session,
             )
 
@@ -1446,19 +1597,32 @@ class MessageService:
         `llm_chat_service.LlmChatService._persist_token_usage`と同等のロジックだが、
         「serviceが別serviceを呼ばない」規約により複製している。
 
-        Args:
-            tenant_id: テナントID。
-            user_id: 呼び出したユーザーのID。
-            room_id: 紐づくルームID。
-            message_id: 紐づくメッセージID。
-            model_name: 呼び出したAIモデル名。
-            endpoint_type: 実際に呼び出したプロバイダのエンドポイント種別。
-            token_weight: 呼び出したAIモデルの重み係数。
-            input_tokens: 入力トークン数。
-            output_tokens: 出力トークン数。
-            credit_settings: クレジット換算設定。
-            embedding_tokens: RAG検索用に消費した埋め込みトークン数(SAAS_CHATの場合は0)。
-            embedding_token_weight: 埋め込みモデルの重み係数。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            呼び出したユーザーのID。
+        room_id : str | None
+            紐づくルームID。
+        message_id : str | None
+            紐づくメッセージID。
+        model_name : str
+            呼び出したAIモデル名。
+        endpoint_type : AIModelEndpointType
+            実際に呼び出したプロバイダのエンドポイント種別。
+        token_weight : float
+            呼び出したAIモデルの重み係数。
+        input_tokens : int
+            入力トークン数。
+        output_tokens : int
+            出力トークン数。
+        credit_settings : LlmCreditSettings
+            クレジット換算設定。
+        embedding_tokens : int
+            RAG検索用に消費した埋め込みトークン数(SAAS_CHATの場合は0)。
+        embedding_token_weight : float
+            埋め込みモデルの重み係数。
         """
         if input_tokens <= 0 and output_tokens <= 0 and embedding_tokens <= 0:
             return

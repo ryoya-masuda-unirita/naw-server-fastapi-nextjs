@@ -23,6 +23,7 @@ from app.services.message_service import (
 
 
 def _ai_model(name: str = "gpt-4o", token_weight: str = "1.0") -> AIModel:
+    """テスト用のAIモデルを作る。"""
     return AIModel(
         id=1,
         endpoint_type=AIModelEndpointType.AZURE_OPENAI_CHAT,
@@ -33,6 +34,7 @@ def _ai_model(name: str = "gpt-4o", token_weight: str = "1.0") -> AIModel:
 
 
 def _tenant_endpoint(endpoint_id: str = "endpoint-1") -> TenantEndpoint:
+    """テスト用のテナントエンドポイントを作る。"""
     return TenantEndpoint(
         id=endpoint_id,
         tenant_id="tenant-1",
@@ -44,6 +46,7 @@ def _tenant_endpoint(endpoint_id: str = "endpoint-1") -> TenantEndpoint:
 
 
 def _assistant_endpoint(model: str = "gpt-4o") -> AssistantEndpoint:
+    """テスト用のアシスタントエンドポイントを作る。"""
     return AssistantEndpoint(
         assistant_id="assistant-1",
         endpoint_id="endpoint-1",
@@ -53,6 +56,7 @@ def _assistant_endpoint(model: str = "gpt-4o") -> AssistantEndpoint:
 
 
 def _assistant(assistant_type: AssistantType = AssistantType.SAAS_CHAT) -> Assistant:
+    """テスト用のアシスタントを作る。"""
     return Assistant(
         id="assistant-1",
         tenant_id="tenant-1",
@@ -63,10 +67,12 @@ def _assistant(assistant_type: AssistantType = AssistantType.SAAS_CHAT) -> Assis
 
 
 def _message(assistant_id: str | None = "assistant-1") -> MagicMock:
+    """テスト用のメッセージを模したモックを作る。"""
     return MagicMock(id="msg-1", room_id="room-1", assistant_id=assistant_id)
 
 
 def _rag_assistant(index_id: str | None = "index-1") -> Assistant:
+    """テスト用のRAGアシスタントを作る。"""
     return Assistant(
         id="assistant-1",
         tenant_id="tenant-1",
@@ -78,10 +84,12 @@ def _rag_assistant(index_id: str | None = "index-1") -> Assistant:
 
 
 def _index(index_id: str = "index-1") -> Index:
+    """テスト用のインデックスを作る。"""
     return Index(id=index_id, tenant_id="tenant-1", type=IndexType.LOCAL, name="Index")
 
 
 def _embedding_endpoint(endpoint_id: str = "embed-endpoint-1") -> TenantEndpoint:
+    """テスト用の埋め込み用エンドポイントを作る。"""
     return TenantEndpoint(
         id=endpoint_id,
         tenant_id="tenant-1",
@@ -93,6 +101,7 @@ def _embedding_endpoint(endpoint_id: str = "embed-endpoint-1") -> TenantEndpoint
 
 
 def _vdb_endpoint(tenant_id: str = "tenant-1") -> TenantEndpoint:
+    """テスト用のベクトルDBエンドポイントを作る。"""
     return TenantEndpoint(
         id="vdb-endpoint-1",
         tenant_id=tenant_id,
@@ -104,6 +113,7 @@ def _vdb_endpoint(tenant_id: str = "tenant-1") -> TenantEndpoint:
 
 
 def _file(file_id: str, reference: str | None) -> File:
+    """テスト用のファイルを作る。"""
     return File(
         id=file_id,
         tenant_id="tenant-1",
@@ -122,10 +132,14 @@ def _sse_events(body: str) -> list[dict]:
     JSONとして読み、種別`type`で判定する。frontendは`error`を処理せず捨てるが、
     サーバーが送る内容を検証するため、ここでは`type`を持つイベントをすべて返す。
 
-    Args:
-        body: SSEレスポンスの本文。
+    Parameters
+    ----------
+    body : str
+        SSEレスポンスの本文。
 
-    Returns:
+    Returns
+    -------
+    list[dict]
         `type`を持つイベント(JSON)の一覧。
     """
     events = []
@@ -138,6 +152,7 @@ def _sse_events(body: str) -> list[dict]:
 
 
 def _request(**overrides) -> MessageContentCreateRequest:
+    """テスト用のリクエストを作る（`overrides` で既定値を上書きする）。"""
     defaults = {
         "messageId": "msg-1",
         "userInput": "こんにちは",
@@ -148,22 +163,29 @@ def _request(**overrides) -> MessageContentCreateRequest:
 
 
 class _AsyncChunkIterator:
+    """チャンク列を非同期イテレータとして返すテスト用のスタブ。"""
+
     def __init__(self, chunks: list) -> None:
+        """返すチャンク列を受け取る。"""
         self._chunks = chunks
 
     def __aiter__(self):
+        """非同期イテレータを返す。"""
         return self._gen()
 
     async def _gen(self):
+        """チャンクを順に返す。"""
         for chunk in self._chunks:
             yield chunk
 
 
 async def _consume(streaming_response) -> list[bytes]:
+    """ストリーミングレスポンスの本文チャンクをすべて読む。"""
     return [chunk async for chunk in streaming_response.body_iterator]
 
 
 def _mock_new_session() -> MagicMock:
+    """新規セッションを模した非同期モックを作る。"""
     mock_new_session = AsyncMock()
     mock_new_session.__aenter__.return_value = mock_new_session
     mock_new_session.add = MagicMock()
@@ -820,6 +842,7 @@ class TestStreamMessageContent:
         from app.models.message import MessageContent, MessageContentStatus
 
         async def _raise(*args, **kwargs):
+            """最初に例外を送出する非同期ジェネレータ。"""
             raise RuntimeError("azure error")
             yield  # pragma: no cover - ジェネレータにするためのダミー
 
@@ -903,6 +926,7 @@ class TestStreamMessageContent:
         from app.models.message import MessageContent, MessageContentStatus
 
         async def _raise_after_first_chunk(*args, **kwargs):
+            """最初のチャンクを返した後に例外を送出する非同期ジェネレータ。"""
             yield ChatStreamChunk(text_delta="途中まで回答")
             raise RuntimeError("azure error")
 
@@ -978,6 +1002,7 @@ class TestStreamMessageContent:
         from app.models.message import MessageContent, MessageContentStatus
 
         async def _hang_after_first_chunk(*args, **kwargs):
+            """最初のチャンクを返した後に待ち続ける非同期ジェネレータ。"""
             yield ChatStreamChunk(text_delta="途中まで")
             yield ChatStreamChunk(input_tokens=3, output_tokens=2)
             # クライアント切断を模すため、ここで無期限に待つ(aclose()でGeneratorExitが
@@ -1276,6 +1301,7 @@ class TestStreamMessageContentRegenerate:
         from app.models.message import MessageContent, MessageContentStatus
 
         async def _raise(*args, **kwargs):
+            """最初に例外を送出する非同期ジェネレータ。"""
             raise RuntimeError("azure error")
             yield  # pragma: no cover - ジェネレータにするためのダミー
 
@@ -1324,11 +1350,13 @@ class TestStreamMessageContentCreateLibrary:
     """MessageService.stream_message_content のライブラリ生成(isCreateLibrary)モードのテスト"""
 
     def _library_prompt(self) -> MagicMock:
+        """ライブラリ生成用のシステムプロンプトを模したモックを作る。"""
         return MagicMock(content="ライブラリ生成用システムプロンプト")
 
     @patch("app.services.message_service.get_session_maker")
     @patch(
-        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+        "app.services.message_service.LibraryRepository.create_with_content",
+        new_callable=AsyncMock,
     )
     @patch(
         "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
@@ -1429,13 +1457,14 @@ class TestStreamMessageContentCreateLibrary:
         mock_save_library.assert_awaited_once()
         saved_library = mock_save_library.await_args.args[0]
         assert saved_library.title == "タイトルA"
-        assert saved_library.content == "本文B"
+        assert mock_save_library.await_args.args[1] == "本文B"
         assert saved_library.tenant_id == "tenant-1"
         assert saved_library.message_id == "msg-1"
 
     @patch("app.services.message_service.get_session_maker")
     @patch(
-        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+        "app.services.message_service.LibraryRepository.create_with_content",
+        new_callable=AsyncMock,
     )
     @patch(
         "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
@@ -1522,7 +1551,8 @@ class TestStreamMessageContentCreateLibrary:
 
     @patch("app.services.message_service.get_session_maker")
     @patch(
-        "app.services.message_service.LibraryRepository.save", new_callable=AsyncMock
+        "app.services.message_service.LibraryRepository.create_with_content",
+        new_callable=AsyncMock,
     )
     @patch(
         "app.services.message_service.SystemPromptTemplateRepository.find_by_type",
@@ -1966,6 +1996,7 @@ class TestStreamMessageContentRag:
         mock_find_endpoint.return_value = (_assistant_endpoint(), _tenant_endpoint())
 
         def _find_model_side_effect(endpoint_type, name, session):
+            """エンドポイント種別ごとに対応するAIモデルを返す。"""
             if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
                 return _ai_model()
             return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
@@ -2111,6 +2142,7 @@ class TestStreamMessageContentRag:
         from app.schemas.message import ToolConfig
 
         def _find_model_side_effect(endpoint_type, name, session):
+            """エンドポイント種別ごとに対応するAIモデルを返す。"""
             if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
                 return _ai_model()
             return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
@@ -2233,6 +2265,7 @@ class TestStreamMessageContentRag:
         from app.models.message import MessageContent, MessageContentStatus
 
         def _find_model_side_effect(endpoint_type, name, session):
+            """エンドポイント種別ごとに対応するAIモデルを返す。"""
             if endpoint_type == AIModelEndpointType.AZURE_OPENAI_CHAT:
                 return _ai_model()
             return _ai_model(name="text-embedding-ada-002", token_weight="2.0")
@@ -2586,6 +2619,7 @@ class TestMessageContentCreateRequestAttachmentFiles:
     """MessageContentCreateRequest の attachmentFiles/historyAttachmentFiles 検証"""
 
     def _file(self, name: str = "a.png") -> AttachmentFile:
+        """テスト用の添付ファイルを作る。"""
         return AttachmentFile(name=name, type="image/png", data=b"data")
 
     def test_attachment_files_default_to_empty_list(self):
@@ -2615,6 +2649,7 @@ class TestApplyAttachmentFiles:
     def _file(
         self, name: str = "photo.png", content_type: str = "image/png"
     ) -> AttachmentFile:
+        """テスト用の添付ファイルを作る。"""
         return AttachmentFile(name=name, type=content_type, data=b"data")
 
     def test_returns_as_is_when_no_files(self):
@@ -3059,6 +3094,7 @@ class TestStreamMessageContentPersistFailure:
         """LLM呼び出しと保存の両方が失敗した場合も、例外を伝播せずerrorイベントを送ること"""
 
         async def _raise(*args, **kwargs):
+            """最初に例外を送出する非同期ジェネレータ。"""
             raise RuntimeError("azure error")
             yield  # pragma: no cover - ジェネレータにするためのダミー
 
@@ -3094,6 +3130,7 @@ _BEDROCK_MODEL = "anthropic.claude-sonnet-5"
 
 
 def _bedrock_tenant_endpoint() -> TenantEndpoint:
+    """テスト用のBedrockエンドポイントを作る。"""
     return TenantEndpoint(
         id="endpoint-1",
         tenant_id="tenant-1",
@@ -3105,6 +3142,7 @@ def _bedrock_tenant_endpoint() -> TenantEndpoint:
 
 
 def _bedrock_ai_model() -> AIModel:
+    """テスト用のBedrockのAIモデルを作る。"""
     return AIModel(
         id=2,
         endpoint_type=AIModelEndpointType.BEDROCK_CHAT,
@@ -3172,6 +3210,7 @@ class TestStreamMessageContentProviderDispatch:
 
     @staticmethod
     def _added_token_usages(new_session: MagicMock) -> list[TokenUsage]:
+        """新規セッションに追加されたトークン使用量を取り出す。"""
         return [
             call.args[0]
             for call in new_session.add.call_args_list

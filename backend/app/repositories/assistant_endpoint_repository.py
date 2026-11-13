@@ -8,6 +8,8 @@ from app.schemas.assistant import AssistantEndpointInput, AssistantEndpointItemR
 
 
 class AssistantEndpointRepository:
+    """アシスタントとエンドポイントの紐付けのDBアクセスを行うリポジトリ。"""
+
     @staticmethod
     async def find_chat_endpoint(
         assistant_id: str, tenant_id: str, session: AsyncSession
@@ -19,12 +21,18 @@ class AssistantEndpointRepository:
         デプロイ名(`AssistantEndpoint.model`)とAPIキーを含む`TenantEndpoint`を
         あわせて1件解決する。対象の種別は`CHAT_AI_MODEL_ENDPOINT_TYPES`で管理する。
 
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[AssistantEndpoint, TenantEndpoint] | None
             (アシスタントとエンドポイントの紐付け, テナントエンドポイント) のタプル。
             紐づくチャット用エンドポイントが存在しない場合はNone。複数存在する
             場合はAzure OpenAIを優先し、同じ種別の中では`AssistantEndpoint.endpoint_id`が
@@ -61,12 +69,18 @@ class AssistantEndpointRepository:
         アシスタントごとに個別クエリを発行するとN+1になるため、対象アシスタントID一覧に対する
         (AssistantEndpoint, TenantEndpoint) の結合結果を1クエリで取得しPython側で集約する。
 
-        Args:
-            assistant_ids: 対象のアシスタントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[AssistantEndpointItemResponse]]
             アシスタントIDをキーとしたエンドポイント情報一覧の辞書。
         """
         if not assistant_ids:
@@ -95,6 +109,41 @@ class AssistantEndpointRepository:
                 )
             )
         return grouped
+
+    @staticmethod
+    async def find_with_tenant_endpoints_by_assistant_id(
+        assistant_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[tuple[AssistantEndpoint, TenantEndpoint]]:
+        """アシスタントの全エンドポイント（モデル名・APIキーを含む）を取得する。
+
+        移植元は先頭のエンドポイントのモデルを使うため、順序を`endpoint_id`昇順に固定する。
+
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[tuple[AssistantEndpoint, TenantEndpoint]]
+            アシスタントとエンドポイントの紐付け、テナントエンドポイントのタプル一覧。
+        """
+        stmt = (
+            select(AssistantEndpoint, TenantEndpoint)
+            .join(TenantEndpoint, TenantEndpoint.id == AssistantEndpoint.endpoint_id)
+            .where(
+                AssistantEndpoint.assistant_id == assistant_id,
+                AssistantEndpoint.tenant_id == tenant_id,
+                TenantEndpoint.tenant_id == tenant_id,
+            )
+            .order_by(AssistantEndpoint.endpoint_id)
+        )
+        result = await session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
 
     @staticmethod
     async def find_tenant_endpoints_grouped_by_assistant_id(
@@ -136,11 +185,16 @@ class AssistantEndpointRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            endpoints: 紐付け先のテナントエンドポイントIDとモデルの一覧（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        endpoints : list[AssistantEndpointInput]
+            紐付け先のテナントエンドポイントIDとモデルの一覧（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(AssistantEndpoint).where(

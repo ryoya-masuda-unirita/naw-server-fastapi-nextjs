@@ -77,10 +77,14 @@ def _build_llm_response_format(
     (`{"type": "json_object"}`)として扱う。json_schemaによる構造強制は移植元でも
     未実装のため踏襲しない（`docs/issue-100/01_要件定義.md`参照）。
 
-    Args:
-        response_format: リクエストのresponseFormat指定。
+    Parameters
+    ----------
+    response_format : ResponseFormatRequest | None
+        リクエストのresponseFormat指定。
 
-    Returns:
+    Returns
+    -------
+    dict | None
         Azure OpenAI呼び出し用のresponse_format辞書。未指定の場合はNone。
     """
     if response_format is None:
@@ -93,11 +97,16 @@ def _prepend_json_response_instruction(
 ) -> list[ChatMessage]:
     """responseFormat指定時、JSON出力を促すsystemメッセージを先頭に追加する。
 
-    Args:
-        messages: 会話履歴。
-        response_format: リクエストのresponseFormat指定。未指定なら何もしない。
+    Parameters
+    ----------
+    messages : list[ChatMessage]
+        会話履歴。
+    response_format : ResponseFormatRequest | None
+        リクエストのresponseFormat指定。未指定なら何もしない。
 
-    Returns:
+    Returns
+    -------
+    list[ChatMessage]
         指示文を前置した会話履歴。
     """
     if response_format is None:
@@ -110,10 +119,14 @@ def _to_core_tool_configs(
 ) -> list[CoreToolConfig] | None:
     """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
 
-    Args:
-        tools: リクエストで指定されたツール設定一覧。
+    Parameters
+    ----------
+    tools : list[SchemaToolConfig] | None
+        リクエストで指定されたツール設定一覧。
 
-    Returns:
+    Returns
+    -------
+    list[CoreToolConfig] | None
         LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
     """
     if not tools:
@@ -133,6 +146,8 @@ def _to_core_tool_configs(
 
 
 class LlmChatService:
+    """ルームに紐づかないLLMチャットのストリーミング生成を行うサービス。"""
+
     @staticmethod
     async def stream_chat(
         tenant_id: str,
@@ -148,23 +163,32 @@ class LlmChatService:
         （StreamingResponse返却後にリクエストのDIスコープが終了しうる）とは独立させる
         必要があるため、新規セッションで行う。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: チャットリクエスト。
-            session: 非同期DBセッション（呼び出し前のDB検証にのみ使用する）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : LlmChatRequest
+            チャットリクエスト。
+        session : AsyncSession
+            非同期DBセッション（呼び出し前のDB検証にのみ使用する）。
 
-        Returns:
+        Returns
+        -------
+        StreamingResponse
             `text/event-stream`のストリーミングレスポンス。
 
-        Raises:
-            HTTPException: クレジット上限超過時は429、指定deployNameのチャット用
-                AIモデル（Azure OpenAI/Bedrock）が存在しない・テナントにそのモデル種別に
-                対応するチャット用エンドポイントが存在しない・
-                createLibrary=trueなのにmessageId未指定・発話の`attachments`に
-                アップロードされていないファイル名がある・Bedrockのモデルで
-                非対応のパラメータ（tools）が指定された場合は400、指定messageIdが
-                テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
+        Raises
+        ------
+        HTTPException
+            クレジット上限超過時は429、指定deployNameのチャット用
+            AIモデル（Azure OpenAI/Bedrock）が存在しない・テナントにそのモデル種別に
+            対応するチャット用エンドポイントが存在しない・
+            createLibrary=trueなのにmessageId未指定・発話の`attachments`に
+            アップロードされていないファイル名がある・Bedrockのモデルで
+            非対応のパラメータ（tools）が指定された場合は400、指定messageIdが
+            テナント内に存在しない場合は404、所属ルームの所有者でない場合は403を返す。
         """
         if req.createLibrary and not req.messageId:
             raise HTTPException(
@@ -413,11 +437,16 @@ class LlmChatService:
         発話を書き換えるのではなく、末尾から遡って最初に見つかった"user"ロールの発話
         （大文字小文字を区別しない）に適用する。該当する発話がない場合は何もしない。
 
-        Args:
-            messages: 会話履歴。
-            additional_prompt: 前置きするプロンプト。未指定・空白のみなら何もしない。
+        Parameters
+        ----------
+        messages : list[ChatMessage]
+            会話履歴。
+        additional_prompt : str | None
+            前置きするプロンプト。未指定・空白のみなら何もしない。
 
-        Returns:
+        Returns
+        -------
+        list[ChatMessage]
             追加プロンプト適用後の会話履歴。
         """
         if not additional_prompt or not additional_prompt.strip():
@@ -442,10 +471,14 @@ class LlmChatService:
         `_apply_additional_prompt`で結合済みの発話にさらに被せる想定のため、必ず
         `_apply_additional_prompt`の後に呼ぶこと。
 
-        Args:
-            messages: 会話履歴。
+        Parameters
+        ----------
+        messages : list[ChatMessage]
+            会話履歴。
 
-        Returns:
+        Returns
+        -------
+        list[ChatMessage]
             指示前置後の会話履歴。該当する"user"ロール発話がない場合はそのまま返す。
         """
         for index in range(len(messages) - 1, -1, -1):
@@ -473,18 +506,26 @@ class LlmChatService:
         ライブラリ生成でsystemからuserへ降格した発話には付与しない（移植元はsystem発話を
         添付なしのuser発話へ変換するため）。
 
-        Args:
-            messages: `turns`から1対1で作った会話履歴（追加プロンプト・ライブラリ用指示・
-                system発話の降格を適用済み。contentはすべてstr）。
-            turns: リクエストの会話履歴（添付ファイル名・元のroleの参照に使う）。
-            files: アップロードされた添付ファイル一覧。
+        Parameters
+        ----------
+        messages : list[ChatMessage]
+            `turns`から1対1で作った会話履歴（追加プロンプト・ライブラリ用指示・
+            system発話の降格を適用済み。contentはすべてstr）。
+        turns : list[LlmChatTurn]
+            リクエストの会話履歴（添付ファイル名・元のroleの参照に使う）。
+        files : list[AttachmentFile]
+            アップロードされた添付ファイル一覧。
 
-        Returns:
+        Returns
+        -------
+        list[ChatMessage]
             添付ファイル付与後の会話履歴。
 
-        Raises:
-            HTTPException: 発話の`attachments`に、アップロードされていないファイル名が
-                ある場合は400を返す。
+        Raises
+        ------
+        HTTPException
+            発話の`attachments`に、アップロードされていないファイル名が
+            ある場合は400を返す。
         """
         files_by_name = {file.name: file for file in files if file.data}
 
@@ -523,10 +564,14 @@ class LlmChatService:
         システムプロンプトより後ろに別のsystem発話が並ぶと出力形式が不安定になるため、
         `messages`由来のsystem発話はuserへ降格する。
 
-        Args:
-            messages: 会話履歴。
+        Parameters
+        ----------
+        messages : list[ChatMessage]
+            会話履歴。
 
-        Returns:
+        Returns
+        -------
+        list[ChatMessage]
             system発話をuserへ降格した会話履歴。
         """
         return [
@@ -547,12 +592,18 @@ class LlmChatService:
     ) -> None:
         """生成したライブラリを新規セッションで永続化する（移植元`persistLibraryInNewTransaction`相当）。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 紐づくメッセージID(`createLibrary=true`時は必須のため非None)。
-            user_id: 生成したユーザーのID。
-            title: 確定したタイトル(255文字以内に切り詰め済み)。
-            content: 確定した本文(md)。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str | None
+            紐づくメッセージID(`createLibrary=true`時は必須のため非None)。
+        user_id : UUID
+            生成したユーザーのID。
+        title : str
+            確定したタイトル(255文字以内に切り詰め済み)。
+        content : str
+            確定した本文(md)。
         """
         if message_id is None:
             # createLibrary=trueの場合、stream_chat冒頭のバリデーションでmessageId
@@ -561,14 +612,14 @@ class LlmChatService:
             return
         session_maker = get_session_maker()
         async with session_maker() as new_session:
-            await LibraryRepository.save(
+            await LibraryRepository.create_with_content(
                 Library(
                     tenant_id=tenant_id,
                     message_id=message_id,
                     user_id=user_id,
                     title=title,
-                    content=content,
                 ),
+                content,
                 new_session,
             )
 
@@ -592,17 +643,28 @@ class LlmChatService:
         `AsyncSession`のライフサイクル外で実行されうるため、独立した新規セッションで
         コミットする。
 
-        Args:
-            tenant_id: テナントID。
-            user_id: 呼び出したユーザーのID。
-            room_id: 紐づくルームID(messageId未指定時はNone)。
-            message_id: 紐づくメッセージID(messageId未指定時はNone)。
-            model_name: 呼び出したAIモデル名。
-            endpoint_type: 実際に呼び出したプロバイダのエンドポイント種別。
-            token_weight: 呼び出したAIモデルの重み係数。
-            input_tokens: 入力トークン数。
-            output_tokens: 出力トークン数。
-            credit_settings: クレジット換算設定。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            呼び出したユーザーのID。
+        room_id : str | None
+            紐づくルームID(messageId未指定時はNone)。
+        message_id : str | None
+            紐づくメッセージID(messageId未指定時はNone)。
+        model_name : str
+            呼び出したAIモデル名。
+        endpoint_type : AIModelEndpointType
+            実際に呼び出したプロバイダのエンドポイント種別。
+        token_weight : float
+            呼び出したAIモデルの重み係数。
+        input_tokens : int
+            入力トークン数。
+        output_tokens : int
+            出力トークン数。
+        credit_settings : LlmCreditSettings
+            クレジット換算設定。
         """
         if input_tokens <= 0 and output_tokens <= 0:
             return
