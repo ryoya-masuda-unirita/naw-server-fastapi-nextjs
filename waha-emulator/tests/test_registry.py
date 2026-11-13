@@ -4,10 +4,31 @@ from waha_emulator.workflows.registry import WorkflowRegistry
 
 
 class _NamedWorkflow:
+    """どのワークフローが選ばれたかを名前で見分けるためのテスト用ワークフロー。"""
+
     def __init__(self, name: str) -> None:
+        """名前を受け取って保持する。
+
+        Parameters
+        ----------
+        name : str
+            見分けるための名前。run の戻り値にもなる。
+        """
         self.name = name
 
     async def run(self, request: WorkflowRequest) -> str:
+        """入力は使わず、保持している名前を返す。
+
+        Parameters
+        ----------
+        request : WorkflowRequest
+            ワークフローへの入力（使わない）。
+
+        Returns
+        -------
+        str
+            保持している名前。
+        """
         return self.name
 
 

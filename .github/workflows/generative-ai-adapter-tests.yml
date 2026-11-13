@@ -97,6 +97,7 @@ jobs:
       - name: フォーマットを検証
         run: uv run ruff format --check .
 
+      # pyproject.toml の [tool.ruff.lint] で有効にした D101〜D107・D417（numpy 規約）もここで検査される（Issue #311）
       - name: リンターを実行
         run: uv run ruff check .
 
