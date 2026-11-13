@@ -193,7 +193,8 @@ export const useAuthStore = create<AuthStore>((set) => {
       const user = mapToUser(response);
       setUser(user);
       sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
-      window.location.href = ROUTES.APP.DASHBOARD;
+      // 遷移は呼び出し側（パスワード再設定画面）がルーターで行う。window.location.href でページごと読み込み直すと、
+      // 直前に出した「パスワードを更新しました。」のトーストが消える（移植元はルーターの遷移）
     },
 
     // API が 401 を返したとき（移植元 errorInterceptor）。移植元は sessionStorage を消すだけだが、

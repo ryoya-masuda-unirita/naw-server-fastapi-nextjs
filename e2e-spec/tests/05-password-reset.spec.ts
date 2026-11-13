@@ -110,8 +110,14 @@ test.describe('05_パスワード再設定', () => {
     const resetPage = new PasswordResetPage(page);
     await resetPage.expectLoaded();
     await resetPage.fill({ oldPassword: 'Old@Pass1234', newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD });
-    await resetPage.submit();
-    await expectFieldError(resetPage, 'username', PW_RESET_MESSAGES.required);
+    // 読み替え（#362）: 項目書の期待は「ログインIDの必須エラー」だが、現行の移植元（pw-reset.component.ts）のログインID欄は
+    // disabled で、Angular は無効な欄を検証しないため必須エラーは出ない（コンポーネントの spec も「編集できないこと」を確かめている）。
+    // 移植元と同じく、欄は編集できず、空のまま更新を押しても更新は成功しない（画面に留まる）ことを確かめる
+    await expect(resetPage.input('username')).toBeDisabled();
+    const response = await resetPage.submitAndWaitForApi();
+    expect(response.ok()).toBe(false);
+    await expect(resetPage.group('username').getByText(PW_RESET_MESSAGES.required)).toHaveCount(0);
+    await expect(page).toHaveURL(RESET_URL);
   });
 
   test('[05-06] 旧パスワード未入力', async ({ loginAs, page }) => {
@@ -168,6 +174,9 @@ test.describe('05_パスワード再設定', () => {
       await page.goto(PW_RESET_PATH);
       const resetPage = new PasswordResetPage(page);
       await resetPage.expectLoaded();
+      // 再入力だけを入れると、欄から外れた時点で「パスワードが一致しません」が欄の上に出て（移植元も同じ）、
+      // 切替ボタンの位置がずれてクリックが外れるため、新パスワードにも同じ値を入れて一致させる
+      if (field === 'confirmPassword') await resetPage.input('newPassword').fill('Secret@1234');
       await resetPage.input(field).fill('Secret@1234');
       await expect(resetPage.input(field)).toHaveAttribute('type', 'password');
       await resetPage.toggle(field).click();
