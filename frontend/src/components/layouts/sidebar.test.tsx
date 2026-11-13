@@ -305,7 +305,7 @@ describe('Sidebar', () => {
       await user.click(screen.getByRole('button', { name: 'user-menu' }));
       await user.click(screen.getByText('USER_MENU.CHECK_CREDIT'));
 
-      expect(screen.getByRole('dialog', { name: 'UsageDialogComponent' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'USER_MENU.CHECK_CREDIT' })).toBeInTheDocument();
     });
 
     test('ログアウトを確認ダイアログでキャンセルするとログアウトしないこと', async () => {
