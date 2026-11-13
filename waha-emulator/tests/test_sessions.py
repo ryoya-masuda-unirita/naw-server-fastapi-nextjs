@@ -11,23 +11,60 @@ IDLE_TIMEOUT_SECONDS = 60.0
 
 
 class _Clock:
+    """時刻を手動で進められるテスト用の時計。"""
+
     def __init__(self) -> None:
+        """時刻を 1000.0 秒で始める。"""
         self.now = 1000.0
 
     def __call__(self) -> float:
+        """現在の（手動で進めた）時刻を返す。
+
+        Returns
+        -------
+        float
+            現在時刻（秒）。
+        """
         return self.now
 
 
 class _WaitingWorkflow:
+    """release が呼ばれるまで終わらないテスト用ワークフロー。"""
+
     def __init__(self) -> None:
+        """待ち合わせ用のイベントを作る。"""
         self.release = asyncio.Event()
 
     async def run(self, request: WorkflowRequest) -> str:
+        """release がセットされるまで待ち、空の JSON を返す。
+
+        Parameters
+        ----------
+        request : WorkflowRequest
+            ワークフローへの入力（使わない）。
+
+        Returns
+        -------
+        str
+            空の JSON オブジェクトの文字列。
+        """
         await self.release.wait()
         return "{}"
 
 
 def _store(clock: _Clock) -> SessionStore:
+    """指定した時計を使うセッションストアを作る。
+
+    Parameters
+    ----------
+    clock : _Clock
+        ストアが時刻の取得に使う時計。
+
+    Returns
+    -------
+    SessionStore
+        アイドル時間切れを IDLE_TIMEOUT_SECONDS にしたストア。
+    """
     return SessionStore(idle_timeout_seconds=IDLE_TIMEOUT_SECONDS, clock=clock)
 
 

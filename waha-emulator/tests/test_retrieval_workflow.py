@@ -171,6 +171,13 @@ def _runtime_factory(client: FakeSearchClient) -> Any:
     """
 
     def factory() -> CoreRetrievalRuntime:
+        """偽の provider を載せた検索ランタイムを作る。
+
+        Returns
+        -------
+        CoreRetrievalRuntime
+            偽の DB・埋め込みで動く検索ランタイム。
+        """
         provider = CorePostgreSqlRetrievalProvider(client, FixedEmbedding())
         return CoreRetrievalRuntime(default_provider_runtime(provider))
 
