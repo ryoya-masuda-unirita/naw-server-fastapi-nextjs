@@ -2,6 +2,7 @@ import { describe, test, expect, vi, afterEach } from 'vitest';
 import { act, createRef } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { queryMatIcon, querySvgIcon } from './icons/test-helpers';
 import { ContextMenu, type ContextMenuHandle } from './context-menu';
 
 const DESKTOP_WIDTH = 1024;
@@ -56,9 +57,9 @@ describe('ContextMenu', () => {
 
     test('トリガーアイコンを指定しないと歯車の SVG を出すこと', () => {
       const { container, rerender } = render(<ContextMenu triggerTestid="t" menu={null} />);
-      expect(container.querySelector('[data-svg-icon-name="settings"]')).toBeInTheDocument();
+      expect(querySvgIcon(container, 'settings')).toBeInTheDocument();
       rerender(<ContextMenu triggerTestid="t" triggerIcon="more_vert" menu={null} />);
-      expect(container.querySelector('[data-mat-icon-name="more_vert"]')).toBeInTheDocument();
+      expect(queryMatIcon(container, 'more_vert')).toBeInTheDocument();
     });
 
     test('customTrigger で独自のトリガーを使えること', async () => {

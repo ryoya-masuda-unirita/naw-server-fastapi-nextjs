@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 interface RadioProps {
   /** 表示文言（移植元も翻訳せずそのまま出す） */

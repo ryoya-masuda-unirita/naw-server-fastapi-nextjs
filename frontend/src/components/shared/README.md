@@ -15,7 +15,7 @@
 | `<ng-content>` | `children` |
 | `TemplateRef` の input（例: `actionsTemplate`、`menuTpl`） | `ReactNode` または描画関数（例: `renderActions={(row) => ...}`） |
 | `MatDialog.open(DialogComponent, { data })` | `<Dialog open={...} onClose={...} {...data} />` |
-| `ToastService` | `useToastStore`（`toast-store.ts`） |
+| `ToastService` | `useToastStore`（`toast-store.ts`）。API の共通エラートーストは `showErrorToast`（`main.tsx` で接続済み） |
 | `DropdownService` | `dropdownService`（`dropdown-service.ts`） |
 | `UiStore.isMobile` | `useIsMobile()`（`use-is-mobile.ts`、幅 768px 未満をモバイル） |
 | `src/types/common.ts` の `SelectOption`、`tab.type.ts` の `TabItem`、`table.interface.ts` | `types.ts` |
@@ -27,12 +27,14 @@
 
 ### アイコン
 
-- `MatIcon`（`mat-icon.tsx`）: 移植元テンプレートの `<mat-icon class="...">name</mat-icon>`。`material-symbols-outlined` フォントのリガチャで描画します
-- `AppMatIcon`（`mat-icon.tsx`）: 移植元の `<app-mat-icon [icon]="...">`。外側の要素の font-size に合わせて 1em で描画します
-- `SvgIcon`（`svg-icon.tsx`）: 移植元の `<app-svg-icon name="...">`。20x20 の SVG パス辞書（`svg-icon-paths.ts`、移植元からそのまま移したもの）から描画します
+アイコンは `icons/` にあります（レイアウト側の #277 が作ったものと共通）。
+
+- `MatIcon`（`icons/mat-icon.tsx`）: 移植元テンプレートの `<mat-icon class="...">name</mat-icon>`。`name` と大きさ `size`（px）を渡す。`material-symbols-outlined` フォントのリガチャで描画する。旧名（`expand_more` など）も描画できるので `name` は文字列も受け取る
+- `AppMatIcon`（`icons/app-mat-icon.tsx`）: 移植元の `<app-mat-icon [icon]="...">`。`icon` を渡し、外側の要素の font-size（`text-[20px]!` など）に合わせて 1em で描画する
+- `SvgIcon`（`icons/svg-icon.tsx`）: 移植元の `<app-svg-icon name="...">`。20x20 の SVG パス辞書（`icons/svg-icon-paths.ts`）から描画する
 
 ```tsx
-<MatIcon icon="close" className="icon-20" />
+<MatIcon name="close" size={20} />
 <AppMatIcon icon="check" className="text-[22px]! text-brand-primary" />
 <SvgIcon name="arrowDown" className="w-5 h-5 text-text-weak" />
 ```
@@ -41,7 +43,7 @@
 
 - `src/index.css`: 移植元 `styles.css` をそのまま移したもの（色・文字サイズのトークン、`.dropdown-menu`・`.table-list-row`・`.icon-button`・`.combobox-*` などのグローバルなクラス）。中身は移植元と同じに保ちます
 - `<部品名>.css`: 移植元の component SCSS。`:host` は部品のルート要素のクラス（`.app-<部品名>`）に置き換えてスコープしています
-- `cdk-overlay.css`・`dialog.css`・`mat-icon.css`: 移植元が前提にしている Angular CDK / Material の基本スタイル。`index.css` 側の上書き（`.cdk-overlay-backdrop`、`.mdc-dialog__surface` など）がそのまま効くよう、同じクラス名で DOM を組んでいます
+- `cdk-overlay.css`・`dialog.css`: 移植元が前提にしている Angular CDK / Material の基本スタイル。`index.css` 側の上書き（`.cdk-overlay-backdrop`、`.mdc-dialog__surface` など）がそのまま効くよう、同じクラス名で DOM を組んでいます
 - `host-selectors.css`: 移植元 `styles.css` のうち要素セレクタ（`app-button.dialog-cancel-btn`、`app-checkbox:has(...)`）を使うルールのクラスセレクタ版
 
 ### アプリのルートに置くもの
@@ -84,7 +86,7 @@
 <Button variant="outline" intent="cancel" size="largePcDefault" heightPx={54} onClick={close}>
   {t('COMMON.CANCEL')}
 </Button>
-<Button type="submit" fullWidth loading={isPending} iconPosition="left" icon={<MatIcon icon="login" className="h-5! w-5! text-[20px]!" />}>
+<Button type="submit" fullWidth loading={isPending} iconPosition="left" icon={<MatIcon name="login" size={24} />}>
   {t('AUTH.LOGIN.SUBMIT')}
 </Button>
 ```

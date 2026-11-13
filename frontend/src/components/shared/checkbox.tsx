@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './host-selectors.css';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 interface CheckboxProps {
   checked?: boolean;

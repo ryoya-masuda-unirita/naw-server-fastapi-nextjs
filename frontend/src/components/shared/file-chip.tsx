@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { cx } from './class-names';
-import { AppMatIcon, MatIcon } from './mat-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { MatIcon } from './icons/mat-icon';
 
 /** 移植元 FileChipComponent.getFileTypeLabel。MIME タイプ（なければ拡張子）から種別ラベルを作る */
 function getFileTypeLabel(file: File): string {
@@ -48,7 +49,7 @@ export function FileChip({ file, showRemoveBtn = true, onRemove, className }: Fi
             aria-label={t('CHAT.INPUT.REMOVE_FILE')}
             onClick={() => onRemove?.()}
           >
-            <MatIcon icon="close" className="icon-12 text-white!" />
+            <MatIcon name="close" size={12} className="text-white!" />
           </button>
         )}
       </div>

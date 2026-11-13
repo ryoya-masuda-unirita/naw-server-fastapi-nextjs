@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import './file-upload.css';
 import { Button } from './button';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 // webkitdirectory は React の型定義に無いので、属性としてそのまま渡す
 const FOLDER_INPUT_ATTRS = { webkitdirectory: '' };

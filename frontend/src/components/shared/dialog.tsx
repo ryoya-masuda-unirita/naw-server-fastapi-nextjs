@@ -4,8 +4,9 @@ import './cdk-overlay.css';
 import './dialog.css';
 import { Button } from './button';
 import { cx } from './class-names';
-import { AppMatIcon, MatIcon } from './mat-icon';
-import { SvgIcon } from './svg-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { MatIcon } from './icons/mat-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 /** MatDialog の既定（autoFocus: 'first-tabbable'）と同じ対象を探す */
 const TABBABLE_SELECTOR =
@@ -234,7 +235,7 @@ function DialogOverlay({
                             onClick={() => close()}
                             aria-label="Close"
                           >
-                            <MatIcon icon="close" className="h-5 w-5 text-[20px]" />
+                            <MatIcon name="close" size={24} />
                           </button>
                         )}
                       </div>
@@ -276,7 +277,7 @@ function DialogOverlay({
                                   loading={leftActionLoading}
                                   icon={
                                     leftActionIcon ? (
-                                      <MatIcon icon={leftActionIcon} className="h-5 w-5 text-[20px]" />
+                                      <MatIcon name={leftActionIcon} size={24} />
                                     ) : undefined
                                   }
                                   onClick={() => onLeftAction?.()}

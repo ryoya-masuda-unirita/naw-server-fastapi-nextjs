@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from './button';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useDocumentClick, useLatestRef, useModelState, useWindowEvent } from './select-hooks';
 import type { SelectOption } from './types';
 import { useIsMobile } from './use-is-mobile';
@@ -390,7 +390,8 @@ export function ComboboxMulti<T = string>({
           {supportText && <p className="fieldset-support-text">{supportText}</p>}
           {errorMessage && (
             <p className="fieldset-error-message" role="alert">
-              <SvgIcon name="attention" />
+              {/* 移植元の name="attention" は SVG 辞書になく、空のアイコン枠だけが出る。見た目を揃えるため枠だけ置く */}
+              <span className="flex w-5 h-5 items-center justify-center" />
               {errorMessage}
             </p>
           )}

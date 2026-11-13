@@ -53,3 +53,11 @@ export const useToastStore = create<ToastStore>((set, get) => {
     clear: () => set({ toasts: [] }),
   };
 });
+
+/**
+ * 移植元 errorInterceptor が出す共通のエラートースト。`useApiErrorInterceptor({ showErrorToast })` に渡す。
+ * 参照が変わらないようモジュールの関数にしている（渡し先の useEffect の依存に入るため）
+ */
+export function showErrorToast(message: string): void {
+  useToastStore.getState().error(message);
+}

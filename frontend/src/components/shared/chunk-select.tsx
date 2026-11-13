@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import './chunk-select.css';
 import { Button } from './button';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useDocumentClick, useLatestRef, useModelState, useWindowEvent } from './select-hooks';
 import type { SelectOption } from './types';
 import { useIsMobile } from './use-is-mobile';

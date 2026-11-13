@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import './cdk-overlay.css';
 import './date-range-select.css';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 
 export interface DateRangeOption {
   /** i18n キー */
@@ -133,13 +133,10 @@ export function DateRangeSelect({
         )}
       >
         <span className="text-sm text-text-default truncate">{t(selectedLabel)}</span>
-        <MatIcon
-          icon="expand_more"
-          className={cx(
-            'text-gray-400 !w-4 !h-4 !text-[16px] transition-transform duration-200 flex-shrink-0',
+        <MatIcon name="expand_more" size={16} className={cx(
+            'text-gray-400 transition-transform duration-200 flex-shrink-0',
             isOpen && 'rotate-180',
-          )}
-        />
+          )} />
       </div>
 
       {isOpen &&
@@ -165,7 +162,7 @@ export function DateRangeSelect({
                     >
                       <div className="flex items-center gap-2">
                         {period === option.value ? (
-                          <MatIcon icon="check" className="text-primary !w-4 !h-4 !text-[16px]" />
+                          <MatIcon name="check" size={16} className="text-primary" />
                         ) : (
                           <div className="w-4" />
                         )}
@@ -183,7 +180,7 @@ export function DateRangeSelect({
                   >
                     <div className="flex items-center gap-2">
                       {period === 'custom' ? (
-                        <MatIcon icon="check" className="text-primary !w-4 !h-4 !text-[16px]" />
+                        <MatIcon name="check" size={16} className="text-primary" />
                       ) : (
                         <div className="w-4" />
                       )}
@@ -191,7 +188,7 @@ export function DateRangeSelect({
                         {t('COMMON.SPECIFY_PERIOD')}
                       </span>
                     </div>
-                    <MatIcon icon="chevron_right" className="text-gray-400 !w-4 !h-4 !text-[16px]" />
+                    <MatIcon name="chevron_right" size={16} className="text-gray-400" />
                   </div>
                 </div>
               </div>

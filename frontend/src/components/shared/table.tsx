@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from './checkbox';
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
 import type { SortEvent, TableColumn } from './types';
 
 interface TableProps<T extends object> {

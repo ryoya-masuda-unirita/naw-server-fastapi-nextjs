@@ -12,6 +12,11 @@ from app.schemas.assistant_category import (
     AssistantCategoryUpdateRequest,
 )
 
+# 移植元 AssistantCategoryService の EntityNotFoundException の文言に合わせる。
+# 移植元は更新処理だけコロンの後に空白が入るため、文言を2つ持つ。
+_NOT_FOUND_MESSAGE = "AssistantCategory not found with id:{category_id}"
+_NOT_FOUND_MESSAGE_ON_UPDATE = "AssistantCategory not found with id: {category_id}"
+
 
 class AssistantCategoryService:
     @staticmethod
@@ -25,7 +30,11 @@ class AssistantCategoryService:
 
     @staticmethod
     async def _get_category_or_404(
-        category_id: str, tenant_id: str, session: AsyncSession
+        category_id: str,
+        tenant_id: str,
+        session: AsyncSession,
+        *,
+        not_found_message: str = _NOT_FOUND_MESSAGE,
     ) -> AssistantCategory:
         """IDとテナントIDでアシスタントカテゴリを取得し、存在しなければ404を送出する。
 
@@ -33,6 +42,7 @@ class AssistantCategoryService:
             category_id: アシスタントカテゴリID。
             tenant_id: テナントID。
             session: 非同期DBセッション。
+            not_found_message: 存在しない場合の文言の雛形（`{category_id}` を埋める）。
 
         Returns:
             該当するアシスタントカテゴリ。
@@ -46,7 +56,7 @@ class AssistantCategoryService:
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Assistant category not found",
+                detail=not_found_message.format(category_id=category_id),
             )
         return category
 
@@ -153,7 +163,10 @@ class AssistantCategoryService:
                 既に存在する場合400を返す。
         """
         category = await AssistantCategoryService._get_category_or_404(
-            category_id, tenant_id, session
+            category_id,
+            tenant_id,
+            session,
+            not_found_message=_NOT_FOUND_MESSAGE_ON_UPDATE,
         )
         if await AssistantCategoryRepository.exists_by_tenant_id_and_name(
             tenant_id, req.name, session, exclude_id=category_id

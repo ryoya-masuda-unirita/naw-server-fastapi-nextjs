@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cx } from './class-names';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useIsMobile } from './use-is-mobile';
 
 /** 移植元と同じく size='small' のデスクトップでは幅 160px に固定する */

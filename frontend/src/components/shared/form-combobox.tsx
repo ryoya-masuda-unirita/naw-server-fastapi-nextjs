@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 
 export interface ComboboxOption {
   value: string;
@@ -184,7 +184,6 @@ export function FormCombobox({
                       className="mat-icon notranslate material-symbols-outlined text-[16px]! w-4! h-4! text-text-default!"
                       style={CHIP_REMOVE_ICON_STYLE}
                       aria-hidden="true"
-                      data-mat-icon-name="cancel"
                       onClick={(event) => removeOption(event, option)}
                     >
                       cancel
@@ -195,10 +194,7 @@ export function FormCombobox({
             </div>
             <div className="w-px h-8 bg-text-lighter/30 mx-1 shrink-0" />
             <div className="w-8 shrink-0 flex items-center justify-center text-text-lighter">
-              <MatIcon
-                icon="arrow_drop_down"
-                className={cx('text-[24px]! w-6! h-6! transition-transform duration-200', isOpen && 'rotate-180')}
-              />
+              <MatIcon name="arrow_drop_down" size={24} className={cx('transition-transform duration-200', isOpen && 'rotate-180')} />
             </div>
           </div>
         </div>
@@ -226,10 +222,7 @@ export function FormCombobox({
                     <div className="relative flex items-center justify-center w-3.75 h-3.75 mr-3 shrink-0">
                       <div className={checkboxClass(isAllSelected || isIndeterminate)}>
                         {(isAllSelected || isIndeterminate) && (
-                          <MatIcon
-                            icon={isIndeterminate && !isAllSelected ? 'remove' : 'check'}
-                            className="text-white! text-[14px]! w-3.5! h-3.5! flex items-center justify-center leading-none"
-                          />
+                          <MatIcon name={isIndeterminate && !isAllSelected ? 'remove' : 'check'} size={14} className="text-white! flex items-center justify-center leading-none" />
                         )}
                       </div>
                     </div>
@@ -261,10 +254,7 @@ export function FormCombobox({
                         >
                           <div className={checkboxClass(selected)}>
                             {selected && (
-                              <MatIcon
-                                icon="check"
-                                className="text-white! text-sm! w-3.5! h-3.5! flex items-center justify-center leading-none"
-                              />
+                              <MatIcon name="check" size={14} className="text-white! flex items-center justify-center leading-none" />
                             )}
                           </div>
                         </div>

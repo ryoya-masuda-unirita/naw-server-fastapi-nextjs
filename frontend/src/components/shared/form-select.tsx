@@ -1,6 +1,6 @@
 import './form-select.css';
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
 import { Select } from './select';
 import type { SelectOption } from './types';
 

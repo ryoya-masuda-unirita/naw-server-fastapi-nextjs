@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './form-sort-input.css';
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
-import { SvgIcon } from './svg-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useIsMobile } from './use-is-mobile';
 
 export interface SortOption {

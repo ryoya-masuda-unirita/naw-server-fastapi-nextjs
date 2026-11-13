@@ -1,5 +1,5 @@
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
 import { Switch } from './switch';
 
 interface FormSwitchProps {

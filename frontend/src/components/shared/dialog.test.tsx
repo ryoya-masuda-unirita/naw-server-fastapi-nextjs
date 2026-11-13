@@ -2,6 +2,7 @@ import { describe, test, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Dialog } from './dialog';
+import { querySvgIcon } from './icons/test-helpers';
 
 describe('Dialog', () => {
   describe('表示', () => {
@@ -56,7 +57,7 @@ describe('Dialog', () => {
       render(<Dialog open title="削除" showConfirm confirmDanger confirmIcon="delete" confirmText="削除" />);
       const confirm = screen.getByTestId('dialog-confirm-button');
       expect(confirm).toHaveClass('bg-status-error');
-      expect(confirm.querySelector('[data-svg-icon-name="delete"]')).toBeInTheDocument();
+      expect(querySvgIcon(confirm, 'delete')).toBeInTheDocument();
     });
 
     test('確認ボタンを無効・読み込み中にできること', () => {

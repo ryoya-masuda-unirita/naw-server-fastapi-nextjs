@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import './cdk-overlay.css';
 import './dropdown-select.css';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 
 export interface DropdownOption {
   label: string;
@@ -82,13 +82,10 @@ export function DropdownSelect({
         )}
       >
         <span className="text-sm text-text-default truncate">{label(selectedLabel)}</span>
-        <MatIcon
-          icon="expand_more"
-          className={cx(
-            'text-gray-400 !w-4 !h-4 !text-[16px] transition-transform duration-200 flex-shrink-0',
+        <MatIcon name="expand_more" size={16} className={cx(
+            'text-gray-400 transition-transform duration-200 flex-shrink-0',
             isOpen && 'rotate-180',
-          )}
-        />
+          )} />
       </div>
 
       {isOpen &&
@@ -114,12 +111,12 @@ export function DropdownSelect({
                   >
                     <div className="flex items-center gap-2">
                       {value === option.value ? (
-                        <MatIcon icon="check" className="text-primary !w-4 !h-4 !text-[16px]" />
+                        <MatIcon name="check" size={16} className="text-primary" />
                       ) : (
                         <div className="w-4" />
                       )}
                       {option.icon && (
-                        <MatIcon icon={option.icon} className="!w-4 !h-4 !text-[16px] text-text-lighter" />
+                        <MatIcon name={option.icon} size={16} className="text-text-lighter" />
                       )}
                       <span className="text-sm text-text-default group-hover:text-primary">
                         {label(option.label)}

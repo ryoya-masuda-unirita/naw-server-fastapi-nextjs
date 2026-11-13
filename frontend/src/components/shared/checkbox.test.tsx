@@ -2,6 +2,7 @@ import { describe, test, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Checkbox } from './checkbox';
+import { querySvgIcon } from './icons/test-helpers';
 
 describe('Checkbox', () => {
   test('ラベルを翻訳キーで表示すること', () => {
@@ -35,6 +36,6 @@ describe('Checkbox', () => {
 
   test('ヘッダー用は中間状態のアイコンが全選択用になること', () => {
     const { container } = render(<Checkbox isHeader indeterminate />);
-    expect(container.querySelector('[data-svg-icon-name="checkboxAll"]')).toBeInTheDocument();
+    expect(querySvgIcon(container, 'checkboxAll')).toBeInTheDocument();
   });
 });

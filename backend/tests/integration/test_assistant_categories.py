@@ -298,6 +298,33 @@ class TestGetAssistantCategory:
             )
 
         assert response.status_code == 404
+        assert (
+            response.json()["message"]
+            == "AssistantCategory not found with id:nonexistent"
+        )
+
+    async def test_get_options_is_treated_as_id(self, client, admin_headers):
+        """/optionsは移植元と同じく単体取得として扱われ404になること"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistant-categories/options",
+                headers=admin_headers,
+            )
+
+        assert response.status_code == 404
+        assert (
+            response.json()["message"] == "AssistantCategory not found with id:options"
+        )
+
+    async def test_get_options_as_non_admin_returns_403(self, client, member_headers):
+        """/optionsもテナント管理者以外は取得できないこと"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/assistant-categories/options",
+                headers=member_headers,
+            )
+
+        assert response.status_code == 403
 
     async def test_get_other_tenant_category_returns_404(
         self, client, admin_headers, other_tenant_category
@@ -310,6 +337,11 @@ class TestGetAssistantCategory:
             )
 
         assert response.status_code == 404
+        # 他テナントに存在することを区別できないよう、存在しない場合と同じ文言になる
+        assert (
+            response.json()["message"]
+            == f"AssistantCategory not found with id:{other_tenant_category.id}"
+        )
 
     async def test_get_as_non_admin_returns_403(self, client, member_headers, category):
         """テナント管理者以外は単体取得できないこと"""
@@ -375,6 +407,11 @@ class TestUpdateAssistantCategory:
             )
 
         assert response.status_code == 404
+        # 移植元は更新だけコロンの後に空白が入る
+        assert (
+            response.json()["message"]
+            == "AssistantCategory not found with id: nonexistent"
+        )
 
     async def test_update_other_tenant_category_returns_404(
         self, client, admin_headers, other_tenant_category
@@ -388,6 +425,10 @@ class TestUpdateAssistantCategory:
             )
 
         assert response.status_code == 404
+        assert (
+            response.json()["message"]
+            == f"AssistantCategory not found with id: {other_tenant_category.id}"
+        )
 
     async def test_update_with_description_256_chars_returns_400(
         self, client, admin_headers, category
@@ -438,6 +479,10 @@ class TestDeleteAssistantCategory:
             )
 
         assert response.status_code == 404
+        assert (
+            response.json()["message"]
+            == "AssistantCategory not found with id:nonexistent"
+        )
 
     async def test_delete_as_non_admin_returns_403(
         self, client, member_headers, category

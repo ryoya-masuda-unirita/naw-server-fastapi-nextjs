@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 import type { TabItem } from './types';
 
 interface TabProps {
@@ -50,7 +50,7 @@ export function Tab({
 
   const renderInner = (tab: TabItem, labelClass?: string) => (
     <>
-      {tab.icon && <MatIcon icon={tab.icon} className="text-current text-xl w-5 h-5" />}
+      {tab.icon && <MatIcon name={tab.icon} size={24} className="text-current" />}
       <span className={labelClass}>{t(tab.label)}</span>
       {currentActiveId === tab.id && (
         <span className="absolute -bottom-0.5 -left-4 -right-4 h-1.25 bg-brand-primary mx-4" />

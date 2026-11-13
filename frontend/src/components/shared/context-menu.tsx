@@ -11,8 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 import './cdk-overlay.css';
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
-import { SvgIcon } from './svg-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useIsMobile } from './use-is-mobile';
 
 /** 移植元 CDK の ConnectedPosition と同じ形 */

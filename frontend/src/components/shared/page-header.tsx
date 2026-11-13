@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useUiStore } from '@/store/ui-store';
 import { cx } from './class-names';
 import { dropdownService } from './dropdown-service';
-import { AppMatIcon, MatIcon } from './mat-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { MatIcon } from './icons/mat-icon';
 import { Tab } from './tab';
 import type { TabItem } from './types';
 
@@ -128,7 +129,7 @@ export function PageHeader({
             onClick={() => onBackClick?.()}
             title={t('HEADER.BACK')}
           >
-            <MatIcon icon="chevron_left" className="icon-20 text-text-lighter!" />
+            <MatIcon name="chevron_left" size={20} className="text-text-lighter!" />
           </button>
         )}
         <div className="flex-1 min-w-0 ml-3 md:ml-0 items-center gap-1 flex">
@@ -149,7 +150,7 @@ export function PageHeader({
                 className="mt-1 p-1 rounded hover:bg-slate-100 text-text-lighter"
                 onClick={() => onRenameClick?.()}
               >
-                <MatIcon icon="edit" className="icon-16" />
+                <MatIcon name="edit" size={16} />
               </button>
             )}
           </div>
@@ -164,7 +165,7 @@ export function PageHeader({
                   onClick={() => onShareClick?.()}
                   title={t('HEADER.SHARE')}
                 >
-                  <MatIcon icon="share" className="icon-20" />
+                  <MatIcon name="share" size={20} />
                 </button>
               )}
               {showLikeButton && (
@@ -174,7 +175,7 @@ export function PageHeader({
                   onClick={() => onLikeClick?.()}
                   title={t('HEADER.LIKE')}
                 >
-                  <MatIcon icon="thumb_up" className="icon-20" />
+                  <MatIcon name="thumb_up" size={20} />
                 </button>
               )}
               {settingsIcon === 'more_vert' ? (
@@ -187,7 +188,7 @@ export function PageHeader({
                     aria-haspopup="true"
                     aria-expanded={isMoreMenuOpen}
                   >
-                    <MatIcon icon="more_vert" className="icon-20" />
+                    <MatIcon name="more_vert" size={20} />
                   </button>
                   <div
                     className={cx('dropdown-menu dropdown-menu--bordered', isMoreMenuOpen && 'is-open')}
@@ -201,7 +202,7 @@ export function PageHeader({
                       onClick={() => runMoreAction(onRenameClick)}
                     >
                       <span className="dropdown-item-icon">
-                        <MatIcon icon="drive_file_rename_outline" className="w-5! h-5! text-xl!" />
+                        <MatIcon name="drive_file_rename_outline" size={20} />
                       </span>
                       {t('HEADER.RENAME')}
                     </button>
@@ -212,7 +213,7 @@ export function PageHeader({
                       onClick={() => runMoreAction(onSettingsClick)}
                     >
                       <span className="dropdown-item-icon">
-                        <MatIcon icon="dock_to_right" className="w-5! h-5! text-xl!" />
+                        <MatIcon name="dock_to_right" size={20} />
                       </span>
                       {t('HEADER.OPEN_VIEWER')}
                     </button>
@@ -224,7 +225,7 @@ export function PageHeader({
                       onClick={() => runMoreAction(onShareClick)}
                     >
                       <span className="dropdown-item-icon">
-                        <MatIcon icon="share" className="w-5! h-5! text-xl!" />
+                        <MatIcon name="share" size={20} />
                       </span>
                       {t('HEADER.SHARE')}
                     </button>
@@ -235,7 +236,7 @@ export function PageHeader({
                       onClick={() => runMoreAction(onLikeClick)}
                     >
                       <span className="dropdown-item-icon">
-                        <MatIcon icon="thumb_up" className="w-5! h-5! text-xl!" />
+                        <MatIcon name="thumb_up" size={20} />
                       </span>
                       {t('HEADER.RATE')}
                     </button>
@@ -248,7 +249,7 @@ export function PageHeader({
                   onClick={() => onSettingsClick?.()}
                   title={t('HEADER.SETTINGS')}
                 >
-                  <MatIcon icon={settingsIcon} className="icon-20" />
+                  <MatIcon name={settingsIcon} size={20} />
                 </button>
               )}
             </>

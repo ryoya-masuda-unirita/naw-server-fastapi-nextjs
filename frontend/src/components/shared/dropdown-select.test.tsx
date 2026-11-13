@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { queryMatIcon } from './icons/test-helpers';
 import { DropdownSelect } from './dropdown-select';
 import type { DropdownOption } from './dropdown-select';
 
@@ -51,7 +52,7 @@ describe('DropdownSelect', () => {
     await user.click(screen.getByText('COMMON.ACTIVE'));
     const selected = screen.getByRole('option', { name: /COMMON\.ACTIVE/ });
     expect(selected).toHaveAttribute('aria-selected', 'true');
-    expect(selected.querySelector('[data-mat-icon-name="check"]')).not.toBeNull();
+    expect(queryMatIcon(selected, 'check')).not.toBeNull();
   });
 
   test('背景をクリックすると選ばずに閉じること', async () => {

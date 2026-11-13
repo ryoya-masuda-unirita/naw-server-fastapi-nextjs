@@ -5,7 +5,7 @@ import './period-filter.css';
 import { Button } from './button';
 import { cx } from './class-names';
 import type { PeriodChange, PeriodOption, PeriodRange } from './period-filter-utils';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 import { useIsMobile } from './use-is-mobile';
 
 export type { PeriodChange, PeriodOption, PeriodRange } from './period-filter-utils';

@@ -19,6 +19,7 @@ from app.repositories.message_repository import MessageRepository
 from app.repositories.room_repository import RoomRepository
 from app.repositories.share_library_repository import ShareLibraryRepository
 from app.schemas.library import (
+    LibraryContentResponse,
     LibraryGetResponse,
     LibraryListItemResponse,
     LibraryPageItemResponse,
@@ -213,13 +214,13 @@ class LibraryService:
         ]
 
     @staticmethod
-    async def get_library(
+    async def _require_readable_library(
         tenant_id: str, current_user: User, library_id: str, session: AsyncSession
-    ) -> LibraryGetResponse:
-        """ライブラリのMarkdownコンテンツを取得する。
+    ) -> Library:
+        """閲覧できるライブラリを取得する（移植元 LibraryService#requireReadableLibrary）。
 
         「紐づくメッセージのルームへの閲覧権限がある」または「ライブラリ自体が
-        可視（所有者 or 共有先グループ所属）」のいずれかを満たせば取得できる。
+        可視（所有者 or 共有先グループ所属）」のいずれかを満たせば閲覧できる。
 
         Args:
             tenant_id: テナントID。
@@ -228,10 +229,10 @@ class LibraryService:
             session: 非同期DBセッション。
 
         Returns:
-            ライブラリのタイトル・コンテンツ。
+            閲覧できるライブラリ。
 
         Raises:
-            HTTPException: どちらの条件も満たさない場合404を返す。
+            HTTPException: 存在しない、またはどちらの条件も満たさない場合404を返す。
         """
         library = await LibraryService._get_library_or_404(
             library_id, tenant_id, session
@@ -247,7 +248,7 @@ class LibraryService:
             if room is not None and await can_view_room(
                 tenant_id, current_user, room, session
             ):
-                return LibraryGetResponse(title=library.title, data=library.content)
+                return library
 
         if not await LibraryRepository.is_visible_to_user(
             library.id, tenant_id, current_user.id, session
@@ -255,8 +256,62 @@ class LibraryService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
             )
+        return library
 
+    @staticmethod
+    async def get_library(
+        tenant_id: str, current_user: User, library_id: str, session: AsyncSession
+    ) -> LibraryGetResponse:
+        """ライブラリのMarkdownコンテンツを取得する。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            library_id: 対象のライブラリID。
+            session: 非同期DBセッション。
+
+        Returns:
+            ライブラリのタイトル・コンテンツ。
+
+        Raises:
+            HTTPException: 閲覧できない場合404を返す。
+        """
+        library = await LibraryService._require_readable_library(
+            tenant_id, current_user, library_id, session
+        )
         return LibraryGetResponse(title=library.title, data=library.content)
+
+    @staticmethod
+    async def get_library_content(
+        tenant_id: str, current_user: User, library_id: str, session: AsyncSession
+    ) -> LibraryContentResponse:
+        """ライブラリの本文を取得する（移植元 LibraryService#getLibraryContent）。
+
+        移植元は本文を library_contents テーブルに分けているが、backend は未移植で
+        libraries.content 列に持つため列から読む。列が NULL なら移植元の
+        「library_contents に行が無い」と同じく404にする。
+
+        Args:
+            tenant_id: テナントID。
+            current_user: 認証済みユーザー。
+            library_id: 対象のライブラリID。
+            session: 非同期DBセッション。
+
+        Returns:
+            ライブラリの本文。
+
+        Raises:
+            HTTPException: 閲覧できない場合、または本文が無い場合404を返す。
+        """
+        library = await LibraryService._require_readable_library(
+            tenant_id, current_user, library_id, session
+        )
+        if library.content is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Library content not found",
+            )
+        return LibraryContentResponse(data=library.content)
 
     @staticmethod
     async def update_library(

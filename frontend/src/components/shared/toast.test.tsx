@@ -1,7 +1,8 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { queryMatIcon } from './icons/test-helpers';
 import { ToastContainer } from './toast-container';
-import { useToastStore } from './toast-store';
+import { showErrorToast, useToastStore } from './toast-store';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -36,6 +37,13 @@ describe('useToastStore', () => {
   });
 });
 
+describe('showErrorToast', () => {
+  test('エラーのトーストを出すこと（API の共通エラー用）', () => {
+    showErrorToast('通信に失敗しました');
+    expect(useToastStore.getState().toasts).toMatchObject([{ type: 'error', message: '通信に失敗しました' }]);
+  });
+});
+
 describe('ToastContainer', () => {
   test('トーストを種類に応じた見た目とアイコンで表示すること', () => {
     render(<ToastContainer />);
@@ -44,7 +52,7 @@ describe('ToastContainer', () => {
     expect(toast).toHaveAttribute('role', 'alert');
     expect(toast).toHaveClass('bg-red-50', 'border-red-200', 'text-red-800');
     expect(toast).toHaveTextContent('保存に失敗しました');
-    expect(toast.querySelector('[data-mat-icon-name="error"]')).toBeInTheDocument();
+    expect(queryMatIcon(toast, 'error')).toBeInTheDocument();
   });
 
   test('閉じるボタンでトーストを消せること', () => {

@@ -1,8 +1,8 @@
 import { useId } from 'react';
 import './form-radio.css';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
-import { SvgIcon } from './svg-icon';
+import { MatIcon } from './icons/mat-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 export interface FormRadioOption<T = string> {
   label: string;
@@ -74,13 +74,13 @@ export function FormRadio<T = string>({
         )}
         {warning && (
           <div className="flex items-center gap-1 mb-3 text-status-caution">
-            <MatIcon icon="warning" className="icon-20" />
+            <MatIcon name="warning" size={20} />
             <p className="text-xs font-normal leading-[1.4]">{warning}</p>
           </div>
         )}
         {error && (
           <div className="flex items-center gap-1 mb-3 text-status-error">
-            <MatIcon icon="warning" className="icon-20" />
+            <MatIcon name="warning" size={20} />
             <p className="text-xs font-normal leading-[1.4]">{error}</p>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import './toast-container.css';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 import { useToastStore, type ToastType } from './toast-store';
 
 const TOAST_CLASS: Record<ToastType, string> = {
@@ -74,10 +74,7 @@ export function ToastContainer() {
             )}
             role="alert"
           >
-            <MatIcon
-              icon={ICON[toast.type]}
-              className={cx(ICON_CLASS[toast.type], '!w-5 !h-5 !text-[20px] flex-shrink-0 mt-0.5')}
-            />
+            <MatIcon name={ICON[toast.type]} size={20} className={cx(ICON_CLASS[toast.type], 'flex-shrink-0 mt-0.5')} />
             <p className="flex-1 text-sm leading-5">{toast.message}</p>
             <button
               type="button"
@@ -85,7 +82,7 @@ export function ToastContainer() {
               className="flex-shrink-0 ml-2 p-0 hover:opacity-70 transition-opacity"
               aria-label="Close notification"
             >
-              <MatIcon icon="close" className="!w-5 !h-5 !text-[18px]" />
+              <MatIcon name="close" size={18} className="!w-5 !h-5" />
             </button>
           </div>
         ))}

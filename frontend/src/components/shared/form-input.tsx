@@ -1,8 +1,8 @@
 import { useState, type ChangeEvent, type ReactNode } from 'react';
 import './form-input.css';
 import { cx } from './class-names';
-import { AppMatIcon } from './mat-icon';
-import { SvgIcon } from './svg-icon';
+import { AppMatIcon } from './icons/app-mat-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 /** asciiOnly のとき残す文字（印字可能な ASCII）以外 */
 const NON_PRINTABLE_ASCII = /[^\x20-\x7E]/g;

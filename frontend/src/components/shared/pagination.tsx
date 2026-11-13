@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { cx } from './class-names';
 import { getVisiblePages } from './pagination-utils';
-import { SvgIcon } from './svg-icon';
+import { SvgIcon } from './icons/svg-icon';
 
 interface PaginationProps {
   totalPages: number;

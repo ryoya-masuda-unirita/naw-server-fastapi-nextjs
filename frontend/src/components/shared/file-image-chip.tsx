@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cx } from './class-names';
-import { MatIcon } from './mat-icon';
+import { MatIcon } from './icons/mat-icon';
 
 interface FileImageChipProps {
   file: File;
@@ -49,7 +49,7 @@ export function FileImageChip({ file, showRemoveBtn = true, onRemove, className 
             aria-label={t('CHAT.INPUT.REMOVE_FILE')}
             onClick={() => onRemove?.()}
           >
-            <MatIcon icon="close" className="icon-12 text-white!" />
+            <MatIcon name="close" size={12} className="text-white!" />
           </button>
         )}
       </div>
