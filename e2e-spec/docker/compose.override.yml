@@ -1,0 +1,9 @@
+# ルートの docker-compose.demo.yml に重ねる上書き。
+# demo は backend のイメージ名を naw-demo-backend に固定している。そのまま build すると
+# 手元の demo 環境（naw-demo）のイメージを付け替えてしまうため、この環境専用の名前にする
+# （E2E_SPEC_BACKEND_IMAGE は src/environment.ts がプロジェクト名から決めて渡す）。
+services:
+  migrate:
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
+  backend:
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}

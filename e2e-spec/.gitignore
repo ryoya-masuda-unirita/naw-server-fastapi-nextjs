@@ -1,0 +1,5 @@
+node_modules/
+# テスト結果（スクリーンショット・trace・集計）は git 管理しない
+reports/
+test-results/
+playwright-report/
