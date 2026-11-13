@@ -388,6 +388,31 @@ describe('TrainingDataPage', () => {
       expect(screen.getAllByTestId('admin-training-data-card')).toHaveLength(2);
     });
 
+    test('送信中は Esc でダイアログを閉じられないこと', async () => {
+      mockApis();
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.post(LIST_PATH, async () => {
+          await gate;
+          return HttpResponse.json({ ...FIXTURE_INDEXES[1], id: NEW_FOLDER_ID, name: '遅い' });
+        }),
+      );
+      await renderPage();
+      const user = await openDialog();
+
+      await user.type(screen.getByTestId('admin-training-data-name-input'), '遅い');
+      await selectServer(user, 'LEARNING_DATA.SERVER_CLOUD');
+      await user.click(screen.getByTestId('admin-training-data-create-submit'));
+      await user.keyboard('{Escape}');
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      release();
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+
     test('キャンセルを押すとダイアログが閉じること', async () => {
       mockApis();
       await renderPage();

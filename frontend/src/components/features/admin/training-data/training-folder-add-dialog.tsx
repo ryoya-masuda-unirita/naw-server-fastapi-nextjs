@@ -185,6 +185,11 @@ export function TrainingFolderAddDialog({ filter, onClose }: TrainingFolderAddDi
     }
   };
 
+  // 送信中に Esc・背景クリックで閉じると、作成の結果が見えないまま二重に作りかねないため閉じない
+  const handleDialogClose = () => {
+    if (!submittingRef.current) onClose();
+  };
+
   const customActions = (
     <div className="flex gap-3 justify-end max-sm:justify-center">
       <Button
@@ -221,7 +226,7 @@ export function TrainingFolderAddDialog({ filter, onClose }: TrainingFolderAddDi
       showDefaultActions={false}
       buttonAlign="right"
       dialogWidth={DIALOG_WIDTH}
-      onClose={onClose}
+      onClose={handleDialogClose}
     >
       <div className="relative">
         {isLoading && (
@@ -281,7 +286,7 @@ export function TrainingFolderAddDialog({ filter, onClose }: TrainingFolderAddDi
                 placeholder={t('LEARNING_DATA.ENDPOINT_PLACEHOLDER')}
                 options={endpointOptions}
                 value={endpointId || null}
-                error={endpointError(submitted, errors.endpointId, t)}
+                error={fieldError('endpointId')}
                 disabled={isLoading || hasNoEndpoints}
                 onValueChange={(next) => setEndpointId(next ?? '')}
               />
@@ -338,13 +343,4 @@ export function TrainingFolderAddDialog({ filter, onClose }: TrainingFolderAddDi
       </div>
     </Dialog>
   );
-}
-
-/** 接続先の必須エラー。移植元は `endpointError` で、必須のときだけ `VALIDATION.REQUIRED` を出す */
-function endpointError(
-  submitted: boolean,
-  errors: FieldErrors | null,
-  t: (key: string) => string,
-): string {
-  return submitted && errors ? t('VALIDATION.REQUIRED') : '';
 }
