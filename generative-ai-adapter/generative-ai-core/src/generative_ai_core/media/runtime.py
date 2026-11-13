@@ -32,6 +32,12 @@ from generative_ai_core.media.model import (
     CoreMediaPreprocessingResult,
     CoreProcessedImage,
 )
+from generative_ai_core.media.processors_office import (
+    ExcelCoreMediaProcessor,
+    PowerPointCoreMediaProcessor,
+    WordCoreMediaProcessor,
+)
+from generative_ai_core.media.processors_pdf import PdfCoreMediaProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -409,10 +415,17 @@ def default_processors() -> list[CoreMediaProcessor]:
     Returns
     -------
     list[CoreMediaProcessor]
-        移植済みのプロセッサ（画像・テキスト）。
+        移植元 CoreMediaProcessorRegistry#defaults と同じ順序
+        （PDF・Word・PowerPoint・Excel・画像・テキスト）のプロセッサ。
     """
-    # 移植元の順序（PDF・Word・PowerPoint・Excel・画像・テキスト）のうち移植済みのもの
-    return [ImageCoreMediaProcessor(), TextCoreMediaProcessor()]
+    return [
+        PdfCoreMediaProcessor(),
+        WordCoreMediaProcessor(),
+        PowerPointCoreMediaProcessor(),
+        ExcelCoreMediaProcessor(),
+        ImageCoreMediaProcessor(),
+        TextCoreMediaProcessor(),
+    ]
 
 
 def _classify_io(error: OSError) -> str:

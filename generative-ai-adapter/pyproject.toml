@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "naw-generative-ai-core",
     "naw-generative-ai-adapter",
+    "naw-embedding-adapter",
 ]
 
 [dependency-groups]
@@ -23,15 +24,16 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-# 移植元と同じ分け方。embedding-adapter・retrieval-adapter は後続の Issue で加える
-members = ["generative-ai-core", "generative-ai-adapter"]
+# 移植元と同じ分け方。retrieval-adapter は後続の Issue（#299）で加える
+members = ["generative-ai-core", "generative-ai-adapter", "embedding-adapter"]
 
 [tool.uv.sources]
 naw-generative-ai-core = { workspace = true }
 naw-generative-ai-adapter = { workspace = true }
+naw-embedding-adapter = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["generative-ai-core/tests", "generative-ai-adapter/tests"]
+testpaths = ["generative-ai-core/tests", "generative-ai-adapter/tests", "embedding-adapter/tests"]
 # core と adapter の tests に同じ名前のモジュールがあっても衝突しないようにする
 addopts = ["--import-mode=importlib"]
 
@@ -52,4 +54,4 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 explicit_package_bases = true
-mypy_path = ["generative-ai-core/src", "generative-ai-adapter/src"]
+mypy_path = ["generative-ai-core/src", "generative-ai-adapter/src", "embedding-adapter/src"]
