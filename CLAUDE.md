@@ -12,7 +12,7 @@
 |---|---|
 | `server/`（Spring Boot 3.5 / Java 21） | `backend/`（FastAPI） |
 | `client/`（Angular 21） | `frontend/`（React、Vite + React Router） |
-| `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト） | `generative-ai-adapter/`（Python。移植元と同じ 4 つの分け方で uv ワークスペースにする。#298 で `generative-ai-core/`・`generative-ai-adapter/`（チャット・RAG 回答）を移植。`embedding-adapter/`・`retrieval-adapter/` は後続。手順は `generative-ai-adapter/README.md`） |
+| `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト） | `generative-ai-adapter/`（Python。移植元と同じ 4 つの分け方で uv ワークスペースにする。#298 で `generative-ai-core/`・`generative-ai-adapter/`（チャット・RAG 回答）、#300 で `embedding-adapter/`（文書の分割・ベクトル保存・更新・削除・Graph Candidate と、core の embedding・vector・ファイル前処理）を移植。`retrieval-adapter/` は後続。手順は `generative-ai-adapter/README.md`） |
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
 | （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
 | `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
@@ -116,14 +116,14 @@ naw-server-fastapi-nextjs/
 ├── backend/           # FastAPI（server/ の移植先）
 ├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
 ├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト。generative-ai-adapter/ をパス依存で使う）
-├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/）
+├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/・embedding-adapter/）
 ├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
 └── infra/             # Terraform（AWS インフラ定義）
 ```
 
 `e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
-`embedding-adapter/`・`retrieval-adapter/` などは、移植に着手するときに `generative-ai-adapter/` 配下へ足す（「プロジェクト概要」の対応表を参照）。
+`retrieval-adapter/` などは、移植に着手するときに `generative-ai-adapter/` 配下へ足す（「プロジェクト概要」の対応表を参照）。
 
 フロントエンド固有の規約は `frontend/.claude/CLAUDE.md`、バックエンド固有は `backend/.claude/CLAUDE.md` を参照すること。
 

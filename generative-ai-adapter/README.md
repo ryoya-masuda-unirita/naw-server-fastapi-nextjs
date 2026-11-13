@@ -13,9 +13,9 @@ uv のワークスペース（このディレクトリがルート）。移植�
 
 | ディレクトリ | パッケージ | 役割 | 状況 |
 |---|---|---|---|
-| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像） | chat・provider・network・media（テキスト・画像）を移植 |
+| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像・PDF・Word・Excel・PowerPoint）、埋め込み（embedding）、ベクトルDB（vector）、Graph Candidate の取り込み（graphrag の ingestion・bootstrap） | chat・provider・network・media・embedding・vector・graphrag（ingestion・bootstrap）を移植。検索側の retrieval・graphrag は後続 |
 | `generative-ai-adapter/` | `generative_ai_adapter` | Waha! の生成AIアダプタ本体。通常チャット（出力モード 0・2）と RAG 回答（その他）を core に任せ、`RetrievalAnswer` の JSON を書く | 移植（ログ出力先・HTTP クライアントの互換部分・Office/PDF の薄い層を除く） |
-| `embedding-adapter/` | — | 文書の分割、ベクトル保存・更新・削除 | 後続の Issue |
+| `embedding-adapter/` | `embedding_adapter` | Waha! の埋め込みアダプタ本体。入力ファイルを core の前処理でテキストにして分割し、ベクトルDB（PostgreSQL + pgvector / Azure AI Search）に保存・削除する。Graph 書き込みが有効なら Graph Candidate（LLM で候補を抽出して AGE グラフに書く）も行う | 移植（#300）。詳細は下の「埋め込みアダプタ」 |
 | `retrieval-adapter/` | — | ベクトル・ハイブリッド・Graph RAG の検索 | 後続の Issue |
 
 **ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で 2 つのテストを一度に動かせる。エミュレーターは adapter だけをパス依存（`../generative-ai-adapter/generative-ai-adapter`）で入れ、core は adapter の依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして両方をイメージへコピーする（`waha-emulator/Dockerfile`）。
@@ -38,12 +38,55 @@ cd generative-ai-adapter
 uv sync
 uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
-uv run mypy generative-ai-core && uv run mypy generative-ai-adapter   # tests に同名の conftest.py があるため別々に実行する
+uv run mypy generative-ai-core && uv run mypy generative-ai-adapter && uv run mypy embedding-adapter   # tests に同名の conftest.py があるため別々に実行する
 ```
 
 - docstring は NumPy 形式（日本語。`Parameters`・`Returns`・`Raises`）。ruff の D ルール（numpy）を `pyproject.toml` で有効にしている
 - テストは移植元の Java のテスト（`src/test`）のうち今回の範囲に当たるものを移したもの。各テストファイルの先頭に、どの Java のテストを移したかを書いている
 - 実際の LLM には接続しない。OpenAI・Azure・SecuAiGent の HTTP は `respx` でモックする
+
+## 埋め込みアダプタ（`embedding-adapter/`、#300）
+
+移植元の `embedding-adapter`（Waha! の「生成AI学習」アダプタ）の Python 移植。生成AIアダプタと同じく**ライブラリ**で、エミュレーターのワークフローから Waha! の呼び方のまま使う。
+
+```text
+set_property → connect(出力モード) → set_column_information → set_view_name → before_execute → write(レコード) → after_execute
+```
+
+| 出力モード（`connect`） | 動き |
+|---|---|
+| 0 テキスト出力 | 分割した本文を TSV（`OUTPUT_DIR/<ビュー名>`）に書くだけ。ベクトルDB には書かない |
+| 1 VDB追加登録 | 分割したチャンクごとに埋め込みを作り、ベクトルDB に追加。テーブルは作らない |
+| 3 VDB新規登録 | 1 と同じ。テーブルがなければ作る（あれば消さずに追記する） |
+| 2 VDB削除 | ID 列のファイル ID に紐づく行をベクトルDB から削除する |
+
+- 列は ID（文字）・入力ファイル（FILE）・分割文字数（DECIMAL_NUMBER）の 3 つ。分割は「行を足していき、分割文字数を超えたら区切る」移植元どおり
+- TSV の 1 行は `"入力ファイルのパス"<TAB>"本文"<TAB>"ベクトルDB の行 ID（パート ID）"<TAB>"ファイル ID"`（ファイルごとにアダプタが採番する UUID）
+- 入力ファイルの前処理は core の media（テキスト・画像・PDF・Word・Excel・PowerPoint）。画像説明（プロパティ 32）は core の chat で行う
+- プロパティ番号・名前は `embedding_adapter.constants.PropertyIds`（移植元の `properties.xml` と `App#setProperty` の case と同じ番号）。Python 版だけの追加は、`VENDOR=99`（Echo。キーなしで動く確認用の埋め込みで、文字列から決まる 1536 次元の単位ベクトルを返す）
+
+### 移植元と挙動を変えた点
+
+| 点 | 内容 |
+|---|---|
+| 削除のテナント ID | 移植元は Graph candidate 用の接続設定からだけテナント ID を受け取るため、Graph 書き込みが無効だと削除（テナント必須）が必ず失敗する。埋め込みの接続設定（プロパティ 3）で補う（`CoreDelegatingVectorStoreService.use_tenant_id_if_unset`） |
+| Graph の取り込みテナント | 移植元は取り込みのテナントを `tenant-default` に固定している（`IngestionCoreMapper`）。削除はプロパティ 3 のテナントで GraphRAG 側を消すため、Graph 書き込みを有効にするときはプロパティ 3 を `tenant-default` にしないと GraphRAG 側の行が残る（移植元どおり） |
+| 削除に必要な GraphRAG のスキーマ | 移植元は削除のたびに GraphRAG のスキーマ（`graphrag_s02`）を参照するが、スキーマを作るのは Graph 書き込みが有効な取り込みだけ。エミュレーターの削除ワークフローが事前に作る（アダプタ自体は移植元どおり） |
+| JDBC | psycopg 3 で接続（自動コミット）。移植元の Spring・Azure SDK・Tika・POI・PDFBox は Python の標準的な手段に置き換えた（差は docs/issue-300/03） |
+| PowerPoint の画像説明（ページ全体） | Python に描画の手段がなく `RENDERING_FAILURE` にする（埋め込み画像の説明は動く） |
+
+### 実 DB での確認
+
+`onprem/vector-db` のイメージ（pgvector + PGroonga + Apache AGE）で確認できる。自動テストは DB に接続しない（偽の接続）。
+
+```bash
+docker build -t naw-onprem-vector-db onprem/vector-db
+docker run -d --name naw-vdb -e POSTGRES_DB=onprem_vector -e POSTGRES_USER=onprem_vector \
+  -e POSTGRES_PASSWORD=onprem_vector_password -p 127.0.0.1:35432:5432 \
+  -v "$PWD/onprem/vector-db/init:/docker-entrypoint-initdb.d:ro" naw-onprem-vector-db
+```
+
+接続先は `VDB_URL=127.0.0.1:35432`・`VDB_USER_NAME=onprem_vector`・`VDB_PASSWORD=onprem_vector_password`・`VDB_DATABASE_NAME=onprem_vector`・`VDB_TABLE_NAME=<テーブル名>`、`VDB_VENDOR=PostgreSQL(PGVector)`。
 
 ## プロバイダ
 
