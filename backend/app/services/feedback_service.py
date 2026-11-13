@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tenant_endpoint import EndpointType
 from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
+from app.repositories.file_repository import FileRepository
 from app.repositories.message_feedback_repository import MessageFeedbackRepository
 from app.repositories.room_repository import RoomRepository
 from app.schemas.feedback import (
@@ -54,6 +55,8 @@ _FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN = {
 
 
 class FeedbackService:
+    """フィードバック（ユーザー別集計・メッセージ評価・ルーム評価）の業務ロジック。"""
+
     @staticmethod
     async def get_feedback_messages(
         tenant_id: str, query: FeedbackMessageListRequest, session: AsyncSession
@@ -150,12 +153,18 @@ class FeedbackService:
     ) -> FeedbackUserListResponse:
         """テナント内のフィードバックユーザー一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            query: 絞り込み・ソート・ページング条件。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : FeedbackUserListRequest
+            絞り込み・ソート・ページング条件。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        FeedbackUserListResponse
             フィードバックユーザー一覧（ページング済み）。
         """
         sort_column = _SORT_FIELD_TO_COLUMN[query.sortField]
@@ -177,6 +186,7 @@ class FeedbackService:
                     userId=row.login_id,
                     displayName=row.display_name,
                 ),
+                responded=row.feedback_message_count > 0,
                 isResponded=row.feedback_message_count > 0,
                 feedbackMessageCount=row.feedback_message_count,
                 feedbackRoomCount=FeedbackRoomCount(
@@ -221,6 +231,10 @@ class FeedbackService:
             session,
         )
 
+        index_ids = await FileRepository.find_latest_index_ids_by_room_ids(
+            tenant_id, [row.room_id for row in rows], session
+        )
+
         content = [
             FeedbackRoomItemResponse(
                 id=row.room_id,
@@ -236,6 +250,7 @@ class FeedbackService:
                     rating=row.rating,
                 ),
                 rating=row.rating,
+                indexId=index_ids.get(row.room_id),
                 createdAt=row.created_at,
                 updatedAt=row.updated_at,
             )

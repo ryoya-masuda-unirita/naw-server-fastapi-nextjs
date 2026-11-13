@@ -230,32 +230,51 @@ async def assistant_with_endpoint(session, tenant, assistant, tenant_endpoint):
 
 
 def _headers(login_id, tenant_id):
+    """認証済みリクエスト用のヘッダーを作る
+
+    Parameters
+    ----------
+    login_id : str
+        アクセストークンの対象ユーザーのログインID
+    tenant_id : str
+        テナントID（トークンと X-Tenant-ID ヘッダーに使う）
+
+    Returns
+    -------
+    dict[str, str]
+        Authorization と X-Tenant-ID を含むヘッダー
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
 def member_headers(member_user, tenant):
+    """一般メンバーの認証ヘッダー"""
     return _headers(member_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def unaffiliated_headers(unaffiliated_user, tenant):
+    """グループに所属しないユーザーの認証ヘッダー"""
     return _headers(unaffiliated_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def admin_headers(admin_user, tenant):
+    """テナント管理者の認証ヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def group_admin_headers(group_admin_user, tenant):
+    """グループ管理者の認証ヘッダー"""
     return _headers(group_admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -398,7 +417,8 @@ class TestGetAssistantsEndpoints:
         assert endpoints[0]["model"] == "gpt-4o"
         assert endpoints[0]["type"] == "AZURE_OPENAI_CHAT"
         assert endpoints[0]["url"] == "https://example.openai.azure.com"
-        assert "label" not in endpoints[0]
+        # 移植元は label を管理者向け一覧だけに入れる（それ以外は null で項目は出る）
+        assert endpoints[0]["label"] is None
         assert "apiKey" not in endpoints[0]
 
     async def test_returns_empty_endpoints_when_not_linked(
@@ -535,6 +555,8 @@ class TestGetAssistantsCategory:
         body = response.json()
         assert body[0]["category"]["id"] == assistant_category.id
         assert body[0]["categories"][0]["id"] == assistant_category.id
+        # 移植元は updatedAt を設定しないため、項目は出るが常に null
+        assert body[0]["category"]["updatedAt"] is None
 
 
 @pytest.mark.asyncio
@@ -991,6 +1013,18 @@ class TestDeleteAssistant:
 class TestListAdminAssistants:
     """GET /api/admin/assistants"""
 
+    async def test_endpoints_include_label(
+        self, client, admin_headers, assistant_with_endpoint, tenant_endpoint
+    ):
+        """管理者向け一覧の endpoints[].label にテナントエンドポイント名が入ること（Issue #309）"""
+        async with client as c:
+            response = await c.get("/api/admin/assistants", headers=admin_headers)
+
+        assert response.status_code == 200
+        endpoint = response.json()["content"][0]["endpoints"][0]
+        assert endpoint["label"] == tenant_endpoint.endpoint_name
+        assert endpoint["id"] == tenant_endpoint.id
+
     async def test_tenant_admin_sees_all_assistants(
         self, client, session, tenant, admin_headers, assistant
     ):
@@ -1293,6 +1327,22 @@ async def _add_assistants(session, tenant_id, specs):
 
 
 async def _list_admin_assistants(c, headers, sort):
+    """管理者向けアシスタント一覧を取得して content を返す
+
+    Parameters
+    ----------
+    c : AsyncClient
+        テスト用の HTTP クライアント
+    headers : dict[str, str]
+        認証ヘッダー
+    sort : str
+        sort クエリパラメータの値
+
+    Returns
+    -------
+    list[dict]
+        レスポンスの content（アシスタントの一覧）
+    """
     response = await c.get(
         "/api/admin/assistants", params={"sort": sort}, headers=headers
     )

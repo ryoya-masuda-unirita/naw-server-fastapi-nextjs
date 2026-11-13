@@ -381,7 +381,7 @@ def _split_reference_paths(file_paths: str | None) -> list[str]:
 
 
 class MessageService:
-    """メッセージの作成・取得・ストリーミング生成を行うサービス。"""
+    """メッセージの作成・取得・評価と、メッセージ内容の生成の業務ロジック。"""
 
     @staticmethod
     async def _resolve_room(
@@ -534,10 +534,16 @@ class MessageService:
             assistant_ids, tenant_id, session
         )
 
+        models = await AssistantEndpointRepository.find_models_by_assistant_id(
+            assistant_ids, tenant_id, session
+        )
+
         assistant_responses = [
             AssistantResponse(
                 id=assistant.id,
                 type=assistant.type.value,
+                includeHistory=assistant.include_history,
+                model=models.get(assistant.id),
                 endpoints=[
                     EndpointResponse(
                         type=tenant_endpoint.type.value,
