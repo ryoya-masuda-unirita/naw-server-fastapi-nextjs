@@ -76,8 +76,9 @@ export function useDeleteGroup(groupId: string) {
     mutationFn: async (): Promise<void> => {
       await apiClient.delete<unknown>(API_PATHS.ADMIN.GROUPS.DETAIL(groupId), OWN_ERROR_TOAST);
     },
+    // 詳細のキャッシュは消さない。画面がまだ詳細を購読しているため、消すと削除済みのグループを取り直しに行き、
+    // 404 の共通エラートーストが出てしまう（一覧へ戻れば詳細は使われなくなる）
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: [GROUP_DETAIL_QUERY_KEY, groupId] });
       invalidateGroupLists(queryClient);
     },
   });

@@ -107,11 +107,20 @@ interface RequestLog {
   patched: unknown[];
   posted: unknown[];
   deleted: string[];
+  /** グループ詳細の取得回数 */
+  detailGets: number;
 }
 
 /** グループ詳細とその一覧・変更の API を差し替え、受けたリクエストを記録する */
 function mockApis(options: { updateFails?: boolean } = {}): RequestLog {
-  const log: RequestLog = { listParams: [], optionParams: [], patched: [], posted: [], deleted: [] };
+  const log: RequestLog = {
+    listParams: [],
+    optionParams: [],
+    patched: [],
+    posted: [],
+    deleted: [],
+    detailGets: 0,
+  };
   const page = (content: unknown[]) => ({
     content,
     totalElements: content.length,
@@ -119,9 +128,10 @@ function mockApis(options: { updateFails?: boolean } = {}): RequestLog {
     size: 25,
   });
   server.use(
-    http.get(DETAIL_PATH, ({ params }) =>
-      HttpResponse.json({ id: params.groupId, tenantId: 'tenant', name: '営業チーム' }),
-    ),
+    http.get(DETAIL_PATH, ({ params }) => {
+      log.detailGets += 1;
+      return HttpResponse.json({ id: params.groupId, tenantId: 'tenant', name: '営業チーム' });
+    }),
     http.patch(DETAIL_PATH, async ({ request, params }) => {
       if (options.updateFails) return HttpResponse.json({ message: 'ng' }, { status: 400 });
       const body = (await request.json()) as { name: string };
@@ -322,6 +332,8 @@ describe('GroupDetailPage', () => {
       await waitFor(() => expect(log.deleted).toContain('group:g1'));
       await waitFor(() => expect(router.state.location.pathname).toBe('/admin/groups'));
       expect(toastMessages()).toContain('GROUPS.DELETE_SUCCESS');
+      // 削除済みのグループを取り直しに行かない（404 のエラートーストが出てしまう）
+      expect(log.detailGets).toBe(1);
     });
 
     test('グループ管理者には削除メニューを表示しないこと', async () => {
