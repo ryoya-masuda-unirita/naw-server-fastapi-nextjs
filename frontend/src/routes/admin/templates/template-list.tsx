@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   TEAM_FILTER_ALL,
@@ -71,6 +71,17 @@ export function AdminTemplateListPage() {
   const to = Math.min(filter.pageIndex * filter.pageSize, totalItems);
   const countDisplay =
     totalItems === 0 ? '' : t('TEMPLATES.PAGE_COUNT', { from, to, total: totalItems });
+
+  // 画面を離れたら検索・ページ・選択を捨てる。残すと、空に戻った検索欄の裏で前回の条件が効き続ける
+  useEffect(() => store.reset, [store.reset]);
+
+  // 最後のページの行をすべて消したとき、存在しないページに留まらないよう最終ページへ戻す
+  const { updatePageIndex } = store;
+  useEffect(() => {
+    if (listQuery.isSuccess && !listQuery.isFetching && filter.pageIndex > totalPages) {
+      updatePageIndex(totalPages);
+    }
+  }, [listQuery.isSuccess, listQuery.isFetching, filter.pageIndex, totalPages, updatePageIndex]);
 
   const handleFilterChange = (event: TemplateFilterChange) => {
     let teamId: string | undefined;

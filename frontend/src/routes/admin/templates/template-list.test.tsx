@@ -146,6 +146,21 @@ describe('AdminTemplateListPage', () => {
     });
   });
 
+  describe('ページ送り', () => {
+    test('総件数が減って現在のページが範囲外になったら最終ページへ戻ること', async () => {
+      server.use(
+        http.get(LIST_PATH, () =>
+          HttpResponse.json({ content: FIXTURE_TEMPLATES, totalElements: 5, number: 0, size: 10 }),
+        ),
+      );
+      useTemplateListStore.getState().updatePageIndex(3);
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp('/admin/templates');
+
+      await waitFor(() => expect(useTemplateListStore.getState().filter.pageIndex).toBe(1));
+    });
+  });
+
   describe('検索・絞り込み', () => {
     test('検索ワードを入力すると search を付けて取得し直すこと', async () => {
       const log = mockApis();

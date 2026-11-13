@@ -50,6 +50,8 @@ function toListParams(filter: TemplateFilter) {
 export function useTemplateList(filter: TemplateFilter) {
   return useQuery({
     queryKey: [TEMPLATES_QUERY_KEY, 'admin', filter],
+    // 移植元は画面を開いたときと操作したときだけ読み込む。フォーカスで再取得すると一覧がスピナーに替わってしまう
+    refetchOnWindowFocus: false,
     queryFn: () =>
       apiClient.get<TemplateApiResponse>(API_PATHS.ADMIN.PROMPT_TEMPLATES.LIST, {
         params: toListParams(filter),
