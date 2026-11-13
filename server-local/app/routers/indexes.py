@@ -256,6 +256,8 @@ async def upload_file(
         ファイルのサイズが上限を超えている場合（413）。
     ExternalServiceError
         Waha! の呼び出しに失敗した場合（500）。
+    RuntimeError
+        Waha! の学習結果の TSV からファイルの登録内容を読み取れない場合（500）。
     """
     _require_name(name)
     return await file_service.create_file(
@@ -316,7 +318,9 @@ async def update_file(
     splitLength : str | None
         文書を分割する長さ。
     userId : str | None
-        更新するユーザー ID。
+        ファイルを差し替えるときに、新しいファイルの登録者として使うユーザー ID。
+        メタデータだけの更新では使われない。差し替えるのに未指定だと、Waha! の
+        処理が済んだ後の保存時に 400 になる。
     file : FastAPIUploadFile | None, optional
         差し替えるファイル。
 
