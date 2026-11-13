@@ -35,6 +35,26 @@ def start_job(
     params: Mapping[str, str],
     stream_allowed_dir: Path | None,
 ) -> Job:
+    """ジョブを作り、別のタスクで動かし始める。
+
+    Parameters
+    ----------
+    session : Session
+        セッション。
+    workflow : Workflow
+        動かすワークフロー。
+    service_id : str
+        execute のサービス ID。
+    params : Mapping[str, str]
+        execute のクエリパラメータ（sessionid を除く）。
+    stream_allowed_dir : Path | None
+        ストリームファイルを書いてよいディレクトリ。
+
+    Returns
+    -------
+    Job
+        作ったジョブ。
+    """
     job = Job()
     session.job = job
     session.slots.pop(SLOT_OUTPUT, None)
@@ -52,6 +72,28 @@ async def _run(
     params: dict[str, str],
     stream_allowed_dir: Path | None,
 ) -> None:
+    """ワークフローを動かし、結果を outputfile とジョブの状態に残す。
+
+    Parameters
+    ----------
+    session : Session
+        セッション。
+    job : Job
+        ジョブ。
+    workflow : Workflow
+        動かすワークフロー。
+    service_id : str
+        execute のサービス ID。
+    params : dict[str, str]
+        execute のクエリパラメータ。
+    stream_allowed_dir : Path | None
+        ストリームファイルを書いてよいディレクトリ。
+
+    Raises
+    ------
+    asyncio.CancelledError
+        ジョブが止められたとき（失敗にしてから送り直す）。
+    """
     stream: StreamFile | None = None
     try:
         stream_path = params.get(STREAM_FILE_PARAM)
@@ -63,6 +105,7 @@ async def _run(
                 params=params,
                 inputs=dict(session.slots),
                 stream=stream,
+                stream_allowed_dir=stream_allowed_dir,
             )
         )
         # server-local は SUCCESS を見たら outputfile を取りに来るため、先に保存する
@@ -96,13 +139,34 @@ async def _run(
 
 
 def _fail(session: Session, job: Job, stream: StreamFile | None, reason: str) -> None:
+    """ジョブを失敗にし、ストリームに error を書く。
+
+    Parameters
+    ----------
+    session : Session
+        セッション。
+    job : Job
+        ジョブ。
+    stream : StreamFile | None
+        ストリームファイル。
+    reason : str
+        失敗の理由。
+    """
     logger.warning("Job failed: sessionId=%s, reason=%s", session.id, reason)
     _write_event_quietly(stream, {"type": "error", "message": reason})
     job.fail(reason)
 
 
 def _write_event_quietly(stream: StreamFile | None, event: dict[str, Any]) -> None:
-    """ストリームに終端を書く。結果は result で伝わるため、書けなくても続ける。"""
+    """ストリームに終端を書く。結果は result で伝わるため、書けなくても続ける。
+
+    Parameters
+    ----------
+    stream : StreamFile | None
+        ストリームファイル。None なら何もしない。
+    event : dict[str, Any]
+        書くイベント。
+    """
     if stream is None:
         return
     try:

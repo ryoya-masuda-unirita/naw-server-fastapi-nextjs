@@ -2,7 +2,11 @@
 # 値は同じディレクトリの .env（.env.example をコピーして作る）から読み込む。
 services:
   waha-emulator:
-    build: .
+    # 生成AIアダプタ（../generative-ai-adapter）をイメージに含めるため、
+    # ビルドコンテキストはリポジトリのルートにする
+    build:
+      context: ..
+      dockerfile: waha-emulator/Dockerfile
     image: naw-waha-emulator:latest
     container_name: naw-waha-emulator
     # server-local が作ったストリームファイルに追記するため、server-local と UID/GID を揃える
@@ -16,7 +20,8 @@ services:
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      # サービス ID → ワークフローの設定（任意）。例: /app/config/workflows.example.json
+      WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # ログの時刻を server-local と揃える
       TZ: ${TZ:-Asia/Tokyo}
@@ -31,4 +36,9 @@ services:
         target: /app/data/stream-output
         bind:
           create_host_path: false
+      # ワークフローの設定ファイルと RAG Context JSON の置き場（読み取り専用）
+      - type: bind
+        source: ${WAHA_EMULATOR_CONFIG_DIR:-./config}
+        target: /app/config
+        read_only: true
     restart: unless-stopped

@@ -31,16 +31,52 @@ SessionIdQuery = Annotated[str, Query(alias=SESSION_ID_PARAM)]
 
 
 def _settings(request: Request) -> Settings:
+    """アプリの設定を取り出す。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+
+    Returns
+    -------
+    Settings
+        アプリの状態に載せた設定。
+    """
     settings: Settings = request.app.state.settings
     return settings
 
 
 def _store(request: Request) -> SessionStore:
+    """セッションの置き場を取り出す。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+
+    Returns
+    -------
+    SessionStore
+        アプリの状態に載せたセッションの置き場。
+    """
     store: SessionStore = request.app.state.session_store
     return store
 
 
 def _registry(request: Request) -> WorkflowRegistry:
+    """ワークフローの登録簿を取り出す。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+
+    Returns
+    -------
+    WorkflowRegistry
+        アプリの状態に載せた登録簿。
+    """
     registry: WorkflowRegistry = request.app.state.workflow_registry
     return registry
 
@@ -49,6 +85,25 @@ def _registry(request: Request) -> WorkflowRegistry:
 async def start_session(
     request: Request, authkey: Annotated[str, Query()]
 ) -> PlainTextResponse:
+    """セッションを開始する。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    authkey : str
+        認証キー。
+
+    Returns
+    -------
+    PlainTextResponse
+        新しいセッション ID。
+
+    Raises
+    ------
+    EmulatorError
+        認証キーが正しくないとき（401）。
+    """
     expected = _settings(request).authkey
     if not hmac.compare_digest(authkey.encode("utf-8"), expected.encode("utf-8")):
         # 本文・ログに受け取った authkey を出さない
@@ -63,6 +118,25 @@ async def start_session(
 async def end_session(
     request: Request, session_id: SessionIdQuery
 ) -> PlainTextResponse:
+    """セッションを終了する。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        `OK`。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがないとき（404）。
+    """
     _store(request).end(session_id)
     logger.info("Session ended: sessionId=%s", session_id)
     return PlainTextResponse(OK_TEXT)
@@ -75,6 +149,29 @@ async def upload(
     session_id: SessionIdQuery,
     file: Annotated[UploadFile, File()],
 ) -> PlainTextResponse:
+    """入力スロットにファイルをアップロードする。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    slot : str
+        スロット名。
+    session_id : str
+        セッション ID。
+    file : UploadFile
+        アップロードされたファイル。
+
+    Returns
+    -------
+    PlainTextResponse
+        `OK`。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがないとき（404）、入力スロットでないとき（400）。
+    """
     session = _store(request).get(session_id)
     if slot not in INPUT_SLOTS:
         raise EmulatorError(
@@ -100,6 +197,27 @@ async def upload(
 async def execute(
     request: Request, service_id: str, session_id: SessionIdQuery
 ) -> PlainTextResponse:
+    """サービス ID のワークフローを実行する。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    service_id : str
+        サービス ID。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        `OK`、または完了待ちの設定なら結果。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがない、ジョブを実行中などのとき。
+    """
     return await _execute(request, service_id, session_id)
 
 
@@ -107,10 +225,27 @@ async def execute(
 async def execute_without_service_id(
     request: Request, session_id: SessionIdQuery
 ) -> PlainTextResponse:
-    """サービス ID が空の execute。
+    """サービス ID が空の execute を受ける。
 
     server-local はアシスタント ID・サービス名が未指定だと空文字列で呼ぶ
     （`/execute/`）。パスの引数には空文字列がマッチしないため、別に受ける。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        `OK`、または完了待ちの設定なら結果。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがない、ジョブを実行中などのとき。
     """
     return await _execute(request, "", session_id)
 
@@ -118,6 +253,29 @@ async def execute_without_service_id(
 async def _execute(
     request: Request, service_id: str, session_id: str
 ) -> PlainTextResponse:
+    """ワークフローを解決してジョブを開始する。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    service_id : str
+        サービス ID（空文字列もありうる）。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        `OK`、または完了待ちの設定ならジョブの結果。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがない、ジョブを実行中のとき。
+    asyncio.CancelledError
+        このリクエスト自体がキャンセルされたとき。
+    """
     session = _store(request).get(session_id)
     if session.job_running:
         raise EmulatorError(HTTPStatus.CONFLICT, "ジョブを実行中です")
@@ -153,6 +311,25 @@ async def _execute(
 
 @router.get("/result")
 async def result(request: Request, session_id: SessionIdQuery) -> PlainTextResponse:
+    """ジョブの結果を返す。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        `RUNNING`・`SUCCESS`・`FAILURE: 理由` のいずれか。
+
+    Raises
+    ------
+    EmulatorError
+        セッションがないとき（404）。
+    """
     return PlainTextResponse(_store(request).get(session_id).result_text())
 
 
@@ -160,6 +337,27 @@ async def result(request: Request, session_id: SessionIdQuery) -> PlainTextRespo
 async def download(
     request: Request, slot: str, session_id: SessionIdQuery
 ) -> PlainTextResponse:
+    """スロットのファイルをテキストとして返す。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    slot : str
+        スロット名。
+    session_id : str
+        セッション ID。
+
+    Returns
+    -------
+    PlainTextResponse
+        ファイルの内容（UTF-8 として復号）。
+
+    Raises
+    ------
+    EmulatorError
+        セッションまたはスロットのファイルがないとき（404）。
+    """
     stored = _store(request).get(session_id).slots.get(slot)
     if stored is None:
         raise EmulatorError(
