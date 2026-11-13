@@ -78,6 +78,34 @@ class GroupUserRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def find_memberships_for_user(
+        tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> list[tuple[str, bool]]:
+        """指定ユーザーの所属グループとグループ内管理者フラグを1クエリで取得する。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            ユーザーID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[tuple[str, bool]]
+            (グループID, グループ内管理者か) の一覧。グループID順。
+        """
+        stmt = (
+            select(GroupUser.group_id, GroupUser.is_admin)
+            .where(GroupUser.tenant_id == tenant_id, GroupUser.user_id == user_id)
+            .order_by(GroupUser.group_id)
+        )
+        result = await session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+    @staticmethod
     async def find_belonging_group_ids(
         tenant_id: str, user_id: UUID, session: AsyncSession
     ) -> list[str]:

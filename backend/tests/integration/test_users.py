@@ -336,6 +336,27 @@ class TestGetUsers:
         assert "content" in body
         assert body["totalElements"] >= 1
 
+    async def test_page_fields_follow_spring_page(
+        self, client, admin_headers, admin_user, normal_user
+    ):
+        """ページ情報が移植元（Spring の Page）と同じ number などで返ること（Issue #309）"""
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users", headers=admin_headers, params={"size": 1}
+            )
+
+        body = response.json()
+        assert response.status_code == 200
+        assert "page" not in body
+        assert body["number"] == 0
+        assert body["size"] == 1
+        assert body["totalElements"] == 2
+        assert body["totalPages"] == 2
+        assert body["numberOfElements"] == 1
+        assert body["first"] is True
+        assert body["last"] is False
+        assert body["empty"] is False
+
     async def test_user_gets_403(self, client, user_headers):
         """一般ユーザーは 403 になること"""
         async with client as c:

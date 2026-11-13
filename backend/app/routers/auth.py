@@ -18,7 +18,7 @@ from app.schemas.auth import (
     PasswordResetRequest,
     AuthResponse,
 )
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, build_auth_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 api_router = APIRouter(prefix="/api", tags=["api"])
@@ -45,7 +45,7 @@ async def _issue_session(
         set_session_cookie(response, session_id)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post("/login", response_model=AuthResponse, response_model_exclude_none=True)
 async def login(
     request: LoginRequest,
     response: Response,
@@ -61,7 +61,9 @@ async def login(
     return auth_response
 
 
-@router.post("/login-key", response_model=AuthResponse)
+@router.post(
+    "/login-key", response_model=AuthResponse, response_model_exclude_none=True
+)
 async def login_with_login_key(
     request: LoginKeyRequest,
     response: Response,
@@ -92,7 +94,9 @@ async def logout(
     return {"message": "Logout successful."}
 
 
-@router.post("/password/reset", response_model=AuthResponse)
+@router.post(
+    "/password/reset", response_model=AuthResponse, response_model_exclude_none=True
+)
 async def reset_password(
     request: PasswordResetRequest,
     response: Response,
@@ -113,7 +117,7 @@ async def reset_password(
     return auth_response
 
 
-@api_router.get("/auth", response_model=AuthResponse)
+@api_router.get("/auth", response_model=AuthResponse, response_model_exclude_none=True)
 async def get_auth(
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -122,6 +126,7 @@ async def get_auth(
         default=None, alias=session_store.SESSION_COOKIE_NAME
     ),
     redis_client: redis.Redis = Depends(get_redis_client),
+    session: AsyncSession = Depends(get_session),
 ) -> AuthResponse:
     """認証トークン取得（新しいトークンを再発行）"""
     if session_id:
@@ -130,11 +135,4 @@ async def get_auth(
 
     token = create_access_token(current_user.login_id, x_tenant_id)
 
-    return AuthResponse(
-        id=current_user.login_id,
-        name=current_user.name,
-        role=current_user.role.value,
-        token=token,
-        groups=[],
-        loginStatus="SUCCESS",
-    )
+    return await build_auth_response(current_user, token, x_tenant_id, session)

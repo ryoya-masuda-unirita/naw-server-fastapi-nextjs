@@ -213,7 +213,11 @@ class UserService:
             content=content,
             totalElements=total,
             totalPages=total_pages,
-            page=page,
+            number=page,
+            numberOfElements=len(content),
+            first=page == 0,
+            last=page + 1 >= total_pages,
+            empty=not content,
             size=size,
         )
 

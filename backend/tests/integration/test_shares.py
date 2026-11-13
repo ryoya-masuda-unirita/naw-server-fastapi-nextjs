@@ -199,7 +199,7 @@ class TestShareRouter:
                 )
 
             assert response.status_code == 200
-            body = response.json()
+            body = response.json()["data"]
             assert body["roomId"] == owned_room.id
             assert body["teamIds"] == [target_group.id]
 
@@ -256,8 +256,8 @@ class TestShareRouter:
                     headers=owner_headers,
                 )
 
-            assert first.json()["id"] == second.json()["id"]
-            assert second.json()["teamIds"] == [other_group.id]
+            assert first.json()["data"]["id"] == second.json()["data"]["id"]
+            assert second.json()["data"]["teamIds"] == [other_group.id]
 
         async def test_create_share_with_other_users_room_returns_403(
             self,
@@ -300,7 +300,7 @@ class TestShareRouter:
                 )
 
             assert response.status_code == 200
-            body = response.json()
+            body = response.json()["data"]
             assert body["roomId"] == owned_room.id
             assert body["isReadOnly"] is False
 
@@ -314,7 +314,7 @@ class TestShareRouter:
                 )
 
             assert response.status_code == 200
-            assert response.json()["isReadOnly"] is True
+            assert response.json()["data"]["isReadOnly"] is True
 
         async def test_resolve_access_as_unrelated_user_returns_403(
             self, client, unrelated_user_headers, owned_share
@@ -352,7 +352,8 @@ class TestShareRouter:
                     f"/api/shares/{owned_share.id}/access", headers=owner_headers
                 )
 
-            assert delete_response.status_code == 204
+            assert delete_response.status_code == 200
+            assert delete_response.json() == {"data": {"id": owned_share.id}}
             assert access_response.status_code == 404
 
         async def test_delete_share_as_non_owner_returns_403(

@@ -18,10 +18,21 @@ from app.models.user import User, UserRole
 from app.core.security import hash_password
 
 REPO_PATH = "app.services.auth_service.PasswordHistoryRepository"
+GROUP_USER_REPO_PATH = "app.services.auth_service.GroupUserRepository"
 
 # サービスと同じ設定から取り、.env で上限を変えてもテストが実装とずれないようにする
 MAX_FAILURE_ATTEMPTS = get_password_reset_settings().max_failure_attempts
 LOCKOUT_MINUTES = get_password_reset_settings().lockout_minutes
+
+
+@pytest.fixture(autouse=True)
+def no_group_memberships():
+    """所属グループの取得をモックし、所属なしとして扱う。"""
+    with patch(
+        f"{GROUP_USER_REPO_PATH}.find_memberships_for_user",
+        new=AsyncMock(return_value=[]),
+    ):
+        yield
 
 
 def _mismatch_key(user: User) -> str:
@@ -303,8 +314,24 @@ class TestAuthServiceLoginWithLoginKey:
             )
 
         assert response.id == test_user.login_id
-        assert response.loginStatus == "SUCCESS"
+        # 移植元は /auth/login 以外では loginStatus を返さない
+        assert response.loginStatus is None
         assert response.token is not None
+
+    @pytest.mark.parametrize("login_key", [None, "", "   "])
+    async def test_blank_login_key_returns_401_without_lookup(
+        self, test_tenant, login_key
+    ):
+        """null・空白のログインキーは検索せず 401 にすること"""
+        find = AsyncMock()
+        with patch(f"{self.REPO_USER_PATH}.find_by_login_key", new=find):
+            with pytest.raises(HTTPException) as exc_info:
+                await AuthService.login_with_login_key(
+                    login_key, test_tenant.id, AsyncMock()
+                )
+
+        assert exc_info.value.status_code == 401
+        find.assert_not_called()
 
     async def test_login_with_nonexistent_login_key(self, test_tenant):
         """存在しないログインキーの場合、HTTPException 401 を返すこと"""

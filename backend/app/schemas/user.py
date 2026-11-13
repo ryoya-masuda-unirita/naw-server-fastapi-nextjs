@@ -202,10 +202,14 @@ class UserUpdateResponse(_UserMutationResponse):
 
 
 class PagedUserResponse(BaseModel):
-    """ユーザー一覧のページ応答。"""
+    """ユーザー一覧のページ応答（移植元は Spring の `Page`。ページ番号は `number`）。"""
 
     content: list[UserResponse]
     totalElements: int
     totalPages: int
-    page: int
+    number: int
     size: int
+    numberOfElements: int
+    first: bool
+    last: bool
+    empty: bool

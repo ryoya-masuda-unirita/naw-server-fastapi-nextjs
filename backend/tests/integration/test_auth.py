@@ -6,6 +6,7 @@ from app.core import password_mismatch_store
 from app.core.password_mismatch_store import LOGIN_FAILURE_THRESHOLD
 from app.core.session_store import SESSION_COOKIE_NAME
 from app.core.config import get_password_reset_settings
+from app.models.group import Group, GroupUser
 from app.services.auth_service import (
     INVALID_CREDENTIALS_MESSAGE,
     LOGIN_FAILED_MESSAGE,
@@ -77,7 +78,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 200
-        assert response.json()["loginStatus"] == "SUCCESS"
+        assert "loginStatus" not in response.json()
         assert response.json()["id"] == test_user_with_login_key.login_id
         assert response.json()["token"] is not None
 
@@ -160,7 +161,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 200
-        assert response.json()["loginStatus"] == "SUCCESS"
+        assert "loginStatus" not in response.json()
         assert response.json()["token"] is not None
 
     async def test_post_auth_password_reset_with_username_key(
@@ -193,7 +194,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 200
-        assert response.json()["loginStatus"] == "SUCCESS"
+        assert "loginStatus" not in response.json()
         assert response.json()["token"] is not None
         assert SESSION_COOKIE_NAME in response.cookies
         assert second_response.status_code == 200
@@ -431,7 +432,7 @@ class TestAuthAPI:
             )
 
         assert response.status_code == 200
-        assert response.json()["loginStatus"] == "SUCCESS"
+        assert "loginStatus" not in response.json()
         assert response.json()["token"] is not None
 
     async def test_get_api_auth_without_token(self, client, test_tenant):
@@ -514,6 +515,96 @@ class TestAuthAPI:
 
         assert response.json()["loginStatus"] == "REQUIRES_PASSWORD_RESET"
         assert SESSION_COOKIE_NAME not in response.cookies
+        # 移植元は @JsonInclude(NON_NULL) のため、token・groups はキーごと出さない
+        assert "token" not in response.json()
+        assert "groups" not in response.json()
+
+    async def test_post_auth_login_returns_group_memberships(
+        self, client, session, test_tenant, test_user_with_password
+    ):
+        """ログイン応答の groups が所属グループの groupId・groupAdmin であること"""
+        user = test_user_with_password["user"]
+        group_admin = Group(id="g-admin", tenant_id=test_tenant.id, name="Admin G")
+        group_member = Group(id="g-member", tenant_id=test_tenant.id, name="Member G")
+        session.add_all([group_admin, group_member])
+        await session.flush()
+        session.add_all(
+            [
+                GroupUser(
+                    group_id=group_admin.id,
+                    tenant_id=test_tenant.id,
+                    user_id=user.id,
+                    is_admin=True,
+                ),
+                GroupUser(
+                    group_id=group_member.id,
+                    tenant_id=test_tenant.id,
+                    user_id=user.id,
+                    is_admin=False,
+                ),
+            ]
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.post(
+                "/auth/login",
+                json={
+                    "username": user.login_id,
+                    "password": test_user_with_password["plain_password"],
+                },
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["groups"] == [
+            {"groupId": "g-admin", "groupAdmin": True},
+            {"groupId": "g-member", "groupAdmin": False},
+        ]
+
+    async def test_get_api_auth_returns_group_memberships(
+        self, client, session, test_tenant, test_user, valid_jwt_token
+    ):
+        """GET /api/auth の groups も所属グループを返し、グループが無ければ空配列であること"""
+        headers = {
+            "Authorization": f"Bearer {valid_jwt_token}",
+            "X-Tenant-ID": test_tenant.id,
+        }
+        async with client as c:
+            empty = await c.get("/api/auth", headers=headers)
+            group = Group(id="g-one", tenant_id=test_tenant.id, name="One")
+            session.add(group)
+            await session.flush()
+            session.add(
+                GroupUser(
+                    group_id=group.id,
+                    tenant_id=test_tenant.id,
+                    user_id=test_user.id,
+                    is_admin=True,
+                )
+            )
+            await session.commit()
+            joined = await c.get("/api/auth", headers=headers)
+
+        assert empty.json()["groups"] == []
+        assert joined.json()["groups"] == [{"groupId": "g-one", "groupAdmin": True}]
+
+    async def test_post_auth_login_key_blank_returns_401(self, client, test_tenant):
+        """loginKey が null・空白でも 400 ではなく 401 になること（移植元と同じ）"""
+        async with client as c:
+            null_key = await c.post(
+                "/auth/login-key",
+                json={"loginKey": None},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+            blank_key = await c.post(
+                "/auth/login-key",
+                json={"loginKey": "  "},
+                headers={"X-Tenant-ID": test_tenant.id},
+            )
+
+        assert null_key.status_code == 401
+        assert blank_key.status_code == 401
 
     async def test_post_auth_logout_deletes_session_and_clears_cookie(
         self, client, fake_redis, test_tenant, test_user_with_password
@@ -824,4 +915,4 @@ class TestAuthLoginLockout:
             )
 
         assert response.status_code == 200
-        assert response.json()["loginStatus"] == "SUCCESS"
+        assert "loginStatus" not in response.json()

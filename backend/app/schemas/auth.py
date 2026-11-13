@@ -13,7 +13,8 @@ class LoginRequest(BaseModel):
 class LoginKeyRequest(BaseModel):
     """ログインキー認証リクエスト"""
 
-    loginKey: str
+    # 移植元は null・空白でも 400 にせず、ユーザーが見つからない扱い（401）にする。
+    loginKey: str | None = None
 
 
 # 移植元`PasswordResetRequest`の`@NotBlank`の検査順とメッセージ。
@@ -65,21 +66,27 @@ class PasswordResetRequest(BaseModel):
 
 
 class AuthGroupResponse(BaseModel):
-    """グループレスポンス"""
+    """所属グループ1件分（移植元 `AuthGroupResponse`）。"""
 
-    id: str
-    name: str
+    groupId: str
+    groupAdmin: bool
 
 
 class AuthResponse(BaseModel):
-    """認証レスポンス（ログイン・トークン取得・パスワードリセット）"""
+    """認証レスポンス（ログイン・トークン取得・パスワードリセット）。
+
+    移植元 `AuthResponse` は `@JsonInclude(NON_NULL)` のため、ルーターは
+    `response_model_exclude_none=True` で返し、None の項目は応答に出さない。
+    `loginStatus` を返すのは `/auth/login` だけ。パスワード再設定が必要なときは
+    `token`・`groups` も出さない。
+    """
 
     id: str
     name: str
     role: str
     token: str | None = None
-    groups: list[AuthGroupResponse] = []
-    loginStatus: str = "SUCCESS"
+    groups: list[AuthGroupResponse] | None = None
+    loginStatus: str | None = None
     reason: str | None = None
 
     class Config:
