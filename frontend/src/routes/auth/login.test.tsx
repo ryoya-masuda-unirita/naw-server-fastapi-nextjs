@@ -137,6 +137,137 @@ describe('LoginPage', () => {
     });
   });
 
+  describe('入力チェック', () => {
+    const watchLoginRequest = () => {
+      const state = { called: false };
+      server.use(
+        http.post(`${BASE_URL}/auth/login`, () => {
+          state.called = true;
+          return HttpResponse.json({ message: 'Invalid credentials' }, { status: 401 });
+        })
+      );
+      return state;
+    };
+
+    test('ユーザーIDとパスワードが未入力だと両方に必須エラーが出て認証 API を呼ばないこと', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.click(submitButton);
+
+      expect(screen.getAllByText('VALIDATION.REQUIRED')).toHaveLength(2);
+      expect(request.called).toBe(false);
+    });
+
+    test('ユーザーIDだけ未入力だと必須エラーが1つ出ること', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.type(passwordInput, 'pass');
+      await user.click(submitButton);
+
+      expect(screen.getAllByText('VALIDATION.REQUIRED')).toHaveLength(1);
+      expect(request.called).toBe(false);
+    });
+
+    test('パスワードだけ未入力だと必須エラーが1つ出ること', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, usernameInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.type(usernameInput, 'user');
+      await user.click(submitButton);
+
+      expect(screen.getAllByText('VALIDATION.REQUIRED')).toHaveLength(1);
+      expect(request.called).toBe(false);
+    });
+
+    test('ユーザーIDが2文字だと最小文字数エラーが出て認証 API を呼ばないこと', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, usernameInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.type(usernameInput, 'ab');
+      await user.type(passwordInput, 'pass');
+      await user.click(submitButton);
+
+      expect(screen.getByText('VALIDATION.MIN_LENGTH')).toBeInTheDocument();
+      expect(request.called).toBe(false);
+    });
+
+    test('ユーザーIDが51文字だと最大文字数エラーが出ること', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, usernameInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.type(usernameInput, 'a'.repeat(51));
+      await user.type(passwordInput, 'pass');
+      await user.click(submitButton);
+
+      expect(screen.getByText('VALIDATION.MAX_LENGTH')).toBeInTheDocument();
+      expect(request.called).toBe(false);
+    });
+
+    test('テナントIDが未入力だと必須エラーが出ること', async () => {
+      const request = watchLoginRequest();
+      renderLogin();
+      const user = userEvent.setup();
+      const { usernameInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(usernameInput, 'user');
+      await user.type(passwordInput, 'pass');
+      await user.click(submitButton);
+
+      expect(screen.getAllByText('VALIDATION.REQUIRED')).toHaveLength(1);
+      expect(request.called).toBe(false);
+    });
+
+    test('パスワード欄は全角文字を取り除き64文字までしか入力できないこと', async () => {
+      renderLogin();
+      const user = userEvent.setup();
+      const { passwordInput } = getInputs();
+
+      await user.type(passwordInput, 'あab');
+      expect(passwordInput.value).toBe('ab');
+
+      await user.clear(passwordInput);
+      fireEvent.change(passwordInput, { target: { value: 'a'.repeat(70) } });
+      expect(passwordInput.value).toHaveLength(64);
+    });
+
+    test('エラー表示後に入力を直すとエラーが消えること', async () => {
+      renderLogin();
+      const user = userEvent.setup();
+      const { tenantIdInput, usernameInput, passwordInput, submitButton } = getInputs();
+
+      await user.type(tenantIdInput, FIXTURE_TENANT_ID);
+      await user.type(passwordInput, 'pass');
+      await user.click(submitButton);
+      expect(screen.getByText('VALIDATION.REQUIRED')).toBeInTheDocument();
+
+      await user.type(usernameInput, 'user');
+      expect(screen.queryByText('VALIDATION.REQUIRED')).not.toBeInTheDocument();
+    });
+
+    test('フォームにブラウザ標準の検証が付かないこと', () => {
+      renderLogin();
+
+      expect(getInputs().submitButton.closest('form')).toHaveAttribute('noValidate');
+    });
+  });
+
   describe('ログイン失敗', () => {
     test('401 エラー時にエラーメッセージが表示されること', async () => {
       renderLogin();
