@@ -5,10 +5,15 @@ from app.core.session_store import (
     get_session,
     touch_session,
 )
+from fakeredis.aioredis import FakeRedis
 
 
 class TestCreateAndGetSession:
-    async def test_creates_session_retrievable_by_id(self, fake_redis):
+    """セッションの作成と取得のテスト"""
+
+    async def test_creates_session_retrievable_by_id(
+        self, fake_redis: FakeRedis
+    ) -> None:
         """作成したセッションをセッションIDで取得できること"""
         session_id = await create_session("testuser", "test-tenant", fake_redis)
 
@@ -16,7 +21,7 @@ class TestCreateAndGetSession:
 
         assert data == {"login_id": "testuser", "tenant_id": "test-tenant"}
 
-    async def test_sets_ttl_on_creation(self, fake_redis):
+    async def test_sets_ttl_on_creation(self, fake_redis: FakeRedis) -> None:
         """作成したセッションにTTLが設定されること"""
         session_id = await create_session("testuser", "test-tenant", fake_redis)
 
@@ -24,13 +29,15 @@ class TestCreateAndGetSession:
 
         assert 0 < ttl <= SESSION_TTL_SECONDS
 
-    async def test_returns_none_for_nonexistent_session(self, fake_redis):
+    async def test_returns_none_for_nonexistent_session(
+        self, fake_redis: FakeRedis
+    ) -> None:
         """存在しないセッションIDの場合はNoneを返すこと"""
         data = await get_session("nonexistent-session-id", fake_redis)
 
         assert data is None
 
-    async def test_returns_none_for_malformed_json(self, fake_redis):
+    async def test_returns_none_for_malformed_json(self, fake_redis: FakeRedis) -> None:
         """Redisの値が不正なJSONの場合は例外を送出せずNoneを返すこと"""
         await fake_redis.set("session:broken", "not-valid-json{")
 
@@ -38,7 +45,9 @@ class TestCreateAndGetSession:
 
         assert data is None
 
-    async def test_returns_none_when_required_keys_missing(self, fake_redis):
+    async def test_returns_none_when_required_keys_missing(
+        self, fake_redis: FakeRedis
+    ) -> None:
         """Redisの値にlogin_id・tenant_idが欠けている場合はNoneを返すこと"""
         await fake_redis.set("session:incomplete", '{"login_id": "testuser"}')
 
@@ -48,7 +57,9 @@ class TestCreateAndGetSession:
 
 
 class TestDeleteSession:
-    async def test_removes_session(self, fake_redis):
+    """セッション削除のテスト"""
+
+    async def test_removes_session(self, fake_redis: FakeRedis) -> None:
         """セッションを削除できること"""
         session_id = await create_session("testuser", "test-tenant", fake_redis)
 
@@ -58,7 +69,9 @@ class TestDeleteSession:
 
 
 class TestTouchSession:
-    async def test_extends_ttl(self, fake_redis):
+    """セッション延長のテスト"""
+
+    async def test_extends_ttl(self, fake_redis: FakeRedis) -> None:
         """TTLを延長できること"""
         session_id = await create_session("testuser", "test-tenant", fake_redis)
         await fake_redis.expire(f"session:{session_id}", 10)

@@ -8,12 +8,12 @@ from app.schemas.response_format import ResponseFormatRequest
 class TestMessageContentCreateRequest:
     """MessageContentCreateRequest のバリデーションテスト"""
 
-    def test_raises_error_when_both_message_id_and_content_id_are_none(self):
+    def test_raises_error_when_both_message_id_and_content_id_are_none(self) -> None:
         """messageId・messageContentIdのいずれも指定しない場合バリデーションエラーになること"""
         with pytest.raises(ValidationError):
             MessageContentCreateRequest(userInput="質問")
 
-    def test_accepts_message_content_id_only(self):
+    def test_accepts_message_content_id_only(self) -> None:
         """messageContentIdのみ指定した場合、正常にインスタンス化できること（回答再生成）"""
         req = MessageContentCreateRequest(
             messageContentId="content-1", userInput="質問"
@@ -21,30 +21,30 @@ class TestMessageContentCreateRequest:
         assert req.messageId is None
         assert req.messageContentId == "content-1"
 
-    def test_accepts_message_id_only(self):
+    def test_accepts_message_id_only(self) -> None:
         """messageIdのみ指定した場合、正常にインスタンス化できること（既存動作）"""
         req = MessageContentCreateRequest(messageId="msg-1", userInput="質問")
         assert req.messageId == "msg-1"
         assert req.messageContentId is None
 
-    def test_accepts_empty_user_input(self):
+    def test_accepts_empty_user_input(self) -> None:
         """userInputが空文字でも、移植元と同じく受け付けること"""
         req = MessageContentCreateRequest(messageId="msg-1", userInput="")
         assert req.userInput == ""
 
-    def test_raises_error_when_user_input_is_missing(self):
+    def test_raises_error_when_user_input_is_missing(self) -> None:
         """userInputの項目がない場合バリデーションエラーになること"""
         with pytest.raises(ValidationError):
             MessageContentCreateRequest.model_validate({"messageId": "msg-1"})
 
-    def test_accepts_spring_create_library_name(self):
+    def test_accepts_spring_create_library_name(self) -> None:
         """移植元のcreateLibraryで指定したライブラリ生成フラグを受け取れること"""
         req = MessageContentCreateRequest.model_validate(
             {"messageId": "msg-1", "userInput": "質問", "createLibrary": True}
         )
         assert req.isCreateLibrary is True
 
-    def test_accepts_spring_response_format_name(self):
+    def test_accepts_spring_response_format_name(self) -> None:
         """移植元のresponse_formatで指定した出力フォーマットを受け取れること"""
         req = MessageContentCreateRequest.model_validate(
             {
@@ -55,7 +55,7 @@ class TestMessageContentCreateRequest:
         )
         assert req.responseFormat == ResponseFormatRequest(type="json_object")
 
-    def test_normalizes_history_type_to_lower_role(self):
+    def test_normalizes_history_type_to_lower_role(self) -> None:
         """移植元の大文字のtypeで指定した会話履歴の発話種別が小文字のroleになること"""
         req = MessageContentCreateRequest.model_validate(
             {
@@ -74,7 +74,7 @@ class TestMessageContentCreateRequest:
             "system",
         ]
 
-    def test_raises_error_when_history_type_is_unknown(self):
+    def test_raises_error_when_history_type_is_unknown(self) -> None:
         """会話履歴の発話種別が移植元の列挙値以外の場合バリデーションエラーになること"""
         with pytest.raises(ValidationError):
             MessageContentCreateRequest.model_validate(

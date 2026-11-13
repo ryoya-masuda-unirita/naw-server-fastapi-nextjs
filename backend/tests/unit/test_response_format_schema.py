@@ -9,20 +9,20 @@ from app.schemas.response_format import ResponseFormatRequest
 class TestResponseFormatRequest:
     """ResponseFormatRequest のテスト"""
 
-    def test_accepts_json_object_type(self):
+    def test_accepts_json_object_type(self) -> None:
         """typeがjson_objectの場合はバリデーションを通過すること"""
         assert ResponseFormatRequest(type="json_object").type == "json_object"
 
-    def test_accepts_json_schema_type(self):
+    def test_accepts_json_schema_type(self) -> None:
         """typeがjson_schemaの場合はバリデーションを通過すること"""
         assert ResponseFormatRequest(type="json_schema").type == "json_schema"
 
-    def test_rejects_invalid_type(self):
+    def test_rejects_invalid_type(self) -> None:
         """typeが不正な値の場合はValidationErrorになること"""
         with pytest.raises(ValidationError):
             ResponseFormatRequest(type="text")
 
-    def test_rejects_empty_type(self):
+    def test_rejects_empty_type(self) -> None:
         """typeが空文字の場合はValidationErrorになること"""
         with pytest.raises(ValidationError):
             ResponseFormatRequest(type="")
@@ -31,7 +31,7 @@ class TestResponseFormatRequest:
 class TestLlmChatRequestResponseFormat:
     """LlmChatRequest.responseFormat のテスト"""
 
-    def test_defaults_to_none(self):
+    def test_defaults_to_none(self) -> None:
         """responseFormat未指定時はNoneになること"""
         req = LlmChatRequest(
             deployName="gpt-4o",
@@ -39,7 +39,7 @@ class TestLlmChatRequestResponseFormat:
         )
         assert req.responseFormat is None
 
-    def test_accepts_response_format(self):
+    def test_accepts_response_format(self) -> None:
         """responseFormat指定時はResponseFormatRequestとして保持すること"""
         req = LlmChatRequest(
             deployName="gpt-4o",
@@ -52,12 +52,12 @@ class TestLlmChatRequestResponseFormat:
 class TestMessageContentCreateRequestResponseFormat:
     """MessageContentCreateRequest.responseFormat のテスト"""
 
-    def test_defaults_to_none(self):
+    def test_defaults_to_none(self) -> None:
         """responseFormat未指定時はNoneになること"""
         req = MessageContentCreateRequest(messageId="msg-1", userInput="こんにちは")
         assert req.responseFormat is None
 
-    def test_accepts_response_format(self):
+    def test_accepts_response_format(self) -> None:
         """responseFormat指定時はResponseFormatRequestとして保持すること"""
         req = MessageContentCreateRequest(
             messageId="msg-1",

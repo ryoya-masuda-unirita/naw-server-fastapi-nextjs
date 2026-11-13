@@ -22,6 +22,9 @@ from app.models.room import Room, RoomRating
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
+from typing import Any
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _tenant(tenant_id: str) -> Tenant:
@@ -72,7 +75,7 @@ def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
 
 
 @pytest.fixture
-async def feedback_tenant(session):
+async def feedback_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = _tenant("tenant-feedback-test")
     session.add(tenant)
@@ -82,7 +85,7 @@ async def feedback_tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """別テナント（テナント分離の確認用）"""
     tenant = _tenant("tenant-feedback-other")
     session.add(tenant)
@@ -92,7 +95,7 @@ async def other_tenant(session):
 
 
 @pytest.fixture
-async def tenant_admin_user(session, feedback_tenant):
+async def tenant_admin_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """テナント管理者ユーザー"""
     user = User(
         id=uuid4(),
@@ -109,7 +112,7 @@ async def tenant_admin_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def group_admin_user(session, feedback_tenant):
+async def group_admin_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """グループ管理者ユーザー"""
     user = User(
         id=uuid4(),
@@ -126,7 +129,7 @@ async def group_admin_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def general_user(session, feedback_tenant):
+async def general_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """一般ユーザー"""
     user = User(
         id=uuid4(),
@@ -143,7 +146,7 @@ async def general_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def responded_user(session, feedback_tenant):
+async def responded_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """フィードバックに回答済みのユーザー"""
     user = User(
         id=uuid4(),
@@ -160,7 +163,7 @@ async def responded_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def heavy_response_user(session, feedback_tenant):
+async def heavy_response_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """回答数が多いユーザー"""
     user = User(
         id=uuid4(),
@@ -177,7 +180,7 @@ async def heavy_response_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def unresponded_user(session, feedback_tenant):
+async def unresponded_user(session: AsyncSession, feedback_tenant: Tenant) -> User:
     """フィードバックに未回答のユーザー"""
     user = User(
         id=uuid4(),
@@ -194,7 +197,7 @@ async def unresponded_user(session, feedback_tenant):
 
 
 @pytest.fixture
-async def other_tenant_user(session, other_tenant):
+async def other_tenant_user(session: AsyncSession, other_tenant: Tenant) -> User:
     """別テナントのユーザー"""
     user = User(
         id=uuid4(),
@@ -211,7 +214,9 @@ async def other_tenant_user(session, other_tenant):
 
 
 @pytest.fixture
-async def feedback_group(session, feedback_tenant, group_admin_user):
+async def feedback_group(
+    session: AsyncSession, feedback_tenant: Tenant, group_admin_user: User
+) -> Group:
     """フィードバック集計用のグループ"""
     group = Group(tenant_id=feedback_tenant.id, name="Feedback Admin Group")
     session.add(group)
@@ -230,7 +235,9 @@ async def feedback_group(session, feedback_tenant, group_admin_user):
 
 
 @pytest.fixture
-async def feedback_assistant(session, feedback_tenant):
+async def feedback_assistant(
+    session: AsyncSession, feedback_tenant: Tenant
+) -> Assistant:
     """フィードバック対象のアシスタント"""
     assistant = Assistant(
         tenant_id=feedback_tenant.id,
@@ -245,7 +252,9 @@ async def feedback_assistant(session, feedback_tenant):
 
 
 @pytest.fixture
-async def other_tenant_assistant(session, other_tenant):
+async def other_tenant_assistant(
+    session: AsyncSession, other_tenant: Tenant
+) -> Assistant:
     """別テナントのアシスタント"""
     assistant = Assistant(
         tenant_id=other_tenant.id,
@@ -260,7 +269,9 @@ async def other_tenant_assistant(session, other_tenant):
 
 
 @pytest.fixture
-async def secondary_feedback_assistant(session, feedback_tenant):
+async def secondary_feedback_assistant(
+    session: AsyncSession, feedback_tenant: Tenant
+) -> Assistant:
     """2 つ目のフィードバック対象アシスタント"""
     assistant = Assistant(
         tenant_id=feedback_tenant.id,
@@ -276,21 +287,21 @@ async def secondary_feedback_assistant(session, feedback_tenant):
 
 @pytest.fixture
 async def feedback_dataset(
-    session,
-    feedback_tenant,
-    other_tenant,
-    tenant_admin_user,
-    group_admin_user,
-    general_user,
-    responded_user,
-    heavy_response_user,
-    unresponded_user,
-    other_tenant_user,
-    feedback_group,
-    feedback_assistant,
-    other_tenant_assistant,
-    secondary_feedback_assistant,
-):
+    session: AsyncSession,
+    feedback_tenant: Tenant,
+    other_tenant: Tenant,
+    tenant_admin_user: User,
+    group_admin_user: User,
+    general_user: User,
+    responded_user: User,
+    heavy_response_user: User,
+    unresponded_user: User,
+    other_tenant_user: User,
+    feedback_group: Group,
+    feedback_assistant: Assistant,
+    other_tenant_assistant: Assistant,
+    secondary_feedback_assistant: Assistant,
+) -> dict[str, Any]:
     """フィードバック集計テスト用のデータ一式"""
     responded_room_excellent = Room(
         tenant_id=feedback_tenant.id,
@@ -457,19 +468,21 @@ async def feedback_dataset(
 
 
 @pytest.fixture
-def admin_headers(tenant_admin_user, feedback_tenant):
+def admin_headers(tenant_admin_user: User, feedback_tenant: Tenant) -> dict[str, str]:
     """テナント管理者の認証ヘッダー"""
     return _headers(tenant_admin_user.login_id, feedback_tenant.id)
 
 
 @pytest.fixture
-def group_admin_headers(group_admin_user, feedback_tenant):
+def group_admin_headers(
+    group_admin_user: User, feedback_tenant: Tenant
+) -> dict[str, str]:
     """グループ管理者の認証ヘッダー"""
     return _headers(group_admin_user.login_id, feedback_tenant.id)
 
 
 @pytest.fixture
-def general_user_headers(general_user, feedback_tenant):
+def general_user_headers(general_user: User, feedback_tenant: Tenant) -> dict[str, str]:
     """一般ユーザーの認証ヘッダー"""
     return _headers(general_user.login_id, feedback_tenant.id)
 
@@ -482,8 +495,11 @@ class TestFeedbackRouter:
         """フィードバックのユーザー別集計取得のテスト"""
 
         async def test_returns_feedback_message_count_and_room_rating_counts(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """フィードバック件数とルーム満足度別件数が正しく集計されること"""
             async with client as c:
                 response = await c.get(
@@ -511,8 +527,11 @@ class TestFeedbackRouter:
             }
 
         async def test_user_without_feedback_returns_zero_counts(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """フィードバック・評価ともにないユーザーは件数0・isResponded=falseで返ること"""
             async with client as c:
                 response = await c.get(
@@ -541,8 +560,11 @@ class TestFeedbackRouter:
             }
 
         async def test_filters_by_response_status_has_response(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """responseStatus=has_responseでフィードバック済みユーザーのみ絞り込まれること"""
             async with client as c:
                 response = await c.get(
@@ -561,8 +583,11 @@ class TestFeedbackRouter:
             }
 
         async def test_filters_by_response_status_no_response(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """responseStatus=no_responseで未フィードバックユーザーのみ絞り込まれること"""
             async with client as c:
                 response = await c.get(
@@ -580,8 +605,11 @@ class TestFeedbackRouter:
             assert feedback_dataset["unresponded_user"].login_id in login_ids
 
         async def test_filters_by_satisfaction_star5(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """satisfaction=star5でEXCELLENT評価を持つユーザーのみ絞り込まれること"""
             async with client as c:
                 response = await c.get(
@@ -596,8 +624,11 @@ class TestFeedbackRouter:
             ]
 
         async def test_invalid_sort_order_returns_400(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """sortOrderが不正だと400になり、移植元と同じ文言が返ること"""
             async with client as c:
                 response = await c.get(
@@ -612,8 +643,11 @@ class TestFeedbackRouter:
             )
 
         async def test_sorts_by_feedback_count_ascending(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """sortField=count&sortOrder=ascでフィードバック件数の昇順に並ぶこと"""
             async with client as c:
                 response = await c.get(
@@ -629,7 +663,12 @@ class TestFeedbackRouter:
                 feedback_dataset["heavy_response_user"].login_id
             )
 
-        async def test_paginates_results(self, client, admin_headers, feedback_dataset):
+        async def test_paginates_results(
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """page/sizeでページングされ、totalElements・totalPages・numberOfElementsが正しいこと"""
             async with client as c:
                 response = await c.get(
@@ -650,8 +689,11 @@ class TestFeedbackRouter:
         """フィードバックのユーザー別集計取得の権限のテスト"""
 
         async def test_general_user_returns_403(
-            self, client, general_user_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            general_user_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """一般ユーザーはアクセスできないこと"""
             async with client as c:
                 response = await c.get(
@@ -662,8 +704,11 @@ class TestFeedbackRouter:
             assert response.status_code == 403
 
         async def test_group_admin_can_access(
-            self, client, group_admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """グループ管理者はアクセスできること"""
             async with client as c:
                 response = await c.get(
@@ -677,8 +722,11 @@ class TestFeedbackRouter:
         """テナント分離のテスト"""
 
         async def test_other_tenant_users_are_excluded(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """別テナントのユーザー・フィードバックが結果に含まれないこと"""
             async with client as c:
                 response = await c.get(
@@ -697,8 +745,11 @@ class TestFeedbackRouter:
         """フィードバックメッセージ取得のテスト"""
 
         async def test_returns_feedback_message_with_assistant_name_and_content(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """assistantName と question/answer を含む一覧が返ること"""
             async with client as c:
                 response = await c.get(
@@ -719,8 +770,11 @@ class TestFeedbackRouter:
             assert item["rating"] == "GOOD"
 
         async def test_returns_assistant_id_to_server_map_for_local_server(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """LOCAL_SERVER endpoint を assistantIdToServerMap として返すこと"""
             async with client as c:
                 response = await c.get(
@@ -739,8 +793,11 @@ class TestFeedbackRouter:
             }
 
         async def test_returns_null_content_when_message_content_is_missing(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """message_contents が無い場合でも content.question/answer が null で返ること"""
             async with client as c:
                 response = await c.get(
@@ -755,8 +812,11 @@ class TestFeedbackRouter:
             assert item["message"]["content"]["answer"] is None
 
         async def test_filters_by_assistant_id(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """assistantId 絞り込みが効くこと"""
             async with client as c:
                 response = await c.get(
@@ -773,7 +833,12 @@ class TestFeedbackRouter:
                 == feedback_dataset["secondary_feedback_assistant"].id
             )
 
-        async def test_filters_by_rating(self, client, admin_headers, feedback_dataset):
+        async def test_filters_by_rating(
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """rating 絞り込みが効くこと"""
             async with client as c:
                 response = await c.get(
@@ -787,8 +852,11 @@ class TestFeedbackRouter:
             assert items[0]["rating"] == "BAD"
 
         async def test_filters_by_folder_id(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """folderId 絞り込みが message_feedbacks.index_id に対して効くこと"""
             async with client as c:
                 response = await c.get(
@@ -803,8 +871,11 @@ class TestFeedbackRouter:
             assert items[0]["message"]["content"]["question"] == "Heavy question"
 
         async def test_sorts_by_accuracy_ascending(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """accuracy 昇順ソートが効くこと"""
             async with client as c:
                 response = await c.get(
@@ -819,8 +890,11 @@ class TestFeedbackRouter:
             assert ratings == sorted(ratings)
 
         async def test_paginates_feedback_messages(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """page/size でページングされ、totalPages・numberOfElementsも正しいこと"""
             async with client as c:
                 response = await c.get(
@@ -841,8 +915,11 @@ class TestFeedbackRouter:
         """フィードバックメッセージ取得の権限のテスト"""
 
         async def test_general_user_returns_403(
-            self, client, general_user_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            general_user_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """一般ユーザーはアクセスできないこと"""
             async with client as c:
                 response = await c.get(
@@ -853,8 +930,11 @@ class TestFeedbackRouter:
             assert response.status_code == 403
 
         async def test_group_admin_can_access(
-            self, client, group_admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """グループ管理者はアクセスできること"""
             async with client as c:
                 response = await c.get(
@@ -868,13 +948,18 @@ class TestFeedbackRouter:
         """フィードバックのルーム評価取得のテスト"""
 
         async def test_returns_latest_index_id_of_room_files(
-            self, client, session, feedback_tenant, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            feedback_tenant: Tenant,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """feedbackRoom の indexId がルームに紐づく最新ファイルのインデックスIDになること（Issue #309）"""
             room = (
                 (
                     await session.execute(
-                        select(Room).where(Room.name == "Responded Good")
+                        select(Room).where(Room.name == "Responded Good")  # type: ignore[arg-type]
                     )
                 )
                 .scalars()
@@ -917,8 +1002,11 @@ class TestFeedbackRouter:
             assert items["Responded Excellent"]["indexId"] is None
 
         async def test_excludes_unrated_rooms(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """rating未登録のルームは一覧から除外されること"""
             async with client as c:
                 response = await c.get(
@@ -934,8 +1022,11 @@ class TestFeedbackRouter:
             assert room_names == {"Responded Excellent", "Responded Good"}
 
         async def test_returns_user_name_and_assistant_name(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """userNameとdefaultAssistantNameが解決されて返ること"""
             async with client as c:
                 response = await c.get(
@@ -955,8 +1046,11 @@ class TestFeedbackRouter:
             assert item["room"]["rating"] == "EXCELLENT"
 
         async def test_filters_by_assistant_id(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """assistantId絞り込みが効くこと"""
             async with client as c:
                 response = await c.get(
@@ -968,7 +1062,12 @@ class TestFeedbackRouter:
             assert response.status_code == 200
             assert response.json()["feedbacks"]["content"] == []
 
-        async def test_filters_by_rating(self, client, admin_headers, feedback_dataset):
+        async def test_filters_by_rating(
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """rating絞り込みが効くこと"""
             async with client as c:
                 response = await c.get(
@@ -982,8 +1081,11 @@ class TestFeedbackRouter:
             assert items[0]["room"]["name"] == "Responded Good"
 
         async def test_sorts_by_level_ascending(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """sortField=level&sortOrder=ascで評価の昇順に並ぶこと"""
             async with client as c:
                 response = await c.get(
@@ -998,8 +1100,11 @@ class TestFeedbackRouter:
             assert ratings == sorted(ratings)
 
         async def test_paginates_feedback_rooms(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """page/sizeでページングされ、totalPages・numberOfElementsも正しいこと"""
             async with client as c:
                 response = await c.get(
@@ -1017,8 +1122,11 @@ class TestFeedbackRouter:
             assert body["numberOfElements"] == 1
 
         async def test_excludes_other_tenant_rooms(
-            self, client, admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """別テナントの評価済みルームが結果に含まれないこと"""
             async with client as c:
                 response = await c.get(
@@ -1036,8 +1144,11 @@ class TestFeedbackRouter:
         """フィードバックのルーム評価取得の権限のテスト"""
 
         async def test_general_user_returns_403(
-            self, client, general_user_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            general_user_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """一般ユーザーはアクセスできないこと"""
             async with client as c:
                 response = await c.get(
@@ -1048,8 +1159,11 @@ class TestFeedbackRouter:
             assert response.status_code == 403
 
         async def test_group_admin_can_access(
-            self, client, group_admin_headers, feedback_dataset
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
             """グループ管理者はアクセスできること"""
             async with client as c:
                 response = await c.get(
@@ -1059,7 +1173,9 @@ class TestFeedbackRouter:
 
             assert response.status_code == 200
 
-        async def test_returns_401_without_token(self, client, feedback_dataset):
+        async def test_returns_401_without_token(
+            self, client: AsyncClient, feedback_dataset: dict[str, Any]
+        ) -> None:
             """未ログインではアクセスできないこと"""
             async with client as c:
                 response = await c.get("/api/admin/feedbackRoom")

@@ -7,6 +7,8 @@ from app.core.library_tag_id import normalize_library_tag_id, normalize_library_
 
 
 class TestNormalizeLibraryTagId:
+    """normalize_library_tag_id のテスト"""
+
     def test_normalize_keeps_stored_format(self) -> None:
         """保存形式（ハイフンなし32桁）はそのまま返ること"""
         tag_id = uuid4().hex
@@ -45,6 +47,8 @@ class TestNormalizeLibraryTagId:
 
 
 class TestNormalizeLibraryTagIds:
+    """normalize_library_tag_ids のテスト"""
+
     def test_normalize_ids_keeps_order(self) -> None:
         """表記の混在した一覧が順序を保って保存形式に揃うこと"""
         first, second, third = uuid4(), uuid4(), uuid4()

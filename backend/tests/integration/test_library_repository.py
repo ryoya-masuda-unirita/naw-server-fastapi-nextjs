@@ -25,6 +25,13 @@ async def _find_page_capturing_statements(
     statements: list[sa.Executable] = []
 
     def _capture(state: ORMExecuteState) -> None:
+        """実行された文を記録する。
+
+        Parameters
+        ----------
+        state : ORMExecuteState
+            ORM実行時の状態。
+        """
         statements.append(state.statement)
 
     event.listen(session.sync_session, "do_orm_execute", _capture)
@@ -69,7 +76,11 @@ def _tag_id_in_binds(stmt: sa.Executable) -> list[BindParameter]:
 
 
 class TestFindPageTagIdsBinding:
-    async def test_find_page_binds_tag_ids_as_string_for_postgresql(self, session):
+    """ライブラリ一覧のタグID絞り込みのバインドのテスト。"""
+
+    async def test_find_page_binds_tag_ids_as_string_for_postgresql(
+        self, session: AsyncSession
+    ) -> None:
         """PostgreSQL向けにタグIDが文字列型でバインドされること"""
         statements = await _find_page_capturing_statements(session, [uuid.uuid4()])
 
@@ -79,7 +90,9 @@ class TestFindPageTagIdsBinding:
             assert isinstance(bind.type, sa.String)
             assert not isinstance(bind.type, sa.Uuid)
 
-    async def test_find_page_binds_tag_ids_as_hex_values(self, session):
+    async def test_find_page_binds_tag_ids_as_hex_values(
+        self, session: AsyncSession
+    ) -> None:
         """タグIDがDB保存形式（ハイフンなし32桁hex）の文字列でasyncpgに渡ること"""
         tag_ids = [uuid.uuid4(), uuid.uuid4()]
 
@@ -87,7 +100,7 @@ class TestFindPageTagIdsBinding:
 
         checked = 0
         for stmt in statements:
-            compiled = stmt.compile(dialect=asyncpg.dialect())
+            compiled = stmt.compile(dialect=asyncpg.dialect())  # type: ignore[attr-defined]
             params = compiled.construct_params()
             for bind in _tag_id_in_binds(stmt):
                 # 匿名バインドの実際の名前はコンパイル時に決まるため、コンパイル結果から引く

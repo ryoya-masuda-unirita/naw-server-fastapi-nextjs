@@ -12,6 +12,7 @@ from app.models.assistant import AssistantType
 from app.models.library import Library
 from app.models.tenant_endpoint import EndpointType
 from app.services.library_service import LibraryService
+from unittest.mock import MagicMock
 
 _MODULE = "app.services.library_service"
 _TENANT_ID = "tenant-1"
@@ -151,7 +152,7 @@ def mocks() -> Iterator[_Mocks]:
 class TestGetLibraryContent:
     """LibraryService.get_library_content のテスト"""
 
-    async def test_returns_content_when_room_viewable(self, mocks):
+    async def test_returns_content_when_room_viewable(self, mocks: _Mocks) -> None:
         """ルームを閲覧できれば本文テーブルの本文を返し、ライブラリの可視判定は行わないこと"""
         library = _library()
         mocks.find_library.return_value = library
@@ -159,14 +160,17 @@ class TestGetLibraryContent:
         mocks.find_content.return_value = SimpleNamespace(content="# 本文")
 
         result = await LibraryService.get_library_content(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.data == "# 本文"
         mocks.find_content.assert_awaited_once_with(library.id, _TENANT_ID, None)
         mocks.is_visible.assert_not_called()
 
-    async def test_returns_content_when_library_visible(self, mocks):
+    async def test_returns_content_when_library_visible(self, mocks: _Mocks) -> None:
         """ルームを閲覧できなくてもライブラリが可視なら本文を返すこと"""
         library = _library()
         mocks.find_library.return_value = library
@@ -175,12 +179,15 @@ class TestGetLibraryContent:
         mocks.find_content.return_value = SimpleNamespace(content="# 本文")
 
         result = await LibraryService.get_library_content(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.data == "# 本文"
 
-    async def test_raises_404_when_not_readable(self, mocks):
+    async def test_raises_404_when_not_readable(self, mocks: _Mocks) -> None:
         """ルームもライブラリも見えない場合はLibrary not foundの404になること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -189,28 +196,36 @@ class TestGetLibraryContent:
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library_content(
-                _TENANT_ID, _user(), str(library.id), session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library.id),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library not found"
         mocks.find_content.assert_not_called()
 
-    async def test_raises_404_when_library_not_in_tenant(self, mocks):
+    async def test_raises_404_when_library_not_in_tenant(self, mocks: _Mocks) -> None:
         """テナント内にライブラリが無い場合はLibrary not foundの404になること"""
         library_id = uuid4()
         mocks.find_library.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library_content(
-                _TENANT_ID, _user(), str(library_id), session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library_id),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library not found"
         mocks.find_library.assert_awaited_once_with(library_id, _TENANT_ID, None)
 
-    async def test_falls_back_to_visibility_when_message_missing(self, mocks):
+    async def test_falls_back_to_visibility_when_message_missing(
+        self, mocks: _Mocks
+    ) -> None:
         """紐づくメッセージが無い場合はライブラリの可視判定で閲覧可否を決めること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -219,14 +234,19 @@ class TestGetLibraryContent:
         mocks.find_content.return_value = SimpleNamespace(content="# 本文")
 
         result = await LibraryService.get_library_content(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.data == "# 本文"
         mocks.find_room.assert_not_called()
         mocks.can_view_room.assert_not_called()
 
-    async def test_falls_back_to_visibility_when_room_missing(self, mocks):
+    async def test_falls_back_to_visibility_when_room_missing(
+        self, mocks: _Mocks
+    ) -> None:
         """紐づくルームが無く、ライブラリも見えない場合は404になること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -235,14 +255,17 @@ class TestGetLibraryContent:
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library_content(
-                _TENANT_ID, _user(), str(library.id), session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library.id),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library not found"
         mocks.can_view_room.assert_not_called()
 
-    async def test_raises_404_when_content_row_missing(self, mocks):
+    async def test_raises_404_when_content_row_missing(self, mocks: _Mocks) -> None:
         """本文テーブルに行が無い場合はLibrary content not foundの404になること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -251,13 +274,16 @@ class TestGetLibraryContent:
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library_content(
-                _TENANT_ID, _user(), str(library.id), session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library.id),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library content not found"
 
-    async def test_returns_empty_string_content(self, mocks):
+    async def test_returns_empty_string_content(self, mocks: _Mocks) -> None:
         """本文が空文字の場合は空文字を返すこと"""
         library = _library()
         mocks.find_library.return_value = library
@@ -265,16 +291,22 @@ class TestGetLibraryContent:
         mocks.find_content.return_value = SimpleNamespace(content="")
 
         result = await LibraryService.get_library_content(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.data == ""
 
-    async def test_raises_404_when_library_id_is_not_uuid(self, mocks):
+    async def test_raises_404_when_library_id_is_not_uuid(self, mocks: _Mocks) -> None:
         """UUID形式でないIDは検索せずにLibrary not foundの404になること"""
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library_content(
-                _TENANT_ID, _user(), "not-a-uuid", session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                "not-a-uuid",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -286,7 +318,9 @@ class TestGetLibraryContent:
 class TestGetLibrary:
     """LibraryService.get_library のテスト"""
 
-    async def test_returns_metadata_assistant_and_content_flag(self, mocks):
+    async def test_returns_metadata_assistant_and_content_flag(
+        self, mocks: _Mocks
+    ) -> None:
         """移植元の項目（メタデータ・アシスタント・本文の有無）を返すこと"""
         library = _library()
         mocks.find_library.return_value = library
@@ -307,7 +341,10 @@ class TestGetLibrary:
         ]
 
         result = await LibraryService.get_library(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.id == str(library.id)
@@ -323,7 +360,9 @@ class TestGetLibrary:
         # SECURE以外のアシスタントではAPIキーを返さない
         assert [e.apiKey for e in result.assistant.endpoints] == ["", ""]
 
-    async def test_returns_api_key_only_for_secure_local_server(self, mocks):
+    async def test_returns_api_key_only_for_secure_local_server(
+        self, mocks: _Mocks
+    ) -> None:
         """SECUREアシスタントのLOCAL_SERVERエンドポイントだけAPIキーを返すこと"""
         library = _library()
         mocks.find_library.return_value = library
@@ -343,7 +382,10 @@ class TestGetLibrary:
         ]
 
         result = await LibraryService.get_library(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.assistant is not None
@@ -352,7 +394,9 @@ class TestGetLibrary:
             "LOCAL_SERVER": "local-key",
         }
 
-    async def test_returns_null_model_when_assistant_has_no_endpoint(self, mocks):
+    async def test_returns_null_model_when_assistant_has_no_endpoint(
+        self, mocks: _Mocks
+    ) -> None:
         """エンドポイントが無いアシスタントでは`model`がNoneになること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -362,14 +406,19 @@ class TestGetLibrary:
         )
 
         result = await LibraryService.get_library(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.assistant is not None
         assert result.assistant.model is None
         assert result.assistant.endpoints == []
 
-    async def test_returns_null_assistant_when_message_has_no_assistant(self, mocks):
+    async def test_returns_null_assistant_when_message_has_no_assistant(
+        self, mocks: _Mocks
+    ) -> None:
         """メッセージにアシスタントが無い場合は`assistant`がNoneになること"""
         library = _library(title=None)
         mocks.find_library.return_value = library
@@ -379,7 +428,10 @@ class TestGetLibrary:
         )
 
         result = await LibraryService.get_library(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.title is None
@@ -387,7 +439,9 @@ class TestGetLibrary:
         assert result.hasNawContent is False
         mocks.find_assistant.assert_not_called()
 
-    async def test_returns_null_assistant_when_assistant_missing(self, mocks):
+    async def test_returns_null_assistant_when_assistant_missing(
+        self, mocks: _Mocks
+    ) -> None:
         """アシスタントが存在しない場合は`assistant`がNoneになること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -395,13 +449,16 @@ class TestGetLibrary:
         mocks.find_assistant.return_value = None
 
         result = await LibraryService.get_library(
-            _TENANT_ID, _user(), str(library.id), session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.assistant is None
         mocks.find_endpoints.assert_not_called()
 
-    async def test_raises_404_when_not_readable(self, mocks):
+    async def test_raises_404_when_not_readable(self, mocks: _Mocks) -> None:
         """閲覧できない場合はLibrary not foundの404になること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -410,7 +467,10 @@ class TestGetLibrary:
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.get_library(
-                _TENANT_ID, _user(), str(library.id), session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library.id),
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -428,8 +488,11 @@ class TestCreateLibraryStub:
         new_callable=AsyncMock,
     )
     async def test_saves_library_without_title(
-        self, mock_find_message, mock_require_owned_room, mock_save
-    ):
+        self,
+        mock_find_message: MagicMock,
+        mock_require_owned_room: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
         """所有者確認のうえ、タイトルなしのライブラリを保存してIDを返すこと"""
         user = _user()
         mock_find_message.return_value = SimpleNamespace(room_id="room-1")
@@ -437,7 +500,10 @@ class TestCreateLibraryStub:
         mock_save.return_value = saved
 
         result = await LibraryService.create_library_stub(
-            _TENANT_ID, user, "message-1", session=None
+            _TENANT_ID,
+            user,  # type: ignore[arg-type]
+            "message-1",
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.id == str(saved.id)
@@ -455,13 +521,18 @@ class TestCreateLibraryStub:
         f"{_MODULE}.MessageRepository.find_by_tenant_id_and_id",
         new_callable=AsyncMock,
     )
-    async def test_raises_404_when_message_missing(self, mock_find_message, mock_save):
+    async def test_raises_404_when_message_missing(
+        self, mock_find_message: MagicMock, mock_save: MagicMock
+    ) -> None:
         """メッセージが無い場合はMessage not foundの404になり保存しないこと"""
         mock_find_message.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.create_library_stub(
-                _TENANT_ID, _user(), "message-1", session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                "message-1",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
@@ -475,15 +546,21 @@ class TestCreateLibraryStub:
         new_callable=AsyncMock,
     )
     async def test_does_not_save_when_not_room_owner(
-        self, mock_find_message, mock_require_owned_room, mock_save
-    ):
+        self,
+        mock_find_message: MagicMock,
+        mock_require_owned_room: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
         """ルームの所有者でない場合は例外を伝え、保存しないこと"""
         mock_find_message.return_value = SimpleNamespace(room_id="room-1")
         mock_require_owned_room.side_effect = HTTPException(status_code=403)
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.create_library_stub(
-                _TENANT_ID, _user(), "message-1", session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                "message-1",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 403
@@ -496,33 +573,43 @@ class TestUpdateLibraryTitle:
 
     @patch(f"{_MODULE}.LibraryRepository.save", new_callable=AsyncMock)
     @patch(f"{_MODULE}.require_owned_room", new_callable=AsyncMock)
-    async def test_updates_title(self, mock_require_owned_room, mock_save, mocks):
+    async def test_updates_title(
+        self, mock_require_owned_room: MagicMock, mock_save: MagicMock, mocks: _Mocks
+    ) -> None:
         """所有者確認のうえ、タイトルだけを更新してIDを返すこと"""
         library = _library(title=None)
         mocks.find_library.return_value = library
         mock_save.side_effect = lambda lib, session: lib
 
         result = await LibraryService.update_library_title(
-            _TENANT_ID, _user(), str(library.id), "新タイトル", session=None
+            _TENANT_ID,
+            _user(),  # type: ignore[arg-type]
+            str(library.id),
+            "新タイトル",
+            session=None,  # type: ignore[arg-type]
         )
 
         assert result.id == str(library.id)
         assert library.title == "新タイトル"
         mock_require_owned_room.assert_awaited_once()
 
-    async def test_raises_404_when_library_missing(self, mocks):
+    async def test_raises_404_when_library_missing(self, mocks: _Mocks) -> None:
         """ライブラリが無い場合はLibrary not foundの404になること"""
         mocks.find_library.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.update_library_title(
-                _TENANT_ID, _user(), str(uuid4()), "新タイトル", session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(uuid4()),
+                "新タイトル",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Library not found"
 
-    async def test_raises_404_when_message_missing(self, mocks):
+    async def test_raises_404_when_message_missing(self, mocks: _Mocks) -> None:
         """紐づくメッセージが無い場合はLibrary not foundの404になること"""
         library = _library()
         mocks.find_library.return_value = library
@@ -530,7 +617,11 @@ class TestUpdateLibraryTitle:
 
         with pytest.raises(HTTPException) as exc_info:
             await LibraryService.update_library_title(
-                _TENANT_ID, _user(), str(library.id), "新タイトル", session=None
+                _TENANT_ID,
+                _user(),  # type: ignore[arg-type]
+                str(library.id),
+                "新タイトル",
+                session=None,  # type: ignore[arg-type]
             )
 
         assert exc_info.value.status_code == 404

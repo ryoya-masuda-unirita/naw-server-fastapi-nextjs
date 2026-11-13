@@ -15,10 +15,13 @@ import jwt
 from app.core.security import hash_password, create_access_token, SECRET_KEY, ALGORITHM
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from collections.abc import AsyncIterator
+from fakeredis.aioredis import FakeRedis
+from typing import Any
 
 
 @pytest.fixture
-def test_tenant():
+def test_tenant() -> Tenant:
     """テスト用テナント（DB なし）"""
     return Tenant(
         id="test-tenant",
@@ -34,7 +37,7 @@ def test_tenant():
 
 
 @pytest.fixture
-def test_user(test_tenant):
+def test_user(test_tenant: Tenant) -> User:
     """テスト用ユーザー（DB なし）"""
     return User(
         id=uuid4(),
@@ -47,7 +50,7 @@ def test_user(test_tenant):
 
 
 @pytest.fixture
-def test_user_with_password(test_tenant, test_user):
+def test_user_with_password(test_tenant: Tenant, test_user: User) -> dict[str, Any]:
     """テスト用ユーザー（パスワード設定済み、DB なし）"""
     plain_password = "TestPassword123!"
     hashed_password = hash_password(plain_password)
@@ -60,13 +63,13 @@ def test_user_with_password(test_tenant, test_user):
 
 
 @pytest.fixture
-def valid_jwt_token(test_user):
+def valid_jwt_token(test_user: User) -> str:
     """有効な JWT トークン"""
     return create_access_token(test_user.login_id, "test-tenant")
 
 
 @pytest.fixture
-def expired_jwt_token(test_user):
+def expired_jwt_token(test_user: User) -> str:
     """有効期限切れ JWT"""
     now = datetime.now(timezone.utc)
     payload = {
@@ -79,7 +82,7 @@ def expired_jwt_token(test_user):
 
 
 @pytest.fixture
-def invalid_jwt_token():
+def invalid_jwt_token() -> str:
     """不正な JWT（署名が違う秘密鍵で生成）"""
     now = datetime.now(timezone.utc)
     payload = {
@@ -92,7 +95,7 @@ def invalid_jwt_token():
 
 
 @pytest.fixture
-async def fake_redis():
+async def fake_redis() -> AsyncIterator[FakeRedis]:
     """fakeredis によるインメモリ Redis（テスト用）"""
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
     yield redis

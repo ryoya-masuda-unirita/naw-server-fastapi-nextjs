@@ -33,6 +33,13 @@ async def _order_by_sql(
     statements: list[ClauseElement] = []
 
     def _capture(state: ORMExecuteState) -> None:
+        """実行された文を記録する。
+
+        Parameters
+        ----------
+        state : ORMExecuteState
+            ORM実行時の状態。
+        """
         # 実行時は句要素だが、`Executable`の型定義はcompile()を持たないため絞り込む
         statements.append(cast(ClauseElement, state.statement))
 
@@ -50,8 +57,24 @@ async def _order_by_sql(
 
 
 class TestAssistantFindPage:
+    """アシスタント一覧の並べ替えで列挙型がキャストされることのテスト。"""
+
     @staticmethod
     def _run(session: AsyncSession, order: SortOrder) -> Callable[[], Awaitable[Any]]:
+        """アシスタント一覧の取得を実行する関数を組み立てる。
+
+        Parameters
+        ----------
+        session : AsyncSession
+            DBセッション。
+        order : SortOrder
+            並べ替え条件。
+
+        Returns
+        -------
+        Callable[[], Awaitable[Any]]
+            一覧取得を実行する引数なしの非同期関数。
+        """
         return lambda: AssistantRepository.find_page(
             tenant_id=_TENANT_ID,
             search=None,
@@ -67,13 +90,17 @@ class TestAssistantFindPage:
         )
 
     @pytest.mark.parametrize("key", ["type", "assistantType", "serverType", "server"])
-    async def test_type_sort_casts_to_varchar(self, session, key):
+    async def test_type_sort_casts_to_varchar(
+        self, session: AsyncSession, key: str
+    ) -> None:
         """種別での並べ替えがENUMの宣言順ではなく文字列順になるようキャストされること"""
         sql = await _order_by_sql(session, self._run(session, SortOrder(key)))
 
         assert sql.startswith("CAST(assistants.type AS VARCHAR) ASC")
 
-    async def test_type_sort_descending_casts_to_varchar(self, session):
+    async def test_type_sort_descending_casts_to_varchar(
+        self, session: AsyncSession
+    ) -> None:
         """種別の降順も文字列にキャストした列で並べること"""
         sql = await _order_by_sql(
             session, self._run(session, SortOrder("type", descending=True))
@@ -83,7 +110,9 @@ class TestAssistantFindPage:
 
 
 class TestIndexFindPage:
-    async def test_type_sort_casts_to_varchar(self, session):
+    """インデックス一覧の並べ替えで列挙型がキャストされることのテスト。"""
+
+    async def test_type_sort_casts_to_varchar(self, session: AsyncSession) -> None:
         """インデックス種別での並べ替えが文字列順になるようキャストされること"""
         sql = await _order_by_sql(
             session,
@@ -104,8 +133,12 @@ class TestIndexFindPage:
 
 
 class TestGroupAssistantFindPageByGroup:
+    """グループのアシスタント一覧の並べ替えで列挙型がキャストされることのテスト。"""
+
     @pytest.mark.parametrize("key", ["type", "server", "assistantType"])
-    async def test_type_sort_casts_to_varchar(self, session, key):
+    async def test_type_sort_casts_to_varchar(
+        self, session: AsyncSession, key: str
+    ) -> None:
         """グループのアシスタント一覧の種別での並べ替えが文字列順になるようキャストされること"""
         sql = await _order_by_sql(
             session,
@@ -126,7 +159,9 @@ class TestGroupAssistantFindPageByGroup:
 
 
 class TestFeedbackRooms:
-    async def test_rating_sort_casts_to_varchar(self, session):
+    """ルームのフィードバック一覧の並べ替えで列挙型がキャストされることのテスト。"""
+
+    async def test_rating_sort_casts_to_varchar(self, session: AsyncSession) -> None:
         """ルームのフィードバック一覧の評価での並べ替えが文字列順になるようキャストされること"""
         sql = await _order_by_sql(
             session,
@@ -146,7 +181,9 @@ class TestFeedbackRooms:
 
 
 class TestFeedbackMessages:
-    async def test_rating_sort_casts_to_varchar(self, session):
+    """メッセージのフィードバック一覧の並べ替えで列挙型がキャストされることのテスト。"""
+
+    async def test_rating_sort_casts_to_varchar(self, session: AsyncSession) -> None:
         """メッセージのフィードバック一覧の評価での並べ替えが文字列順になるようキャストされること"""
         sql = await _order_by_sql(
             session,

@@ -20,10 +20,12 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
 from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-groups-test",
@@ -45,7 +47,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用テナント管理者"""
     u = User(
         id=uuid4(),
@@ -62,7 +64,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def member_user(session, tenant):
+async def member_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー（グループ所属想定）"""
     u = User(
         id=uuid4(),
@@ -79,7 +81,7 @@ async def member_user(session, tenant):
 
 
 @pytest.fixture
-async def other_user(session, tenant):
+async def other_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー（未所属想定）"""
     u = User(
         id=uuid4(),
@@ -96,7 +98,7 @@ async def other_user(session, tenant):
 
 
 @pytest.fixture
-async def group(session, tenant):
+async def group(session: AsyncSession, tenant: Tenant) -> Group:
     """テスト用グループ"""
     g = Group(tenant_id=tenant.id, name="Test Group")
     session.add(g)
@@ -106,7 +108,9 @@ async def group(session, tenant):
 
 
 @pytest.fixture
-async def group_with_admin_member(session, tenant, group, member_user):
+async def group_with_admin_member(
+    session: AsyncSession, tenant: Tenant, group: Group, member_user: User
+) -> Group:
     """member_userをグループ内管理者として所属させたグループ"""
     gu = GroupUser(
         group_id=group.id, tenant_id=tenant.id, user_id=member_user.id, is_admin=True
@@ -116,7 +120,7 @@ async def group_with_admin_member(session, tenant, group, member_user):
     return group
 
 
-def _headers(login_id, tenant_id):
+def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
     """ユーザーの認証ヘッダーを作る。
 
     Parameters
@@ -136,25 +140,25 @@ def _headers(login_id, tenant_id):
 
 
 @pytest.fixture
-def admin_headers(admin_user, tenant):
+def admin_headers(admin_user: User, tenant: Tenant) -> dict[str, str]:
     """テナント管理者の認証ヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def member_headers(member_user, tenant):
+def member_headers(member_user: User, tenant: Tenant) -> dict[str, str]:
     """グループメンバーの認証ヘッダー"""
     return _headers(member_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def other_headers(other_user, tenant):
+def other_headers(other_user: User, tenant: Tenant) -> dict[str, str]:
     """グループ外ユーザーの認証ヘッダー"""
     return _headers(other_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
     """テスト用の HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -164,8 +168,8 @@ class TestGetGroups:
     """GET /api/groups"""
 
     async def test_returns_all_groups_when_not_belonged(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """isBelonged未指定の場合テナント内の全グループが返ること"""
         async with client as c:
             response = await c.get("/api/groups", headers=admin_headers)
@@ -175,8 +179,13 @@ class TestGetGroups:
         assert group.id in ids
 
     async def test_returns_only_belonging_groups(
-        self, client, member_headers, group_with_admin_member, tenant, session
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+    ) -> None:
         """isBelonged=trueの場合、所属するグループのみ返ること"""
         other_group = Group(tenant_id=tenant.id, name="Not Belonging")
         session.add(other_group)
@@ -194,13 +203,13 @@ class TestGetGroups:
 
     async def test_returns_assistants_and_prompt_templates(
         self,
-        client,
-        admin_headers,
-        group_with_assistant,
-        assistant,
-        group_with_prompt_template,
-        prompt_template,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+        group_with_prompt_template: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """紐づくアシスタント・プロンプトテンプレートの実データがレスポンスに含まれること"""
         async with client as c:
             response = await c.get("/api/groups", headers=admin_headers)
@@ -213,8 +222,8 @@ class TestGetGroups:
         assert body["promptTemplates"] == [prompt_template.name]
 
     async def test_returns_empty_lists_when_nothing_linked(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """アシスタント・プロンプトテンプレートが紐づいていない場合は空リストのままであること"""
         async with client as c:
             response = await c.get("/api/groups", headers=admin_headers)
@@ -227,8 +236,15 @@ class TestGetGroups:
         assert body["promptTemplates"] == []
 
     async def test_multiple_groups_do_not_mix_assistant_data(
-        self, client, admin_headers, session, tenant, group, assistant, other_assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+        assistant: Assistant,
+        other_assistant: Assistant,
+    ) -> None:
         """複数グループを一覧取得したとき、紐付けデータが他グループと混在しないこと"""
         other_group = Group(tenant_id=tenant.id, name="Other Group")
         session.add(other_group)
@@ -262,7 +278,9 @@ class TestGetGroups:
 class TestListAdminGroups:
     """GET /api/admin/groups"""
 
-    async def test_tenant_admin_sees_all_groups(self, client, admin_headers, group):
+    async def test_tenant_admin_sees_all_groups(
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """テナント管理者は全グループを取得できること"""
         async with client as c:
             response = await c.get("/api/admin/groups", headers=admin_headers)
@@ -273,8 +291,13 @@ class TestListAdminGroups:
         assert any(g["id"] == group.id for g in body["data"])
 
     async def test_group_admin_sees_only_managed_groups(
-        self, client, member_headers, group_with_admin_member, tenant, session
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+    ) -> None:
         """グループ管理者は自分が管理するグループのみ取得できること"""
         other_group = Group(tenant_id=tenant.id, name="Not Managed")
         session.add(other_group)
@@ -288,7 +311,9 @@ class TestListAdminGroups:
         assert group_with_admin_member.id in ids
         assert other_group.id not in ids
 
-    async def test_non_group_admin_sees_no_groups(self, client, other_headers, group):
+    async def test_non_group_admin_sees_no_groups(
+        self, client: AsyncClient, other_headers: dict[str, str], group: Group
+    ) -> None:
         """いずれのグループも管理していない一般ユーザーは0件になること（403にはならない）"""
         async with client as c:
             response = await c.get("/api/admin/groups", headers=other_headers)
@@ -301,7 +326,9 @@ class TestListAdminGroups:
 class TestAllGroups:
     """GET /api/admin/all-groups"""
 
-    async def test_tenant_admin_can_access(self, client, admin_headers, group):
+    async def test_tenant_admin_can_access(
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """テナント管理者は全グループ一覧を取得できること"""
         async with client as c:
             response = await c.get("/api/admin/all-groups", headers=admin_headers)
@@ -309,8 +336,11 @@ class TestAllGroups:
         assert response.status_code == 200
 
     async def test_group_admin_gets_403(
-        self, client, member_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """グループ管理者（テナント管理者でない）は403になること"""
         async with client as c:
             response = await c.get("/api/admin/all-groups", headers=member_headers)
@@ -322,7 +352,9 @@ class TestAllGroups:
 class TestGroupCrud:
     """POST/GET/PATCH/DELETE /api/admin/groups/{id}"""
 
-    async def test_tenant_admin_creates_group(self, client, admin_headers):
+    async def test_tenant_admin_creates_group(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """テナント管理者はグループを作成できること"""
         async with client as c:
             response = await c.post(
@@ -332,7 +364,9 @@ class TestGroupCrud:
         assert response.status_code == 200
         assert response.json()["name"] == "New Group"
 
-    async def test_group_admin_cannot_create_group(self, client, member_headers):
+    async def test_group_admin_cannot_create_group(
+        self, client: AsyncClient, member_headers: dict[str, str]
+    ) -> None:
         """グループ管理者はグループを作成できないこと"""
         async with client as c:
             response = await c.post(
@@ -341,7 +375,9 @@ class TestGroupCrud:
 
         assert response.status_code == 403
 
-    async def test_get_nonexistent_group_returns_404(self, client, admin_headers):
+    async def test_get_nonexistent_group_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないグループの取得は404になること"""
         async with client as c:
             response = await c.get(
@@ -351,8 +387,11 @@ class TestGroupCrud:
         assert response.status_code == 404
 
     async def test_group_admin_updates_own_group(
-        self, client, member_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """グループ管理者は自分の管理グループを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -365,8 +404,8 @@ class TestGroupCrud:
         assert response.json()["name"] == "Renamed"
 
     async def test_unrelated_user_cannot_update_group(
-        self, client, other_headers, group
-    ):
+        self, client: AsyncClient, other_headers: dict[str, str], group: Group
+    ) -> None:
         """無関係な一般ユーザーはグループを更新できないこと"""
         async with client as c:
             response = await c.patch(
@@ -377,7 +416,9 @@ class TestGroupCrud:
 
         assert response.status_code == 403
 
-    async def test_tenant_admin_deletes_group(self, client, admin_headers, group):
+    async def test_tenant_admin_deletes_group(
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """テナント管理者はグループを削除できること"""
         async with client as c:
             response = await c.delete(
@@ -387,8 +428,11 @@ class TestGroupCrud:
         assert response.status_code == 204
 
     async def test_group_admin_cannot_delete_group(
-        self, client, member_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """グループ管理者はグループを削除できないこと"""
         async with client as c:
             response = await c.delete(
@@ -404,8 +448,11 @@ class TestGroupUsers:
     """GET/POST/DELETE/PATCH /api/admin/groups/{groupId}/users"""
 
     async def test_get_group_users_returns_spring_page_shape(
-        self, client, admin_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """所属ユーザー一覧がcontent/totalElements/number/size形式で返ること"""
         async with client as c:
             response = await c.get(
@@ -420,8 +467,13 @@ class TestGroupUsers:
         assert body["content"][0]["groupAdmin"] is True
 
     async def test_get_group_users_does_not_return_login_key(
-        self, client, session, admin_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """所属ユーザー一覧はログインキーを返さないこと（Issue #309、移植元 NAW-1342）"""
         member_user.login_key_hash = "member-secret-hash"
         session.add(member_user)
@@ -439,7 +491,13 @@ class TestGroupUsers:
         assert "hasLoginKey" not in row
         assert "member-secret-key" not in response.text
 
-    async def test_add_user_to_group(self, client, admin_headers, group, other_user):
+    async def test_add_user_to_group(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        other_user: User,
+    ) -> None:
         """ユーザーをグループに追加できること"""
         async with client as c:
             response = await c.post(
@@ -451,8 +509,12 @@ class TestGroupUsers:
         assert response.status_code == 204
 
     async def test_add_already_member_is_idempotent(
-        self, client, admin_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """既に所属済みのユーザーを追加してもエラーにならないこと"""
         async with client as c:
             response = await c.post(
@@ -463,7 +525,9 @@ class TestGroupUsers:
 
         assert response.status_code == 204
 
-    async def test_add_nonexistent_user_returns_404(self, client, admin_headers, group):
+    async def test_add_nonexistent_user_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """存在しないユーザーIDの追加は404になること"""
         async with client as c:
             response = await c.post(
@@ -475,8 +539,8 @@ class TestGroupUsers:
         assert response.status_code == 404
 
     async def test_add_malformed_user_id_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """UUID形式でないユーザーIDの追加は404になること（500にならない）"""
         async with client as c:
             response = await c.post(
@@ -488,8 +552,8 @@ class TestGroupUsers:
         assert response.status_code == 404
 
     async def test_remove_malformed_user_id_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """UUID形式でないユーザーIDの削除は404になること（500にならない）"""
         async with client as c:
             response = await c.delete(
@@ -499,8 +563,8 @@ class TestGroupUsers:
         assert response.status_code == 404
 
     async def test_update_role_malformed_user_id_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """UUID形式でないユーザーIDのロール更新は404になること（500にならない）"""
         async with client as c:
             response = await c.patch(
@@ -512,8 +576,12 @@ class TestGroupUsers:
         assert response.status_code == 404
 
     async def test_search_with_percent_is_treated_as_literal(
-        self, client, admin_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """検索文字列の%が特殊文字として展開されずリテラル扱いされること"""
         async with client as c:
             response = await c.get(
@@ -526,8 +594,12 @@ class TestGroupUsers:
         assert response.json()["totalElements"] == 0
 
     async def test_remove_user_from_group(
-        self, client, admin_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """ユーザーをグループから削除できること"""
         async with client as c:
             response = await c.delete(
@@ -538,8 +610,12 @@ class TestGroupUsers:
         assert response.status_code == 204
 
     async def test_remove_non_member_is_idempotent(
-        self, client, admin_headers, group, other_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        other_user: User,
+    ) -> None:
         """既に非所属のユーザーを削除してもエラーにならないこと"""
         async with client as c:
             response = await c.delete(
@@ -550,8 +626,12 @@ class TestGroupUsers:
         assert response.status_code == 204
 
     async def test_update_group_user_role(
-        self, client, admin_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """グループ内管理者フラグを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -563,8 +643,12 @@ class TestGroupUsers:
         assert response.status_code == 204
 
     async def test_group_admin_cannot_remove_self(
-        self, client, member_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """グループ管理者は自分自身をグループから削除できないこと"""
         async with client as c:
             response = await c.delete(
@@ -575,8 +659,12 @@ class TestGroupUsers:
         assert response.status_code == 403
 
     async def test_group_admin_cannot_change_own_role(
-        self, client, member_headers, group_with_admin_member, member_user
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """グループ管理者は自分自身のロールを変更できないこと"""
         async with client as c:
             response = await c.patch(
@@ -588,8 +676,14 @@ class TestGroupUsers:
         assert response.status_code == 403
 
     async def test_tenant_admin_can_remove_self_from_group(
-        self, client, admin_headers, admin_user, tenant, session, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        admin_user: User,
+        tenant: Tenant,
+        session: AsyncSession,
+        group: Group,
+    ) -> None:
         """テナント管理者は自分自身をグループから削除できること（自己操作禁止の対象外）"""
         gu = GroupUser(
             group_id=group.id, tenant_id=tenant.id, user_id=admin_user.id, is_admin=True
@@ -607,7 +701,7 @@ class TestGroupUsers:
 
 
 @pytest.fixture
-async def usage_plan(session):
+async def usage_plan(session: AsyncSession) -> Plan:
     """テスト用プラン（NAW-1172: includeUsage検証用）"""
     plan = Plan(
         id="plan-groups-usage-test",
@@ -621,7 +715,9 @@ async def usage_plan(session):
     return plan
 
 
-async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
+async def _create_active_subscription(
+    session: AsyncSession, tenant_id: str, plan_id: str
+) -> None:
     """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する。
 
     請求期間解決ロジックはUTCの日付で判定するため、契約開始日もUTCの日付で作る
@@ -639,7 +735,7 @@ async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> 
     await session.commit()
 
 
-def _token_usage(tenant_id: str, user_id, input_credits: int = 0) -> TokenUsage:
+def _token_usage(tenant_id: str, user_id: UUID, input_credits: int = 0) -> TokenUsage:
     """テスト用のトークン使用量を作る。
 
     Parameters
@@ -668,7 +764,7 @@ def _token_usage(tenant_id: str, user_id, input_credits: int = 0) -> TokenUsage:
 
 
 async def _add_members(
-    session,
+    session: AsyncSession,
     tenant_id: str,
     group_id: str,
     names: list[str],
@@ -695,7 +791,9 @@ async def _add_members(
     await session.commit()
 
 
-async def _get_member_ids(c, group_id: str, headers: dict, sort: str) -> list[str]:
+async def _get_member_ids(
+    c: AsyncClient, group_id: str, headers: dict, sort: str
+) -> list[str]:
     """フロントエンドと同じクエリで所属ユーザー一覧を取得し、userIdの並びを返す。"""
     response = await c.get(
         f"/api/admin/groups/{group_id}/users",
@@ -711,8 +809,13 @@ class TestGroupUsersSort:
     """GET /api/admin/groups/{groupId}/users の並べ替え（Issue #181）"""
 
     async def test_sort_by_name_switches_first_row_by_direction(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """ユーザー表示名順の昇順・降順で先頭行が入れ替わり、並びが完全に反転すること"""
         await _add_members(session, tenant.id, group.id, ["carol", "Bob", "alice"])
 
@@ -737,8 +840,13 @@ class TestGroupUsersSort:
         assert desc_names == ["carol", "Bob", "alice"]
 
     async def test_sort_by_name_reverses_rows_with_same_name(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """同じ表示名のユーザーがいても昇順と降順で並びが完全に反転すること"""
         await _add_members(session, tenant.id, group.id, ["Same", "Same", "Same"])
 
@@ -750,8 +858,13 @@ class TestGroupUsersSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_sort_by_updated_at_reverses_rows_with_same_timestamp(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """追加日時が同値の所属ユーザーでも昇順と降順で並びが完全に反転すること"""
         await _add_members(
             session,
@@ -771,8 +884,13 @@ class TestGroupUsersSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_sort_by_role_reverses_rows(
-        self, client, admin_headers, session, tenant, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group_with_admin_member: Group,
+    ) -> None:
         """権限順の昇順は一般が先頭、降順はチーム管理者が先頭になり並びが反転すること"""
         await _add_members(
             session, tenant.id, group_with_admin_member.id, ["u1", "u2", "u3"]
@@ -801,8 +919,13 @@ class TestGroupUsersSort:
         )
 
     async def test_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """ソート方向を大文字(DESC)で指定しても降順になること"""
         await _add_members(session, tenant.id, group.id, ["alpha", "zulu"])
 
@@ -819,7 +942,7 @@ class TestGroupUsersSort:
 
 
 async def _get_members_by_role(
-    client, group_id: str, headers: dict, params: dict
+    client: AsyncClient, group_id: str, headers: dict, params: dict
 ) -> dict:
     """所属ユーザー一覧を取得し、レスポンス本文を返す。"""
     async with client as c:
@@ -836,7 +959,7 @@ class TestGroupUsersRoleFilter:
 
     @pytest.fixture
     async def group_with_members(
-        self, session, tenant, group_with_admin_member
+        self, session: AsyncSession, tenant: Tenant, group_with_admin_member: Group
     ) -> Group:
         """チーム管理者1名（member_user）と一般2名（u1・u2）が所属するグループ"""
         await _add_members(session, tenant.id, group_with_admin_member.id, ["u1", "u2"])
@@ -844,8 +967,13 @@ class TestGroupUsersRoleFilter:
 
     @pytest.mark.parametrize("role", ["ADMIN", "admin", "Admin"])
     async def test_admin_returns_group_admins_only(
-        self, client, admin_headers, member_user, group_with_members, role
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        member_user: User,
+        group_with_members: Group,
+        role: str,
+    ) -> None:
         """大文字小文字を区別せず、ADMINでチーム管理者だけを返すこと"""
         body = await _get_members_by_role(
             client, group_with_members.id, admin_headers, {"role": role}
@@ -857,8 +985,12 @@ class TestGroupUsersRoleFilter:
 
     @pytest.mark.parametrize("role", ["USER", "user", "User"])
     async def test_user_returns_non_admins_only(
-        self, client, admin_headers, group_with_members, role
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_members: Group,
+        role: str,
+    ) -> None:
         """大文字小文字を区別せず、USERで一般の所属ユーザーだけを返すこと"""
         body = await _get_members_by_role(
             client, group_with_members.id, admin_headers, {"role": role}
@@ -870,8 +1002,12 @@ class TestGroupUsersRoleFilter:
 
     @pytest.mark.parametrize("role", ["SYSTEM", "foo", " ADMIN", "ADMIN "])
     async def test_unknown_role_returns_empty(
-        self, client, admin_headers, group_with_members, role
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_members: Group,
+        role: str,
+    ) -> None:
         """未知の値（前後に空白が付いた値を含む）ではエラーにせず0件を返すこと"""
         body = await _get_members_by_role(
             client, group_with_members.id, admin_headers, {"role": role}
@@ -882,8 +1018,12 @@ class TestGroupUsersRoleFilter:
 
     @pytest.mark.parametrize("role", ["", "   "])
     async def test_blank_role_returns_all(
-        self, client, admin_headers, group_with_members, role
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_members: Group,
+        role: str,
+    ) -> None:
         """空文字・空白のみの指定では絞り込まないこと"""
         body = await _get_members_by_role(
             client, group_with_members.id, admin_headers, {"role": role}
@@ -891,7 +1031,12 @@ class TestGroupUsersRoleFilter:
 
         assert body["totalElements"] == 3
 
-    async def test_no_role_returns_all(self, client, admin_headers, group_with_members):
+    async def test_no_role_returns_all(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_members: Group,
+    ) -> None:
         """roleを指定しなければ絞り込まないこと"""
         body = await _get_members_by_role(
             client, group_with_members.id, admin_headers, {}
@@ -905,8 +1050,11 @@ class TestGroupUsersWithUsage:
     """GET /api/admin/groups/{groupId}/users?includeUsage=true (NAW-1172)"""
 
     async def test_include_usage_false_omits_total_credits(
-        self, client, admin_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """includeUsage未指定時はtotalCreditsがレスポンスに含まれないこと"""
         async with client as c:
             response = await c.get(
@@ -919,14 +1067,14 @@ class TestGroupUsersWithUsage:
 
     async def test_include_usage_true_returns_total_credits(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        usage_plan,
-        group_with_admin_member,
-        member_user,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        usage_plan: Plan,
+        group_with_admin_member: Group,
+        member_user: User,
+    ) -> None:
         """includeUsage=trueの場合、請求期間内のtotalCreditsが返ること"""
         await _create_active_subscription(session, tenant.id, usage_plan.id)
         session.add(_token_usage(tenant.id, member_user.id, input_credits=42))
@@ -943,8 +1091,11 @@ class TestGroupUsersWithUsage:
         assert response.json()["content"][0]["totalCredits"] == 42
 
     async def test_include_usage_true_without_subscription_omits_total_credits(
-        self, client, admin_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """有効なサブスクリプションがない場合、totalCreditsが含まれないこと"""
         async with client as c:
             response = await c.get(
@@ -957,8 +1108,11 @@ class TestGroupUsersWithUsage:
         assert "totalCredits" not in response.json()["content"][0]
 
     async def test_sort_total_credits_without_include_usage_returns_400(
-        self, client, admin_headers, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_admin_member: Group,
+    ) -> None:
         """includeUsage未指定でsort=totalCreditsを指定すると400になること"""
         async with client as c:
             response = await c.get(
@@ -971,15 +1125,15 @@ class TestGroupUsersWithUsage:
 
     async def test_sort_total_credits_orders_by_credit_amount(
         self,
-        client,
-        admin_headers,
-        session,
-        tenant,
-        usage_plan,
-        group,
-        member_user,
-        other_user,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        usage_plan: Plan,
+        group: Group,
+        member_user: User,
+        other_user: User,
+    ) -> None:
         """includeUsage=trueかつsort=totalCreditsで利用クレジット降順に並ぶこと"""
         session.add(
             GroupUser(
@@ -1016,7 +1170,7 @@ class TestGroupUsersWithUsage:
 
 
 @pytest.fixture
-async def prompt_template(session, tenant):
+async def prompt_template(session: AsyncSession, tenant: Tenant) -> PromptTemplate:
     """テスト用プロンプトテンプレート"""
     t = PromptTemplate(
         tenant_id=tenant.id,
@@ -1031,7 +1185,9 @@ async def prompt_template(session, tenant):
 
 
 @pytest.fixture
-async def other_prompt_template(session, tenant):
+async def other_prompt_template(
+    session: AsyncSession, tenant: Tenant
+) -> PromptTemplate:
     """テスト用プロンプトテンプレート（未紐付け想定）"""
     t = PromptTemplate(
         tenant_id=tenant.id,
@@ -1046,7 +1202,9 @@ async def other_prompt_template(session, tenant):
 
 
 @pytest.fixture
-async def group_with_prompt_template(session, tenant, group, prompt_template):
+async def group_with_prompt_template(
+    session: AsyncSession, tenant: Tenant, group: Group, prompt_template: PromptTemplate
+) -> Group:
     """prompt_templateを紐付けたグループ"""
     gpt = GroupPromptTemplate(
         group_id=group.id, tenant_id=tenant.id, prompt_template_id=prompt_template.id
@@ -1061,8 +1219,12 @@ class TestGroupPromptTemplates:
     """GET/POST/DELETE /api/admin/groups/{groupId}/prompt-templates"""
 
     async def test_get_group_prompt_templates_returns_spring_page_shape(
-        self, client, admin_headers, group_with_prompt_template, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_prompt_template: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """所属テンプレート一覧がcontent/totalElements/number/size形式で返り、addedAtを含むこと"""
         async with client as c:
             response = await c.get(
@@ -1079,14 +1241,14 @@ class TestGroupPromptTemplates:
 
     async def test_search_filters_by_name(
         self,
-        client,
-        admin_headers,
-        group_with_prompt_template,
-        tenant,
-        session,
-        group,
-        other_prompt_template,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_prompt_template: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+        group: Group,
+        other_prompt_template: PromptTemplate,
+    ) -> None:
         """search指定時、名前・説明でフィルタされること"""
         gpt = GroupPromptTemplate(
             group_id=group.id,
@@ -1109,8 +1271,12 @@ class TestGroupPromptTemplates:
         assert body["content"][0]["id"] == other_prompt_template.id
 
     async def test_add_template_to_group(
-        self, client, admin_headers, group, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """テンプレートをグループに追加できること"""
         async with client as c:
             response = await c.post(
@@ -1123,11 +1289,11 @@ class TestGroupPromptTemplates:
 
     async def test_add_already_linked_is_idempotent(
         self,
-        client,
-        admin_headers,
-        group_with_prompt_template,
-        prompt_template,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_prompt_template: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """既に紐付け済みのテンプレートを追加してもエラーにならないこと"""
         async with client as c:
             response = await c.post(
@@ -1139,8 +1305,8 @@ class TestGroupPromptTemplates:
         assert response.status_code == 204
 
     async def test_add_empty_template_ids_returns_400(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """templateIdsが空の場合400になること"""
         async with client as c:
             response = await c.post(
@@ -1152,8 +1318,8 @@ class TestGroupPromptTemplates:
         assert response.status_code == 400
 
     async def test_add_nonexistent_template_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """存在しないテンプレートIDの追加は404になること"""
         async with client as c:
             response = await c.post(
@@ -1165,8 +1331,12 @@ class TestGroupPromptTemplates:
         assert response.status_code == 404
 
     async def test_remove_template_from_group(
-        self, client, admin_headers, group_with_prompt_template, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_prompt_template: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """テンプレートをグループから削除できること"""
         async with client as c:
             response = await c.delete(
@@ -1178,8 +1348,12 @@ class TestGroupPromptTemplates:
         assert response.status_code == 204
 
     async def test_remove_non_linked_is_idempotent(
-        self, client, admin_headers, group, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """既に非紐付けのテンプレートを削除してもエラーにならないこと"""
         async with client as c:
             response = await c.delete(
@@ -1190,8 +1364,8 @@ class TestGroupPromptTemplates:
         assert response.status_code == 204
 
     async def test_remove_nonexistent_template_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """存在しないテンプレートIDの削除は404になること"""
         async with client as c:
             response = await c.delete(
@@ -1202,8 +1376,12 @@ class TestGroupPromptTemplates:
         assert response.status_code == 404
 
     async def test_group_admin_can_manage_own_group_templates(
-        self, client, member_headers, group_with_admin_member, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """グループ管理者は自分の管理グループのテンプレートを追加できること"""
         async with client as c:
             response = await c.post(
@@ -1215,8 +1393,12 @@ class TestGroupPromptTemplates:
         assert response.status_code == 204
 
     async def test_unrelated_user_cannot_manage_templates(
-        self, client, other_headers, group, prompt_template
-    ):
+        self,
+        client: AsyncClient,
+        other_headers: dict[str, str],
+        group: Group,
+        prompt_template: PromptTemplate,
+    ) -> None:
         """無関係な一般ユーザーはテンプレートを追加できないこと"""
         async with client as c:
             response = await c.post(
@@ -1229,7 +1411,7 @@ class TestGroupPromptTemplates:
 
 
 @pytest.fixture
-async def assistant(session, tenant):
+async def assistant(session: AsyncSession, tenant: Tenant) -> Assistant:
     """テスト用アシスタント"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -1246,7 +1428,7 @@ async def assistant(session, tenant):
 
 
 @pytest.fixture
-async def other_assistant(session, tenant):
+async def other_assistant(session: AsyncSession, tenant: Tenant) -> Assistant:
     """テスト用アシスタント（未紐付け想定）"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -1263,7 +1445,7 @@ async def other_assistant(session, tenant):
 
 
 @pytest.fixture
-async def secure_assistant(session, tenant):
+async def secure_assistant(session: AsyncSession, tenant: Tenant) -> Assistant:
     """種別フィルタ用SECUREアシスタント"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -1280,7 +1462,9 @@ async def secure_assistant(session, tenant):
 
 
 @pytest.fixture
-async def assistant_category(session, tenant, admin_user):
+async def assistant_category(
+    session: AsyncSession, tenant: Tenant, admin_user: User
+) -> AssistantCategory:
     """テスト用アシスタントカテゴリ"""
     c = AssistantCategory(
         tenant_id=tenant.id,
@@ -1295,7 +1479,9 @@ async def assistant_category(session, tenant, admin_user):
 
 
 @pytest.fixture
-async def categorized_assistant(session, tenant, assistant_category):
+async def categorized_assistant(
+    session: AsyncSession, tenant: Tenant, assistant_category: AssistantCategory
+) -> Assistant:
     """カテゴリを持つアシスタント"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -1320,7 +1506,9 @@ async def categorized_assistant(session, tenant, assistant_category):
 
 
 @pytest.fixture
-async def group_with_assistant(session, tenant, group, assistant):
+async def group_with_assistant(
+    session: AsyncSession, tenant: Tenant, group: Group, assistant: Assistant
+) -> Group:
     """assistantを紐付けたグループ"""
     ga = GroupAssistant(
         group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
@@ -1335,8 +1523,12 @@ class TestGroupAssistants:
     """GET/POST/DELETE /api/admin/groups/{groupId}/assistants"""
 
     async def test_get_group_assistants_returns_spring_page_shape(
-        self, client, admin_headers, group_with_assistant, assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+    ) -> None:
         """所属アシスタント一覧がcontent/totalElements/number/size形式で返り、addedAtを含むこと"""
         async with client as c:
             response = await c.get(
@@ -1353,14 +1545,14 @@ class TestGroupAssistants:
 
     async def test_search_filters_by_name_or_description(
         self,
-        client,
-        admin_headers,
-        group,
-        tenant,
-        session,
-        assistant,
-        other_assistant,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+        assistant: Assistant,
+        other_assistant: Assistant,
+    ) -> None:
         """search指定時、名前・説明でフィルタされること"""
         session.add(
             GroupAssistant(
@@ -1388,14 +1580,14 @@ class TestGroupAssistants:
 
     async def test_type_filter_returns_matching_assistants(
         self,
-        client,
-        admin_headers,
-        group,
-        tenant,
-        session,
-        assistant,
-        secure_assistant,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+        assistant: Assistant,
+        secure_assistant: Assistant,
+    ) -> None:
         """type指定時、指定種別のアシスタントのみ返ること"""
         session.add(
             GroupAssistant(
@@ -1425,14 +1617,14 @@ class TestGroupAssistants:
 
     async def test_category_none_filter_returns_uncategorized_assistants(
         self,
-        client,
-        admin_headers,
-        group,
-        tenant,
-        session,
-        assistant,
-        categorized_assistant,
-    ):
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        tenant: Tenant,
+        session: AsyncSession,
+        assistant: Assistant,
+        categorized_assistant: Assistant,
+    ) -> None:
         """categoryId=NONE指定時、カテゴリ未設定のアシスタントのみ返ること"""
         session.add(
             GroupAssistant(
@@ -1461,8 +1653,12 @@ class TestGroupAssistants:
         assert body["content"][0]["id"] == assistant.id
 
     async def test_add_assistant_to_group(
-        self, client, admin_headers, group, assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        assistant: Assistant,
+    ) -> None:
         """アシスタントをグループに追加できること"""
         async with client as c:
             response = await c.post(
@@ -1474,8 +1670,12 @@ class TestGroupAssistants:
         assert response.status_code == 204
 
     async def test_add_already_linked_is_idempotent(
-        self, client, admin_headers, group_with_assistant, assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+    ) -> None:
         """既に紐付け済みのアシスタントを追加してもエラーにならないこと"""
         async with client as c:
             response = await c.post(
@@ -1487,8 +1687,8 @@ class TestGroupAssistants:
         assert response.status_code == 204
 
     async def test_add_empty_assistant_ids_returns_400(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """assistantIdsが空の場合400になること"""
         async with client as c:
             response = await c.post(
@@ -1500,8 +1700,8 @@ class TestGroupAssistants:
         assert response.status_code == 400
 
     async def test_add_nonexistent_assistant_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """存在しないアシスタントIDの追加は404になること"""
         async with client as c:
             response = await c.post(
@@ -1513,8 +1713,12 @@ class TestGroupAssistants:
         assert response.status_code == 404
 
     async def test_remove_assistant_from_group(
-        self, client, admin_headers, group_with_assistant, assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group_with_assistant: Group,
+        assistant: Assistant,
+    ) -> None:
         """アシスタントをグループから削除できること"""
         async with client as c:
             response = await c.delete(
@@ -1525,8 +1729,12 @@ class TestGroupAssistants:
         assert response.status_code == 204
 
     async def test_remove_non_linked_is_idempotent(
-        self, client, admin_headers, group, assistant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        group: Group,
+        assistant: Assistant,
+    ) -> None:
         """既に非紐付けのアシスタントを削除してもエラーにならないこと"""
         async with client as c:
             response = await c.delete(
@@ -1537,8 +1745,8 @@ class TestGroupAssistants:
         assert response.status_code == 204
 
     async def test_remove_nonexistent_assistant_returns_404(
-        self, client, admin_headers, group
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], group: Group
+    ) -> None:
         """存在しないアシスタントIDの削除は404になること"""
         async with client as c:
             response = await c.delete(
@@ -1549,8 +1757,12 @@ class TestGroupAssistants:
         assert response.status_code == 404
 
     async def test_group_admin_can_manage_own_group_assistants(
-        self, client, member_headers, group_with_admin_member, assistant
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        group_with_admin_member: Group,
+        assistant: Assistant,
+    ) -> None:
         """グループ管理者は自分の管理グループのアシスタントを追加できること"""
         async with client as c:
             response = await c.post(
@@ -1562,8 +1774,12 @@ class TestGroupAssistants:
         assert response.status_code == 204
 
     async def test_unrelated_user_cannot_manage_assistants(
-        self, client, other_headers, group, assistant
-    ):
+        self,
+        client: AsyncClient,
+        other_headers: dict[str, str],
+        group: Group,
+        assistant: Assistant,
+    ) -> None:
         """無関係な一般ユーザーはアシスタントを追加できないこと"""
         async with client as c:
             response = await c.post(
@@ -1578,7 +1794,7 @@ class TestGroupAssistants:
 SAME_TIMESTAMP = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-async def _add_groups(session, tenant_id: str, names: list[str]) -> None:
+async def _add_groups(session: AsyncSession, tenant_id: str, names: list[str]) -> None:
     """指定した名前のグループを同じ更新日時で作成する。"""
     for name in names:
         session.add(
@@ -1598,8 +1814,13 @@ class TestListGroupsSort:
 
     @pytest.mark.parametrize("path", ["/api/admin/groups", "/api/admin/all-groups"])
     async def test_sort_by_name_reverses_rows_with_same_name(
-        self, client, admin_headers, session, tenant, path
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        path: str,
+    ) -> None:
         """同名のグループがあっても昇順と降順で並びが完全に反転すること"""
         await _add_groups(session, tenant.id, ["Same", "Same", "Same"])
 
@@ -1619,8 +1840,12 @@ class TestListGroupsSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """ソート方向を大文字(DESC)で指定しても降順になること"""
         await _add_groups(session, tenant.id, ["alpha", "zulu"])
 
@@ -1635,8 +1860,12 @@ class TestListGroupsSort:
         assert [g["name"] for g in response.json()["data"]] == ["zulu", "alpha"]
 
     async def test_multiple_sort_params_are_applied_in_order(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """sortを複数指定すると、第1キーが同値の行を第2キーで並べること"""
         session.add_all(
             [
@@ -1672,8 +1901,12 @@ class TestListGroupsSort:
         assert data[0]["updatedAt"] < data[1]["updatedAt"]
 
     async def test_empty_sort_falls_back_to_default(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """sort=（空）の場合は既定の更新日時の降順になること"""
         session.add_all(
             [
@@ -1705,8 +1938,13 @@ class TestGroupMembersSort:
     """GET /api/admin/groups/{groupId}/assistants・prompt-templates の並べ替え（Issue #225）"""
 
     async def test_assistants_sort_by_added_at_reverses_rows_with_same_timestamp(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """追加日時が同値の所属アシスタントでも昇順と降順で並びが完全に反転すること"""
         for i in range(3):
             assistant = Assistant(
@@ -1747,8 +1985,13 @@ class TestGroupMembersSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_assistants_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """所属アシスタントのソート方向を大文字(DESC)で指定しても降順になること"""
         for name in ["alpha", "zulu"]:
             assistant = Assistant(
@@ -1777,8 +2020,13 @@ class TestGroupMembersSort:
         assert [a["name"] for a in response.json()["content"]] == ["zulu", "alpha"]
 
     async def test_prompt_templates_sort_by_added_at_reverses_rows_with_same_timestamp(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """追加日時が同値の所属テンプレートでも昇順と降順で並びが完全に反転すること"""
         for i in range(3):
             template = PromptTemplate(
@@ -1819,8 +2067,13 @@ class TestGroupMembersSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_prompt_templates_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant, group
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group: Group,
+    ) -> None:
         """所属テンプレートのソート方向を大文字(DESC)で指定しても降順になること"""
         for name in ["alpha", "zulu"]:
             template = PromptTemplate(
@@ -1853,8 +2106,13 @@ class TestGroupUsersExcludeSystem:
     """GET /api/admin/groups/{groupId}/users の SYSTEM 除外（Issue #225）"""
 
     async def test_excludes_system_users(
-        self, client, admin_headers, session, tenant, group_with_admin_member
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        group_with_admin_member: Group,
+    ) -> None:
         """SYSTEM権限の所属ユーザーは一覧にも総件数にも含まれないこと（移植元 NAW-1096）"""
         system_user = User(
             id=uuid4(),

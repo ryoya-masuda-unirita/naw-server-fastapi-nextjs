@@ -11,27 +11,29 @@ _EXPECTED_MESSAGE = (
 
 
 class TestParseIsoInstant:
-    def test_parses_utc_datetime(self):
+    """ISO 8601 形式の日時文字列のパースのテスト。"""
+
+    def test_parses_utc_datetime(self) -> None:
         """末尾がZの日時をUTCの日時に変換できること"""
         assert parse_iso_instant("2026-10-08T15:00:00Z", "updatedAtFrom") == datetime(
             2026, 10, 8, 15, tzinfo=timezone.utc
         )
 
-    def test_converts_offset_datetime_to_utc(self):
+    def test_converts_offset_datetime_to_utc(self) -> None:
         """オフセット付きの日時をUTCの日時に直すこと"""
         parsed = parse_iso_instant("2026-10-09T00:00:00+09:00", "updatedAtFrom")
 
         assert parsed == datetime(2026, 10, 8, 15, tzinfo=timezone.utc)
         assert parsed is not None and parsed.tzinfo == timezone.utc
 
-    def test_parses_fractional_seconds(self):
+    def test_parses_fractional_seconds(self) -> None:
         """小数秒付きの日時を変換できること"""
         parsed = parse_iso_instant("2026-10-08T15:00:00.123Z", "updatedAtFrom")
 
         assert parsed == datetime(2026, 10, 8, 15, 0, 0, 123000, tzinfo=timezone.utc)
 
     @pytest.mark.parametrize("value", [None, "", "  "])
-    def test_returns_none_when_not_specified(self, value):
+    def test_returns_none_when_not_specified(self, value: None | str) -> None:
         """未指定・空文字・空白だけは指定なしとしてNoneを返すこと"""
         assert parse_iso_instant(value, "updatedAtFrom") is None
 
@@ -47,7 +49,7 @@ class TestParseIsoInstant:
             "9999-12-31T23:59:59-01:00",
         ],
     )
-    def test_rejects_invalid_value(self, value):
+    def test_rejects_invalid_value(self, value: str) -> None:
         """日付だけ・オフセットなし・日時でない値は移植元と同じメッセージで400になること"""
         with pytest.raises(HTTPException) as exc_info:
             parse_iso_instant(value, "updatedAtFrom")

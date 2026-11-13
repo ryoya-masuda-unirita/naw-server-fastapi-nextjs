@@ -1,16 +1,21 @@
-from httpx import ASGITransport, AsyncClient
+from httpx import Response, ASGITransport, AsyncClient
 
 from app.main import app
 
 
-async def _preflight(origin: str, request_headers: str = "content-type") -> object:
+async def _preflight(origin: str, request_headers: str = "content-type") -> Response:
     """指定オリジン・ヘッダーでのプリフライトリクエストを実アプリに送る。
 
-    Args:
-        origin: `Origin` ヘッダーに設定する値。
-        request_headers: `Access-Control-Request-Headers` に設定する値。
+    Parameters
+    ----------
+    origin : str
+        `Origin` ヘッダーに設定する値。
+    request_headers : str
+        `Access-Control-Request-Headers` に設定する値。
 
-    Returns:
+    Returns
+    -------
+    Response
         アプリからのレスポンス。
     """
     async with AsyncClient(
@@ -27,7 +32,9 @@ async def _preflight(origin: str, request_headers: str = "content-type") -> obje
 
 
 class TestCorsMiddleware:
-    async def test_allows_configured_origin(self):
+    """CORS ミドルウェアのテスト。"""
+
+    async def test_allows_configured_origin(self) -> None:
         """許可オリジンからのプリフライトリクエストにAccess-Control-Allow-Originが返ること"""
         response = await _preflight("http://localhost:5173")
 
@@ -36,13 +43,13 @@ class TestCorsMiddleware:
         )
         assert response.headers["access-control-allow-credentials"] == "true"
 
-    async def test_rejects_unconfigured_origin(self):
+    async def test_rejects_unconfigured_origin(self) -> None:
         """許可されていないオリジンからのプリフライトリクエストには許可ヘッダーが付与されないこと"""
         response = await _preflight("http://evil.example.com")
 
         assert "access-control-allow-origin" not in response.headers
 
-    async def test_allows_custom_tenant_header(self):
+    async def test_allows_custom_tenant_header(self) -> None:
         """アプリが実際に送るX-Tenant-IDヘッダーがプリフライトで許可されること
 
         api-client.ts はテナントID判明後の全リクエストに X-Tenant-ID を付与し、

@@ -17,10 +17,12 @@ from app.models.room import Room
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
+from collections.abc import Iterator
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-indexes-test",
@@ -42,7 +44,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テナント管理者"""
     u = User(
         id=uuid4(),
@@ -59,7 +61,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def group_admin_user(session, tenant):
+async def group_admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テナント管理者ロールではないグループ管理者"""
     u = User(
         id=uuid4(),
@@ -76,7 +78,7 @@ async def group_admin_user(session, tenant):
 
 
 @pytest.fixture
-async def member_user(session, tenant):
+async def member_user(session: AsyncSession, tenant: Tenant) -> User:
     """管理者権限もグループ管理者権限も持たない一般ユーザー"""
     u = User(
         id=uuid4(),
@@ -93,7 +95,9 @@ async def member_user(session, tenant):
 
 
 @pytest.fixture
-async def managed_group(session, tenant, group_admin_user):
+async def managed_group(
+    session: AsyncSession, tenant: Tenant, group_admin_user: User
+) -> Group:
     """group_admin_userがグループ内管理者として所属するグループ"""
     g = Group(tenant_id=tenant.id, name="ManagedGroup")
     session.add(g)
@@ -113,7 +117,7 @@ async def managed_group(session, tenant, group_admin_user):
 
 
 @pytest.fixture
-async def unmanaged_group(session, tenant):
+async def unmanaged_group(session: AsyncSession, tenant: Tenant) -> Group:
     """group_admin_userが管理しない別グループ"""
     g = Group(tenant_id=tenant.id, name="UnmanagedGroup")
     session.add(g)
@@ -123,7 +127,8 @@ async def unmanaged_group(session, tenant):
 
 
 @pytest.fixture
-async def tenant_endpoint_1(session, tenant):
+async def tenant_endpoint_1(session: AsyncSession, tenant: Tenant) -> TenantEndpoint:
+    """Azure OpenAIの埋め込みエンドポイント(1つ目)を登録して返す。"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
         type=EndpointType.AZURE_OPENAI_EMBEDDING,
@@ -138,7 +143,8 @@ async def tenant_endpoint_1(session, tenant):
 
 
 @pytest.fixture
-async def tenant_endpoint_2(session, tenant):
+async def tenant_endpoint_2(session: AsyncSession, tenant: Tenant) -> TenantEndpoint:
+    """Azure OpenAIの埋め込みエンドポイント(2つ目)を登録して返す。"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
         type=EndpointType.VDB,
@@ -153,7 +159,10 @@ async def tenant_endpoint_2(session, tenant):
 
 
 @pytest.fixture
-async def tenant_endpoint_local(session, tenant):
+async def tenant_endpoint_local(
+    session: AsyncSession, tenant: Tenant
+) -> TenantEndpoint:
+    """ローカルサーバーのエンドポイントを登録して返す。"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
         type=EndpointType.LOCAL_SERVER,
@@ -168,7 +177,12 @@ async def tenant_endpoint_local(session, tenant):
 
 
 @pytest.fixture
-async def saas_index(session, tenant, tenant_endpoint_1, tenant_endpoint_2):
+async def saas_index(
+    session: AsyncSession,
+    tenant: Tenant,
+    tenant_endpoint_1: TenantEndpoint,
+    tenant_endpoint_2: TenantEndpoint,
+) -> Index:
     """SAAS_GLOBALインデックス（グループ・アシスタント未紐付け）"""
     idx = Index(
         tenant_id=tenant.id,
@@ -196,8 +210,12 @@ async def saas_index(session, tenant, tenant_endpoint_1, tenant_endpoint_2):
 
 @pytest.fixture
 async def group_linked_index(
-    session, tenant, managed_group, tenant_endpoint_1, tenant_endpoint_2
-):
+    session: AsyncSession,
+    tenant: Tenant,
+    managed_group: Group,
+    tenant_endpoint_1: TenantEndpoint,
+    tenant_endpoint_2: TenantEndpoint,
+) -> Index:
     """managed_groupに直接紐づくインデックス"""
     idx = Index(
         tenant_id=tenant.id,
@@ -217,8 +235,12 @@ async def group_linked_index(
 
 @pytest.fixture
 async def assistant_linked_index(
-    session, tenant, managed_group, tenant_endpoint_1, tenant_endpoint_2
-):
+    session: AsyncSession,
+    tenant: Tenant,
+    managed_group: Group,
+    tenant_endpoint_1: TenantEndpoint,
+    tenant_endpoint_2: TenantEndpoint,
+) -> Index:
     """managed_groupのアシスタントが使用するインデックス（グループへの直接紐付けなし）"""
     idx = Index(
         tenant_id=tenant.id,
@@ -250,7 +272,9 @@ async def assistant_linked_index(
 
 
 @pytest.fixture
-async def unrelated_index(session, tenant, unmanaged_group):
+async def unrelated_index(
+    session: AsyncSession, tenant: Tenant, unmanaged_group: Group
+) -> Index:
     """group_admin_userの管理範囲外のインデックス"""
     idx = Index(
         tenant_id=tenant.id,
@@ -269,7 +293,9 @@ async def unrelated_index(session, tenant, unmanaged_group):
 
 
 @pytest.fixture
-async def local_index(session, tenant, tenant_endpoint_local):
+async def local_index(
+    session: AsyncSession, tenant: Tenant, tenant_endpoint_local: TenantEndpoint
+) -> Index:
     """LOCALタイプのインデックス（追加学習400系テスト用）"""
     idx = Index(
         tenant_id=tenant.id,
@@ -293,15 +319,23 @@ async def local_index(session, tenant, tenant_endpoint_local):
 
 
 @pytest.fixture
-def index_storage_root(tmp_path) -> Path:
+def index_storage_root(tmp_path: Path) -> Path:
+    """インデックスのファイルストレージ用の一時ディレクトリを返す。"""
     return tmp_path / "index-file-storage"
 
 
 @pytest.fixture
-def override_index_file_storage(index_storage_root):
+def override_index_file_storage(index_storage_root: Path) -> Iterator[None]:
     """追加学習テストでファイルストレージを一時ディレクトリへ差し替える（実ストレージへは接続しない）"""
 
     def _get_storage() -> FileStorage:
+        """差し替え用のファイルストレージを返す。
+
+        Returns
+        -------
+        FileStorage
+            一時ディレクトリを使うローカルファイルストレージ。
+        """
         return LocalFileStorage(root=index_storage_root)
 
     app.dependency_overrides[get_file_storage] = _get_storage
@@ -310,7 +344,7 @@ def override_index_file_storage(index_storage_root):
 
 
 @pytest.fixture
-async def feedback_assistant(session, tenant):
+async def feedback_assistant(session: AsyncSession, tenant: Tenant) -> Assistant:
     """フィードバック紐付け用の最小限のアシスタント"""
     a = Assistant(
         tenant_id=tenant.id,
@@ -325,7 +359,12 @@ async def feedback_assistant(session, tenant):
 
 
 @pytest.fixture
-async def feedback_room(session, tenant, feedback_assistant, admin_user):
+async def feedback_room(
+    session: AsyncSession,
+    tenant: Tenant,
+    feedback_assistant: Assistant,
+    admin_user: User,
+) -> Room:
     """フィードバック紐付け用の最小限のルーム"""
     room = Room(
         tenant_id=tenant.id,
@@ -340,7 +379,12 @@ async def feedback_room(session, tenant, feedback_assistant, admin_user):
 
 
 @pytest.fixture
-async def feedback_message(session, tenant, feedback_room, feedback_assistant):
+async def feedback_message(
+    session: AsyncSession,
+    tenant: Tenant,
+    feedback_room: Room,
+    feedback_assistant: Assistant,
+) -> Message:
     """フィードバック紐付け用の最小限のメッセージ"""
     m = Message(
         tenant_id=tenant.id,
@@ -354,7 +398,9 @@ async def feedback_message(session, tenant, feedback_room, feedback_assistant):
 
 
 @pytest.fixture
-async def message_feedback(session, tenant, feedback_message, admin_user):
+async def message_feedback(
+    session: AsyncSession, tenant: Tenant, feedback_message: Message, admin_user: User
+) -> MessageFeedback:
     """追加学習のデータソースとするフィードバック"""
     fb = MessageFeedback(
         tenant_id=tenant.id,
@@ -369,38 +415,62 @@ async def message_feedback(session, tenant, feedback_message, admin_user):
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証ヘッダーとテナントIDヘッダーを組み立てる。
+
+    Parameters
+    ----------
+    login_id : str
+        ログインID。
+    tenant_id : str
+        テナントID。
+
+    Returns
+    -------
+    dict[str, str]
+        `Authorization` と `X-Tenant-ID` を含むヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
-def admin_headers(admin_user, tenant):
+def admin_headers(admin_user: User, tenant: Tenant) -> dict[str, str]:
+    """管理者のリクエスト用ヘッダーを返す。"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def group_admin_headers(group_admin_user, tenant):
+def group_admin_headers(group_admin_user: User, tenant: Tenant) -> dict[str, str]:
+    """グループ管理者のリクエスト用ヘッダーを返す。"""
     return _headers(group_admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def member_headers(member_user, tenant):
+def member_headers(member_user: User, tenant: Tenant) -> dict[str, str]:
+    """一般メンバーのリクエスト用ヘッダーを返す。"""
     return _headers(member_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
+    """DBセッションを差し替えたテスト用のHTTPクライアントを返す。"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 @pytest.mark.asyncio
 class TestIndexRouter:
+    """インデックスAPIのテスト。"""
+
     class TestList:
         """GET /api/admin/indexes"""
 
         async def test_list_all_indexes_for_tenant_admin(
-            self, client, admin_headers, saas_index, unrelated_index
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            unrelated_index: Index,
+        ) -> None:
             """テナント管理者は全インデックスを取得できること"""
             async with client as c:
                 response = await c.get("/api/admin/indexes", headers=admin_headers)
@@ -410,8 +480,12 @@ class TestIndexRouter:
             assert body["totalElements"] == 2
 
         async def test_list_filters_by_search_text(
-            self, client, admin_headers, saas_index, unrelated_index
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            unrelated_index: Index,
+        ) -> None:
             """検索文字列でname/descriptionの部分一致絞り込みができること"""
             async with client as c:
                 response = await c.get(
@@ -427,12 +501,12 @@ class TestIndexRouter:
 
         async def test_list_filters_by_group_id_as_tenant_admin(
             self,
-            client,
-            admin_headers,
-            group_linked_index,
-            unrelated_index,
-            managed_group,
-        ):
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            group_linked_index: Index,
+            unrelated_index: Index,
+            managed_group: Group,
+        ) -> None:
             """テナント管理者はgroupId指定で該当グループ紐付けのインデックスのみ取得できること"""
             async with client as c:
                 response = await c.get(
@@ -447,8 +521,12 @@ class TestIndexRouter:
             assert body["content"][0]["id"] == group_linked_index.id
 
         async def test_list_filters_by_group_id_as_group_admin(
-            self, client, group_admin_headers, group_linked_index, managed_group
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            group_linked_index: Index,
+            managed_group: Group,
+        ) -> None:
             """グループ管理者は自分が管理するグループIDで絞り込めること"""
             async with client as c:
                 response = await c.get(
@@ -464,12 +542,12 @@ class TestIndexRouter:
 
         async def test_list_returns_empty_when_group_admin_has_no_access_to_group(
             self,
-            client,
-            group_admin_headers,
-            unrelated_index,
-            unmanaged_group,
-            managed_group,
-        ):
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            unrelated_index: Index,
+            unmanaged_group: Group,
+            managed_group: Group,
+        ) -> None:
             """グループ管理者が自分の管理外のgroupIdを指定すると空ページが返ること
 
             `managed_group`は`require_admin_or_group_admin`（いずれかのグループの管理者であればアクセス可）を
@@ -490,12 +568,12 @@ class TestIndexRouter:
 
         async def test_group_admin_scoped_to_managed_group_and_assistant_indexes(
             self,
-            client,
-            group_admin_headers,
-            group_linked_index,
-            assistant_linked_index,
-            unrelated_index,
-        ):
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            group_linked_index: Index,
+            assistant_linked_index: Index,
+            unrelated_index: Index,
+        ) -> None:
             """groupId未指定時、グループ管理者は管理グループ直接紐付け∪アシスタント経由のインデックスのみ見えること"""
             async with client as c:
                 response = await c.get(
@@ -508,7 +586,9 @@ class TestIndexRouter:
             assert ids == {group_linked_index.id, assistant_linked_index.id}
             assert body["totalElements"] == 2
 
-        async def test_normal_user_returns_403(self, client, member_headers):
+        async def test_normal_user_returns_403(
+            self, client: AsyncClient, member_headers: dict[str, str]
+        ) -> None:
             """管理者権限もグループ管理者権限もない一般ユーザーは403になること"""
             async with client as c:
                 response = await c.get("/api/admin/indexes", headers=member_headers)
@@ -518,7 +598,9 @@ class TestIndexRouter:
     class TestGet:
         """GET /api/admin/indexes/{id}"""
 
-        async def test_get_index_by_id(self, client, admin_headers, saas_index):
+        async def test_get_index_by_id(
+            self, client: AsyncClient, admin_headers: dict[str, str], saas_index: Index
+        ) -> None:
             """存在するインデックスの詳細を取得できること"""
             async with client as c:
                 response = await c.get(
@@ -531,7 +613,9 @@ class TestIndexRouter:
             assert body["name"] == "SaaS Index"
             assert len(body["tenantEndpoints"]) == 2
 
-        async def test_get_index_not_found_returns_404(self, client, admin_headers):
+        async def test_get_index_not_found_returns_404(
+            self, client: AsyncClient, admin_headers: dict[str, str]
+        ) -> None:
             """存在しないインデックスIDを指定すると404になること"""
             async with client as c:
                 response = await c.get(
@@ -541,8 +625,12 @@ class TestIndexRouter:
             assert response.status_code == 404
 
         async def test_get_index_out_of_scope_returns_404_for_group_admin(
-            self, client, group_admin_headers, unrelated_index, managed_group
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            unrelated_index: Index,
+            managed_group: Group,
+        ) -> None:
             """グループ管理者が可視範囲外のインデックスIDを指定すると404になること
 
             `managed_group`は`require_admin_or_group_admin`を通過させるために必要
@@ -560,8 +648,12 @@ class TestIndexRouter:
         """POST /api/admin/indexes"""
 
         async def test_create_saas_index(
-            self, client, admin_headers, tenant_endpoint_1, tenant_endpoint_2
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """SAAS_GLOBALインデックスをエンドポイント2件で作成できること"""
             payload = {
                 "name": "New SaaS Index",
@@ -580,8 +672,11 @@ class TestIndexRouter:
             assert len(body["tenantEndpoints"]) == 2
 
         async def test_create_saas_index_invalid_endpoint_count_raises_error(
-            self, client, admin_headers, tenant_endpoint_1
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+        ) -> None:
             """SAAS_GLOBALでエンドポイントが2件でない場合400になること"""
             payload = {
                 "name": "Bad Index",
@@ -597,13 +692,13 @@ class TestIndexRouter:
 
         async def test_create_saas_index_over_limit_raises_error(
             self,
-            client,
-            session,
-            tenant,
-            admin_headers,
-            tenant_endpoint_1,
-            tenant_endpoint_2,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            tenant: Tenant,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """既存SAAS_GLOBALインデックスが15件あるテナントでは新規作成が400になること"""
             for i in range(15):
                 idx = Index(
@@ -626,8 +721,11 @@ class TestIndexRouter:
             assert "15個" in response.json()["message"]
 
         async def test_create_local_index(
-            self, client, admin_headers, tenant_endpoint_local
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_local: TenantEndpoint,
+        ) -> None:
             """LOCALインデックスをエンドポイント1件・Waha!サービスID指定ありで作成できること"""
             payload = {
                 "name": "New Local Index",
@@ -648,8 +746,12 @@ class TestIndexRouter:
             assert body["add"] == "add-service"
 
         async def test_create_local_index_invalid_endpoint_count_raises_error(
-            self, client, admin_headers, tenant_endpoint_local, tenant_endpoint_1
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_local: TenantEndpoint,
+            tenant_endpoint_1: TenantEndpoint,
+        ) -> None:
             """LOCALでエンドポイントが1件でない場合400になること"""
             payload = {
                 "name": "Bad Local Index",
@@ -667,8 +769,11 @@ class TestIndexRouter:
             assert response.status_code == 400
 
         async def test_create_local_index_missing_waha_service_id_raises_error(
-            self, client, admin_headers, tenant_endpoint_local
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_local: TenantEndpoint,
+        ) -> None:
             """LOCALでget/add/deleteのいずれかが空の場合400になること"""
             payload = {
                 "name": "Bad Local Index",
@@ -686,8 +791,12 @@ class TestIndexRouter:
             assert response.status_code == 400
 
         async def test_create_description_too_long_raises_error(
-            self, client, admin_headers, tenant_endpoint_1, tenant_endpoint_2
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """descriptionが256文字以上の場合400になること"""
             payload = {
                 "name": "Long Desc Index",
@@ -703,8 +812,11 @@ class TestIndexRouter:
             assert response.status_code == 400
 
         async def test_create_unknown_endpoint_id_raises_error(
-            self, client, admin_headers, tenant_endpoint_1
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+        ) -> None:
             """存在しないテナントエンドポイントIDを指定すると404になること"""
             payload = {
                 "name": "Bad Endpoint Index",
@@ -720,8 +832,12 @@ class TestIndexRouter:
             assert "テナントエンドポイント" in response.json()["message"]
 
         async def test_create_unknown_group_id_raises_error(
-            self, client, admin_headers, tenant_endpoint_1, tenant_endpoint_2
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """存在しないグループIDを指定すると404になること"""
             payload = {
                 "name": "Bad Group Index",
@@ -742,13 +858,13 @@ class TestIndexRouter:
 
         async def test_update_index_replaces_all_fields(
             self,
-            client,
-            session,
-            admin_headers,
-            saas_index,
-            tenant_endpoint_1,
-            managed_group,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            tenant_endpoint_1: TenantEndpoint,
+            managed_group: Group,
+        ) -> None:
             """更新リクエストで全フィールドが置換されること（groupIds/endpointIdsの完全置換を含む）"""
             payload = {
                 "name": "Updated Name",
@@ -768,7 +884,7 @@ class TestIndexRouter:
             session.add(second_endpoint)
             await session.commit()
             await session.refresh(second_endpoint)
-            payload["endpointIds"].append(second_endpoint.id)
+            payload["endpointIds"].append(second_endpoint.id)  # type: ignore[attr-defined]
 
             async with client as c:
                 response = await c.patch(
@@ -789,14 +905,14 @@ class TestIndexRouter:
 
         async def test_update_skips_saas_limit_check(
             self,
-            client,
-            session,
-            tenant,
-            admin_headers,
-            saas_index,
-            tenant_endpoint_1,
-            tenant_endpoint_2,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            tenant: Tenant,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """既存15件のテナントでも既存インデックスの更新は上限チェックの対象外であること"""
             for i in range(15):
                 idx = Index(
@@ -821,13 +937,13 @@ class TestIndexRouter:
 
         async def test_update_by_group_admin_within_scope_succeeds(
             self,
-            client,
-            group_admin_headers,
-            group_linked_index,
-            managed_group,
-            tenant_endpoint_1,
-            tenant_endpoint_2,
-        ):
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            group_linked_index: Index,
+            managed_group: Group,
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """グループ管理者は自分の管理範囲内のインデックスを更新できること"""
             payload = {
                 "name": "Updated By Group Admin",
@@ -847,13 +963,13 @@ class TestIndexRouter:
 
         async def test_update_by_group_admin_out_of_scope_returns_404(
             self,
-            client,
-            group_admin_headers,
-            unrelated_index,
-            managed_group,
-            tenant_endpoint_1,
-            tenant_endpoint_2,
-        ):
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            unrelated_index: Index,
+            managed_group: Group,
+            tenant_endpoint_1: TenantEndpoint,
+            tenant_endpoint_2: TenantEndpoint,
+        ) -> None:
             """グループ管理者は自分の管理範囲外のインデックスを更新できず404になること
 
             `managed_group`は`require_admin_or_group_admin`を通過させるために必要。
@@ -876,8 +992,12 @@ class TestIndexRouter:
         """DELETE /api/admin/indexes/{id}"""
 
         async def test_delete_index_cascades_junction_tables(
-            self, client, session, admin_headers, saas_index
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+        ) -> None:
             """インデックス削除時にindexes_endpoints・indexes_groupsの関連行もCASCADE削除されること"""
             async with client as c:
                 response = await c.delete(
@@ -890,7 +1010,7 @@ class TestIndexRouter:
                 (
                     await session.execute(
                         select(IndexEndpoint).where(
-                            IndexEndpoint.index_id == saas_index.id
+                            IndexEndpoint.index_id == saas_index.id  # type: ignore[arg-type]
                         )
                     )
                 )
@@ -900,8 +1020,8 @@ class TestIndexRouter:
             assert remaining == []
 
         async def test_delete_nonexistent_index_is_idempotent(
-            self, client, admin_headers
-        ):
+            self, client: AsyncClient, admin_headers: dict[str, str]
+        ) -> None:
             """存在しないインデックスIDを削除しても204が返ること（冪等）"""
             async with client as c:
                 response = await c.delete(
@@ -911,8 +1031,11 @@ class TestIndexRouter:
             assert response.status_code == 204
 
         async def test_delete_by_group_admin_within_scope_succeeds(
-            self, client, group_admin_headers, group_linked_index
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            group_linked_index: Index,
+        ) -> None:
             """グループ管理者は自分の管理範囲内のインデックスを削除できること"""
             async with client as c:
                 response = await c.delete(
@@ -923,8 +1046,12 @@ class TestIndexRouter:
             assert response.status_code == 204
 
         async def test_delete_by_group_admin_out_of_scope_returns_404(
-            self, client, group_admin_headers, unrelated_index, managed_group
-        ):
+            self,
+            client: AsyncClient,
+            group_admin_headers: dict[str, str],
+            unrelated_index: Index,
+            managed_group: Group,
+        ) -> None:
             """グループ管理者は自分の管理範囲外のインデックスを削除できず404になること
 
             `managed_group`は`require_admin_or_group_admin`を通過させるために必要。
@@ -943,8 +1070,8 @@ class TestIndexRouter:
         """POST /api/admin/indexes/{id}/sync"""
 
         async def test_sync_always_returns_bad_request(
-            self, client, admin_headers, saas_index
-        ):
+            self, client: AsyncClient, admin_headers: dict[str, str], saas_index: Index
+        ) -> None:
             """同期APIは常に400（ローカルAPIサーバ限定機能）を返すこと"""
             async with client as c:
                 response = await c.post(
@@ -961,8 +1088,12 @@ class TestIndexRouter:
         """POST /api/admin/indexes/{id}/additionalLearning"""
 
         async def test_neither_feedback_id_nor_room_id_raises_error(
-            self, client, admin_headers, saas_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """feedbackId・roomIdどちらも未指定だと400になること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             async with client as c:
@@ -980,8 +1111,12 @@ class TestIndexRouter:
             )
 
         async def test_both_feedback_id_and_room_id_raises_error(
-            self, client, admin_headers, saas_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """feedbackId・roomIdを両方指定すると400になること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": "some-feedback-id", "roomId": "some-room-id"}
@@ -1001,13 +1136,13 @@ class TestIndexRouter:
 
         async def test_create_file_with_feedback_id(
             self,
-            client,
-            session,
-            admin_headers,
-            saas_index,
-            message_feedback,
-            override_index_file_storage,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            message_feedback: MessageFeedback,
+            override_index_file_storage: None,
+        ) -> None:
             """feedbackId指定で追加学習ファイルが作成されること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": message_feedback.id}
@@ -1024,7 +1159,7 @@ class TestIndexRouter:
             created = (
                 (
                     await session.execute(
-                        select(File).where(File.feedback_id == message_feedback.id)
+                        select(File).where(File.feedback_id == message_feedback.id)  # type: ignore[arg-type]
                     )
                 )
                 .scalars()
@@ -1038,13 +1173,13 @@ class TestIndexRouter:
 
         async def test_update_message_feedback_index_id(
             self,
-            client,
-            session,
-            admin_headers,
-            saas_index,
-            message_feedback,
-            override_index_file_storage,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            message_feedback: MessageFeedback,
+            override_index_file_storage: None,
+        ) -> None:
             """feedbackId指定後に対象MessageFeedbackのindex_idが更新されること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": message_feedback.id}
@@ -1063,13 +1198,13 @@ class TestIndexRouter:
 
         async def test_create_file_with_room_id(
             self,
-            client,
-            session,
-            admin_headers,
-            saas_index,
-            feedback_room,
-            override_index_file_storage,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            feedback_room: Room,
+            override_index_file_storage: None,
+        ) -> None:
             """roomId指定で追加学習ファイルが作成されること"""
             room_id = feedback_room.id
             files = {"content": ("learn.md", b"content", "text/markdown")}
@@ -1085,7 +1220,7 @@ class TestIndexRouter:
             assert response.status_code == 204
 
             created = (
-                (await session.execute(select(File).where(File.room_id == room_id)))
+                (await session.execute(select(File).where(File.room_id == room_id)))  # type: ignore[arg-type]
                 .scalars()
                 .first()
             )
@@ -1095,8 +1230,12 @@ class TestIndexRouter:
             assert created.reference == f"フィードバック_{room_id}"
 
         async def test_nonexistent_feedback_id_raises_404(
-            self, client, admin_headers, saas_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """存在しないfeedbackIdを指定すると404になること（ファイルは作成されない）"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": "nonexistent-feedback-id"}
@@ -1111,8 +1250,12 @@ class TestIndexRouter:
             assert response.status_code == 404
 
         async def test_nonexistent_room_id_raises_404(
-            self, client, admin_headers, saas_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """存在しないroomIdを指定すると404になること（ファイルは作成されない）"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"roomId": "nonexistent-room-id"}
@@ -1128,12 +1271,12 @@ class TestIndexRouter:
 
         async def test_other_tenant_feedback_id_raises_404(
             self,
-            client,
-            session,
-            admin_headers,
-            saas_index,
-            unrelated_index,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            saas_index: Index,
+            unrelated_index: Index,
+        ) -> None:
             """他テナントのfeedbackIdを指定すると404になり、テナントをまたいで紐付かないこと
 
             `files.feedback_id`は`message_feedbacks.id`への単一列FK（テナント条件を含まない）
@@ -1220,7 +1363,7 @@ class TestIndexRouter:
             created = (
                 (
                     await session.execute(
-                        select(File).where(File.feedback_id == other_feedback.id)
+                        select(File).where(File.feedback_id == other_feedback.id)  # type: ignore[arg-type]
                     )
                 )
                 .scalars()
@@ -1232,8 +1375,11 @@ class TestIndexRouter:
             assert other_feedback.index_id is None
 
         async def test_index_not_found_raises_404(
-            self, client, admin_headers, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            override_index_file_storage: None,
+        ) -> None:
             """存在しないindex_idを指定すると404になること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": "some-feedback-id"}
@@ -1248,8 +1394,12 @@ class TestIndexRouter:
             assert response.status_code == 404
 
         async def test_local_index_raises_bad_request(
-            self, client, admin_headers, local_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            local_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """LOCALタイプのインデックスを指定すると400になること"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": "some-feedback-id"}
@@ -1268,8 +1418,12 @@ class TestIndexRouter:
             )
 
         async def test_member_user_forbidden(
-            self, client, member_headers, saas_index, override_index_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            member_headers: dict[str, str],
+            saas_index: Index,
+            override_index_file_storage: None,
+        ) -> None:
             """一般ユーザーは追加学習APIを呼べないこと"""
             files = {"content": ("learn.md", b"content", "text/markdown")}
             data = {"feedbackId": "some-feedback-id"}
@@ -1289,8 +1443,12 @@ class TestListIndexesSort:
     """GET /api/admin/indexes の並べ替え（Issue #225）"""
 
     async def test_sort_by_name_reverses_rows_with_same_name(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """同名のインデックスがあっても昇順と降順で並びが完全に反転すること"""
         session.add_all(
             [
@@ -1318,8 +1476,12 @@ class TestListIndexesSort:
         assert desc_ids == list(reversed(asc_ids))
 
     async def test_sort_direction_is_case_insensitive(
-        self, client, admin_headers, session, tenant
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+    ) -> None:
         """ソート方向を大文字(DESC)で指定しても降順になること"""
         session.add_all(
             [

@@ -5,8 +5,10 @@ from app.main import app
 
 
 class TestHealthRouter:
+    """ヘルスチェックエンドポイントのテスト"""
+
     @pytest.mark.asyncio
-    async def test_health_check_returns_ok(self):
+    async def test_health_check_returns_ok(self) -> None:
         """ヘルスチェックが正常に返ること"""
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

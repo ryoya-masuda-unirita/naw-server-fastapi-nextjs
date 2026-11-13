@@ -11,6 +11,7 @@ from app.models.room import Room
 from app.models.share import Share, ShareRoom
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _tenant(tenant_id: str) -> Tenant:
@@ -42,7 +43,7 @@ def _tenant(tenant_id: str) -> Tenant:
 
 
 @pytest.fixture
-async def shares_tenant(session):
+async def shares_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = _tenant("tenant-shares-test")
     session.add(tenant)
@@ -52,7 +53,7 @@ async def shares_tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """別テナント（テナント分離の確認用）"""
     tenant = _tenant("tenant-shares-other")
     session.add(tenant)
@@ -62,7 +63,7 @@ async def other_tenant(session):
 
 
 @pytest.fixture
-async def room_owner_user(session, shares_tenant):
+async def room_owner_user(session: AsyncSession, shares_tenant: Tenant) -> User:
     """ルームの所有者ユーザー"""
     user = User(
         id=uuid4(),
@@ -79,7 +80,7 @@ async def room_owner_user(session, shares_tenant):
 
 
 @pytest.fixture
-async def group_member_user(session, shares_tenant):
+async def group_member_user(session: AsyncSession, shares_tenant: Tenant) -> User:
     """グループに所属するユーザー"""
     user = User(
         id=uuid4(),
@@ -96,7 +97,7 @@ async def group_member_user(session, shares_tenant):
 
 
 @pytest.fixture
-async def unrelated_user(session, shares_tenant):
+async def unrelated_user(session: AsyncSession, shares_tenant: Tenant) -> User:
     """共有に無関係なユーザー"""
     user = User(
         id=uuid4(),
@@ -113,7 +114,7 @@ async def unrelated_user(session, shares_tenant):
 
 
 @pytest.fixture
-async def share_assistant(session, shares_tenant):
+async def share_assistant(session: AsyncSession, shares_tenant: Tenant) -> Assistant:
     """共有対象ルームのアシスタント"""
     assistant = Assistant(
         tenant_id=shares_tenant.id,
@@ -128,7 +129,12 @@ async def share_assistant(session, shares_tenant):
 
 
 @pytest.fixture
-async def owned_room(session, shares_tenant, room_owner_user, share_assistant):
+async def owned_room(
+    session: AsyncSession,
+    shares_tenant: Tenant,
+    room_owner_user: User,
+    share_assistant: Assistant,
+) -> Room:
     """ユーザー自身のルーム"""
     room = Room(
         tenant_id=shares_tenant.id,
@@ -143,7 +149,9 @@ async def owned_room(session, shares_tenant, room_owner_user, share_assistant):
 
 
 @pytest.fixture
-async def target_group(session, shares_tenant, group_member_user):
+async def target_group(
+    session: AsyncSession, shares_tenant: Tenant, group_member_user: User
+) -> Group:
     """共有先のグループ"""
     group = Group(tenant_id=shares_tenant.id, name="Target Group")
     session.add(group)
@@ -162,7 +170,9 @@ async def target_group(session, shares_tenant, group_member_user):
 
 
 @pytest.fixture
-async def owned_share(session, shares_tenant, owned_room, target_group):
+async def owned_share(
+    session: AsyncSession, shares_tenant: Tenant, owned_room: Room, target_group: Group
+) -> Share:
     """共有済みのルームと共有先グループ"""
     share = Share(tenant_id=shares_tenant.id, room_id=owned_room.id)
     session.add(share)
@@ -200,25 +210,29 @@ def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
 
 
 @pytest.fixture
-def owner_headers(room_owner_user, shares_tenant):
+def owner_headers(room_owner_user: User, shares_tenant: Tenant) -> dict[str, str]:
     """ルーム所有者の認証ヘッダー"""
     return _headers(room_owner_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
-def group_member_headers(group_member_user, shares_tenant):
+def group_member_headers(
+    group_member_user: User, shares_tenant: Tenant
+) -> dict[str, str]:
     """グループ所属ユーザーの認証ヘッダー"""
     return _headers(group_member_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
-def unrelated_user_headers(unrelated_user, shares_tenant):
+def unrelated_user_headers(
+    unrelated_user: User, shares_tenant: Tenant
+) -> dict[str, str]:
     """無関係なユーザーの認証ヘッダー"""
     return _headers(unrelated_user.login_id, shares_tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
     """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -231,8 +245,12 @@ class TestShareRouter:
         """共有の作成・更新のテスト"""
 
         async def test_create_share_with_owned_room_and_valid_group(
-            self, client, owner_headers, owned_room, target_group
-        ):
+            self,
+            client: AsyncClient,
+            owner_headers: dict[str, str],
+            owned_room: Room,
+            target_group: Group,
+        ) -> None:
             """自分が所有するルームに実在するグループを指定して共有リンクを作成できること"""
             async with client as c:
                 response = await c.post(
@@ -247,8 +265,8 @@ class TestShareRouter:
             assert body["teamIds"] == [target_group.id]
 
         async def test_create_share_with_invalid_group_id_returns_400(
-            self, client, owner_headers, owned_room
-        ):
+            self, client: AsyncClient, owner_headers: dict[str, str], owned_room: Room
+        ) -> None:
             """存在しないグループIDを指定すると400エラーになること"""
             async with client as c:
                 response = await c.post(
@@ -260,8 +278,8 @@ class TestShareRouter:
             assert response.status_code == 400
 
         async def test_create_share_with_empty_team_ids_returns_400(
-            self, client, owner_headers, owned_room
-        ):
+            self, client: AsyncClient, owner_headers: dict[str, str], owned_room: Room
+        ) -> None:
             """teamIdsが空だとバリデーションエラーになること"""
             async with client as c:
                 response = await c.post(
@@ -274,13 +292,13 @@ class TestShareRouter:
 
         async def test_upsert_share_replaces_groups_without_creating_new_share(
             self,
-            client,
-            session,
-            shares_tenant,
-            owner_headers,
-            owned_room,
-            target_group,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            shares_tenant: Tenant,
+            owner_headers: dict[str, str],
+            owned_room: Room,
+            target_group: Group,
+        ) -> None:
             """既存の共有リンクに再度POSTすると同一IDのまま共有先グループが入れ替わること"""
             other_group = Group(tenant_id=shares_tenant.id, name="Other Group")
             session.add(other_group)
@@ -304,14 +322,14 @@ class TestShareRouter:
 
         async def test_create_share_with_other_users_room_returns_403(
             self,
-            client,
-            owner_headers,
-            target_group,
-            session,
-            shares_tenant,
-            unrelated_user,
-            share_assistant,
-        ):
+            client: AsyncClient,
+            owner_headers: dict[str, str],
+            target_group: Group,
+            session: AsyncSession,
+            shares_tenant: Tenant,
+            unrelated_user: User,
+            share_assistant: Assistant,
+        ) -> None:
             """他人が所有するルームを指定するとエラーになること"""
             other_room = Room(
                 tenant_id=shares_tenant.id,
@@ -336,8 +354,12 @@ class TestShareRouter:
         """共有アクセス解決のテスト"""
 
         async def test_resolve_access_as_owner_returns_not_read_only(
-            self, client, owner_headers, owned_share, owned_room
-        ):
+            self,
+            client: AsyncClient,
+            owner_headers: dict[str, str],
+            owned_share: Share,
+            owned_room: Room,
+        ) -> None:
             """所有者本人はisReadOnly=falseで解決できること"""
             async with client as c:
                 response = await c.get(
@@ -350,8 +372,11 @@ class TestShareRouter:
             assert body["isReadOnly"] is False
 
         async def test_resolve_access_as_shared_group_member_returns_read_only(
-            self, client, group_member_headers, owned_share
-        ):
+            self,
+            client: AsyncClient,
+            group_member_headers: dict[str, str],
+            owned_share: Share,
+        ) -> None:
             """共有先グループのメンバーはisReadOnly=trueで解決できること"""
             async with client as c:
                 response = await c.get(
@@ -362,8 +387,11 @@ class TestShareRouter:
             assert response.json()["data"]["isReadOnly"] is True
 
         async def test_resolve_access_as_unrelated_user_returns_403(
-            self, client, unrelated_user_headers, owned_share
-        ):
+            self,
+            client: AsyncClient,
+            unrelated_user_headers: dict[str, str],
+            owned_share: Share,
+        ) -> None:
             """共有先グループに属さないユーザーはエラーになること"""
             async with client as c:
                 response = await c.get(
@@ -374,8 +402,8 @@ class TestShareRouter:
             assert response.status_code == 403
 
         async def test_resolve_access_with_nonexistent_share_id_returns_404(
-            self, client, owner_headers
-        ):
+            self, client: AsyncClient, owner_headers: dict[str, str]
+        ) -> None:
             """存在しない共有リンクIDを指定すると404になること"""
             async with client as c:
                 response = await c.get(
@@ -388,8 +416,8 @@ class TestShareRouter:
         """共有削除のテスト"""
 
         async def test_delete_share_as_owner_succeeds(
-            self, client, owner_headers, owned_share
-        ):
+            self, client: AsyncClient, owner_headers: dict[str, str], owned_share: Share
+        ) -> None:
             """所有者本人が削除でき、以後のアクセス解決が404になること"""
             async with client as c:
                 delete_response = await c.delete(
@@ -404,8 +432,11 @@ class TestShareRouter:
             assert access_response.status_code == 404
 
         async def test_delete_share_as_non_owner_returns_403(
-            self, client, group_member_headers, owned_share
-        ):
+            self,
+            client: AsyncClient,
+            group_member_headers: dict[str, str],
+            owned_share: Share,
+        ) -> None:
             """所有者でないユーザーが削除しようとするとエラーになること"""
             async with client as c:
                 response = await c.delete(
@@ -415,8 +446,8 @@ class TestShareRouter:
             assert response.status_code == 403
 
         async def test_delete_nonexistent_share_returns_404(
-            self, client, owner_headers
-        ):
+            self, client: AsyncClient, owner_headers: dict[str, str]
+        ) -> None:
             """存在しない共有リンクIDを指定すると404になること"""
             async with client as c:
                 response = await c.delete(
@@ -430,11 +461,11 @@ class TestShareRouter:
 
         async def test_resolve_access_on_other_tenant_share_returns_404(
             self,
-            client,
-            session,
-            other_tenant,
-            owner_headers,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            other_tenant: Tenant,
+            owner_headers: dict[str, str],
+        ) -> None:
             """別テナントの共有リンクIDを指定した操作が404になること"""
             other_tenant_user = User(
                 id=uuid4(),

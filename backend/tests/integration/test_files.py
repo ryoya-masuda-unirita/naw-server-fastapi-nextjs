@@ -14,10 +14,14 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.tenant import Tenant
 from app.models.token_usage import TokenUsage
 from app.models.user import User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from collections.abc import Iterator
+from typing import Any
 
 
 @pytest.fixture
-async def files_tenant(session):
+async def files_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-files-test",
@@ -39,7 +43,7 @@ async def files_tenant(session):
 
 
 @pytest.fixture
-async def files_admin_user(session, files_tenant):
+async def files_admin_user(session: AsyncSession, files_tenant: Tenant) -> User:
     """テナント管理者"""
     u = User(
         id=uuid4(),
@@ -56,14 +60,14 @@ async def files_admin_user(session, files_tenant):
 
 
 @pytest.fixture
-def files_admin_headers(files_admin_user, files_tenant):
+def files_admin_headers(files_admin_user: User, files_tenant: Tenant) -> dict[str, str]:
     """ファイル管理者の認証ヘッダー"""
     token = create_access_token(files_admin_user.login_id, files_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": files_tenant.id}
 
 
 @pytest.fixture
-async def files_index(session, files_tenant):
+async def files_index(session: AsyncSession, files_tenant: Tenant) -> Index:
     """アップロード可能なSAAS_GLOBALインデックス"""
     index = Index(
         tenant_id=files_tenant.id,
@@ -77,7 +81,7 @@ async def files_index(session, files_tenant):
 
 
 @pytest.fixture
-async def files_local_index(session, files_tenant):
+async def files_local_index(session: AsyncSession, files_tenant: Tenant) -> Index:
     """LOCALタイプのインデックス（400系テスト用）"""
     index = Index(
         tenant_id=files_tenant.id,
@@ -94,13 +98,13 @@ async def files_local_index(session, files_tenant):
 
 
 @pytest.fixture
-def file_storage_root(tmp_path) -> Path:
+def file_storage_root(tmp_path: Path) -> Path:
     """テスト用ファイルストレージのルートディレクトリ"""
     return tmp_path / "file-storage"
 
 
 @pytest.fixture
-def override_file_storage(file_storage_root):
+def override_file_storage(file_storage_root: Path) -> Iterator[None]:
     """ファイルストレージをテスト用一時ディレクトリに差し替える（実ストレージへは接続しない）"""
 
     def _get_storage() -> FileStorage:
@@ -113,7 +117,7 @@ def override_file_storage(file_storage_root):
 
 
 @pytest.fixture
-async def files_plan(session):
+async def files_plan(session: AsyncSession) -> Plan:
     """ファイルテスト用のプラン"""
     plan = Plan(
         id="plan-files-test",
@@ -127,7 +131,9 @@ async def files_plan(session):
     return plan
 
 
-async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> None:
+async def _create_active_subscription(
+    session: AsyncSession, tenant_id: str, plan_id: str
+) -> None:
     """本日（UTC）を契約開始日とする有効なサブスクリプションを作成する。"""
     subscription = Subscription(
         tenant_id=tenant_id,
@@ -140,7 +146,7 @@ async def _create_active_subscription(session, tenant_id: str, plan_id: str) -> 
     await session.commit()
 
 
-async def _exceed_quota(session, tenant_id: str, plan: Plan) -> None:
+async def _exceed_quota(session: AsyncSession, tenant_id: str, plan: Plan) -> None:
     """当月クレジット上限を超過させる（`enforce_within_quota`が429を返す状態を作る）。"""
     await _create_active_subscription(session, tenant_id, plan.id)
     session.add(
@@ -161,7 +167,7 @@ def _upload_payload(
     display_name: str = "サンプル",
     reference: str | None = None,
     content: bytes = b"hello world",
-):
+) -> tuple[dict[str, Any], dict[str, str]]:
     """ファイルアップロード用の multipart 送信内容を作る
 
     Parameters
@@ -187,7 +193,9 @@ def _upload_payload(
     return files, data
 
 
-async def _upload_and_soft_delete(ac, index_id: str, headers: dict[str, str]) -> str:
+async def _upload_and_soft_delete(
+    ac: AsyncClient, index_id: str, headers: dict[str, str]
+) -> str:
     """ファイルをアップロードして論理削除し、そのファイルIDを返す。"""
     files, data = _upload_payload(reference="old-ref")
     upload_response = await ac.post(
@@ -205,7 +213,7 @@ async def _upload_and_soft_delete(ac, index_id: str, headers: dict[str, str]) ->
 
 
 async def _list_files(
-    ac, index_id: str, headers: dict[str, str], status: str | None = None
+    ac: AsyncClient, index_id: str, headers: dict[str, str], status: str | None = None
 ) -> list[dict]:
     """ファイル一覧の`content`を返す（`status`指定時はそのステータスで絞り込む）。"""
     params = {"status": status} if status is not None else {}
@@ -224,12 +232,12 @@ class TestFilesRouter:
 
         async def test_upload_file(
             self,
-            client,
-            files_tenant,
-            files_index,
-            files_admin_headers,
-            override_file_storage,
-        ):
+            client: AsyncClient,
+            files_tenant: Tenant,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """ファイルをアップロードできること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -249,8 +257,11 @@ class TestFilesRouter:
             assert body["storageUrl"] is not None
 
         async def test_index_not_found_returns_404(
-            self, client, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """存在しないインデックスへのアップロードは404になること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -265,11 +276,11 @@ class TestFilesRouter:
 
         async def test_local_index_returns_400(
             self,
-            client,
-            files_local_index,
-            files_admin_headers,
-            override_file_storage,
-        ):
+            client: AsyncClient,
+            files_local_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """LOCALインデックスへのアップロードは400になること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -284,14 +295,14 @@ class TestFilesRouter:
 
         async def test_quota_exceeded_returns_429(
             self,
-            client,
-            session,
-            files_tenant,
-            files_index,
-            files_plan,
-            files_admin_headers,
-            override_file_storage,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            files_tenant: Tenant,
+            files_index: Index,
+            files_plan: Plan,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """当月クレジット上限超過時は429になること"""
             await _exceed_quota(session, files_tenant.id, files_plan)
             files, data = _upload_payload()
@@ -306,8 +317,12 @@ class TestFilesRouter:
             assert response.status_code == 429
 
         async def test_upload_file_with_query_params(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file以外の項目をクエリパラメータで送ってもアップロードできること"""
             # 画面（training-api.service.ts）と同じく、fileのみボディ・他はクエリで送る
             async with client as ac:
@@ -329,8 +344,12 @@ class TestFilesRouter:
             assert body["reference"] == "ref"
 
         async def test_upload_without_name_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """nameがボディ・クエリのどちらにも無い場合は400になること"""
             async with client as ac:
                 response = await ac.post(
@@ -342,8 +361,12 @@ class TestFilesRouter:
             assert response.status_code == 400
 
         async def test_upload_with_empty_name_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """nameが空文字の場合は400になること"""
             files, data = _upload_payload(name="")
             async with client as ac:
@@ -357,8 +380,8 @@ class TestFilesRouter:
             assert response.status_code == 400
 
         async def test_upload_without_name_and_auth_returns_401(
-            self, client, files_index, override_file_storage
-        ):
+            self, client: AsyncClient, files_index: Index, override_file_storage: None
+        ) -> None:
             """未認証ならnameが無くても入力エラーより先に401になること"""
             async with client as ac:
                 response = await ac.post(
@@ -369,8 +392,12 @@ class TestFilesRouter:
             assert response.status_code == 401
 
         async def test_form_value_takes_precedence_over_query(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """同じ項目がボディとクエリの両方にある場合はボディの値が採用されること"""
             files, data = _upload_payload(display_name="form")
             async with client as ac:
@@ -390,11 +417,11 @@ class TestFilesRouter:
 
         async def test_download_file(
             self,
-            client,
-            files_index,
-            files_admin_headers,
-            override_file_storage,
-        ):
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """アップロード済みファイルをダウンロードできること"""
             files, data = _upload_payload(content=b"download me")
             async with client as ac:
@@ -420,8 +447,12 @@ class TestFilesRouter:
             )
 
         async def test_file_not_found_returns_404(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """存在しないファイルのダウンロードは404になること"""
             async with client as ac:
                 response = await ac.get(
@@ -432,8 +463,12 @@ class TestFilesRouter:
             assert response.status_code == 404
 
         async def test_download_deleted_file_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みのファイルのダウンロードは500ではなく400になること"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -451,12 +486,12 @@ class TestFilesRouter:
 
         async def test_download_file_without_stored_content_returns_404(
             self,
-            client,
-            files_index,
-            files_admin_headers,
-            override_file_storage,
-            file_storage_root,
-        ):
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+            file_storage_root: Path,
+        ) -> None:
             """保存先の実体が無いファイルのダウンロードは500ではなく404になること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -482,8 +517,12 @@ class TestFilesRouter:
         """ファイル更新のテスト"""
 
         async def test_update_deleted_file_status_to_enable_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みのファイルを学習中に戻そうとすると400になり、削除済みのままであること"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -503,8 +542,12 @@ class TestFilesRouter:
             assert [f["id"] for f in deleted] == [file_id]
 
         async def test_update_deleted_file_status_to_disable_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みのファイルを停止中に変えようとすると400になり、削除済みのままであること"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -524,8 +567,12 @@ class TestFilesRouter:
             assert [f["id"] for f in deleted] == [file_id]
 
         async def test_update_deleted_file_metadata_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みのファイルの表示名・参照先の変更は400になり、保存されないこと"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -547,8 +594,12 @@ class TestFilesRouter:
             assert deleted[0]["reference"] == "old-ref"
 
         async def test_replace_deleted_file_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みのファイルの差し替えは400になり、作り直されないこと"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -571,8 +622,12 @@ class TestFilesRouter:
             assert active == []
 
         async def test_replace_deleted_file_without_name_returns_deleted_error(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """削除済みの判定はnameの必須チェックより先に行われること"""
             async with client as ac:
                 file_id = await _upload_and_soft_delete(
@@ -589,8 +644,12 @@ class TestFilesRouter:
             assert response.json()["message"] == "削除済みのファイルは更新できません。"
 
         async def test_replace_missing_file_without_name_returns_404(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """存在しないファイルの差し替えは、nameの必須チェックより先に404になること"""
             async with client as ac:
                 response = await ac.patch(
@@ -604,8 +663,12 @@ class TestFilesRouter:
             assert response.json()["message"] == "ファイルが存在しません。"
 
         async def test_update_metadata_only(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file未添付時はメタデータのみ更新されること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -629,8 +692,12 @@ class TestFilesRouter:
             assert body["fileName"] == "sample.txt"
 
         async def test_update_with_file_without_name_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file添付時にnameを省略すると400になり、旧ファイルが削除されないこと"""
             files, data = _upload_payload()
             async with client as ac:
@@ -660,8 +727,12 @@ class TestFilesRouter:
             assert download_response.content == b"hello world"
 
         async def test_update_status_deleted_returns_400(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """status=DELETEDの指定は400になること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -682,8 +753,12 @@ class TestFilesRouter:
             assert response.status_code == 400
 
         async def test_update_with_file_replaces_content(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file添付時は既存ファイルが置き換わること"""
             files, data = _upload_payload(content=b"original")
             async with client as ac:
@@ -720,14 +795,14 @@ class TestFilesRouter:
 
         async def test_update_with_file_quota_exceeded_returns_429(
             self,
-            client,
-            session,
-            files_tenant,
-            files_index,
-            files_plan,
-            files_admin_headers,
-            override_file_storage,
-        ):
+            client: AsyncClient,
+            session: AsyncSession,
+            files_tenant: Tenant,
+            files_index: Index,
+            files_plan: Plan,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file添付更新時も上限超過なら429になること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -753,8 +828,12 @@ class TestFilesRouter:
             assert response.status_code == 429
 
         async def test_update_metadata_with_query_params(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """file未添付時にクエリパラメータで送った項目が更新されること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -787,8 +866,12 @@ class TestFilesRouter:
         """ファイル削除のテスト"""
 
         async def test_soft_delete_marks_status_deleted(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """論理削除でstatusがDELETEDになること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -816,8 +899,12 @@ class TestFilesRouter:
             assert any(item["id"] == file_id for item in body["content"])
 
         async def test_soft_deleted_file_is_excluded_from_list(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """status未指定の一覧から論理削除済みのファイルが除かれること"""
             files_a, data_a = _upload_payload(name="a.txt", display_name="A")
             files_b, data_b = _upload_payload(name="b.txt", display_name="B")
@@ -850,8 +937,12 @@ class TestFilesRouter:
             assert [item["id"] for item in body["content"]] == [remaining.json()["id"]]
 
         async def test_physical_delete_removes_record(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """物理削除でレコードが消えること"""
             files, data = _upload_payload()
             async with client as ac:
@@ -880,8 +971,12 @@ class TestFilesRouter:
         """ファイル一覧取得のテスト"""
 
         async def test_list_files(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """ファイル一覧を取得できること"""
             files, data = _upload_payload(name="a.txt", display_name="Aファイル")
             async with client as ac:
@@ -903,8 +998,12 @@ class TestFilesRouter:
             assert body["content"][0]["updatedBy"] == "Files Admin"
 
         async def test_filter_by_display_name(
-            self, client, files_index, files_admin_headers, override_file_storage
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+            override_file_storage: None,
+        ) -> None:
             """displayNameで絞り込めること"""
             files_a, data_a = _upload_payload(name="a.txt", display_name="Alpha")
             files_b, data_b = _upload_payload(name="b.txt", display_name="Beta")
@@ -932,8 +1031,13 @@ class TestFilesRouter:
             assert body["content"][0]["displayName"] == "Alpha"
 
         async def test_filter_by_updated_at_range_excludes_end(
-            self, client, session, files_index, files_admin_user, files_admin_headers
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            files_index: Index,
+            files_admin_user: User,
+            files_admin_headers: dict[str, str],
+        ) -> None:
             """更新日時は開始の時刻以上・終了の時刻より前のファイルだけが返ること"""
             # 日本時間の 2026-10-09 を選んだときに画面が送る範囲の前後に置く
             # （移植元 FileIT の期間絞り込みと同じ境界）
@@ -971,8 +1075,11 @@ class TestFilesRouter:
             }
 
         async def test_date_only_updated_at_from_returns_400(
-            self, client, files_index, files_admin_headers
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+        ) -> None:
             """updatedAtFromが時刻を持たない日付の場合、移植元と同じメッセージで400になること"""
             async with client as ac:
                 response = await ac.get(
@@ -988,8 +1095,11 @@ class TestFilesRouter:
             )
 
         async def test_invalid_updated_at_to_returns_400(
-            self, client, files_index, files_admin_headers
-        ):
+            self,
+            client: AsyncClient,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+        ) -> None:
             """updatedAtToが日時でない場合400になること"""
             async with client as ac:
                 response = await ac.get(
@@ -1002,8 +1112,13 @@ class TestFilesRouter:
             assert "updatedAtTo" in response.json()["message"]
 
         async def test_sort_by_user_id(
-            self, client, session, files_tenant, files_index, files_admin_headers
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            files_tenant: Tenant,
+            files_index: Index,
+            files_admin_headers: dict[str, str],
+        ) -> None:
             """sort=userIdで登録ユーザーID順に並べ替えられること"""
             user_low = await _create_user(session, files_tenant.id, _USER_ID_LOW, "z")
             user_high = await _create_user(session, files_tenant.id, _USER_ID_HIGH, "a")
@@ -1034,8 +1149,13 @@ class TestFilesRouter:
             assert desc_user_ids == [str(_USER_ID_HIGH), str(_USER_ID_LOW)]
 
         async def test_sort_by_status(
-            self, client, session, files_index, files_admin_user, files_admin_headers
-        ):
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            files_index: Index,
+            files_admin_user: User,
+            files_admin_headers: dict[str, str],
+        ) -> None:
             """sort=statusで学習設定（ENABLE→DISABLE）順に並べ替えられること"""
             # 更新日時順（未知キー時のフォールバック）では逆の結果になるよう、
             # ENABLE のファイルを新しくする
@@ -1073,7 +1193,9 @@ _OLDER = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _NEWER = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
 
-async def _create_user(session, tenant_id: str, user_id: UUID, name: str) -> User:
+async def _create_user(
+    session: AsyncSession, tenant_id: str, user_id: UUID, name: str
+) -> User:
     """並べ替え検証用に、IDを固定したユーザーを作成する。"""
     user = User(
         id=user_id,
@@ -1090,7 +1212,11 @@ async def _create_user(session, tenant_id: str, user_id: UUID, name: str) -> Use
 
 
 async def _create_file(
-    session, index: Index, user_id: UUID, status: FileStatus, updated_at: datetime
+    session: AsyncSession,
+    index: Index,
+    user_id: UUID,
+    status: FileStatus,
+    updated_at: datetime,
 ) -> File:
     """並べ替え検証用に、状態・更新日時を指定したファイルをDBへ直接登録する。"""
     file = File(

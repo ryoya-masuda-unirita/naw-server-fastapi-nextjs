@@ -6,9 +6,22 @@ import pytest
 from app.core.sort import SortOrder, parse_sort
 from app.models.user import User, UserRole
 from app.services.prompt_template_service import PromptTemplateService
+from unittest.mock import MagicMock
 
 
 def _user(role: UserRole) -> User:
+    """指定したロールのテスト用ユーザーを生成する。
+
+    Parameters
+    ----------
+    role : UserRole
+        ユーザーのロール。
+
+    Returns
+    -------
+    User
+        テスト用ユーザー。
+    """
     return User(
         id=uuid4(),
         tenant_id="tenant-1",
@@ -22,15 +35,15 @@ def _user(role: UserRole) -> User:
 class TestIsTenantAdmin:
     """PromptTemplateService._is_tenant_admin のテスト"""
 
-    def test_admin_role_is_tenant_admin(self):
+    def test_admin_role_is_tenant_admin(self) -> None:
         """ADMINロールは全体管理者と判定されること"""
         assert PromptTemplateService._is_tenant_admin(_user(UserRole.ADMIN)) is True
 
-    def test_system_role_is_tenant_admin(self):
+    def test_system_role_is_tenant_admin(self) -> None:
         """SYSTEMロールは全体管理者と判定されること"""
         assert PromptTemplateService._is_tenant_admin(_user(UserRole.SYSTEM)) is True
 
-    def test_user_role_is_not_tenant_admin(self):
+    def test_user_role_is_not_tenant_admin(self) -> None:
         """USERロールは全体管理者と判定されないこと"""
         assert PromptTemplateService._is_tenant_admin(_user(UserRole.USER)) is False
 
@@ -52,8 +65,11 @@ class TestGetAdminPromptTemplates:
         new_callable=AsyncMock,
     )
     async def test_tenant_admin_has_no_group_restriction(
-        self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
-    ):
+        self,
+        mock_find_admin_group_ids: MagicMock,
+        mock_find_page: MagicMock,
+        mock_find_groups: MagicMock,
+    ) -> None:
         """全体管理者は管理グループ一覧を問い合わせず絞り込みなしで検索すること"""
         mock_find_page.return_value = ([], 0)
         mock_find_groups.return_value = {}
@@ -67,7 +83,7 @@ class TestGetAdminPromptTemplates:
             parse_sort("updatedAt,desc"),
             0,
             20,
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         mock_find_admin_group_ids.assert_not_called()
@@ -88,8 +104,11 @@ class TestGetAdminPromptTemplates:
         new_callable=AsyncMock,
     )
     async def test_group_admin_is_restricted_to_managed_groups(
-        self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
-    ):
+        self,
+        mock_find_admin_group_ids: MagicMock,
+        mock_find_page: MagicMock,
+        mock_find_groups: MagicMock,
+    ) -> None:
         """グループ管理者は管理グループID一覧に絞り込まれること"""
         mock_find_admin_group_ids.return_value = ["g1", "g2"]
         mock_find_page.return_value = ([], 0)
@@ -104,7 +123,7 @@ class TestGetAdminPromptTemplates:
             parse_sort("updatedAt,desc"),
             0,
             20,
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         mock_find_admin_group_ids.assert_called_once()
@@ -125,8 +144,11 @@ class TestGetAdminPromptTemplates:
         new_callable=AsyncMock,
     )
     async def test_non_admin_with_no_managed_groups_gets_empty_scope(
-        self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
-    ):
+        self,
+        mock_find_admin_group_ids: MagicMock,
+        mock_find_page: MagicMock,
+        mock_find_groups: MagicMock,
+    ) -> None:
         """管理グループを持たない一般ユーザーは空のグループID一覧で検索されること（403にはしない）"""
         mock_find_admin_group_ids.return_value = []
         mock_find_page.return_value = ([], 0)
@@ -141,7 +163,7 @@ class TestGetAdminPromptTemplates:
             parse_sort("updatedAt,desc"),
             0,
             20,
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         args = mock_find_page.call_args.args
@@ -161,8 +183,11 @@ class TestGetAdminPromptTemplates:
         new_callable=AsyncMock,
     )
     async def test_passes_sort_orders_to_repository(
-        self, mock_find_admin_group_ids, mock_find_page, mock_find_groups
-    ):
+        self,
+        mock_find_admin_group_ids: MagicMock,
+        mock_find_page: MagicMock,
+        mock_find_groups: MagicMock,
+    ) -> None:
         """解釈済みの並べ替え指定をそのままリポジトリへ渡すこと"""
         mock_find_page.return_value = ([], 0)
         mock_find_groups.return_value = {}
@@ -176,7 +201,7 @@ class TestGetAdminPromptTemplates:
             [SortOrder("name", descending=True)],
             0,
             20,
-            session=None,
+            session=None,  # type: ignore[arg-type]
         )
 
         args = mock_find_page.call_args.args

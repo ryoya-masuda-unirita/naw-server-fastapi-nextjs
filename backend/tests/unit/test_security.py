@@ -21,7 +21,7 @@ from app.core.session_store import SESSION_COOKIE_NAME
 class TestSecurityUtilities:
     """JWT・パスワードハッシュユーティリティテスト"""
 
-    def test_create_and_decode_token(self):
+    def test_create_and_decode_token(self) -> None:
         """JWT エンコード・デコード正常"""
         login_id = "testuser"
         tenant_id = "test-tenant"
@@ -32,7 +32,7 @@ class TestSecurityUtilities:
         assert payload["sub"] == login_id
         assert payload["tenantId"] == tenant_id
 
-    def test_decode_expired_token(self):
+    def test_decode_expired_token(self) -> None:
         """有効期限切れ JWT デコード"""
         now = datetime.now(timezone.utc)
         payload = {
@@ -46,7 +46,7 @@ class TestSecurityUtilities:
         with pytest.raises(Exception):
             decode_token(token)
 
-    def test_decode_invalid_token(self):
+    def test_decode_invalid_token(self) -> None:
         """不正な JWT デコード"""
         now = datetime.now(timezone.utc)
         payload = {
@@ -60,7 +60,7 @@ class TestSecurityUtilities:
         with pytest.raises(Exception):
             decode_token(token)
 
-    def test_token_contains_correct_payload(self):
+    def test_token_contains_correct_payload(self) -> None:
         """JWT ペイロード正確性"""
         login_id = "admin"
         tenant_id = "tenant-123"
@@ -73,7 +73,7 @@ class TestSecurityUtilities:
         assert "exp" in payload
         assert "iat" in payload
 
-    def test_hash_and_verify_correct_password(self):
+    def test_hash_and_verify_correct_password(self) -> None:
         """bcrypt ハッシュ・検証"""
         password = "TestPassword123!"
 
@@ -81,14 +81,14 @@ class TestSecurityUtilities:
 
         assert verify_password(password, hashed)
 
-    def test_verify_incorrect_password(self):
+    def test_verify_incorrect_password(self) -> None:
         """bcrypt 検証失敗"""
         password = "TestPassword123!"
         hashed = hash_password(password)
 
         assert not verify_password("WrongPassword", hashed)
 
-    def test_hash_produces_different_hash(self):
+    def test_hash_produces_different_hash(self) -> None:
         """bcrypt 毎回異なるハッシュ生成"""
         password = "TestPassword123!"
 
@@ -103,14 +103,14 @@ class TestSecurityUtilities:
 class TestVerifyPasswordAsync:
     """パスワード非同期検証テスト"""
 
-    async def test_returns_true_for_correct_password(self):
+    async def test_returns_true_for_correct_password(self) -> None:
         """正しいパスワードでTrueを返すこと"""
         password = "TestPassword123!"
         hashed = hash_password(password)
 
         assert await verify_password_async(password, hashed) is True
 
-    async def test_returns_false_for_incorrect_password(self):
+    async def test_returns_false_for_incorrect_password(self) -> None:
         """誤ったパスワードでFalseを返すこと"""
         password = "TestPassword123!"
         hashed = hash_password(password)
@@ -121,7 +121,7 @@ class TestVerifyPasswordAsync:
 class TestSessionCookie:
     """セッションCookie発行・削除テスト"""
 
-    def test_set_session_cookie_sets_httponly_cookie(self):
+    def test_set_session_cookie_sets_httponly_cookie(self) -> None:
         """Cookieがhttponly・samesite=laxで設定されること"""
         response = Response()
 
@@ -132,7 +132,7 @@ class TestSessionCookie:
         assert "HttpOnly" in set_cookie_header
         assert "samesite=lax" in set_cookie_header.lower()
 
-    def test_clear_session_cookie_expires_cookie(self):
+    def test_clear_session_cookie_expires_cookie(self) -> None:
         """Cookie削除時に即時失効するSet-Cookieが設定されること"""
         response = Response()
 

@@ -16,6 +16,11 @@ from app.services.auth_service import (
 )
 from app.models.user import User, UserRole
 from app.core.security import hash_password
+from typing import Any
+from fakeredis.aioredis import FakeRedis
+from app.models.tenant import Tenant
+from collections.abc import Iterator
+from contextlib import AbstractContextManager
 
 REPO_PATH = "app.services.auth_service.PasswordHistoryRepository"
 GROUP_USER_REPO_PATH = "app.services.auth_service.GroupUserRepository"
@@ -26,7 +31,7 @@ LOCKOUT_MINUTES = get_password_reset_settings().lockout_minutes
 
 
 @pytest.fixture(autouse=True)
-def no_group_memberships():
+def no_group_memberships() -> Iterator[None]:
     """所属グループの取得をモックし、所属なしとして扱う。"""
     with patch(
         f"{GROUP_USER_REPO_PATH}.find_memberships_for_user",
@@ -51,7 +56,7 @@ def _mismatch_key(user: User) -> str:
     return f"password_mismatch:{user.tenant_id}:{user.id}"
 
 
-async def _record_failures(user: User, count: int, redis_client) -> None:
+async def _record_failures(user: User, count: int, redis_client: FakeRedis) -> None:
     """事前に失敗を count 回記録する。"""
     for _ in range(count):
         await password_mismatch_store.record_failure_and_check_lockout(
@@ -59,7 +64,9 @@ async def _record_failures(user: User, count: int, redis_client) -> None:
         )
 
 
-async def _record_login_failures(user: User, count: int, redis_client) -> None:
+async def _record_login_failures(
+    user: User, count: int, redis_client: FakeRedis
+) -> None:
     """事前にログインの失敗を count 回記録する。"""
     for _ in range(count):
         await password_mismatch_store.record_login_failure_and_check_lockout(
@@ -67,7 +74,9 @@ async def _record_login_failures(user: User, count: int, redis_client) -> None:
         )
 
 
-def _patch_latest_password(hashed_password: str, expired_at: datetime | None = None):
+def _patch_latest_password(
+    hashed_password: str, expired_at: datetime | None = None
+) -> AbstractContextManager[Any]:
     """最新のパスワード履歴として hashed_password を返すパッチを作る。"""
     return patch(
         f"{REPO_PATH}.get_latest",
@@ -90,8 +99,11 @@ class TestAuthServiceLogin:
     """ログイン処理テスト（モック使用）"""
 
     async def test_login_with_valid_credentials(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """有効な認証情報でログインできること"""
         session = _session_returning_user(test_user_with_password["user"])
 
@@ -109,8 +121,11 @@ class TestAuthServiceLogin:
         assert response.token is not None
 
     async def test_login_with_invalid_password(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """パスワード不一致で 403 を返し、失敗を記録すること"""
         user = test_user_with_password["user"]
         session = _session_returning_user(user)
@@ -125,7 +140,9 @@ class TestAuthServiceLogin:
         assert exc_info.value.detail == LOGIN_FAILED_MESSAGE
         assert await fake_redis.zcard(_mismatch_key(user)) == 1
 
-    async def test_login_with_nonexistent_user(self, test_tenant, fake_redis):
+    async def test_login_with_nonexistent_user(
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """ユーザーが存在しない場合、パスワード誤りと同じ 403 を返すこと"""
         session = AsyncMock()
         mock_result = MagicMock()
@@ -141,8 +158,8 @@ class TestAuthServiceLogin:
         assert exc_info.value.detail == LOGIN_FAILED_MESSAGE
 
     async def test_login_with_no_password_history(
-        self, test_tenant, test_user, fake_redis
-    ):
+        self, test_tenant: Tenant, test_user: User, fake_redis: FakeRedis
+    ) -> None:
         """パスワード履歴が0件の場合、403 を返し、失敗を記録すること"""
         session = _session_returning_user(test_user)
 
@@ -161,8 +178,11 @@ class TestAuthServiceLogin:
         assert await fake_redis.zcard(_mismatch_key(test_user)) == 1
 
     async def test_login_returns_429_when_failure_reaches_threshold(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """失敗が上限回目に達したログインは 429 を返すこと"""
         user = test_user_with_password["user"]
         await _record_login_failures(user, LOGIN_FAILURE_THRESHOLD - 1, fake_redis)
@@ -178,8 +198,11 @@ class TestAuthServiceLogin:
         assert exc_info.value.detail == LOGIN_LOCKED_MESSAGE
 
     async def test_login_rejects_correct_password_while_locked(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """ロック中は正しいパスワードでも 429 を返し、失敗を記録しないこと"""
         user = test_user_with_password["user"]
         await _record_login_failures(user, LOGIN_FAILURE_THRESHOLD, fake_redis)
@@ -200,8 +223,11 @@ class TestAuthServiceLogin:
         assert await fake_redis.zcard(_mismatch_key(user)) == LOGIN_FAILURE_THRESHOLD
 
     async def test_login_success_clears_failures(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """ログインに成功すると失敗記録が消えること"""
         user = test_user_with_password["user"]
         await _record_login_failures(user, LOGIN_FAILURE_THRESHOLD - 1, fake_redis)
@@ -220,11 +246,11 @@ class TestAuthServiceLogin:
 
     def _build_login_session(
         self,
-        test_tenant,
+        test_tenant: Tenant,
         login_id: str,
         is_required_password_reset: bool,
         expired_at: datetime | None,
-    ):
+    ) -> tuple[AsyncMock, User, AbstractContextManager[Any]]:
         """パスワードリセット系のログインテストで共通のsession/user/get_latestパッチを組み立てる。"""
         user = User(
             id=uuid4(),
@@ -240,7 +266,9 @@ class TestAuthServiceLogin:
         )
         return session, user, get_latest_patch
 
-    async def test_login_when_password_reset_required(self, test_tenant, fake_redis):
+    async def test_login_when_password_reset_required(
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """is_required_password_reset=true の場合、REQUIRES_PASSWORD_RESET を返すこと"""
         session, user, get_latest_patch = self._build_login_session(
             test_tenant, "resetuser", is_required_password_reset=True, expired_at=None
@@ -256,8 +284,8 @@ class TestAuthServiceLogin:
         assert response.token is None
 
     async def test_login_requiring_password_reset_clears_failures(
-        self, test_tenant, fake_redis
-    ):
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """パスワード再設定が必要な応答を返す場合も失敗記録が消えること"""
         session, user, get_latest_patch = self._build_login_session(
             test_tenant, "resetuser", is_required_password_reset=True, expired_at=None
@@ -271,7 +299,9 @@ class TestAuthServiceLogin:
 
         assert await fake_redis.exists(_mismatch_key(user)) == 0
 
-    async def test_login_when_password_expired(self, test_tenant, fake_redis):
+    async def test_login_when_password_expired(
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """パスワード有効期限切れの場合、reason=EXPIREDでREQUIRES_PASSWORD_RESETを返すこと"""
         expired_at = datetime.now(timezone.utc) - timedelta(days=1)
         session, user, get_latest_patch = self._build_login_session(
@@ -291,8 +321,8 @@ class TestAuthServiceLogin:
         assert response.token is None
 
     async def test_login_when_expired_and_reset_required_returns_expired(
-        self, test_tenant, fake_redis
-    ):
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """有効期限切れと初回ログインが両方該当する場合、EXPIREDが優先されること"""
         expired_at = datetime.now(timezone.utc) - timedelta(days=1)
         session, user, get_latest_patch = self._build_login_session(
@@ -315,7 +345,9 @@ class TestAuthServiceLoginWithLoginKey:
 
     REPO_USER_PATH = "app.services.auth_service.UserRepository"
 
-    async def test_login_with_valid_login_key(self, test_tenant, test_user):
+    async def test_login_with_valid_login_key(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
         """有効なログインキーで認証に成功しトークンが発行されること"""
         with patch(
             f"{self.REPO_USER_PATH}.find_by_login_key",
@@ -332,8 +364,8 @@ class TestAuthServiceLoginWithLoginKey:
 
     @pytest.mark.parametrize("login_key", [None, "", "   "])
     async def test_blank_login_key_returns_401_without_lookup(
-        self, test_tenant, login_key
-    ):
+        self, test_tenant: Tenant, login_key: None | str
+    ) -> None:
         """null・空白のログインキーは検索せず 401 にすること"""
         find = AsyncMock()
         with patch(f"{self.REPO_USER_PATH}.find_by_login_key", new=find):
@@ -345,7 +377,7 @@ class TestAuthServiceLoginWithLoginKey:
         assert exc_info.value.status_code == 401
         find.assert_not_called()
 
-    async def test_login_with_nonexistent_login_key(self, test_tenant):
+    async def test_login_with_nonexistent_login_key(self, test_tenant: Tenant) -> None:
         """存在しないログインキーの場合、HTTPException 401 を返すこと"""
         with patch(
             f"{self.REPO_USER_PATH}.find_by_login_key",
@@ -358,7 +390,9 @@ class TestAuthServiceLoginWithLoginKey:
 
         assert exc_info.value.status_code == 401
 
-    async def test_login_with_login_key_of_different_tenant(self, test_tenant):
+    async def test_login_with_login_key_of_different_tenant(
+        self, test_tenant: Tenant
+    ) -> None:
         """別テナントのログインキーの場合、存在しない場合と同じ401を返すこと"""
         # find_by_login_key はテナントIDも条件に含むため、別テナントのキーはNoneを返す
         with patch(
@@ -377,8 +411,11 @@ class TestAuthServicePasswordReset:
     """パスワードリセット処理テスト（モック使用）"""
 
     async def test_reset_password_with_invalid_old_password(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """旧パスワード不一致でHTTPException 403 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
@@ -411,7 +448,9 @@ class TestAuthServicePasswordReset:
             await fake_redis.zcard(_mismatch_key(test_user_with_password["user"])) == 1
         )
 
-    async def test_reset_password_with_nonexistent_user(self, test_tenant, fake_redis):
+    async def test_reset_password_with_nonexistent_user(
+        self, test_tenant: Tenant, fake_redis: FakeRedis
+    ) -> None:
         """ユーザーが存在しない場合、HTTPException 403 を返すこと"""
         session = AsyncMock()
         mock_result = MagicMock()
@@ -434,8 +473,11 @@ class TestAuthServicePasswordReset:
         assert await fake_redis.keys("password_mismatch:*") == []
 
     async def test_reset_password_without_password_history(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """パスワード履歴がない場合、失敗を記録せず HTTPException 403 を返すこと"""
         session = _session_returning_user(test_user_with_password["user"])
 
@@ -455,8 +497,11 @@ class TestAuthServicePasswordReset:
         assert await fake_redis.keys("password_mismatch:*") == []
 
     async def test_reset_password_when_locked_out(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """ロック中は旧パスワードが正しくても HTTPException 429 を返すこと"""
         user = test_user_with_password["user"]
         await _record_failures(user, MAX_FAILURE_ATTEMPTS, fake_redis)
@@ -484,8 +529,11 @@ class TestAuthServicePasswordReset:
         assert exc_info.value.detail == PASSWORD_RESET_LOCKED_MESSAGE
 
     async def test_reset_password_locks_on_max_failed_attempt(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """旧パスワード誤りで失敗が上限に達したら HTTPException 429 を返すこと"""
         user = test_user_with_password["user"]
         await _record_failures(user, MAX_FAILURE_ATTEMPTS - 1, fake_redis)
@@ -513,8 +561,11 @@ class TestAuthServicePasswordReset:
         assert exc_info.value.detail == PASSWORD_RESET_LOCKED_MESSAGE
 
     async def test_reset_password_when_too_short(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """最小長未満の新パスワードはHTTPException 400 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
@@ -546,8 +597,11 @@ class TestAuthServicePasswordReset:
         assert exc_info.value.status_code == 400
 
     async def test_reset_password_when_new_password_reused(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """過去パスワードを再利用した場合、HTTPException 400 を返すこと"""
         session = AsyncMock()
         mock_user_result = MagicMock()
@@ -591,8 +645,11 @@ class TestAuthServicePasswordReset:
         )
 
     async def test_reset_password_calls_save(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """パスワードリセット成功時に新パスワードの履歴が保存されること"""
         session = AsyncMock()
         mock_user_result = MagicMock()
@@ -630,8 +687,11 @@ class TestAuthServicePasswordReset:
         assert kwargs.get("expired_at") is not None
 
     async def test_reset_password_clears_failures_on_success(
-        self, test_tenant, test_user_with_password, fake_redis
-    ):
+        self,
+        test_tenant: Tenant,
+        test_user_with_password: dict[str, Any],
+        fake_redis: FakeRedis,
+    ) -> None:
         """パスワードリセット成功時に失敗記録が削除されること"""
         user = test_user_with_password["user"]
         await _record_failures(user, MAX_FAILURE_ATTEMPTS - 1, fake_redis)

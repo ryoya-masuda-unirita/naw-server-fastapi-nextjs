@@ -8,16 +8,21 @@ from app.core.config import (
     PasswordResetSettings,
     Settings,
 )
+from pathlib import Path
 
 
 def _build_cors_settings(**env_overrides: str) -> CorsSettings:
     """テスト用に `.env` を読み込まずに `CorsSettings` を組み立てる。
 
-    Args:
-        **env_overrides: `CorsSettings` のエイリアス名（例: `CORS_ALLOWED_ORIGINS`）
-            をキーとした環境変数の上書き値。
+    Parameters
+    ----------
+    **env_overrides : str
+        `CorsSettings` のエイリアス名（例: `CORS_ALLOWED_ORIGINS`）
+        をキーとした環境変数の上書き値。
 
-    Returns:
+    Returns
+    -------
+    CorsSettings
         `.env` に依存しない `CorsSettings` インスタンス。
     """
     return CorsSettings(_env_file=None, **env_overrides)  # type: ignore[arg-type]
@@ -26,10 +31,14 @@ def _build_cors_settings(**env_overrides: str) -> CorsSettings:
 def _build_settings(**env_overrides: str) -> Settings:
     """テスト用に `.env` を読み込まずに `Settings` を組み立てる。
 
-    Args:
-        **env_overrides: `Settings` のエイリアス名をキーとした環境変数の上書き値。
+    Parameters
+    ----------
+    **env_overrides : str
+        `Settings` のエイリアス名をキーとした環境変数の上書き値。
 
-    Returns:
+    Returns
+    -------
+    Settings
         `.env` に依存しない `Settings` インスタンス。
     """
     base = {"database_url": "postgresql+asyncpg://test", "secret_key": "test-secret"}
@@ -48,7 +57,9 @@ def _build_aws_settings(**env_overrides: str) -> AwsSettings:
 
 
 class TestCorsAllowedOrigins:
-    def test_parses_comma_separated_origins(self):
+    """CORS許可オリジン設定のテスト。"""
+
+    def test_parses_comma_separated_origins(self) -> None:
         """カンマ区切りの環境変数を複数要素のリストにパースできること"""
         settings = _build_cors_settings(
             CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
@@ -59,13 +70,13 @@ class TestCorsAllowedOrigins:
             "http://127.0.0.1:5173",
         ]
 
-    def test_returns_empty_list_when_unset(self):
+    def test_returns_empty_list_when_unset(self) -> None:
         """環境変数が未設定の場合は空リストを返すこと"""
         settings = _build_cors_settings()
 
         assert settings.cors_allowed_origins == []
 
-    def test_trims_whitespace_around_each_origin(self):
+    def test_trims_whitespace_around_each_origin(self) -> None:
         """各オリジンの前後空白を除去すること"""
         settings = _build_cors_settings(
             CORS_ALLOWED_ORIGINS=" http://localhost:5173 , http://127.0.0.1:5173 "
@@ -78,19 +89,21 @@ class TestCorsAllowedOrigins:
 
 
 class TestCorsAllowedOriginRegex:
-    def test_returns_none_when_unset(self):
+    """CORS許可オリジン正規表現設定のテスト。"""
+
+    def test_returns_none_when_unset(self) -> None:
         """環境変数が未設定の場合はNoneを返すこと"""
         settings = _build_cors_settings()
 
         assert settings.cors_allowed_origin_regex is None
 
-    def test_returns_none_when_empty_string(self):
+    def test_returns_none_when_empty_string(self) -> None:
         """環境変数が空文字列の場合もNoneに正規化されること"""
         settings = _build_cors_settings(CORS_ALLOWED_ORIGIN_REGEX="")
 
         assert settings.cors_allowed_origin_regex is None
 
-    def test_returns_value_when_set(self):
+    def test_returns_value_when_set(self) -> None:
         """環境変数が設定されている場合はその値を返すこと"""
         settings = _build_cors_settings(
             CORS_ALLOWED_ORIGIN_REGEX=r"https://.*\.example\.com$"
@@ -100,13 +113,15 @@ class TestCorsAllowedOriginRegex:
 
 
 class TestCookieSecure:
-    def test_defaults_to_false_when_unset(self):
+    """Cookie の Secure 属性設定のテスト。"""
+
+    def test_defaults_to_false_when_unset(self) -> None:
         """COOKIE_SECURE未設定時はFalseになること"""
         settings = _build_settings()
 
         assert settings.cookie_secure is False
 
-    def test_reflects_true_when_set(self):
+    def test_reflects_true_when_set(self) -> None:
         """COOKIE_SECURE=trueの場合Trueになること"""
         settings = _build_settings(COOKIE_SECURE="true")
 
@@ -114,26 +129,28 @@ class TestCookieSecure:
 
 
 class TestCookieSameSite:
-    def test_defaults_to_lax_when_unset(self):
+    """Cookie の SameSite 属性設定のテスト。"""
+
+    def test_defaults_to_lax_when_unset(self) -> None:
         """COOKIE_SAME_SITE未設定時はlaxになること"""
         settings = _build_settings()
 
         assert settings.cookie_same_site == "lax"
 
-    def test_reflects_value_when_set(self):
+    def test_reflects_value_when_set(self) -> None:
         """COOKIE_SAME_SITEを設定した値が反映されること"""
         settings = _build_settings(COOKIE_SAME_SITE="strict")
 
         assert settings.cookie_same_site == "strict"
 
-    def test_none_with_secure_true_is_allowed(self):
+    def test_none_with_secure_true_is_allowed(self) -> None:
         """COOKIE_SAME_SITE=noneかつCOOKIE_SECURE=trueの組み合わせは許可されること"""
         settings = _build_settings(COOKIE_SAME_SITE="none", COOKIE_SECURE="true")
 
         assert settings.cookie_same_site == "none"
         assert settings.cookie_secure is True
 
-    def test_none_with_secure_false_raises_error(self):
+    def test_none_with_secure_false_raises_error(self) -> None:
         """COOKIE_SAME_SITE=noneかつCOOKIE_SECURE=falseの組み合わせはエラーになること
 
         SameSite=NoneはSecure属性が伴わないとブラウザにCookieを拒否されるため、
@@ -149,14 +166,16 @@ def _build_password_reset_settings(**env_overrides: str) -> PasswordResetSetting
 
 
 class TestPasswordResetSettings:
-    def test_defaults_to_reference_values(self):
+    """パスワードリセット設定のテスト。"""
+
+    def test_defaults_to_reference_values(self) -> None:
         """未設定時は移植元 application.yml と同じ 5 回・15 分になること"""
         settings = _build_password_reset_settings()
 
         assert settings.max_failure_attempts == 5
         assert settings.lockout_minutes == 15
 
-    def test_reflects_env_overrides(self):
+    def test_reflects_env_overrides(self) -> None:
         """回数・ロック時間を環境変数相当の値で上書きできること"""
         settings = _build_password_reset_settings(
             PASSWORD_RESET_MAX_FAILURE_ATTEMPTS="3",
@@ -171,21 +190,23 @@ class TestPasswordResetSettings:
         ["PASSWORD_RESET_MAX_FAILURE_ATTEMPTS", "PASSWORD_RESET_LOCKOUT_MINUTES"],
     )
     @pytest.mark.parametrize("value", ["0", "-1"])
-    def test_rejects_non_positive_values(self, env_name, value):
+    def test_rejects_non_positive_values(self, env_name: str, value: str) -> None:
         """回数・ロック時間が 0 以下ならロックが正しく働かないため起動時にエラーになること"""
         with pytest.raises(ValidationError):
             _build_password_reset_settings(**{env_name: value})
 
 
 class TestAzureOpenAISettings:
-    def test_defaults_to_current_api_versions(self):
+    """Azure OpenAI 設定のテスト。"""
+
+    def test_defaults_to_current_api_versions(self) -> None:
         """Azure OpenAI APIバージョン未設定時は現行デフォルト値になること"""
         settings = _build_azure_openai_settings()
 
         assert settings.api_version == "2024-10-21"
         assert settings.responses_api_version == "2025-04-01-preview"
 
-    def test_reflects_env_overrides(self):
+    def test_reflects_env_overrides(self) -> None:
         """Azure OpenAI APIバージョンを環境変数相当の値で上書きできること"""
         settings = _build_azure_openai_settings(
             AZURE_OPENAI_API_VERSION="2026-01-01",
@@ -197,7 +218,9 @@ class TestAzureOpenAISettings:
 
 
 class TestAwsSettings:
-    def test_constructs_without_env_when_s3_and_sqs_unset(self):
+    """AWS 設定のテスト。"""
+
+    def test_constructs_without_env_when_s3_and_sqs_unset(self) -> None:
         """AWS_S3_BUCKET_NAME/AWS_SQS_QUEUE_URLが未設定でも生成自体は失敗しないこと
 
         回帰防止: これらを必須フィールドにすると、S3/SQSを使わない環境
@@ -211,7 +234,7 @@ class TestAwsSettings:
         assert settings.aws_region == "ap-northeast-1"
         assert settings.aws_sqs_listener_enabled is True
 
-    def test_reflects_env_overrides(self):
+    def test_reflects_env_overrides(self) -> None:
         """環境変数を設定した場合その値が反映されること"""
         settings = _build_aws_settings(
             AWS_S3_BUCKET_NAME="test-bucket",
@@ -228,7 +251,9 @@ class TestAwsSettings:
 
 
 class TestSettingsImportIndependence:
-    def test_app_main_importable_without_env_file(self, tmp_path):
+    """設定クラスのインポートが `.env` に依存しないことのテスト。"""
+
+    def test_app_main_importable_without_env_file(self, tmp_path: Path) -> None:
         """DB接続情報（.env）が無い環境でも app.main のインポートが失敗しないこと
 
         main.py は CORS 設定にのみ CorsSettings を使う。CorsSettings は

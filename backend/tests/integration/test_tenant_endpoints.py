@@ -7,10 +7,11 @@ from app.main import app
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-endpoints-test",
@@ -32,7 +33,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """テスト用の別テナント"""
     t = Tenant(
         id="tenant-endpoints-other",
@@ -54,7 +55,7 @@ async def other_tenant(session):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用テナント管理者"""
     u = User(
         id=uuid4(),
@@ -71,7 +72,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def normal_user(session, tenant):
+async def normal_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー"""
     u = User(
         id=uuid4(),
@@ -88,7 +89,7 @@ async def normal_user(session, tenant):
 
 
 @pytest.fixture
-async def other_admin_user(session, other_tenant):
+async def other_admin_user(session: AsyncSession, other_tenant: Tenant) -> User:
     """テスト用の別テナントの管理者"""
     u = User(
         id=uuid4(),
@@ -105,7 +106,9 @@ async def other_admin_user(session, other_tenant):
 
 
 @pytest.fixture
-async def local_server_endpoint(session, tenant):
+async def local_server_endpoint(
+    session: AsyncSession, tenant: Tenant
+) -> TenantEndpoint:
     """テスト用LOCAL_SERVERエンドポイント"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
@@ -121,7 +124,7 @@ async def local_server_endpoint(session, tenant):
 
 
 @pytest.fixture
-async def azure_endpoint(session, tenant):
+async def azure_endpoint(session: AsyncSession, tenant: Tenant) -> TenantEndpoint:
     """テスト用AZURE_OPENAI_CHATエンドポイント（LOCAL_SERVER以外）"""
     e = TenantEndpoint(
         tenant_id=tenant.id,
@@ -136,28 +139,46 @@ async def azure_endpoint(session, tenant):
     return e
 
 
-def _headers(login_id, tenant_id):
+def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
+    """認証ヘッダーとテナントIDヘッダーを組み立てる。
+
+    Parameters
+    ----------
+    login_id : str
+        ログインID。
+    tenant_id : str
+        テナントID。
+
+    Returns
+    -------
+    dict[str, str]
+        `Authorization` と `X-Tenant-ID` を含むヘッダー。
+    """
     token = create_access_token(login_id, tenant_id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": tenant_id}
 
 
 @pytest.fixture
-def admin_headers(admin_user, tenant):
+def admin_headers(admin_user: User, tenant: Tenant) -> dict[str, str]:
+    """管理者のリクエスト用ヘッダーを返す。"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def user_headers(normal_user, tenant):
+def user_headers(normal_user: User, tenant: Tenant) -> dict[str, str]:
+    """一般ユーザーのリクエスト用ヘッダーを返す。"""
     return _headers(normal_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def other_admin_headers(other_admin_user, other_tenant):
+def other_admin_headers(other_admin_user: User, other_tenant: Tenant) -> dict[str, str]:
+    """別テナントの管理者のリクエスト用ヘッダーを返す。"""
     return _headers(other_admin_user.login_id, other_tenant.id)
 
 
 @pytest.fixture
-def client(override_get_session):
+def client(override_get_session: None) -> AsyncClient:
+    """DBセッションを差し替えたテスト用のHTTPクライアントを返す。"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -166,8 +187,13 @@ class TestGetEndpoints:
     """GET /api/admin/tenants/{tenantId}/endpoints"""
 
     async def test_tenant_admin_gets_all_types(
-        self, client, admin_headers, tenant, local_server_endpoint, azure_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        local_server_endpoint: TenantEndpoint,
+        azure_endpoint: TenantEndpoint,
+    ) -> None:
         """テナント管理者は全タイプのエンドポイントを取得できること"""
         async with client as c:
             response = await c.get(
@@ -179,7 +205,9 @@ class TestGetEndpoints:
         assert len(body) == 2
         assert all("apiKey" not in item for item in body)
 
-    async def test_normal_user_gets_403(self, client, user_headers, tenant):
+    async def test_normal_user_gets_403(
+        self, client: AsyncClient, user_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """一般ユーザーは403になること"""
         async with client as c:
             response = await c.get(
@@ -189,8 +217,8 @@ class TestGetEndpoints:
         assert response.status_code == 403
 
     async def test_path_tenant_mismatch_returns_403(
-        self, client, admin_headers, other_tenant
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], other_tenant: Tenant
+    ) -> None:
         """パスのtenantIdが自分のテナントと異なる場合403になること"""
         async with client as c:
             response = await c.get(
@@ -205,8 +233,12 @@ class TestGetEndpointsByType:
     """GET /api/admin/tenants/endpoints/{type}"""
 
     async def test_returns_only_matching_type(
-        self, client, admin_headers, local_server_endpoint, azure_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        local_server_endpoint: TenantEndpoint,
+        azure_endpoint: TenantEndpoint,
+    ) -> None:
         """指定タイプのエンドポイントのみ返ること"""
         async with client as c:
             response = await c.get(
@@ -223,7 +255,9 @@ class TestGetEndpointsByType:
 class TestCreateEndpoint:
     """POST /api/admin/tenants/{tenantId}/endpoints"""
 
-    async def test_creates_local_server_endpoint(self, client, admin_headers, tenant):
+    async def test_creates_local_server_endpoint(
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """LOCAL_SERVERタイプのエンドポイントを作成できること"""
         async with client as c:
             response = await c.post(
@@ -240,7 +274,9 @@ class TestCreateEndpoint:
         assert response.status_code == 200
         assert "apiKey" not in response.json()
 
-    async def test_rejects_non_local_server_type(self, client, admin_headers, tenant):
+    async def test_rejects_non_local_server_type(
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """LOCAL_SERVER以外のタイプでの作成は400になること"""
         async with client as c:
             response = await c.post(
@@ -256,7 +292,9 @@ class TestCreateEndpoint:
 
         assert response.status_code == 400
 
-    async def test_rejects_invalid_url(self, client, admin_headers, tenant):
+    async def test_rejects_invalid_url(
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """URL形式でないendpointは400になること"""
         async with client as c:
             response = await c.post(
@@ -278,8 +316,12 @@ class TestUpdateEndpoint:
     """PATCH /api/admin/tenants/{tenantId}/endpoints/{endpointId}"""
 
     async def test_updates_local_server_endpoint(
-        self, client, admin_headers, tenant, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """LOCAL_SERVERエンドポイントを更新できること"""
         async with client as c:
             response = await c.patch(
@@ -292,8 +334,13 @@ class TestUpdateEndpoint:
         assert response.json()["endpointName"] == "Renamed"
 
     async def test_keeps_existing_api_key_when_not_specified(
-        self, client, session, admin_headers, tenant, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """apiKeyを指定しない更新では既存の値が保持されること"""
         async with client as c:
             response = await c.patch(
@@ -307,8 +354,12 @@ class TestUpdateEndpoint:
         assert local_server_endpoint.api_key == "secret-key"
 
     async def test_rejects_update_on_non_local_server_endpoint(
-        self, client, admin_headers, tenant, azure_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        azure_endpoint: TenantEndpoint,
+    ) -> None:
         """LOCAL_SERVER以外のエンドポイントの更新は400になること"""
         async with client as c:
             response = await c.patch(
@@ -320,8 +371,12 @@ class TestUpdateEndpoint:
         assert response.status_code == 400
 
     async def test_rejects_type_change_to_non_local_server(
-        self, client, admin_headers, tenant, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """typeをLOCAL_SERVER以外に変更しようとすると400になること"""
         async with client as c:
             response = await c.patch(
@@ -333,8 +388,8 @@ class TestUpdateEndpoint:
         assert response.status_code == 400
 
     async def test_update_nonexistent_endpoint_returns_404(
-        self, client, admin_headers, tenant
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """存在しないエンドポイントの更新は404になること"""
         async with client as c:
             response = await c.patch(
@@ -351,8 +406,12 @@ class TestDeleteEndpoint:
     """DELETE /api/admin/tenants/{tenantId}/endpoints/{endpointId}"""
 
     async def test_deletes_local_server_endpoint(
-        self, client, admin_headers, tenant, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """LOCAL_SERVERエンドポイントを削除できること"""
         async with client as c:
             response = await c.delete(
@@ -363,8 +422,12 @@ class TestDeleteEndpoint:
         assert response.status_code == 204
 
     async def test_rejects_delete_on_non_local_server_endpoint(
-        self, client, admin_headers, tenant, azure_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        tenant: Tenant,
+        azure_endpoint: TenantEndpoint,
+    ) -> None:
         """LOCAL_SERVER以外のエンドポイントの削除は400になること"""
         async with client as c:
             response = await c.delete(
@@ -375,8 +438,8 @@ class TestDeleteEndpoint:
         assert response.status_code == 400
 
     async def test_delete_nonexistent_endpoint_returns_404(
-        self, client, admin_headers, tenant
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str], tenant: Tenant
+    ) -> None:
         """存在しないエンドポイントの削除は404になること"""
         async with client as c:
             response = await c.delete(
@@ -392,8 +455,11 @@ class TestGetLocalServerEndpoint:
     """GET /api/tenants/endpoints/local/{endpointId}"""
 
     async def test_admin_gets_local_server_endpoint_with_api_key(
-        self, client, admin_headers, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """管理者は自テナントのLOCAL_SERVERエンドポイントをapiKey付きで取得できること"""
         async with client as c:
             response = await c.get(
@@ -408,8 +474,11 @@ class TestGetLocalServerEndpoint:
         assert body["type"] == "LOCAL_SERVER"
 
     async def test_returns_404_for_non_local_server_type(
-        self, client, admin_headers, azure_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        azure_endpoint: TenantEndpoint,
+    ) -> None:
         """LOCAL_SERVER以外のタイプの場合は404になること"""
         async with client as c:
             response = await c.get(
@@ -419,7 +488,9 @@ class TestGetLocalServerEndpoint:
 
         assert response.status_code == 404
 
-    async def test_returns_404_for_nonexistent_endpoint(self, client, admin_headers):
+    async def test_returns_404_for_nonexistent_endpoint(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないendpointIdの場合は404になること"""
         async with client as c:
             response = await c.get(
@@ -430,8 +501,11 @@ class TestGetLocalServerEndpoint:
         assert response.status_code == 404
 
     async def test_returns_404_for_other_tenant_endpoint(
-        self, client, other_admin_headers, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        other_admin_headers: dict[str, str],
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """他テナントの管理者は自テナントに属さないエンドポイントを取得できず404になること"""
         async with client as c:
             response = await c.get(
@@ -442,8 +516,11 @@ class TestGetLocalServerEndpoint:
         assert response.status_code == 404
 
     async def test_normal_user_gets_403(
-        self, client, user_headers, local_server_endpoint
-    ):
+        self,
+        client: AsyncClient,
+        user_headers: dict[str, str],
+        local_server_endpoint: TenantEndpoint,
+    ) -> None:
         """一般ユーザーは403になること"""
         async with client as c:
             response = await c.get(

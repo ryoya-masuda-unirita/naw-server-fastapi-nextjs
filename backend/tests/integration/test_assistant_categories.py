@@ -8,10 +8,12 @@ from app.core.security import create_access_token
 from app.models.assistant_category import AssistantCategory
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-async def tenant(session):
+async def tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     t = Tenant(
         id="tenant-assistant-categories-test",
@@ -33,7 +35,7 @@ async def tenant(session):
 
 
 @pytest.fixture
-async def other_tenant(session):
+async def other_tenant(session: AsyncSession) -> Tenant:
     """他テナント（テナント分離確認用）"""
     t = Tenant(
         id="tenant-assistant-categories-other",
@@ -55,7 +57,7 @@ async def other_tenant(session):
 
 
 @pytest.fixture
-async def admin_user(session, tenant):
+async def admin_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用テナント管理者"""
     u = User(
         id=uuid4(),
@@ -72,7 +74,7 @@ async def admin_user(session, tenant):
 
 
 @pytest.fixture
-async def member_user(session, tenant):
+async def member_user(session: AsyncSession, tenant: Tenant) -> User:
     """テスト用一般ユーザー"""
     u = User(
         id=uuid4(),
@@ -89,7 +91,9 @@ async def member_user(session, tenant):
 
 
 @pytest.fixture
-async def category(session, tenant, admin_user):
+async def category(
+    session: AsyncSession, tenant: Tenant, admin_user: User
+) -> AssistantCategory:
     """テスト用アシスタントカテゴリ"""
     c = AssistantCategory(
         tenant_id=tenant.id,
@@ -104,7 +108,9 @@ async def category(session, tenant, admin_user):
 
 
 @pytest.fixture
-async def second_category(session, tenant, admin_user):
+async def second_category(
+    session: AsyncSession, tenant: Tenant, admin_user: User
+) -> AssistantCategory:
     """同一テナント内の別名アシスタントカテゴリ（重複名チェックの確認用）"""
     c = AssistantCategory(
         tenant_id=tenant.id,
@@ -119,7 +125,9 @@ async def second_category(session, tenant, admin_user):
 
 
 @pytest.fixture
-async def other_tenant_category(session, other_tenant, admin_user):
+async def other_tenant_category(
+    session: AsyncSession, other_tenant: Tenant, admin_user: User
+) -> AssistantCategory:
     """他テナントのアシスタントカテゴリ"""
     c = AssistantCategory(
         tenant_id=other_tenant.id,
@@ -153,18 +161,18 @@ def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
 
 
 @pytest.fixture
-def admin_headers(admin_user, tenant):
+def admin_headers(admin_user: User, tenant: Tenant) -> dict[str, str]:
     """テナント管理者のリクエストヘッダー"""
     return _headers(admin_user.login_id, tenant.id)
 
 
 @pytest.fixture
-def member_headers(member_user, tenant):
+def member_headers(member_user: User, tenant: Tenant) -> dict[str, str]:
     """一般ユーザーのリクエストヘッダー"""
     return _headers(member_user.login_id, tenant.id)
 
 
-async def _count_categories(session, tenant_id: str, name: str) -> int:
+async def _count_categories(session: AsyncSession, tenant_id: str, name: str) -> int:
     """テナント内の指定した名前のアシスタントカテゴリ件数を数える。
 
     Parameters
@@ -195,7 +203,9 @@ async def _count_categories(session, tenant_id: str, name: str) -> int:
 class TestCreateAssistantCategory:
     """POST /api/admin/assistant-categories"""
 
-    async def test_create_assistant_category(self, client, admin_headers):
+    async def test_create_assistant_category(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """正しいリクエストで作成でき、DBにレコードが作成されること"""
         async with client as c:
             response = await c.post(
@@ -210,7 +220,9 @@ class TestCreateAssistantCategory:
         assert body["description"] == "desc"
         assert "id" in body
 
-    async def test_create_with_blank_name_returns_400(self, client, admin_headers):
+    async def test_create_with_blank_name_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """名前が空白のみだと400になり作成されないこと"""
         async with client as c:
             response = await c.post(
@@ -222,7 +234,9 @@ class TestCreateAssistantCategory:
         assert response.status_code == 400
         assert response.json()["message"] == "カテゴリ名は必須です"
 
-    async def test_create_without_name_returns_400(self, client, admin_headers):
+    async def test_create_without_name_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """名前が無いと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.post(
@@ -234,7 +248,9 @@ class TestCreateAssistantCategory:
         assert response.status_code == 400
         assert response.json()["message"] == "カテゴリ名は必須です"
 
-    async def test_create_with_name_17_chars_returns_400(self, client, admin_headers):
+    async def test_create_with_name_17_chars_returns_400(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """名前が17文字だと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.post(
@@ -247,8 +263,8 @@ class TestCreateAssistantCategory:
         assert response.json()["message"] == "カテゴリ名は16文字以内で入力してください"
 
     async def test_create_with_description_256_chars_returns_400(
-        self, client, admin_headers
-    ):
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """説明が256文字だと400になり、移植元と同じ文言が返ること"""
         async with client as c:
             response = await c.post(
@@ -260,7 +276,9 @@ class TestCreateAssistantCategory:
         assert response.status_code == 400
         assert response.json()["message"] == "説明は255文字以内で入力してください"
 
-    async def test_create_as_non_admin_returns_403(self, client, member_headers):
+    async def test_create_as_non_admin_returns_403(
+        self, client: AsyncClient, member_headers: dict[str, str]
+    ) -> None:
         """テナント管理者以外は作成できないこと"""
         async with client as c:
             response = await c.post(
@@ -272,8 +290,12 @@ class TestCreateAssistantCategory:
         assert response.status_code == 403
 
     async def test_create_with_duplicate_name_returns_500(
-        self, client, session, admin_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """同一テナント内に同名のカテゴリがあると移植元と同じく一意制約違反の500になり作成されないこと"""
         # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
         tenant_id, name = category.tenant_id, category.name
@@ -289,8 +311,11 @@ class TestCreateAssistantCategory:
         assert await _count_categories(session, tenant_id, name) == 1
 
     async def test_create_with_other_tenant_category_name_succeeds(
-        self, client, admin_headers, other_tenant_category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        other_tenant_category: AssistantCategory,
+    ) -> None:
         """他テナントのカテゴリと同じ名前なら作成できること"""
         async with client as c:
             response = await c.post(
@@ -307,8 +332,12 @@ class TestListAssistantCategories:
     """GET /api/admin/assistant-categories"""
 
     async def test_list_assistant_categories(
-        self, client, admin_headers, category, other_tenant_category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+        other_tenant_category: AssistantCategory,
+    ) -> None:
         """自テナント分のみ返ること"""
         async with client as c:
             response = await c.get(
@@ -319,7 +348,9 @@ class TestListAssistantCategories:
         body = response.json()
         assert [item["id"] for item in body] == [category.id]
 
-    async def test_list_assistant_categories_empty(self, client, admin_headers):
+    async def test_list_assistant_categories_empty(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """カテゴリが0件の場合空リストが返ること"""
         async with client as c:
             response = await c.get(
@@ -329,7 +360,9 @@ class TestListAssistantCategories:
         assert response.status_code == 200
         assert response.json() == []
 
-    async def test_list_as_non_admin_returns_403(self, client, member_headers):
+    async def test_list_as_non_admin_returns_403(
+        self, client: AsyncClient, member_headers: dict[str, str]
+    ) -> None:
         """テナント管理者以外は一覧取得できないこと"""
         async with client as c:
             response = await c.get(
@@ -342,7 +375,12 @@ class TestListAssistantCategories:
 class TestGetAssistantCategory:
     """GET /api/admin/assistant-categories/{id}"""
 
-    async def test_get_assistant_category(self, client, admin_headers, category):
+    async def test_get_assistant_category(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """存在するIDで取得できること"""
         async with client as c:
             response = await c.get(
@@ -353,7 +391,9 @@ class TestGetAssistantCategory:
         assert response.status_code == 200
         assert response.json()["id"] == category.id
 
-    async def test_get_not_found_returns_404(self, client, admin_headers):
+    async def test_get_not_found_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないIDだと404になること"""
         async with client as c:
             response = await c.get(
@@ -367,7 +407,9 @@ class TestGetAssistantCategory:
             == "AssistantCategory not found with id:nonexistent"
         )
 
-    async def test_get_options_is_treated_as_id(self, client, admin_headers):
+    async def test_get_options_is_treated_as_id(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """/optionsは移植元と同じく単体取得として扱われ404になること"""
         async with client as c:
             response = await c.get(
@@ -380,7 +422,9 @@ class TestGetAssistantCategory:
             response.json()["message"] == "AssistantCategory not found with id:options"
         )
 
-    async def test_get_options_as_non_admin_returns_403(self, client, member_headers):
+    async def test_get_options_as_non_admin_returns_403(
+        self, client: AsyncClient, member_headers: dict[str, str]
+    ) -> None:
         """/optionsもテナント管理者以外は取得できないこと"""
         async with client as c:
             response = await c.get(
@@ -391,8 +435,11 @@ class TestGetAssistantCategory:
         assert response.status_code == 403
 
     async def test_get_other_tenant_category_returns_404(
-        self, client, admin_headers, other_tenant_category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        other_tenant_category: AssistantCategory,
+    ) -> None:
         """他テナントのIDだと404になること"""
         async with client as c:
             response = await c.get(
@@ -407,7 +454,12 @@ class TestGetAssistantCategory:
             == f"AssistantCategory not found with id:{other_tenant_category.id}"
         )
 
-    async def test_get_as_non_admin_returns_403(self, client, member_headers, category):
+    async def test_get_as_non_admin_returns_403(
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """テナント管理者以外は単体取得できないこと"""
         async with client as c:
             response = await c.get(
@@ -421,7 +473,12 @@ class TestGetAssistantCategory:
 class TestUpdateAssistantCategory:
     """PATCH /api/admin/assistant-categories/{id}"""
 
-    async def test_update_assistant_category(self, client, admin_headers, category):
+    async def test_update_assistant_category(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """正しいリクエストで更新でき、DBの内容が更新されること"""
         async with client as c:
             response = await c.patch(
@@ -436,8 +493,11 @@ class TestUpdateAssistantCategory:
         assert body["description"] == "updated desc"
 
     async def test_update_keeping_same_name_succeeds(
-        self, client, admin_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """自分自身の既存の名前のまま更新しても重複エラーにならないこと"""
         async with client as c:
             response = await c.patch(
@@ -449,8 +509,13 @@ class TestUpdateAssistantCategory:
         assert response.status_code == 200
 
     async def test_update_with_duplicate_name_returns_500(
-        self, client, session, admin_headers, category, second_category
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+        second_category: AssistantCategory,
+    ) -> None:
         """更新後の名前が別カテゴリと重複すると移植元と同じく一意制約違反の500になり変更されないこと"""
         # 一意制約違反でロールバックされると属性が失効し読めなくなるため、先に控える
         category_id, tenant_id = category.id, category.tenant_id
@@ -468,8 +533,11 @@ class TestUpdateAssistantCategory:
         assert await _count_categories(session, tenant_id, second_name) == 1
 
     async def test_update_without_description_keeps_description(
-        self, client, admin_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """説明を送らずに更新すると元の説明が残ること"""
         async with client as c:
             response = await c.patch(
@@ -485,8 +553,13 @@ class TestUpdateAssistantCategory:
 
     @pytest.mark.parametrize("description", [None, "", "   "])
     async def test_update_with_blank_description_keeps_description(
-        self, client, session, admin_headers, category, description
-    ):
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+        description: None | str,
+    ) -> None:
         """説明がnull・空文字・空白だけなら元の説明がDBに残ること"""
         async with client as c:
             response = await c.patch(
@@ -500,7 +573,9 @@ class TestUpdateAssistantCategory:
         await session.refresh(category)
         assert category.description == "orig desc"
 
-    async def test_update_not_found_returns_404(self, client, admin_headers):
+    async def test_update_not_found_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないIDだと404になること"""
         async with client as c:
             response = await c.patch(
@@ -517,8 +592,11 @@ class TestUpdateAssistantCategory:
         )
 
     async def test_update_other_tenant_category_returns_404(
-        self, client, admin_headers, other_tenant_category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        other_tenant_category: AssistantCategory,
+    ) -> None:
         """他テナントのIDだと404になり対象データは変更されないこと"""
         async with client as c:
             response = await c.patch(
@@ -534,8 +612,11 @@ class TestUpdateAssistantCategory:
         )
 
     async def test_update_with_description_256_chars_returns_400(
-        self, client, admin_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """説明が256文字だと400になりDBの内容が変更されないこと"""
         async with client as c:
             response = await c.patch(
@@ -547,8 +628,11 @@ class TestUpdateAssistantCategory:
         assert response.status_code == 400
 
     async def test_update_as_non_admin_returns_403(
-        self, client, member_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """テナント管理者以外は更新できないこと"""
         async with client as c:
             response = await c.patch(
@@ -563,7 +647,12 @@ class TestUpdateAssistantCategory:
 class TestDeleteAssistantCategory:
     """DELETE /api/admin/assistant-categories/{id}"""
 
-    async def test_delete_assistant_category(self, client, admin_headers, category):
+    async def test_delete_assistant_category(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """存在するIDを削除でき204が返ること"""
         async with client as c:
             response = await c.delete(
@@ -573,7 +662,9 @@ class TestDeleteAssistantCategory:
 
         assert response.status_code == 204
 
-    async def test_delete_not_found_returns_404(self, client, admin_headers):
+    async def test_delete_not_found_returns_404(
+        self, client: AsyncClient, admin_headers: dict[str, str]
+    ) -> None:
         """存在しないIDだと404になること"""
         async with client as c:
             response = await c.delete(
@@ -588,8 +679,11 @@ class TestDeleteAssistantCategory:
         )
 
     async def test_delete_as_non_admin_returns_403(
-        self, client, member_headers, category
-    ):
+        self,
+        client: AsyncClient,
+        member_headers: dict[str, str],
+        category: AssistantCategory,
+    ) -> None:
         """テナント管理者以外は削除できないこと"""
         async with client as c:
             response = await c.delete(

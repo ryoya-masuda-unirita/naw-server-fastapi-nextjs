@@ -11,10 +11,11 @@ from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
 from app.services.user_import_listener import RetryableImportError, UserImportListener
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-async def listener_tenant(session):
+async def listener_tenant(session: AsyncSession) -> Tenant:
     """テスト用テナント"""
     tenant = Tenant(
         id="tenant-listener-test",
@@ -36,7 +37,7 @@ async def listener_tenant(session):
 
 
 @pytest.fixture
-async def listener_job(session, listener_tenant):
+async def listener_job(session: AsyncSession, listener_tenant: Tenant) -> UserImportJob:
     """処理待ち（PENDING）のインポートジョブ"""
     job = UserImportJob(
         tenant_id=listener_tenant.id,
@@ -79,8 +80,11 @@ class TestUserImportListener:
     """ユーザーインポートリスナーのテスト"""
 
     async def test_process_import_message_completes_job_on_success(
-        self, session, listener_tenant, listener_job
-    ):
+        self,
+        session: AsyncSession,
+        listener_tenant: Tenant,
+        listener_job: UserImportJob,
+    ) -> None:
         """正常なメッセージでユーザーが登録されジョブがCOMPLETEDになること"""
         csv_content = (
             "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
@@ -100,7 +104,7 @@ class TestUserImportListener:
         assert listener_job.status == UserImportJobStatus.COMPLETED
 
         user = (
-            (await session.execute(select(User).where(User.login_id == "new-import")))
+            (await session.execute(select(User).where(User.login_id == "new-import")))  # type: ignore[arg-type]
             .scalars()
             .one()
         )
@@ -109,8 +113,8 @@ class TestUserImportListener:
         fake_storage.delete.assert_awaited_once_with(listener_job.storage_url)
 
     async def test_process_import_message_fails_job_on_tenant_id_mismatch(
-        self, session, listener_job
-    ):
+        self, session: AsyncSession, listener_job: UserImportJob
+    ) -> None:
         """テナントIDが一致しない場合ジョブがFAILEDになること"""
         await UserImportListener.process_import_message(
             _message_body(listener_job, tenant_id="other-tenant"), session
@@ -121,8 +125,8 @@ class TestUserImportListener:
         assert listener_job.error_details == "テナントIDが一致しません"
 
     async def test_process_import_message_skips_already_finished_job(
-        self, session, listener_job
-    ):
+        self, session: AsyncSession, listener_job: UserImportJob
+    ) -> None:
         """既にCOMPLETED/FAILEDのジョブはスキップされること"""
         listener_job.status = UserImportJobStatus.COMPLETED
         session.add(listener_job)
@@ -140,8 +144,8 @@ class TestUserImportListener:
         fake_storage.download.assert_not_awaited()
 
     async def test_process_import_message_raises_for_retryable_storage_error(
-        self, session, listener_job
-    ):
+        self, session: AsyncSession, listener_job: UserImportJob
+    ) -> None:
         """ストレージ取得失敗時はRetryableImportErrorを送出しジョブはPROCESSINGのままであること"""
         fake_storage = AsyncMock()
         fake_storage.download.side_effect = TimeoutError("network error")
@@ -159,8 +163,8 @@ class TestUserImportListener:
         assert listener_job.status == UserImportJobStatus.PROCESSING
 
     async def test_process_import_message_fails_job_when_storage_object_missing(
-        self, session, listener_job
-    ):
+        self, session: AsyncSession, listener_job: UserImportJob
+    ) -> None:
         """ストレージにオブジェクトが存在しない場合はリトライせずFAILEDにすること"""
         fake_storage = AsyncMock()
         fake_storage.download.side_effect = FileNotFoundError(listener_job.storage_url)
@@ -178,8 +182,8 @@ class TestUserImportListener:
         fake_storage.delete.assert_not_awaited()
 
     async def test_process_import_message_fails_job_on_undecodable_content(
-        self, session, listener_job
-    ):
+        self, session: AsyncSession, listener_job: UserImportJob
+    ) -> None:
         """CSVの文字コードがデコードできない場合、0件成功で握り潰さずFAILEDにすること"""
         fake_storage = AsyncMock()
         # UTF-8/Shift-JISのいずれでもデコードできないバイト列
@@ -195,11 +199,14 @@ class TestUserImportListener:
 
         await session.refresh(listener_job)
         assert listener_job.status == UserImportJobStatus.FAILED
-        assert "文字コード" in listener_job.error_details
+        assert "文字コード" in listener_job.error_details  # type: ignore[operator]
 
     async def test_process_import_message_records_row_error_and_continues(
-        self, session, listener_tenant, listener_job
-    ):
+        self,
+        session: AsyncSession,
+        listener_tenant: Tenant,
+        listener_job: UserImportJob,
+    ) -> None:
         """1行のグループID不正エラーが他の行の処理を止めないこと"""
         group = Group(tenant_id=listener_tenant.id, name="Listener Group")
         session.add(group)
@@ -224,25 +231,28 @@ class TestUserImportListener:
 
         await session.refresh(listener_job)
         assert listener_job.status == UserImportJobStatus.COMPLETED
-        assert "行3" in listener_job.error_details
+        assert "行3" in listener_job.error_details  # type: ignore[operator]
 
         ok_user = (
-            (await session.execute(select(User).where(User.login_id == "listener-ok")))
+            (await session.execute(select(User).where(User.login_id == "listener-ok")))  # type: ignore[arg-type]
             .scalars()
             .one_or_none()
         )
         assert ok_user is not None
 
         bad_user = (
-            (await session.execute(select(User).where(User.login_id == "listener-bad")))
+            (await session.execute(select(User).where(User.login_id == "listener-bad")))  # type: ignore[arg-type]
             .scalars()
             .one_or_none()
         )
         assert bad_user is not None
 
     async def test_process_import_message_replaces_group_memberships(
-        self, session, listener_tenant, listener_job
-    ):
+        self,
+        session: AsyncSession,
+        listener_tenant: Tenant,
+        listener_job: UserImportJob,
+    ) -> None:
         """CSVのgroupIdsで既存のグループ所属がCSV指定の内容に置き換わること"""
         old_group = Group(tenant_id=listener_tenant.id, name="Old Group")
         new_group = Group(tenant_id=listener_tenant.id, name="New Group")
@@ -281,7 +291,7 @@ class TestUserImportListener:
         group_ids = (
             (
                 await session.execute(
-                    select(GroupUser.group_id).where(GroupUser.user_id == user.id)
+                    select(GroupUser.group_id).where(GroupUser.user_id == user.id)  # type: ignore[call-overload]
                 )
             )
             .scalars()
@@ -290,8 +300,11 @@ class TestUserImportListener:
         assert group_ids == [new_group.id]
 
     async def test_process_import_message_updates_existing_user_without_password_change(
-        self, session, listener_tenant, listener_job
-    ):
+        self,
+        session: AsyncSession,
+        listener_tenant: Tenant,
+        listener_job: UserImportJob,
+    ) -> None:
         """既存ユーザーの更新時は名前・ロールのみ更新されパスワード履歴は増えないこと"""
         from app.core.security import hash_password
 
@@ -336,7 +349,7 @@ class TestUserImportListener:
 
         password_history_count = (
             await session.execute(
-                select(func.count()).where(PasswordHistory.user_id == user.id)
+                select(func.count()).where(PasswordHistory.user_id == user.id)  # type: ignore[arg-type]
             )
         ).scalar_one()
         assert password_history_count == 1

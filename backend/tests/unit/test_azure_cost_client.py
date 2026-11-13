@@ -33,8 +33,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_maps_rows_to_query_results(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """Azure APIのレスポンス行をAzureCostQueryResultへ正しくマッピングできること
 
         列の並びは columns メタデータの [totalCost, UsageDate(yyyyMMdd),
@@ -63,8 +66,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_maps_rows_regardless_of_column_order(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """列の並び順がクエリ定義により変わっても、列名で正しくマッピングできること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -90,8 +96,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_raises_when_expected_column_is_missing(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """想定する列（totalCost等）がレスポンスに含まれない場合ValueErrorになること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -108,8 +117,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_returns_empty_list_when_no_rows(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """結果行が0件の場合空リストを返すこと"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -124,8 +136,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_skips_rows_with_unexpected_column_count(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """列メタデータと列数が一致しない行は無視すること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -143,8 +158,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_uses_last_billing_month_timeframe_when_no_dates_given(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """from/to未指定の場合、timeframe=TheLastBillingMonthでAPIを呼び出すこと"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -162,8 +180,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_uses_custom_timeframe_when_date_range_given(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """from/toが指定された場合、timeframe=Customで期間付きAPI呼び出しをすること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -184,8 +205,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_filters_by_resource_id(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """ResourceIdでフィルタしたクエリを組み立てること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()
@@ -205,8 +229,11 @@ class TestGetCostByResourceId:
     @patch("app.core.azure_cost_client.CostManagementClient")
     @patch("app.core.azure_cost_client.ClientSecretCredential")
     def test_builds_scope_from_settings(
-        self, mock_credential, mock_client_cls, mock_get_settings
-    ):
+        self,
+        mock_credential: MagicMock,
+        mock_client_cls: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
         """設定値（サブスクリプションID・リソースグループ名）からscopeを組み立てること"""
         mock_get_settings.return_value = _settings()
         mock_client = MagicMock()

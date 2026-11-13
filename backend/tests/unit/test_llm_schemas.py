@@ -8,6 +8,18 @@ from app.schemas.response_format import ResponseFormatRequest
 
 
 def _payload(**overrides: object) -> dict[str, object]:
+    """チャットリクエストの基本ペイロードを生成する。
+
+    Parameters
+    ----------
+    **overrides : object
+        基本ペイロードに上書きするキーと値。
+
+    Returns
+    -------
+    dict[str, object]
+        上書き済みのリクエストペイロード。
+    """
     payload: dict[str, object] = {
         "deployName": "gpt-4o",
         "messages": [{"role": "user", "content": "こんにちは"}],
@@ -17,6 +29,18 @@ def _payload(**overrides: object) -> dict[str, object]:
 
 
 def _file(name: str) -> dict[str, object]:
+    """添付ファイルのテスト用ペイロードを生成する。
+
+    Parameters
+    ----------
+    name : str
+        ファイル名。
+
+    Returns
+    -------
+    dict[str, object]
+        画像ファイルを表すペイロード。
+    """
     return {
         "name": name,
         "type": "image/png",
@@ -27,7 +51,7 @@ def _file(name: str) -> dict[str, object]:
 class TestLlmChatRequest:
     """LlmChatRequest（移植元 LlmChatTextDataRequest 相当）のテスト"""
 
-    def test_accepts_response_format_snake_case(self):
+    def test_accepts_response_format_snake_case(self) -> None:
         """移植元と同じresponse_formatの項目名で出力フォーマット指定を受け取れること"""
         req = LlmChatRequest.model_validate(
             _payload(response_format={"type": "json_object"})
@@ -35,13 +59,13 @@ class TestLlmChatRequest:
 
         assert req.responseFormat == ResponseFormatRequest(type="json_object")
 
-    def test_attachments_default_to_empty(self):
+    def test_attachments_default_to_empty(self) -> None:
         """発話のattachments省略時は空になること"""
         req = LlmChatRequest.model_validate(_payload())
 
         assert req.messages[0].attachments == []
 
-    def test_treats_null_attachments_as_empty(self):
+    def test_treats_null_attachments_as_empty(self) -> None:
         """移植元と同じく、attachments: nullを添付なしとして扱うこと"""
         req = LlmChatRequest.model_validate(
             _payload(
@@ -51,7 +75,7 @@ class TestLlmChatRequest:
 
         assert req.messages[0].attachments == []
 
-    def test_accepts_attachments(self):
+    def test_accepts_attachments(self) -> None:
         """発話のattachmentsでファイル名の一覧を受け取れること"""
         req = LlmChatRequest.model_validate(
             _payload(
@@ -61,7 +85,7 @@ class TestLlmChatRequest:
 
         assert req.messages[0].attachments == ["a.png"]
 
-    def test_accepts_attatchments_alias(self):
+    def test_accepts_attatchments_alias(self) -> None:
         """移植元と同じく、綴り違いのattatchmentsでも受け取れること"""
         req = LlmChatRequest.model_validate(
             _payload(
@@ -73,7 +97,7 @@ class TestLlmChatRequest:
 
         assert req.messages[0].attachments == ["a.png"]
 
-    def test_ignores_reasoning_effort_and_verbosity(self):
+    def test_ignores_reasoning_effort_and_verbosity(self) -> None:
         """移植元のreasoning_effort・verbosityを受け取ってもエラーにならないこと"""
         req = LlmChatRequest.model_validate(
             _payload(reasoning_effort="high", verbosity="low")
@@ -81,7 +105,7 @@ class TestLlmChatRequest:
 
         assert req.deployName == "gpt-4o"
 
-    def test_rejects_duplicate_attachment_file_names(self):
+    def test_rejects_duplicate_attachment_file_names(self) -> None:
         """同じファイル名の添付ファイルが複数ある場合はValidationErrorになること"""
         with pytest.raises(ValidationError) as exc_info:
             LlmChatRequest.model_validate(
