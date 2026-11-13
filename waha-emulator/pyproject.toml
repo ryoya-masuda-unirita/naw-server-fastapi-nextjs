@@ -8,12 +8,14 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "pydantic-settings>=2.6.0",
     "python-multipart>=0.0.12",
-    # 生成AIアダプタ（ルートの generative-ai-adapter/ の uv ワークスペース。core も一緒に入る）
+    # 生成AIアダプタ・検索アダプタ（ルートの generative-ai-adapter/ の uv ワークスペース。core も一緒に入る）
     "naw-generative-ai-adapter",
+    "naw-retrieval-adapter",
 ]
 
 [tool.uv.sources]
 naw-generative-ai-adapter = { path = "../generative-ai-adapter/generative-ai-adapter", editable = true }
+naw-retrieval-adapter = { path = "../generative-ai-adapter/retrieval-adapter", editable = true }
 
 [dependency-groups]
 dev = [

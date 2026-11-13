@@ -1,9 +1,10 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from generative_ai_adapter.core_mappers import ChatRuntimeFactory
+from generative_ai_core.retrieval.runtime import CoreRetrievalRuntime
 
 from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
@@ -19,7 +20,9 @@ HTTPX_LOG_LEVEL = logging.WARNING
 
 
 def build_registry(
-    config: WorkflowConfig, chat_runtime_factory: ChatRuntimeFactory | None = None
+    config: WorkflowConfig,
+    chat_runtime_factory: ChatRuntimeFactory | None = None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None = None,
 ) -> WorkflowRegistry:
     """ワークフローの設定から、サービス ID → ワークフローの対応を作る。
 
@@ -29,6 +32,8 @@ def build_registry(
         ワークフローの設定。
     chat_runtime_factory : ChatRuntimeFactory | None
         core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで DB・プロバイダを差し替える）。
 
     Returns
     -------
@@ -36,9 +41,13 @@ def build_registry(
         サービス ID → ワークフロー。
     """
     return WorkflowRegistry(
-        default=GenerativeAiWorkflow(config.default, chat_runtime_factory),
+        default=GenerativeAiWorkflow(
+            config.default, chat_runtime_factory, retrieval_runtime_factory
+        ),
         by_service_id={
-            service_id: GenerativeAiWorkflow(definition, chat_runtime_factory)
+            service_id: GenerativeAiWorkflow(
+                definition, chat_runtime_factory, retrieval_runtime_factory
+            )
             for service_id, definition in config.services.items()
         },
     )
@@ -49,6 +58,7 @@ def create_app(
     *,
     registry: WorkflowRegistry | None = None,
     chat_runtime_factory: ChatRuntimeFactory | None = None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None = None,
 ) -> FastAPI:
     """アプリを組み立てる。
 
@@ -62,6 +72,8 @@ def create_app(
         サービス ID → ワークフロー。None なら設定（WAHA_WORKFLOWS_FILE）から作る。
     chat_runtime_factory : ChatRuntimeFactory | None
         core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで DB・プロバイダを差し替える）。
 
     Returns
     -------
@@ -82,7 +94,9 @@ def create_app(
             config.default.describe(),
             {sid: d.describe() for sid, d in config.services.items()},
         )
-        registry = build_registry(config, chat_runtime_factory)
+        registry = build_registry(
+            config, chat_runtime_factory, retrieval_runtime_factory
+        )
     session_store = SessionStore(
         idle_timeout_seconds=settings.session_idle_timeout_seconds
     )

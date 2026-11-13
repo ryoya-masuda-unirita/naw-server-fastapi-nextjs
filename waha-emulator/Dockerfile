@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 # ビルドコンテキストはリポジトリのルート（waha-emulator/docker-compose.yml の build.context）。
-# エミュレーターは生成AIアダプタ（generative-ai-adapter/）をパス依存で使うため、
+# エミュレーターは生成AIアダプタ・検索アダプタ（generative-ai-adapter/）をパス依存で使うため、
 # uv.lock の相対パス（../generative-ai-adapter/...）が解決できる位置に並べて置く
 WORKDIR /app/waha-emulator
 
@@ -12,8 +12,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.25 /uv /usr/local/bin/uv
 # コピーする（ソースのコピーより前にし、依存の層をキャッシュできるようにする）
 COPY generative-ai-adapter/generative-ai-core/pyproject.toml /app/generative-ai-adapter/generative-ai-core/pyproject.toml
 COPY generative-ai-adapter/generative-ai-adapter/pyproject.toml /app/generative-ai-adapter/generative-ai-adapter/pyproject.toml
+COPY generative-ai-adapter/retrieval-adapter/pyproject.toml /app/generative-ai-adapter/retrieval-adapter/pyproject.toml
 COPY generative-ai-adapter/generative-ai-core/src/ /app/generative-ai-adapter/generative-ai-core/src/
 COPY generative-ai-adapter/generative-ai-adapter/src/ /app/generative-ai-adapter/generative-ai-adapter/src/
+COPY generative-ai-adapter/retrieval-adapter/src/ /app/generative-ai-adapter/retrieval-adapter/src/
 COPY waha-emulator/pyproject.toml waha-emulator/uv.lock ./
 RUN uv sync --no-dev --frozen
 
