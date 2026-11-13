@@ -71,9 +71,9 @@ switchVersion(versionInfo.groupKey, 'prev');
 - `loadError` は `'forbidden'`（403）・`'general'`・`null`。本文の取得に一部失敗したときはトーストを出し、そのメッセージは `ERROR` になる
 - `rateMessage` は評価を先に画面へ反映し、失敗したら戻して例外を投げる。**フィードバック管理画面の一覧の再取得は `useChatActions().rateMessage` が行う**ので、画面からはそちらを呼ぶ
 - store は query cache を読めないため、アシスタント一覧は `useChatActions()` が `setAssistantCatalog` で渡す（ルーム名の自動変更・SECURE の model に使う）。チャット画面で `useChatActions()` を 1 回呼ぶこと
-- ライブラリ生成中の途中経過は `lib/chat/library-stream-bridge.ts` の `setLibraryStreamBridge()` に登録された窓口へ流す。ビューワー（#288）の store が登録する。未登録なら捨てる
+- ライブラリ生成中の途中経過は `lib/chat/library-stream-bridge.ts` の `setLibraryStreamBridge()` に登録された窓口へ流す。ビューワーの store（`store/viewer-store.ts`、#288）が読み込み時に登録する。未登録なら捨てる
 - SECURE アシスタント（ローカルサーバー）: 接続先の判定・トークンの取得（`lib/chat/local-content-token.ts`）・本文の取得・送信先の切り替えまで移植済み。#289 で結合（backend の `GET /api/auth` の `token`、server-local の CORS、メッセージ一覧の `apiKey`・`model`）を確認し、ライブラリ本文の取得（`lib/chat/library-content-api.ts`）を足した。確認結果は `docs/issue-289/`
-- **ビューワー（#288）へ**: ライブラリを開くときは `fetchLibraryContent(libraryId)`（`lib/chat/library-content-api.ts`。移植元 `LibraryContentApiService.fetch`）を呼ぶ。詳細（タイトル・アシスタント）を NAW から取り、SECURE ならテナントの LOCAL_SERVER エンドポイントから本文を取る。ローカルへの通信エラーは共通エラートーストを出さず `ApiError` を投げる（移植元の `viewer.service.loadContent` と同じく catch して `contentLoadError` にする）。ローカル側の削除は #136 の `lib/utils/library-local-copy.ts`
+- **ビューワー（#288、実装済み）**: ライブラリを開くとき `viewer-store` が `fetchLibraryContent(libraryId)`（`lib/chat/library-content-api.ts`。移植元 `LibraryContentApiService.fetch`）を呼ぶ。詳細（タイトル・アシスタント）を NAW から取り、SECURE ならテナントの LOCAL_SERVER エンドポイントから本文を取る。ローカルへの通信エラーは共通エラートーストを出さず `ApiError` を投げる（移植元の `viewer.service.loadContent` と同じく catch して `contentLoadError` にする）。ローカル側の削除は #136 の `lib/utils/library-local-copy.ts`
 
 ### server-local との通し（手動）
 
@@ -130,7 +130,7 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 | `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286（実装済み。添付の項目は入力欄内の `input[type=file]` を `click()` する） |
 | `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287（実装済み。`ChatWindow` が `chatAttachmentSlots` を既定で渡す） |
 | `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287（実装済み。未指定なら `useChatRoomDialogs` の共有・評価ダイアログを開く） |
-| `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288 |
+| `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288（実装済み。未指定なら `ChatSummary` が入る） |
 
 - 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
 - `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
@@ -165,7 +165,7 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 | 添付ファイル・共有ルームの文脈 | `store/chat-store.ts`（`attachedFiles`・`sharedRoomContext`・`openSharedRoom`・`clearSharedRoomContext`） | `ChatService` |
 
 - `renderDropzone` に、移植元と同じ `<input type="file" id="chat-file-upload" data-testid="chat-attach-file-input">` を置く（#286 の「＋」メニューの添付項目がこれを `click()` する）
-- **共有閲覧画面（#288）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
+- **共有閲覧画面（#288、実装済み）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
 - `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
 
 
@@ -182,3 +182,21 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 - `sidebar.tsx` がチャットのセクション（`SIDEBAR.CHAT`）を作り、ピン・操作メニュー・バッジは `sidebar/sidebar-route-button.tsx`、メニューは `chat-room-menu.tsx`（名前変更・ピン・削除）・`chat-context-menu.tsx`、まとめて削除は `chat-delete-dialog.tsx`、ピンの一括変更は `chat-sort-dialog.tsx`
 - 移植元でも `chat-context-menu` を開くボタンと `openSortDialog` の呼び出し元がない。部品と配線だけ移してあり、画面からは開けない
 - `PUT /api/rooms/pin`・`PUT /api/rooms/reorder` は移植元 server にも無く、呼ぶと失敗する（移植元の画面と同じ）
+
+## ビューワー・共有閲覧・ライブラリ詳細（#288）
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| ビューワーの状態（一覧・選択・本文・ライブラリ生成中の表示） | `store/viewer-store.ts` | `ViewerService` |
+| ビューワー本体 | `components/features/chat/chat-summary.tsx`（`ChatSummary`・`ChatSummaryConnected`） | `ChatSummaryComponent` |
+| 右パネル・モバイルへの既定の差し込み | `render-chat-summary.ts`（`ChatDataPanel` の `renderSummary`・`ChatWindow` の `renderViewer` の既定） | `<app-chat-summary>` |
+| 「ライブラリに保存」ダイアログ | `chat-save-library-dialog.tsx`・`hooks/use-library-metadata.ts` | `ChatSaveLibraryDialogComponent`・`LibraryService` |
+| 本文の取得（NAW／SECURE のローカルサーバー） | `lib/chat/library-content-api.ts` | `LibraryContentApiService` |
+| PDF 保存 | `lib/utils/print-html-content.ts` | `printHtmlContent` |
+| ページ | `routes/chat/chat-viewer.tsx`・`chat-shared.tsx`・`routes/library/library-detail.tsx`・`routes/chat-shared-history/`・`routes/feedback-preview/` | 各 Component |
+
+- 資料の一覧は `ChatDataPanel` が `roomId` が替わるたびに `loadList` で読む（モバイルのビューワーもこの一覧を使うので、パネルが hidden でも読む）。ビューワーだけのページ（viewer・library-detail）は自分で読む
+- `ChatRoom` の右パネルは、回答があるか「このルームのライブラリを生成中」のとき出す
+- 共有閲覧は移植元どおり、`access.isReadOnly` に関係なく `ChatWindow`・`ChatDataPanel` に常に `isReadOnly` を渡す
+- SECURE のライブラリ本文の取得は #289 の `lib/chat/library-content-api.ts`（`fetchLibraryContent`）を使う
+- ビューワー API の既定の MSW 応答は `mocks/handlers/viewer.ts`（チャット画面を開くと一覧を読むため）
