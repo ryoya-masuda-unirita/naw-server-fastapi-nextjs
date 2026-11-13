@@ -113,11 +113,28 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 |---|---|---|
 | `renderMention`・`onTextareaKeyDown` | textarea の上（候補パネル）・キー入力 | #286 |
 | `renderToolbar` | 送信ボタンの左（有効な機能ウィジェット・アシスタント選択） | #286 |
-| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286・#287 |
-| `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287 |
-| `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287 |
+| `renderAddMenu` | 「＋」ボタンの位置（添付・Web 検索・ライブラリ作成・テンプレート） | #286（添付の項目は #287 の `ChatAttachMenuItem` を置く） |
+| `renderAttachments`・`renderDropzone`・`onDropFiles` | 添付チップ列・ドロップ領域 | #287（実装済み。`ChatWindow` が `chatAttachmentSlots` を既定で渡す） |
+| `ChatWindow` の `onShareClick`・`onLikeClick` | ヘッダーの共有・評価ボタン | #287（実装済み。未指定なら `useChatRoomDialogs` の共有・評価ダイアログを開く） |
 | `ChatWindow` の `renderViewer`・`ChatDataPanel` の `renderSummary` | モバイルのビューワー・右のビューワー本体 | #288 |
 
 - 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
 - `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
 - `AdminChatRoomPage` はサイドバーのルーム一覧（#285）が未移植の間、一覧がなければ読み込む（ヘッダーのルーム名のため）
+
+## 添付・評価・検索・共有（#287）
+
+| 部品 | 場所 | 移植元 |
+|---|---|---|
+| 添付（ドロップ領域・チップ列・＋メニューの項目） | `components/features/chat/chat-attachments.tsx`（`ChatAttachmentDropzone`・`ChatAttachmentChips`・`ChatAttachMenuItem`）・`chat-attachment-slots.tsx`（`chatAttachmentSlots`）・`lib/utils/chat-attachment.ts`・`lib/constants/chat-attachment.ts` | `chat-input` の添付・`chat-attachment.constants.ts` |
+| 評価ダイアログ | `chat-rating-dialog.tsx` | `chat-rating-dialog` + `ChatWindow.openRatingDialog` |
+| 共有ダイアログ | `chat-share-dialog.tsx` | `chat-share-dialog` + `ChatWindow.openShareDialog` |
+| 上の 2 つを開く hook | `use-chat-room-dialogs.tsx` | `ChatWindow` |
+| チャット検索 | `chat-search-modal.tsx`（サイドバーが開く） | `chat-search-modal` |
+| 共有 API・チーム一覧 | `store/shares-store.ts`・`store/teams-store.ts` | `SharesService`・`TeamsService` |
+| 添付ファイル・共有ルームの文脈 | `store/chat-store.ts`（`attachedFiles`・`sharedRoomContext`・`openSharedRoom`・`clearSharedRoomContext`） | `ChatService` |
+
+- **＋メニュー（#286）**: メニューの先頭に `<ChatAttachMenuItem onSelected={メニューを閉じる} />` を置く。ファイル選択の input（`id="chat-file-upload"`）はドロップ領域の中にあり、項目はそれを `click()` する
+- **共有閲覧画面（#288）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
+- `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
+

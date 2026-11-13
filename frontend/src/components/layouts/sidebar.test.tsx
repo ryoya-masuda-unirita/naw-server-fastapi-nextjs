@@ -108,7 +108,7 @@ describe('Sidebar', () => {
 
       await user.click(screen.getByTestId('chat-search-button'));
 
-      expect(screen.getByRole('dialog', { name: 'ChatSearchModalComponent' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'CHAT.SEARCH_MODAL.TITLE' })).toBeInTheDocument();
     });
   });
 

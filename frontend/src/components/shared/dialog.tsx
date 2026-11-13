@@ -69,6 +69,11 @@ export interface DialogProps {
   panelClass?: string;
   /** true にすると Esc・背景クリックで閉じない */
   disableClose?: boolean;
+  /**
+   * false にすると、開いたときに最初の操作可能要素へフォーカスせず、ダイアログ自体にフォーカスする
+   * （`dialog.open(..., { autoFocus: false })`。フォーカスで開く部品が先頭にあるときに使う）
+   */
+  autoFocus?: boolean;
 }
 
 /**
@@ -145,6 +150,7 @@ function DialogOverlay({
   dialogWidth,
   panelClass,
   disableClose = false,
+  autoFocus = true,
 }: DialogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const showDefaultActions = showDefaultActionsProp !== false;
@@ -154,9 +160,11 @@ function DialogOverlay({
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const container = containerRef.current;
-    const first = container?.querySelector<HTMLElement>(TABBABLE_SELECTOR);
+    const first = autoFocus ? container?.querySelector<HTMLElement>(TABBABLE_SELECTOR) : null;
     (first ?? container)?.focus();
     return () => previous?.focus?.();
+    // フォーカスは開いたときの 1 回だけ決める
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // MatDialog の既定のスクロール抑止（block）に合わせ、開いている間は背面をスクロールさせない

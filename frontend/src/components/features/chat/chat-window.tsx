@@ -12,11 +12,13 @@ import { useMessagesStore } from '@/store/messages-store';
 import { useRoomsStore } from '@/store/rooms-store';
 import type { Message } from '@/types/chat/message.type';
 import type { ChatDataPanel } from './chat-data-panel';
+import { chatAttachmentSlots } from './chat-attachment-slots';
 import { ChatHeader } from './chat-header';
 import { ChatInput } from './chat-input';
 import { ChatMessageList } from './chat-message-list';
 import { ChatRenameDialog } from './chat-rename-dialog';
 import type { RatingDirection } from './chat-message-item';
+import { useChatRoomDialogs } from './use-chat-room-dialogs';
 
 /** 新規チャットでアシスタントが未選択のまま送ったときに使うアシスタント ID（移植元と同じ） */
 const FALLBACK_ASSISTANT_ID = 'default';
@@ -38,11 +40,11 @@ interface ChatWindowProps {
   roomId?: string | null;
   showHeader?: boolean;
   isReadOnly?: boolean;
-  /** ヘッダーの「共有」（共有ダイアログは #287） */
+  /** ヘッダーの「共有」。未指定なら共有ダイアログを開く（#287） */
   onShareClick?: () => void;
-  /** ヘッダーの「評価」（評価ダイアログは #287） */
+  /** ヘッダーの「評価」。未指定なら評価ダイアログを開く（#287） */
   onLikeClick?: () => void;
-  /** 入力欄に別 Issue の部品を差し込む口（#286・#287） */
+  /** 入力欄に別 Issue の部品を差し込む口（#286）。添付（#287）は既定で入る */
   inputSlots?: ChatInputSlots;
   /** モバイルで開くビューワー（移植元の `<app-chat-summary>`。#288）。未指定なら空の領域 */
   renderViewer?: ComponentProps<typeof ChatDataPanel>['renderSummary'];
@@ -68,6 +70,7 @@ export function ChatWindow({
   const activeRoom = useActiveRoom();
   const [showDataPanel, setShowDataPanel] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const roomDialogs = useChatRoomDialogs({ isReadOnly });
 
   const viewerRoomId = roomId ?? activeRoom?.id ?? null;
   const assistantDescription = activeRoom?.defaultAssistantId
@@ -161,8 +164,8 @@ export function ChatWindow({
         onRenameClick={() => {
           if (activeRoom) setIsRenameOpen(true);
         }}
-        onShareClick={onShareClick}
-        onLikeClick={onLikeClick}
+        onShareClick={onShareClick ?? roomDialogs.onShareClick}
+        onLikeClick={onLikeClick ?? roomDialogs.onLikeClick}
         onSettingsClick={() => setShowDataPanel((show) => !show)}
       />
 
@@ -183,9 +186,12 @@ export function ChatWindow({
           roomId={roomId ?? activeRoom?.id ?? null}
           defaultAssistantId={activeRoom?.defaultAssistantId ?? null}
           onSend={(data) => void handleSend(data)}
+          {...chatAttachmentSlots}
           {...inputSlots}
         />
       )}
+
+      {roomDialogs.dialogs}
 
       {isRenameOpen && activeRoom && (
         <ChatRenameDialog
