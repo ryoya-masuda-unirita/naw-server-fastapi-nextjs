@@ -213,6 +213,7 @@ class FeedbackRoomListRequest(BaseModel):
     size: int = Field(default=20, ge=1, le=100)
     assistantId: str | None = None
     rating: RoomRating | None = None
+    folderId: str | None = None
     sortField: str = "updatedAt"
     sortOrder: str = "desc"
 

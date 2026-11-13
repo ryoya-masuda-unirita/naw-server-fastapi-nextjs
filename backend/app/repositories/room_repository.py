@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -154,8 +155,36 @@ class RoomRepository:
         page: int,
         size: int,
         session: AsyncSession,
+        room_ids: Sequence[str] | None = None,
     ) -> tuple[list[Row], int]:
-        """評価済みルームのフィードバック一覧を取得する。"""
+        """評価済みルームのフィードバック一覧を取得する。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        assistant_id : str | None
+            既定のアシスタントでの絞り込み。None なら条件なし。
+        rating : RoomRating | None
+            評価での絞り込み。None なら条件なし。
+        sort_column : str
+            並べ替えの列（"room_name"・"assistant_id"・"rating"、それ以外は更新日時）。
+        sort_desc : bool
+            降順にする場合は True。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
+        room_ids : Sequence[str] | None
+            対象のルームIDでの絞り込み。None なら条件なし、空なら 0 件になる。
+
+        Returns
+        -------
+        tuple[list[Row], int]
+            (行のリスト, 総件数) のタプル。
+        """
         stmt = (
             select(
                 Room.id.label("room_id"),
@@ -185,6 +214,9 @@ class RoomRepository:
             stmt = stmt.where(Room.default_assistant_id == assistant_id)
         if rating is not None:
             stmt = stmt.where(Room.rating == rating)
+        if room_ids is not None:
+            # 空のときは IN () で 0 件になる（移植元は空なら cb.disjunction()）
+            stmt = stmt.where(Room.id.in_(room_ids))
 
         total = (
             await session.execute(select(func.count()).select_from(stmt.subquery()))
