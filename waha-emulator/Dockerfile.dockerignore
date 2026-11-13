@@ -1,0 +1,11 @@
+# ビルドコンテキストはリポジトリのルート。必要なものだけを許可する
+*
+!waha-emulator/pyproject.toml
+!waha-emulator/uv.lock
+!waha-emulator/waha_emulator/
+!generative-ai-adapter/generative-ai-core/pyproject.toml
+!generative-ai-adapter/generative-ai-core/src/
+!generative-ai-adapter/generative-ai-adapter/pyproject.toml
+!generative-ai-adapter/generative-ai-adapter/src/
+**/__pycache__
+**/*.pyc

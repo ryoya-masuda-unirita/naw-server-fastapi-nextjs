@@ -31,6 +31,8 @@ CANCELLED_MESSAGE = "ジョブが中断されました"
 
 
 class JobStatus(StrEnum):
+    """ジョブの状態。"""
+
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
@@ -38,6 +40,8 @@ class JobStatus(StrEnum):
 
 @dataclass(frozen=True)
 class SlotFile:
+    """スロットにアップロードされたファイル。"""
+
     filename: str
     content_type: str | None
     data: bytes
@@ -45,16 +49,26 @@ class SlotFile:
 
 @dataclass
 class Job:
+    """セッションで実行するジョブの状態とタスク。"""
+
     status: JobStatus = JobStatus.RUNNING
     error: str | None = None
     # ジョブの中身（コルーチン）が Job を参照するため、作成後に設定する
     task: "asyncio.Task[None]" = field(init=False, repr=False)
 
     def succeed(self) -> None:
+        """ジョブを成功にする。"""
         self.status = JobStatus.SUCCESS
         self.error = None
 
     def fail(self, reason: str) -> None:
+        """ジョブを失敗にする。
+
+        Parameters
+        ----------
+        reason : str
+            失敗の理由。
+        """
         self.status = JobStatus.FAILURE
         self.error = reason
 
@@ -71,6 +85,8 @@ class Job:
 
 @dataclass
 class Session:
+    """Waha! の 1 セッション（スロットのファイルとジョブ）。"""
+
     id: str
     last_used: float
     slots: dict[str, SlotFile] = field(default_factory=dict)
@@ -78,13 +94,26 @@ class Session:
 
     @property
     def job_running(self) -> bool:
+        """ジョブを実行中か判定する。
+
+        Returns
+        -------
+        bool
+            実行中なら True。
+        """
         return self.job is not None and self.job.status == JobStatus.RUNNING
 
     def result_text(self) -> str:
-        """`/result` の応答。server-local は `SUCCESS` で始まる・`RUNNING`・それ以外で判定する。
+        """`/result` の応答を作る。
 
+        server-local は `SUCCESS` で始まる・`RUNNING`・それ以外で判定する。
         server-local の SSE は execute の前に結果のポーリングを始めるため、
         まだジョブがないセッションは失敗ではなく `RUNNING` を返す。
+
+        Returns
+        -------
+        str
+            `RUNNING`・`SUCCESS`・`FAILURE: 理由` のいずれか。
         """
         if self.job is None or self.job.status == JobStatus.RUNNING:
             return JobStatus.RUNNING.value
@@ -106,17 +135,50 @@ class SessionStore:
         idle_timeout_seconds: float,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """破棄までの時間と時計を指定して作る。
+
+        Parameters
+        ----------
+        idle_timeout_seconds : float
+            使われていないセッションを破棄するまでの秒数。
+        clock : Callable[[], float]
+            現在時刻（秒）を返す関数。テストで差し替える。
+        """
         self._sessions: dict[str, Session] = {}
         self._idle_timeout = idle_timeout_seconds
         self._clock = clock
 
     def create(self) -> Session:
+        """新しいセッションを作る。使われていないセッションは先に破棄する。
+
+        Returns
+        -------
+        Session
+            作成したセッション。
+        """
         self._discard_idle_sessions()
         session = Session(id=uuid.uuid4().hex, last_used=self._clock())
         self._sessions[session.id] = session
         return session
 
     def get(self, session_id: str) -> Session:
+        """セッションを取得し、最終利用時刻を更新する。
+
+        Parameters
+        ----------
+        session_id : str
+            セッション ID。
+
+        Returns
+        -------
+        Session
+            対応するセッション。
+
+        Raises
+        ------
+        EmulatorError
+            セッションがないとき（404）。
+        """
         session = self._sessions.get(session_id)
         if session is None:
             raise EmulatorError(HTTPStatus.NOT_FOUND, "セッションがありません")
@@ -124,6 +186,18 @@ class SessionStore:
         return session
 
     def end(self, session_id: str) -> None:
+        """セッションを終了し、実行中のジョブがあれば止める。
+
+        Parameters
+        ----------
+        session_id : str
+            セッション ID。
+
+        Raises
+        ------
+        EmulatorError
+            セッションがないとき（404）。
+        """
         session = self.get(session_id)
         del self._sessions[session_id]
         if session.job is not None:
@@ -138,6 +212,7 @@ class SessionStore:
         await asyncio.gather(*(job.task for job in jobs), return_exceptions=True)
 
     def _discard_idle_sessions(self) -> None:
+        """一定時間使われていないセッションを破棄する。実行中のジョブがあるものは残す。"""
         # 実行中のジョブは、使われていなくても終わるまで残す
         deadline = self._clock() - self._idle_timeout
         idle = [
@@ -150,4 +225,11 @@ class SessionStore:
             logger.info("Idle session discarded: sessionId=%s", session_id)
 
     def __len__(self) -> int:
+        """保持しているセッションの数を返す。
+
+        Returns
+        -------
+        int
+            セッション数。
+        """
         return len(self._sessions)

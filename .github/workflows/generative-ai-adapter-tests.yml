@@ -1,0 +1,98 @@
+# 生成AIアダプタ（generative-ai-adapter/。uv ワークスペース: core・アダプタ）と、
+# それを呼ぶ Waha! エミュレーター（waha-emulator/）のテスト・Ruff・mypy を検証するワークフロー。
+# 書き方は server-local-tests.yml に揃えている。
+# エミュレーターはアダプタをパス依存で使い、結合テストで server-local のコードも読み込むため、
+# どれかを変更した PR・push で両方を流す。
+
+name: 生成AIアダプタ・エミュレーターのテスト
+
+on:
+  pull_request:
+    paths:
+      - "generative-ai-adapter/**"
+      - "waha-emulator/**"
+      - "server-local/**"
+      - ".github/workflows/generative-ai-adapter-tests.yml"
+  push:
+    paths:
+      - "generative-ai-adapter/**"
+      - "waha-emulator/**"
+      - "server-local/**"
+      - ".github/workflows/generative-ai-adapter-tests.yml"
+
+jobs:
+  # 生成AIアダプタ。LLM・クラウドへの HTTP はテスト内でモックするため、外部サービスは要らない。
+  adapter:
+    name: 生成AIアダプタ
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: generative-ai-adapter
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uvをインストール
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # --locked: uv.lock と pyproject.toml がずれていたら失敗させる
+      - name: 依存関係をインストール
+        run: uv sync --locked
+
+      - name: テストを実行
+        run: uv run pytest -q
+
+      # 検証だけ行う（--fix は付けない）。pyproject.toml で有効にした D ルール（numpy）も検査される
+      - name: フォーマットを検証
+        run: uv run ruff format --check .
+
+      - name: リンターを実行
+        run: uv run ruff check .
+
+      # core と adapter の tests に同名の conftest.py があるため、別々に実行する
+      - name: 型を検査（core）
+        run: uv run mypy generative-ai-core
+
+      - name: 型を検査（アダプタ）
+        run: uv run mypy generative-ai-adapter
+
+  # Waha! エミュレーター。アダプタ（パス依存）と server-local（結合テスト）を使う。
+  emulator:
+    name: Waha!エミュレーター
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: waha-emulator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uvをインストール
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 依存関係をインストール
+        run: uv sync --locked
+
+      - name: テストを実行
+        run: uv run pytest -q
+
+      - name: フォーマットを検証
+        run: uv run ruff format --check .
+
+      - name: リンターを実行
+        run: uv run ruff check .
+
+      - name: 型を検査
+        run: uv run mypy
