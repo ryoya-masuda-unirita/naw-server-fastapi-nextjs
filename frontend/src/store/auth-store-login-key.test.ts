@@ -20,7 +20,7 @@ describe('useAuthStore のログインキー・セッション破棄', () => {
       expect(resolveTenantId()).toBe('tenant-a');
     });
 
-    test('誤ったログインキーなら未ログインのままでテナントIDも消すこと', async () => {
+    test('誤ったログインキーなら false を返し、未ログインのままであること', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const ok = await useAuthStore.getState().loginWithKey('wrong-key');
@@ -28,7 +28,21 @@ describe('useAuthStore のログインキー・セッション破棄', () => {
       expect(ok).toBe(false);
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
       expect(sessionStorage.getItem('AUTH_USER')).toBeNull();
-      expect(resolveTenantId()).toBe('');
+    });
+
+    test('ログイン中に誤ったログインキーで失敗しても、ユーザー情報とテナントIDを保つこと', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const user = { id: 'u1', name: 'User', role: 'USER' as const, groups: [] };
+      useAuthStore.setState({ user, isAuthenticated: true, userName: 'User' });
+      sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
+
+      const ok = await useAuthStore.getState().loginWithKey('wrong-key');
+
+      expect(ok).toBe(false);
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().user).toEqual(user);
+      expect(sessionStorage.getItem('AUTH_USER')).not.toBeNull();
+      expect(resolveTenantId()).toBe('tenant-a');
     });
   });
 

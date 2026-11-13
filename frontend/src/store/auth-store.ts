@@ -167,10 +167,11 @@ export const useAuthStore = create<AuthStore>((set) => {
         sessionStorage.setItem('AUTH_USER', JSON.stringify(user));
         return true;
       } catch (e) {
+        // 失敗してもログイン中のセッションは壊さない。移植元はユーザーとテナントIDを消すが、直後のセッション確認で
+        // サブドメインからテナントを補ってログイン中のユーザーに戻る。React はサブドメインを使わないため、
+        // 消すと GET /api/auth が X-Tenant-ID なしで 400 になりログアウトされてしまう（#361）。
+        // URL の tenantId で上書きした分の巻き戻しは呼び出し側（lib/initializers/login-key.ts）が行う
         console.error('Login-key authentication failed', e);
-        setUser(null);
-        sessionStorage.removeItem('AUTH_USER');
-        clearTenantId();
         return false;
       }
     },

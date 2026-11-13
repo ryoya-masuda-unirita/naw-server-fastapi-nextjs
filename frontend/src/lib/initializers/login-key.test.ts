@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { resolveTenantId } from '@/lib/api-client';
+import { persistTenantId, resolveTenantId } from '@/lib/api-client';
 import { runLoginKeyInitializer } from './login-key';
 
 function openUrl(pathWithQuery: string) {
@@ -43,6 +43,42 @@ describe('runLoginKeyInitializer', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(window.location.search).toBe('');
+  });
+
+  test('認証に失敗したら、URL の tenantId で上書きする前のテナントIDに戻すこと', async () => {
+    persistTenantId('session-tenant');
+    openUrl('/dashboard?loginkey=bad-key&tenantId=other-tenant');
+    let tenantDuringAuth = '';
+    const loginWithKey = vi.fn().mockImplementation(async () => {
+      tenantDuringAuth = resolveTenantId();
+      return false;
+    });
+
+    await runLoginKeyInitializer({ loginWithKey });
+
+    expect(tenantDuringAuth).toBe('other-tenant');
+    expect(resolveTenantId()).toBe('session-tenant');
+  });
+
+  test('未ログインで認証に失敗したら、URL の tenantId を残さないこと', async () => {
+    openUrl('/dashboard?loginkey=bad-key&tenantId=other-tenant');
+
+    await runLoginKeyInitializer({ loginWithKey: vi.fn().mockResolvedValue(false) });
+
+    expect(resolveTenantId()).toBe('');
+  });
+
+  test('エラー通知が終わるまで待つこと', async () => {
+    openUrl('/dashboard?loginkey=bad-key');
+    let notified = false;
+    const onError = vi.fn().mockImplementation(async () => {
+      await Promise.resolve();
+      notified = true;
+    });
+
+    await runLoginKeyInitializer({ loginWithKey: vi.fn().mockResolvedValue(false), onError });
+
+    expect(notified).toBe(true);
   });
 
   test('続けて2回呼ばれても認証は1回だけであること（StrictMode の二重実行）', async () => {
