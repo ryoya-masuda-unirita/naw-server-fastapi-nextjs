@@ -164,4 +164,14 @@ describe('useActiveRoom', () => {
     rerender();
     expect(result.current).toBeUndefined();
   });
+
+  test('表示中のルームと別の共有ルームの文脈は返さないこと', () => {
+    useChatStore.setState({
+      activeRoomId: 'r2',
+      sharedRoomContext: { id: 'r9', name: '共有部屋', isPinned: false, category: 'chat' },
+    });
+    const { result } = renderHook(() => useActiveRoom());
+
+    expect(result.current).toBeUndefined();
+  });
 });

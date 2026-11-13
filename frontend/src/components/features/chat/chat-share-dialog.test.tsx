@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
@@ -130,6 +130,18 @@ describe('ChatShareDialog', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(deletedShareId).toBe('s1');
     expect(useRoomsStore.getState().allRooms[0]).toMatchObject({ shareId: null, teamIds: [] });
+  });
+
+  test('無関係なルームの更新では、選びかけのチームを消さないこと', async () => {
+    renderDialog();
+    const user = userEvent.setup();
+    await selectTeam(user, '営業');
+
+    act(() => {
+      useRoomsStore.getState().updateRoom('r1', { name: '改名した部屋' });
+    });
+
+    expect(screen.getByRole('button', { name: 'CHAT.SHARE_DIALOG.SHARE_ACTION' })).toBeEnabled();
   });
 
   test('解除の確認をキャンセルすると API を呼ばず、共有ダイアログを残すこと', async () => {

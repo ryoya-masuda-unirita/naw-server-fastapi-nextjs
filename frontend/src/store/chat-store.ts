@@ -84,5 +84,6 @@ export function useActiveRoom(): ChatRoom | undefined {
   const sharedRoomContext = useChatStore((s) => s.sharedRoomContext);
   const fromList = useRoomsStore((s) => s.allRooms.find((room) => room.id === activeRoomId));
   if (!activeRoomId) return undefined;
-  return fromList ?? sharedRoomContext;
+  // 別のルームへ移ったあとに、前の共有ルームの文脈を返さないよう ID を確かめる（移植元にはない）
+  return fromList ?? (sharedRoomContext?.id === activeRoomId ? sharedRoomContext : undefined);
 }

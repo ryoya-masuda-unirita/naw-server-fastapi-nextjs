@@ -21,12 +21,14 @@ export function ChatShareDialog({ isReadOnly, onClose }: ChatShareDialogProps) {
   const isSharing = useSharesStore((s) => s.isSharing);
   const isUnsharing = useSharesStore((s) => s.isUnsharing);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(room?.teamIds ?? []);
-  const [syncedRoom, setSyncedRoom] = useState(room);
+  // ルームの共有状態が変わったときだけ選択を戻す（無関係な更新で、選びかけの内容を消さない）
+  const roomSyncKey = `${room?.id}|${room?.shareId}|${(room?.teamIds ?? []).join(',')}`;
+  const [syncedKey, setSyncedKey] = useState(roomSyncKey);
   const [isUnshareConfirmOpen, setIsUnshareConfirmOpen] = useState(false);
 
-  // ルームが入れ替わったら（共有・解除でも入れ替わる）、選択をそのルームの共有先へ戻す（移植元の effect）
-  if (room !== syncedRoom) {
-    setSyncedRoom(room);
+  // ルームが替わったり、共有・解除で共有先が変わったら、選択をそのルームの共有先へ戻す（移植元の effect）
+  if (roomSyncKey !== syncedKey) {
+    setSyncedKey(roomSyncKey);
     setSelectedTeamIds(room?.teamIds ?? []);
   }
 
@@ -54,7 +56,9 @@ export function ChatShareDialog({ isReadOnly, onClose }: ChatShareDialogProps) {
 
   const handleCopyShareLink = () => {
     if (!roomShareId) return;
-    void navigator.clipboard.writeText(buildShareUrl(roomShareId));
+    navigator.clipboard.writeText(buildShareUrl(roomShareId)).catch((error: unknown) => {
+      console.error('Copy share link failed', error);
+    });
   };
 
   const handleUnshare = () => {

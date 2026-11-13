@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
+import { useChatStore } from './chat-store';
 import { useRoomsStore } from './rooms-store';
 import { useSharesStore } from './shares-store';
 import { useTeamsStore } from './teams-store';
@@ -13,9 +14,23 @@ beforeEach(() => {
     allRooms: [{ id: 'r1', name: '部屋1', isPinned: false, category: 'chat' }],
   });
   useTeamsStore.setState({ teams: [] });
+  useChatStore.setState({ activeRoomId: null, sharedRoomContext: undefined });
 });
 
 describe('useSharesStore', () => {
+  test('一覧にない共有ルームの文脈にも、共有・解除の結果を反映すること', async () => {
+    useChatStore.setState({
+      activeRoomId: 'r9',
+      sharedRoomContext: { id: 'r9', name: '共有', isPinned: false, category: 'chat', shareId: 's9', teamIds: ['g1'] },
+    });
+
+    await useSharesStore.getState().shareRoom('r9', ['g2']);
+    expect(useChatStore.getState().sharedRoomContext).toMatchObject({ shareId: 'share-1', teamIds: ['g2'] });
+
+    await useSharesStore.getState().unshareRoom('share-1');
+    expect(useChatStore.getState().sharedRoomContext).toMatchObject({ shareId: null, teamIds: [] });
+  });
+
   test('shareRoom は {data} 包みの応答を返し、ルームに共有 ID と共有先を反映すること', async () => {
     const result = await useSharesStore.getState().shareRoom('r1', ['g1']);
 
