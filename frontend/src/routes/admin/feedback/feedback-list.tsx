@@ -1,7 +1,47 @@
-import { NotPortedPage } from '@/components/layouts/not-ported';
+import { useTranslation } from 'react-i18next';
+import { AccuracyTab } from '@/components/features/admin/feedback/accuracy-tab';
+import { CountTab } from '@/components/features/admin/feedback/count-tab';
+import { SatisfactionTab } from '@/components/features/admin/feedback/satisfaction-tab';
+import { AdminPageShell } from '@/components/layouts/admin-page-shell';
+import { PageHeader } from '@/components/shared/page-header';
+import type { TabItem } from '@/components/shared/types';
+import { useTabQueryParam } from '@/hooks/use-tab-query-param';
 
-// 仮の画面。#133 で移植元 features/admin/management/feedback-list を移植し、このファイルの中身を本物に置き換える（export 名は変えない）。
-// ルート定義（routes/index.tsx）・ルート定数・サイドバーは設定済みのため触らなくてよい
+const FEEDBACK_TABS = ['accuracy', 'satisfaction', 'count'] as const;
+type FeedbackTab = (typeof FEEDBACK_TABS)[number];
+
+const TAB_ITEMS: TabItem[] = [
+  { id: 'accuracy', label: 'FEEDBACK.TAB_ACCURACY' },
+  { id: 'satisfaction', label: 'FEEDBACK.TAB_SATISFACTION' },
+  { id: 'count', label: 'FEEDBACK.TAB_COUNT' },
+];
+
+/** 移植元 `AdminFeedbackListComponent`（feedback-list）。フィードバック管理（精度・満足度・回答数の 3 タブ） */
 export function AdminFeedbackListPage() {
-  return <NotPortedPage name="AdminFeedbackListComponent" issue={133} />;
+  const { t } = useTranslation();
+  const { activeTabId, onTabChange } = useTabQueryParam<FeedbackTab>({
+    validTabs: FEEDBACK_TABS,
+    defaultTab: 'accuracy',
+  });
+
+  return (
+    <AdminPageShell
+      header={
+        <PageHeader
+          title={t('SIDEBAR.FEEDBACK')}
+          showSidebarToggle
+          showActions={false}
+          showLanguageToggle
+          showBackButton={false}
+          tabs={TAB_ITEMS}
+          activeTabId={activeTabId}
+          onTabChange={onTabChange}
+        />
+      }
+    >
+      {activeTabId === 'accuracy' && <AccuracyTab />}
+      {activeTabId === 'satisfaction' && <SatisfactionTab />}
+      {activeTabId === 'count' && <CountTab />}
+    </AdminPageShell>
+  );
 }
