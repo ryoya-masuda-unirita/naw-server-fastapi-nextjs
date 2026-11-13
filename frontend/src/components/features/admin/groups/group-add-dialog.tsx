@@ -4,25 +4,8 @@ import { Dialog } from '@/components/shared/dialog';
 import { FormInput } from '@/components/shared/form-input';
 import { useToastStore } from '@/components/shared/toast-store';
 import { useCreateGroup } from '@/hooks/use-group-list';
-import { resolveControlError, type FieldErrors } from '@/lib/utils/form-errors';
-
-/** 移植元 group-list.component の `addForm` の Validators.maxLength */
-const NAME_MAX_LENGTH = 100;
-
-/** ダイアログの幅（移植元 `width: '100%', maxWidth: '800px'`） */
-const DIALOG_WIDTH = 'min(100%, 800px)';
-
-/**
- * Angular の Validators.required・maxLength と同じ判定。
- * required は空文字だけを弾く（空白だけの値は通り、送信時の trim で空になる点も移植元どおり）。
- */
-function validateName(value: string): FieldErrors | null {
-  if (value.length === 0) return { required: true };
-  if (value.length > NAME_MAX_LENGTH) {
-    return { maxlength: { requiredLength: NAME_MAX_LENGTH, actualLength: value.length } };
-  }
-  return null;
-}
+import { resolveControlError } from '@/lib/utils/form-errors';
+import { GROUP_NAME_DIALOG_WIDTH, validateGroupName } from './group-name-validation';
 
 interface GroupAddDialogProps {
   onClose: () => void;
@@ -39,7 +22,7 @@ export function GroupAddDialog({ onClose }: GroupAddDialogProps) {
   const [name, setName] = useState('');
   const [touched, setTouched] = useState(false);
 
-  const errors = validateName(name);
+  const errors = validateGroupName(name);
   const nameError = resolveControlError({ touched, errors }, t);
 
   const submit = async () => {
@@ -67,7 +50,7 @@ export function GroupAddDialog({ onClose }: GroupAddDialogProps) {
       showConfirm
       buttonAlign="right"
       confirmLoading={createMutation.isPending}
-      dialogWidth={DIALOG_WIDTH}
+      dialogWidth={GROUP_NAME_DIALOG_WIDTH}
       onConfirm={() => void submit()}
       onClose={onClose}
     >

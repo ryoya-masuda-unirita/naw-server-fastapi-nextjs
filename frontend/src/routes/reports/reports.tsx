@@ -1,7 +1,27 @@
-import { NotPortedPage } from '@/components/layouts/not-ported';
+import './reports.css';
 
-// 仮の画面。#293 で移植元 features/admin/reports を移植し、このファイルの中身を本物に置き換える（export 名は変えない）。
-// ルート定義（routes/index.tsx）・ルート定数・サイドバーは設定済みのため触らなくてよい
+const PLACEHOLDER_REPORTS = [
+  { icon: '📊', title: 'Sales Report', description: 'View sales analytics' },
+  { icon: '👥', title: 'User Report', description: 'User activity metrics' },
+  { icon: '📈', title: 'Growth Report', description: 'Business growth analytics' },
+];
+
+/** 移植元 `ReportsComponent`（features/admin/reports）。移植元でも中身のないスタブ画面。文言は英語のハードコード */
 export function ReportsPage() {
-  return <NotPortedPage name="ReportsComponent" issue={293} />;
+  return (
+    <div className="page reports-page">
+      <h1>Reports</h1>
+      <p>Analytics and reporting dashboard coming soon...</p>
+
+      <div className="placeholder-cards">
+        {PLACEHOLDER_REPORTS.map((report) => (
+          <div key={report.title} className="placeholder-card">
+            <div className="placeholder-icon">{report.icon}</div>
+            <h3>{report.title}</h3>
+            <p>{report.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

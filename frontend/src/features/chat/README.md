@@ -120,7 +120,7 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 
 - 送信は `ChatWindow` が行う。ルームがなければ `useChatActions().createNewRoom` で作り、`pending-message` に預けて `/chat/:roomId` へ移り、移動先（`AdminChatRoomPage`）が送る
 - `ChatNewRoomDialog` は移植元でも開く手段がない（ヘッダーのボタンがコメントアウト）。部品だけ移してある
-- `AdminChatRoomPage` はサイドバーのルーム一覧（#285）が未移植の間、一覧がなければ読み込む（ヘッダーのルーム名のため）
+- ルーム一覧（ヘッダーのルーム名の元）はサイドバー（`components/layouts/sidebar.tsx`、#285）がマウント時に読み込む。`AdminChatRoomPage` は読み込まない
 
 ## 添付・評価・検索・共有（#287）
 
@@ -138,3 +138,9 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 - **共有閲覧画面（#288）**: `useSharesStore.getState().resolveShareAccess(shareId)` で共有情報を取り、`useChatStore.getState().openSharedRoom(access, shareId)` で開く。画面を離れるときは `clearSharedRoomContext()`。`ChatWindow` の `isReadOnly` に `access.isReadOnly` を渡すと、共有ダイアログは変更不可になる
 - `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
 
+
+## サイドバーのルーム一覧（#285）
+
+- `sidebar.tsx` がチャットのセクション（`SIDEBAR.CHAT`）を作り、ピン・操作メニュー・バッジは `sidebar/sidebar-route-button.tsx`、メニューは `chat-room-menu.tsx`（名前変更・ピン・削除）・`chat-context-menu.tsx`、まとめて削除は `chat-delete-dialog.tsx`、ピンの一括変更は `chat-sort-dialog.tsx`
+- 移植元でも `chat-context-menu` を開くボタンと `openSortDialog` の呼び出し元がない。部品と配線だけ移してあり、画面からは開けない
+- `PUT /api/rooms/pin`・`PUT /api/rooms/reorder` は移植元 server にも無く、呼ぶと失敗する（移植元の画面と同じ）

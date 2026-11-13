@@ -10,10 +10,24 @@ interface ChatRenameDialogProps {
   /** 保存。正規化（前後の空白を除いた）後の名前を渡す */
   onSave: (name: string) => void;
   onCancel: () => void;
+  /** 見出し・ボタンの文言。省略するとチャット画面のヘッダーの名前変更（HEADER.RENAME・COMMON.SAVE・COMMON.CANCEL） */
+  title?: string;
+  cancelText?: string;
+  confirmText?: string;
+  /** 保存中（サイドバーのルーム名変更が使う）。保存ボタンをローディングにする */
+  confirmLoading?: boolean;
 }
 
 /** 移植元 `ChatWindowComponent.openRenameDialog` と `<app-chat-rename-dialog>`。ルーム名の変更 */
-export function ChatRenameDialog({ initialName, onSave, onCancel }: ChatRenameDialogProps) {
+export function ChatRenameDialog({
+  initialName,
+  onSave,
+  onCancel,
+  title,
+  cancelText,
+  confirmText,
+  confirmLoading = false,
+}: ChatRenameDialogProps) {
   const { t } = useTranslation();
   const [name, setName] = useState(initialName);
   const isRenameDisabled = !isValidRoomName(name);
@@ -21,13 +35,14 @@ export function ChatRenameDialog({ initialName, onSave, onCancel }: ChatRenameDi
   return (
     <Dialog
       open
-      title={t('HEADER.RENAME')}
+      title={title ?? t('HEADER.RENAME')}
       showClose={false}
       showCancel
       showConfirm
       buttonAlign="right"
-      cancelText={t('COMMON.CANCEL')}
-      confirmText={t('COMMON.SAVE')}
+      cancelText={cancelText ?? t('COMMON.CANCEL')}
+      confirmText={confirmText ?? t('COMMON.SAVE')}
+      confirmLoading={confirmLoading}
       confirmDisabled={isRenameDisabled}
       dialogWidth="800px"
       onCancel={onCancel}

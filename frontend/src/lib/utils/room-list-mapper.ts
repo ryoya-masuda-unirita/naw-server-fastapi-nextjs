@@ -40,3 +40,8 @@ export function mapRoomListApiResponse(
     mapRoomListApiItemToChatRoom(item, existingById?.get(item.id)),
   );
 }
+
+/** 一覧 API の応答から総件数を取る。件数の項目がなければ、その応答の件数（移植元 getRoomListTotalCount） */
+export function getRoomListTotalCount(response: RoomsListApiResponse): number {
+  return response.total ?? response.totalElements ?? response.content.length;
+}
