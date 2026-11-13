@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { chatAttachmentSlots } from './chat-attachment-slots';
-import { ChatAttachMenuItem } from './chat-attachments';
 import { ChatInput } from './chat-input';
 
 const FIXTURE_PDF = new File(['pdf'], 'report.pdf', { type: 'application/pdf' });
@@ -21,7 +20,6 @@ function renderInput(onSend = vi.fn()) {
           defaultAssistantId={null}
           onSend={onSend}
           {...chatAttachmentSlots}
-          renderAddMenu={() => <ChatAttachMenuItem />}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -105,22 +103,5 @@ describe('チャット入力の添付', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('chat-attached-file-item')).not.toBeInTheDocument();
     });
-  });
-
-  test('＋メニューの項目を押すとファイル選択を開き、メニューを閉じる通知を出すこと', async () => {
-    const onSelected = vi.fn();
-    render(
-      <>
-        <input id="chat-file-upload" type="file" />
-        <ChatAttachMenuItem onSelected={onSelected} />
-      </>,
-    );
-    const input = document.getElementById('chat-file-upload') as HTMLInputElement;
-    const clickSpy = vi.spyOn(input, 'click');
-
-    await userEvent.setup().click(screen.getByTestId('chat-attach-menu-item'));
-
-    expect(clickSpy).toHaveBeenCalled();
-    expect(onSelected).toHaveBeenCalled();
   });
 });

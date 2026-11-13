@@ -98,31 +98,3 @@ export function ChatAttachmentChips({ controls }: { controls: ChatInputControls 
     </div>
   );
 }
-
-/**
- * ＋メニューの「画像またはファイルを添付」の項目。ファイル選択を開き、`onSelected`（メニューを閉じる処理）を呼ぶ。
- * ＋メニュー本体（#286）が、メニューの先頭にこの項目を置く。
- */
-export function ChatAttachMenuItem({ onSelected }: { onSelected?: () => void }) {
-  const { t } = useTranslation();
-
-  const handleClick = () => {
-    document.getElementById(CHAT_FILE_INPUT_ID)?.click();
-    onSelected?.();
-  };
-
-  return (
-    <button
-      type="button"
-      data-testid="chat-attach-menu-item"
-      className="dropdown-item flex min-h-9 items-center gap-2 cursor-pointer rounded-lg w-full px-2 py-1 text-(length:--text-label) font-medium text-text-strong transition-colors duration-150"
-      role="menuitem"
-      onClick={handleClick}
-    >
-      <span className="flex h-5 w-5 shrink-0 justify-center items-center">
-        <ClipIcon />
-      </span>
-      {t('CHAT.INPUT.ATTACH_IMAGE_FILE')}
-    </button>
-  );
-}

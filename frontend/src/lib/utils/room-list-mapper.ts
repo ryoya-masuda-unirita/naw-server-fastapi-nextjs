@@ -27,11 +27,6 @@ export function mapRoomListApiItemToChatRoom(
   };
 }
 
-/** ルーム一覧の総件数（移植元 getRoomListTotalCount） */
-export function getRoomListTotalCount(response: RoomsListApiResponse): number {
-  return response.total ?? response.totalElements ?? response.content.length;
-}
-
 export function mapRoomListApiResponse(
   response: RoomsListApiResponse,
   existingById?: Map<string, ChatRoom>,

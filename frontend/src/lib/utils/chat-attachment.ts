@@ -1,7 +1,7 @@
 import type { ChatInputControls } from '@/hooks/use-chat-input-controls';
 import { isAllowedChatAttachment } from '@/lib/constants/chat-attachment';
 
-/** 添付ファイルを選ぶ input の id（移植元 `#chat-file-upload`）。＋メニューの項目からこの input を開く */
+/** 添付ファイルを選ぶ input の id（移植元 `#chat-file-upload`）。label の for と input の id を結ぶ */
 export const CHAT_FILE_INPUT_ID = 'chat-file-upload';
 
 /**
