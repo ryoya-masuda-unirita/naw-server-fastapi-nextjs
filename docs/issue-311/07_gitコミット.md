@@ -41,3 +41,10 @@
 #311 issue-311 server-local の分の動作確認を記録
     - 08_動作確認.md に pytest・ruff・pre-commit の結果を記録
 ```
+
+## waha-emulator の分（2 本目の PR）
+
+| # | コミット内容 | 対象ファイル |
+|---|---|---|
+| 1 | waha-emulator のテスト用フェイクに docstring を付け、ruff で docstring を強制する | `waha-emulator/pyproject.toml`、`waha-emulator/tests/*.py`、`.github/workflows/generative-ai-adapter-tests.yml` |
+| 2 | 設計・動作確認ドキュメントを追記 | `docs/issue-311/*` |
