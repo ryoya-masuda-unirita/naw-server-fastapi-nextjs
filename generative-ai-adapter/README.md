@@ -16,7 +16,7 @@ uv のワークスペース（このディレクトリがルート）。移植�
 | `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像） | chat・provider・network・media（テキスト・画像）を移植 |
 | `generative-ai-adapter/` | `generative_ai_adapter` | Waha! の生成AIアダプタ本体。通常チャット（出力モード 0・2）と RAG 回答（その他）を core に任せ、`RetrievalAnswer` の JSON を書く | 移植（ログ出力先・HTTP クライアントの互換部分・Office/PDF の薄い層を除く） |
 | `embedding-adapter/` | — | 文書の分割、ベクトル保存・更新・削除 | 後続の Issue |
-| `retrieval-adapter/` | — | ベクトル・ハイブリッド・Graph RAG の検索 | 後続の Issue |
+| `retrieval-adapter/` | `retrieval_adapter` | Waha! の検索アダプタ本体。質問からベクトル・ハイブリッド（PGroonga）・Graph RAG（AGE）で検索し、`LEGACY_TSV`（出力モード 0）か `RAG_CONTEXT_JSON_V1`（出力モード 1）で書く。core の `retrieval` に任せる | 移植（Docs は docs/issue-299） |
 
 **ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で 2 つのテストを一度に動かせる。エミュレーターは adapter だけをパス依存（`../generative-ai-adapter/generative-ai-adapter`）で入れ、core は adapter の依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして両方をイメージへコピーする（`waha-emulator/Dockerfile`）。
 
@@ -38,7 +38,7 @@ cd generative-ai-adapter
 uv sync
 uv run pytest -q
 uv run ruff check . && uv run ruff format --check .
-uv run mypy generative-ai-core && uv run mypy generative-ai-adapter   # tests に同名の conftest.py があるため別々に実行する
+uv run mypy generative-ai-core && uv run mypy generative-ai-adapter && uv run mypy retrieval-adapter   # tests に同名の conftest.py があるため別々に実行する
 ```
 
 - docstring は NumPy 形式（日本語。`Parameters`・`Returns`・`Raises`）。ruff の D ルール（numpy）を `pyproject.toml` で有効にしている
@@ -122,3 +122,18 @@ ls server-local/data/stream-output/     # 途中経過ファイル
 サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`waha-emulator/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して再起動し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
 
 実際の LLM（Azure OpenAI）に向けるときは、`waha-emulator/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
+
+## 検索アダプタ（retrieval-adapter, #299）
+
+RAG チャットは「検索 → 生成AI」の順に 2 つのアダプタを動かす（本物の Waha! のジョブで 2 つを並べるのと同じ）。エミュレーターは、定義に `retrieval` があるサービスで、検索アダプタを出力モード 1 で動かして RAG Context JSON をジョブのディレクトリに書かせ、そのパスを生成AIアダプタの列 index 6（`RAG_CONTEXT_JSON_ALLOW_ROOT` もジョブのディレクトリ）に渡す。
+
+| 検索 | 条件 | 使うもの |
+|---|---|---|
+| ベクトル | 既定 | PostgreSQL（pgvector）。`public.<テーブル>` を `embedding <=> クエリ` の近い順 |
+| ハイブリッド | プロパティ 47 = `1`（PostgreSQL のみ） | 上に PGroonga の全文検索を RRF でまとめ、プロバイダ LLM でリランク（プロパティ 53 = `0` で無効）。PGroonga の拡張・インデックス・実行計画が揃わなければ失敗（ベクトルだけの成功にしない） |
+| Graph RAG | プロパティ 45 = `1`（PostgreSQL のみ） | `graphrag_s01`・`graphrag_s02` と AGE の graph が揃っているか読み取りで確かめ、AGE で前後のチャンク・業務上の関係を広げる |
+| Azure AI Search | VDB プロバイダ 0 | 移植元のマッパーの都合で、プロパティ 31 = `0`（Azure AI Search）は検索プロバイダが未対応になる（core の Azure AI Search 検索は `AzureOpenAI` を渡すテストで確認）。移植元と同じ |
+
+- クエリの埋め込みは、プロパティ 30（OpenAI・AzureOpenAI・SecuAiGent）の埋め込み API。**Python 版だけ** `99`（Echo）は HTTP なしの擬似ベクトル（文字 2-gram のハッシュ。同じ文章は同じベクトル）で、キーなしで動かせる
+- 動かして理解する手順（Docker の `onprem/vector-db` を使う）と、チャット 1 回のログの読み方は [docs/issue-299/08_動作確認.md](../docs/issue-299/08_動作確認.md) と [waha-emulator/README.md](../waha-emulator/README.md)
+- 実 DB の確認用テスト: `NAW_RETRIEVAL_REAL_DB=127.0.0.1:15432 uv run pytest generative-ai-core/tests/test_retrieval_real_postgres.py`（通常は skip。`onprem/vector-db` と同じ構成の DB が必要）

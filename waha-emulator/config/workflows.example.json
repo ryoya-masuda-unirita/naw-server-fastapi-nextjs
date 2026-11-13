@@ -28,6 +28,31 @@
         "MODEL_NAME": "echo",
         "RAG_CONTEXT_JSON_ALLOW_ROOT": "/app/config"
       }
+    },
+    "echo-rag-search": {
+      "outputType": 1,
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo"
+      },
+      "retrieval": {
+        "properties": {
+          "VENDOR": "Echo",
+          "URL": "http://echo.invalid",
+          "API_KEY": "echo",
+          "MODEL_NAME": "echo",
+          "VDB_VENDOR": "PostgreSQL(PGVector)",
+          "VDB_URL": "host.docker.internal:15432",
+          "VDB_USER_NAME": "onprem_vector",
+          "VDB_PASSWORD": "onprem_vector_password",
+          "VDB_DATABASE_NAME": "onprem_vector",
+          "VDB_TABLE_NAME": "vectors",
+          "SEARCH_COUNT": "3",
+          "PROVIDER_LLM_RERANK_ENABLED": "0"
+        }
+      }
     }
   }
 }
