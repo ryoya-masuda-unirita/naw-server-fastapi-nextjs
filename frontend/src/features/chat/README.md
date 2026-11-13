@@ -72,7 +72,21 @@ switchVersion(versionInfo.groupKey, 'prev');
 - `rateMessage` は評価を先に画面へ反映し、失敗したら戻して例外を投げる。**フィードバック管理画面の一覧の再取得は `useChatActions().rateMessage` が行う**ので、画面からはそちらを呼ぶ
 - store は query cache を読めないため、アシスタント一覧は `useChatActions()` が `setAssistantCatalog` で渡す（ルーム名の自動変更・SECURE の model に使う）。チャット画面で `useChatActions()` を 1 回呼ぶこと
 - ライブラリ生成中の途中経過は `lib/chat/library-stream-bridge.ts` の `setLibraryStreamBridge()` に登録された窓口へ流す。ビューワーの store（`store/viewer-store.ts`、#288）が読み込み時に登録する。未登録なら捨てる
-- SECURE アシスタント（ローカルサーバー）: 接続先の判定・トークンの取得（`lib/chat/local-content-token.ts`）・本文の取得・送信先の切り替えまで移植済み。#289 は結合の確認（backend の `GET /api/auth` に `token` があるか等）から始める
+- SECURE アシスタント（ローカルサーバー）: 接続先の判定・トークンの取得（`lib/chat/local-content-token.ts`）・本文の取得・送信先の切り替えまで移植済み。#289 で結合（backend の `GET /api/auth` の `token`、server-local の CORS、メッセージ一覧の `apiKey`・`model`）を確認し、ライブラリ本文の取得（`lib/chat/library-content-api.ts`）を足した。確認結果は `docs/issue-289/`
+- **ビューワー（#288、実装済み）**: ライブラリを開くとき `viewer-store` が `fetchLibraryContent(libraryId)`（`lib/chat/library-content-api.ts`。移植元 `LibraryContentApiService.fetch`）を呼ぶ。詳細（タイトル・アシスタント）を NAW から取り、SECURE ならテナントの LOCAL_SERVER エンドポイントから本文を取る。ローカルへの通信エラーは共通エラートーストを出さず `ApiError` を投げる（移植元の `viewer.service.loadContent` と同じく catch して `contentLoadError` にする）。ローカル側の削除は #136 の `lib/utils/library-local-copy.ts`
+
+### server-local との通し（手動）
+
+自動テスト（MSW）では実物の server-local に届かないため、`onprem/` を起動して確かめる手動用のテストがある（`npm test` には含まれない）。
+
+```bash
+# リポジトリのルートで。waha-emulator は build context がルートのため、onprem/docker-compose.yml の `build: ../waha-emulator` のままでは build できない
+docker build -f waha-emulator/Dockerfile -t naw-onprem-waha-emulator .
+# onprem/docker-compose.yml の waha-emulator を image: naw-onprem-waha-emulator にする上書きファイルで server-local と waha-emulator を起動する
+cd frontend && npx vitest run --config vitest.e2e-local.config.ts
+```
+
+`e2e-local/local-server.e2e.ts` が preflight・送信（SSE）・ルームの読み込み（`POST /api/messages/contents`）・認証キー違いの 401 を確かめる。NAW 側（メッセージ作成・`GET /api/auth`）は MSW で用意する。環境変数 `LOCAL_SERVER_URL`・`LOCAL_SERVER_KEY` で接続先を変えられる。
 
 ## 4. ルーム（`useRoomsStore`）
 
@@ -155,6 +169,14 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 - `Dialog` に `autoFocus` を足した（共有ダイアログは `autoFocus: false`。先頭の `ComboboxMulti` が、フォーカスされて勝手に開くのを防ぐ）
 
 
+## 管理者のチャット履歴詳細（#291）
+
+`routes/admin/chat-history/chat-history-detail.tsx`（`/admin/chat-history/:roomId`）。一覧（#134）が `navigate` の state で渡す `roomName`・`userName`・`userId` を読む。
+
+- `chat-store` の `openAdminHistoryRoom` / `clearAdminHistoryRoomContext`（移植元 `ChatService`）。文脈は共有ルームと同じ `sharedRoomContext` に入る
+- `ChatWindow` を `showHeader={false}`・`isReadOnly` で使う。回答があれば右に `ChatDataPanel`（中身は #288）
+- 画面を離れると文脈・表示中ルーム・メッセージを捨てる（移植元 `ngOnDestroy`）
+
 ## サイドバーのルーム一覧（#285）
 
 - `sidebar.tsx` がチャットのセクション（`SIDEBAR.CHAT`）を作り、ピン・操作メニュー・バッジは `sidebar/sidebar-route-button.tsx`、メニューは `chat-room-menu.tsx`（名前変更・ピン・削除）・`chat-context-menu.tsx`、まとめて削除は `chat-delete-dialog.tsx`、ピンの一括変更は `chat-sort-dialog.tsx`
@@ -176,5 +198,5 @@ const { createNewRoom, submitRoomFeedback } = useChatActions();
 - 資料の一覧は `ChatDataPanel` が `roomId` が替わるたびに `loadList` で読む（モバイルのビューワーもこの一覧を使うので、パネルが hidden でも読む）。ビューワーだけのページ（viewer・library-detail）は自分で読む
 - `ChatRoom` の右パネルは、回答があるか「このルームのライブラリを生成中」のとき出す
 - 共有閲覧は移植元どおり、`access.isReadOnly` に関係なく `ChatWindow`・`ChatDataPanel` に常に `isReadOnly` を渡す
-- SECURE のライブラリ本文は `fetchLibraryBody` が `resolveAssistantEndpoint` で判定し、ローカルサーバー（`{destination}/api/libraries/{id}/content`、`X-Server-Auth-Key`）から取る。#289 は結合の確認から始める
+- SECURE のライブラリ本文の取得は #289 の `lib/chat/library-content-api.ts`（`fetchLibraryContent`）を使う
 - ビューワー API の既定の MSW 応答は `mocks/handlers/viewer.ts`（チャット画面を開くと一覧を読むため）

@@ -27,6 +27,11 @@ export function buildLocalMessageContentUrl(destination: string): string {
   return buildLocalApiUrl(destination, LOCAL_MESSAGE_CONTENT_PATH);
 }
 
+/** ローカルサーバーのライブラリ本文取得 URL（`GET api/libraries/{id}/content`） */
+export function buildLocalLibraryContentUrl(destination: string, libraryId: string): string {
+  return buildLocalApiUrl(destination, `api/libraries/${libraryId}/content`);
+}
+
 export function findSecureLocalEndpoint(
   assistant: MessageListAssistant,
 ): MessageListAssistantEndpoint | undefined {
