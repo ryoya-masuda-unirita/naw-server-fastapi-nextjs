@@ -35,11 +35,11 @@
 | server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `backend/` |
 | server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `server-local/` |
 | Waha! | 顧客の社内 | ユニリタの ETL 製品。LLM に渡すまでのワークフロー（エージェント）を Waha! の中で組み立てて実行する。ワークフローは Waha! 側の設定で、どちらのリポジトリにもない | 製品は対象外。代わりに同じ API を持つ `waha-emulator/` を置く（下記） |
-| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | 未移植（`generative-ai-adapter/` の移植は要件定義中） |
+| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | `generative-ai-adapter/` の生成AIアダプタ（チャット・RAG 回答）を移植済み（#298。[generative-ai-adapter/README.md](./generative-ai-adapter/README.md)）。埋め込み・検索は未移植 |
 
 ## Waha! エミュレーター（server-local と組み合わせて SECURE のチャットを動かす）
 
-Waha! 本体はどちらのリポジトリにもないため、server-local が使う Waha! の servicerun API（`WahaServer/servicerun/api`）だけを同じ形で持つ `waha-emulator/`（FastAPI）を、Waha! の代わりに置く（#274）。いまは土台で、ワークフローは「質問を LLM に 1 回渡して回答を返す」仮のチャットだけ。LLM は `echo`（キー不要。質問をそのまま返す。既定）か Azure OpenAI を環境変数で選ぶ。アダプタ（生成AI・検索・埋め込み）は後続の Issue で移植してワークフローに差し込む。
+Waha! 本体はどちらのリポジトリにもないため、server-local が使う Waha! の servicerun API（`WahaServer/servicerun/api`）だけを同じ形で持つ `waha-emulator/`（FastAPI）を、Waha! の代わりに置く（#274）。ワークフローは、移植した生成AIアダプタ（`generative-ai-adapter/`。通常チャットと RAG 回答）を呼ぶ。サービス ID ごとのアダプタの設定は `WAHA_WORKFLOWS_FILE` の JSON で決め、なければ `echo`（キー不要。質問をそのまま返す。既定）か Azure OpenAI を環境変数で選ぶ。検索・埋め込みのアダプタは後続の Issue で移植してワークフローに差し込む。
 
 組み合わせ方の要点（詳しい手順は [waha-emulator/README.md](./waha-emulator/README.md)）:
 
