@@ -22,6 +22,8 @@ services:
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
       # サービス ID → ワークフローの設定（任意）。例: /app/config/workflows.example.json
       WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}
+      # 埋め込みの学習で filepath を読んでよいディレクトリ（任意。未設定なら filepath での学習は失敗）
+      SOURCE_ALLOWED_DIR: ${SOURCE_ALLOWED_DIR:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # ログの時刻を server-local と揃える
       TZ: ${TZ:-Asia/Tokyo}

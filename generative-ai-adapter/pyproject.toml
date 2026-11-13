@@ -7,6 +7,7 @@ dependencies = [
     "naw-generative-ai-core",
     "naw-generative-ai-adapter",
     "naw-retrieval-adapter",
+    "naw-embedding-adapter",
 ]
 
 [dependency-groups]
@@ -24,19 +25,26 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-# 移植元と同じ分け方。embedding-adapter は後続の Issue で加える
-members = ["generative-ai-core", "generative-ai-adapter", "retrieval-adapter"]
+# 移植元と同じ分け方
+members = [
+    "generative-ai-core",
+    "generative-ai-adapter",
+    "retrieval-adapter",
+    "embedding-adapter",
+]
 
 [tool.uv.sources]
 naw-generative-ai-core = { workspace = true }
 naw-generative-ai-adapter = { workspace = true }
 naw-retrieval-adapter = { workspace = true }
+naw-embedding-adapter = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = [
     "generative-ai-core/tests",
     "generative-ai-adapter/tests",
     "retrieval-adapter/tests",
+    "embedding-adapter/tests",
 ]
 # core と各 adapter の tests に同じ名前のモジュールがあっても衝突しないようにする
 addopts = ["--import-mode=importlib"]
@@ -63,4 +71,5 @@ mypy_path = [
     "generative-ai-core/src",
     "generative-ai-adapter/src",
     "retrieval-adapter/src",
+    "embedding-adapter/src",
 ]

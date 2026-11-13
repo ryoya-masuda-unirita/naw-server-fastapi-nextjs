@@ -18,6 +18,58 @@
         "MODEL_NAME": "echo"
       }
     },
+    "kb-learn": {
+      "adapter": "embedding",
+      "operation": "learn",
+      "defaultSplitLength": 1000,
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs"
+      }
+    },
+    "kb-sync": {
+      "adapter": "embedding",
+      "operation": "sync",
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs"
+      }
+    },
+    "kb-delete": {
+      "adapter": "embedding",
+      "operation": "delete",
+      "properties": {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "echo",
+        "MODEL_NAME": "echo",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs"
+      }
+    },
     "echo-rag": {
       "outputType": 1,
       "ragContextJson": "rag-context.example.json",

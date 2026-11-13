@@ -1,4 +1,4 @@
-# 生成AIアダプタ・検索アダプタ（generative-ai-adapter/。uv ワークスペース: core・各アダプタ）と、
+# 生成AIアダプタ・検索アダプタ・埋め込みアダプタ（generative-ai-adapter/。uv ワークスペース: core・各アダプタ）と、
 # それを呼ぶ Waha! エミュレーター（waha-emulator/）のテスト・Ruff・mypy を検証するワークフロー。
 # 書き方は server-local-tests.yml に揃えている。
 # エミュレーターはアダプタをパス依存で使い、結合テストで server-local のコードも読み込むため、
@@ -21,9 +21,9 @@ on:
       - ".github/workflows/generative-ai-adapter-tests.yml"
 
 jobs:
-  # 生成AIアダプタ・検索アダプタ。LLM・クラウド・DB への接続はテスト内でモックするため、外部サービスは要らない。
+  # 生成AIアダプタ・検索アダプタ・埋め込みアダプタ。LLM・クラウド・DB への接続はテスト内でモックするため、外部サービスは要らない。
   adapter:
-    name: 生成AIアダプタ・検索アダプタ
+    name: 生成AIアダプタ・検索・埋め込みアダプタ
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,6 +64,9 @@ jobs:
 
       - name: 型を検査（検索アダプタ）
         run: uv run mypy retrieval-adapter
+
+      - name: 型を検査（埋め込みアダプタ）
+        run: uv run mypy embedding-adapter
 
   # Waha! エミュレーター。アダプタ（パス依存）と server-local（結合テスト）を使う。
   emulator:

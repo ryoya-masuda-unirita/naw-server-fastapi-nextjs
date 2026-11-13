@@ -1,8 +1,8 @@
 """移植元 TextCoreMediaProcessorTest・ImageCoreMediaProcessorTest・
 CoreMediaProcessorRegistryTest の移植。
 
-レジストリの既定は、Python 版で移植済みの画像とテキストだけ（PDF の期待値は
-UNSUPPORTED_MIME の確認に置き換えている）。
+レジストリの既定は移植元と同じ順序（PDF・Word・PowerPoint・Excel・画像・テキスト）。
+PDF・Office の処理器自体のテストは test_media_office.py。
 """
 
 from pathlib import Path
@@ -16,8 +16,12 @@ from generative_ai_core.media import (
     CoreMediaPreprocessingMode,
     CoreMediaPreprocessingRequest,
     CoreMediaPreprocessingRuntime,
+    ExcelCoreMediaProcessor,
     ImageCoreMediaProcessor,
+    PdfCoreMediaProcessor,
+    PowerPointCoreMediaProcessor,
     TextCoreMediaProcessor,
+    WordCoreMediaProcessor,
 )
 from generative_ai_core.media.runtime import default_processors
 from generative_ai_core.provider.model import Capability
@@ -111,13 +115,20 @@ def test_registry_selects_processor_from_detected_mime_and_extension() -> None:
     """検出した MIME と拡張子から処理器を選ぶこと"""
     assert isinstance(_select("sample.png", "image/png"), ImageCoreMediaProcessor)
     assert isinstance(_select("sample.txt", "text/plain"), TextCoreMediaProcessor)
-    assert _select("sample.pdf", "application/pdf") is None
+    assert isinstance(_select("sample.pdf", "application/pdf"), PdfCoreMediaProcessor)
+    assert isinstance(_select("sample.docx", DOCX_TYPE), WordCoreMediaProcessor)
+    assert isinstance(_select("sample.pptx", PPTX_TYPE), PowerPointCoreMediaProcessor)
+    assert isinstance(_select("sample.xlsx", XLSX_TYPE), ExcelCoreMediaProcessor)
     assert _select("sample.bin", "application/octet-stream") is None
 
 
-def test_registry_defaults_to_image_then_text_only() -> None:
-    """既定の処理器が画像、テキストの順の 2 つだけであること"""
+def test_registry_defaults_follow_the_java_order() -> None:
+    """既定の処理器が移植元と同じ順序であること"""
     assert [type(p) for p in default_processors()] == [
+        PdfCoreMediaProcessor,
+        WordCoreMediaProcessor,
+        PowerPointCoreMediaProcessor,
+        ExcelCoreMediaProcessor,
         ImageCoreMediaProcessor,
         TextCoreMediaProcessor,
     ]
@@ -175,13 +186,13 @@ def test_text_processor_supports_only_non_binary_non_office_non_image() -> None:
     assert not processor.supports(_request("unknown.bin", "application/octet-stream"))
 
 
-@pytest.mark.parametrize("name", ["a.pdf", "a.docx", "a.pptx", "a.xlsx"])
-def test_runtime_returns_unsupported_mime_for_pdf_and_office(
+@pytest.mark.parametrize("name", ["a.doc", "a.xls", "a.ppt"])
+def test_runtime_returns_unsupported_mime_for_legacy_office(
     tmp_path: Path, name: str
 ) -> None:
-    """PDF と Office のファイルが UNSUPPORTED_MIME の失敗になること"""
+    """旧形式の Office（.doc・.xls・.ppt）が UNSUPPORTED_MIME の失敗になること"""
     file = tmp_path / name
-    file.write_bytes(b"%PDF-1.7\n" if name.endswith("pdf") else b"PK\x03\x04\x00")
+    file.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1\x00")
 
     result = CoreMediaPreprocessingRuntime().preprocess(
         CoreMediaPreprocessingRequest(file)

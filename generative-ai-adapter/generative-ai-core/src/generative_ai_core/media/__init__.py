@@ -1,8 +1,7 @@
 """ファイルの前処理（移植元 jp.co.unirita.ai.core.media）。
 
-移植したのはテキスト・画像だけ。PDF・Word・Excel・PowerPoint の処理（移植元の
-Pdf/Word/Excel/PowerPointCoreMediaProcessor）は後続の Issue で移植し、それまでは
-UNSUPPORTED_MIME の失敗になる。
+テキスト・画像（#298）と、PDF・Word・Excel・PowerPoint（#300）を移植している。
+再現できない差（PowerPoint のスライド描画など）は processors_office.py の docstring を参照。
 """
 
 from generative_ai_core.media.model import (
@@ -19,6 +18,12 @@ from generative_ai_core.media.model import (
     CoreMediaPreprocessingResult,
     CoreProcessedImage,
 )
+from generative_ai_core.media.processors_office import (
+    ExcelCoreMediaProcessor,
+    PowerPointCoreMediaProcessor,
+    WordCoreMediaProcessor,
+)
+from generative_ai_core.media.processors_pdf import PdfCoreMediaProcessor
 from generative_ai_core.media.runtime import (
     CoreMediaPreprocessingRuntime,
     CoreMediaProcessor,
@@ -42,7 +47,11 @@ __all__ = [
     "CoreMediaPreprocessingRuntime",
     "CoreMediaProcessor",
     "CoreProcessedImage",
+    "ExcelCoreMediaProcessor",
     "ImageCoreMediaProcessor",
+    "PdfCoreMediaProcessor",
+    "PowerPointCoreMediaProcessor",
     "TextCoreMediaProcessor",
+    "WordCoreMediaProcessor",
     "detect_mime_type",
 ]
