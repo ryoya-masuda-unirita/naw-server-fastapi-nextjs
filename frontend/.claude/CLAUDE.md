@@ -164,7 +164,7 @@ interface PagedResponse<T> {
 
 ### MSW のハンドラー（#279 で決定）
 
-- 置き場所は `src/mocks/handlers/{機能}.ts`（例: `rooms.ts`・`admin-users.ts`）。1ファイルが `xxxHandlers` 配列を export し、`src/mocks/handlers/index.ts` の `handlers` に足す
+- 置き場所は `src/mocks/handlers/{機能}.ts`（例: `rooms.ts`・`admin-users.ts`）。1ファイルが `xxxHandlers`（名前が `Handlers` で終わる）配列を export するだけでよい。`src/mocks/handlers/index.ts` が `handlers/*.ts` を自動で集める（#324）ので、`index.ts` には何も足さない（並列で画面を作っても衝突しない）
 - URL は `mockPath(API_PATHS.X)`（`src/mocks/utils.ts`）で書く。先頭がワイルドカードになり、ベース URL（`VITE_API_URL`・`VITE_AUTH_API_URL`）に関係なく一致する。パスパラメータは `mockPath(API_PATHS.ROOMS.DETAIL(':roomId'))` のように `:名前` を渡す
 - `handlers` はテスト全体（`src/test/setup.ts`）の既定の応答。テストごとに変えたい応答は、テストの中で `server.use(...)` で上書きする（`afterEach` で元に戻る）
 - 応答の形は backend（`backend/app/schemas`）の実際の応答に合わせる。移植元のモック（`core/mocks/handlers/*.mock.ts`）は backend と形が違う場合があるため、そのまま写さない
@@ -236,7 +236,7 @@ src/
 
 4. その画面だけで使う部品は `src/components/features/<機能>/`、API 呼び出しは `src/hooks/use-xxx.ts`、型は `src/types/`、API パスは `src/lib/constants/api-paths.ts`（#279 で整備。足りなければ追加）に置く
 5. 子ルートを持つ画面（グループ詳細のタブ）は、親の画面に `<Outlet />` を置く（子ルートは定義済み）
-6. テストはページと同じ場所に `*.test.tsx` を置く。ガード・レイアウト込みで描画したいときは `src/test/render-app.tsx` の `renderApp(path)` と `setAuthUser(FIXTURE_TENANT_ADMIN)` 等を使う。`src/routes/index.test.tsx`・`guards.test.tsx` は画面の中身に依存しない（パスの一致と遷移先 URL だけを見る）ため直さなくてよい。ただし画面が描画時に API を呼ぶ場合、`guards.test.tsx` で MSW の未定義リクエストのエラーが出ることがあるので、そのときは `src/mocks/handlers/` に自分の API のハンドラーを足して `src/test/setup.ts` に登録する
+6. テストはページと同じ場所に `*.test.tsx` を置く。ガード・レイアウト込みで描画したいときは `src/test/render-app.tsx` の `renderApp(path)` と `setAuthUser(FIXTURE_TENANT_ADMIN)` 等を使う。`src/routes/index.test.tsx`・`guards.test.tsx` は画面の中身に依存しない（パスの一致と遷移先 URL だけを見る）ため直さなくてよい。ただし画面が描画時に API を呼ぶ場合、`guards.test.tsx` で MSW の未定義リクエストのエラーが出ることがあるので、そのときは `src/mocks/handlers/` に自分の API のハンドラーのファイルを足す（自動で登録される）
 
 全画面の移植が終わったら `src/components/layouts/not-ported.tsx` とそのテストを消す。
 
