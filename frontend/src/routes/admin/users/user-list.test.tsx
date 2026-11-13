@@ -112,6 +112,63 @@ describe('ユーザー管理一覧', () => {
     });
   });
 
+  describe('権限フィルター・並べ替え・ページング', () => {
+    /** 一覧の問い合わせのクエリを記録する（21 件あるものとして応答する） */
+    function recordListRequests() {
+      const requested: URLSearchParams[] = [];
+      server.use(
+        http.get(listPath, ({ request }) => {
+          requested.push(new URL(request.url).searchParams);
+          return HttpResponse.json({
+            content: FIXTURE_ADMIN_USER_ROWS,
+            totalElements: 21,
+            totalPages: 3,
+            page: 0,
+            size: 10,
+          });
+        })
+      );
+      return requested;
+    }
+
+    const lastRequest = (requested: URLSearchParams[]) => requested[requested.length - 1] ?? new URLSearchParams();
+
+    test('権限を選ぶと role を付けて 1 ページ目から取り直すこと', async () => {
+      const requested = recordListRequests();
+      const user = await renderList();
+
+      await user.click(screen.getByText('ADMIN.USER_MANAGEMENT.ALL_ROLES'));
+      await user.click(await screen.findByRole('option', { name: 'ADMIN.USER_MANAGEMENT.ROLE_ADMIN' }));
+
+      await waitFor(() => expect(lastRequest(requested).get('role')).toBe('ADMIN'));
+      expect(lastRequest(requested).get('page')).toBe('0');
+    });
+
+    test('並べ替えの項目と順序を選ぶと sort に反映すること', async () => {
+      const requested = recordListRequests();
+      const user = await renderList();
+
+      await user.click(screen.getByTestId('user-sort-trigger'));
+      await user.click((await screen.findAllByTestId('user-sort-field-option'))[2]);
+      await waitFor(() => expect(lastRequest(requested).get('sort')).toBe('role,asc'));
+
+      await user.click(screen.getByTestId('user-sort-trigger'));
+      await user.click((await screen.findAllByTestId('user-sort-order-option'))[1]);
+      await waitFor(() => expect(lastRequest(requested).get('sort')).toBe('role,desc'));
+    });
+
+    test('次のページへ進むと page を 1 にして取り直し、件数を表示すること', async () => {
+      const requested = recordListRequests();
+      const user = await renderList();
+
+      await user.click(screen.getAllByLabelText('Next page')[0]);
+
+      await waitFor(() => expect(lastRequest(requested).get('page')).toBe('1'));
+      await screen.findAllByTestId('admin-users-list-row');
+      expect(screen.getByText('11-20 / 21')).toBeInTheDocument();
+    });
+  });
+
   describe('選択と削除', () => {
     test('行を選ぶと作成ボタンが選択解除・削除ボタンに替わること', async () => {
       const user = await renderList();
