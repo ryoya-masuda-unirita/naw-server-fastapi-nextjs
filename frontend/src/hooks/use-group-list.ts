@@ -146,47 +146,73 @@ export function toViewModel(item: GroupApiItem, lookup: NameLookup): GroupListIt
   };
 }
 
-function hasMissingMembershipInfo(item: GroupListItem): boolean {
-  return (
-    item.adminUserNames.length === 0 ||
-    item.userNames.length === 0 ||
-    item.assistants.length === 0 ||
-    item.templates.length === 0
-  );
-}
-
 interface GroupMemberRow {
   displayName: string | null;
   name: string;
   groupAdmin: boolean;
 }
 
-/** 移植元 `hydrateGroupMembershipInfo` の取得部分。グループ内の一覧から足りない名前を集める */
-async function fetchMembership(groupId: string) {
-  const params = { page: 0, size: GROUP_SCOPED_PAGE_SIZE };
-  const [users, assistants, templates] = await Promise.all([
-    apiClient.get<PagedResponse<GroupMemberRow>>(API_PATHS.ADMIN.GROUPS.USERS(groupId), {
-      params: { ...params, sort: 'updatedAt,desc' },
-      ...SILENT,
-    }),
-    apiClient.get<PagedResponse<NamedRow>>(API_PATHS.ADMIN.GROUPS.ASSISTANTS(groupId), {
-      params: { ...params, sort: 'name,asc' },
-      ...SILENT,
-    }),
-    apiClient.get<PagedResponse<NamedRow>>(API_PATHS.ADMIN.GROUPS.TEMPLATES(groupId), {
-      params: { ...params, sort: 'name,asc' },
-      ...SILENT,
-    }),
-  ]);
+/** グループ内の一覧から補う対象。足りないものだけ取る */
+interface MissingMembership {
+  users: boolean;
+  assistants: boolean;
+  templates: boolean;
+}
+
+function getMissingMembership(item: GroupListItem): MissingMembership {
   return {
-    adminUserNames: users.content
-      .filter((user) => user.groupAdmin)
-      .map((user) => user.displayName ?? user.name),
-    userNames: users.content.map((user) => user.displayName ?? user.name),
-    assistants: assistants.content.map((assistant) => assistant.name),
-    templates: templates.content.map((template) => template.name),
+    users: item.adminUserNames.length === 0 || item.userNames.length === 0,
+    assistants: item.assistants.length === 0,
+    templates: item.templates.length === 0,
   };
 }
+
+interface Membership {
+  adminUserNames: string[];
+  userNames: string[];
+  assistants: string[];
+  templates: string[];
+}
+
+/**
+ * 移植元 `hydrateGroupMembershipInfo` の取得部分。グループ内の一覧から足りない名前を集める。
+ * 移植元は 3 つとも取って足りない項目だけ使うので、結果が同じになるよう足りない分だけ取る。
+ */
+async function fetchMembership(groupId: string, missing: MissingMembership): Promise<Membership> {
+  const params = { page: 0, size: GROUP_SCOPED_PAGE_SIZE };
+  const [users, assistants, templates] = await Promise.all([
+    missing.users
+      ? apiClient.get<PagedResponse<GroupMemberRow>>(API_PATHS.ADMIN.GROUPS.USERS(groupId), {
+          params: { ...params, sort: 'updatedAt,desc' },
+          ...SILENT,
+        })
+      : null,
+    missing.assistants
+      ? apiClient.get<PagedResponse<NamedRow>>(API_PATHS.ADMIN.GROUPS.ASSISTANTS(groupId), {
+          params: { ...params, sort: 'name,asc' },
+          ...SILENT,
+        })
+      : null,
+    missing.templates
+      ? apiClient.get<PagedResponse<NamedRow>>(API_PATHS.ADMIN.GROUPS.TEMPLATES(groupId), {
+          params: { ...params, sort: 'name,asc' },
+          ...SILENT,
+        })
+      : null,
+  ]);
+  const userRows = users?.content ?? [];
+  return {
+    adminUserNames: userRows
+      .filter((user) => user.groupAdmin)
+      .map((user) => user.displayName ?? user.name),
+    userNames: userRows.map((user) => user.displayName ?? user.name),
+    assistants: (assistants?.content ?? []).map((assistant) => assistant.name),
+    templates: (templates?.content ?? []).map((template) => template.name),
+  };
+}
+
+/** 補完の結果を使い回す時間。実際に空のチームを、画面を開くたびに取り直さないため */
+const MEMBERSHIP_STALE_MS = 60_000;
 
 /**
  * 一覧に名前が足りないグループを、グループ内の一覧で補う（移植元 `hydrateMissingMembershipInfo`）。
@@ -194,13 +220,17 @@ async function fetchMembership(groupId: string) {
  */
 export function useHydratedGroupItems(items: GroupListItem[], enabled: boolean): GroupListItem[] {
   const results = useQueries({
-    queries: items.map((item) => ({
-      queryKey: [GROUP_LIST_QUERY_KEY, 'membership', item.id],
-      enabled: enabled && hasMissingMembershipInfo(item),
-      refetchOnWindowFocus: false,
-      retry: false,
-      queryFn: () => fetchMembership(item.id),
-    })),
+    queries: items.map((item) => {
+      const missing = getMissingMembership(item);
+      return {
+        queryKey: [GROUP_LIST_QUERY_KEY, 'membership', item.id, missing],
+        enabled: enabled && (missing.users || missing.assistants || missing.templates),
+        refetchOnWindowFocus: false,
+        staleTime: MEMBERSHIP_STALE_MS,
+        retry: false,
+        queryFn: () => fetchMembership(item.id, missing),
+      };
+    }),
   });
 
   return items.map((item, index) => {
@@ -208,7 +238,8 @@ export function useHydratedGroupItems(items: GroupListItem[], enabled: boolean):
     if (!membership) return item;
     return {
       ...item,
-      adminUserNames: item.adminUserNames.length > 0 ? item.adminUserNames : membership.adminUserNames,
+      adminUserNames:
+        item.adminUserNames.length > 0 ? item.adminUserNames : membership.adminUserNames,
       userNames: item.userNames.length > 0 ? item.userNames : membership.userNames,
       assistants: item.assistants.length > 0 ? item.assistants : membership.assistants,
       templates: item.templates.length > 0 ? item.templates : membership.templates,
@@ -222,11 +253,12 @@ export function useCreateGroup() {
   return useMutation({
     mutationFn: (payload: GroupNamePayload) =>
       apiClient.post<GroupDetailApiItem>(API_PATHS.ADMIN.GROUPS.LIST, payload, SILENT),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: [GROUP_LIST_QUERY_KEY] }),
-        // テンプレート管理などのグループ選択肢にも新しいグループを出す
-        queryClient.invalidateQueries({ queryKey: [GROUP_OPTIONS_QUERY_KEY] }),
-      ]),
+    onSuccess: () => {
+      // 対応表は作成で変わらないので、一覧だけ取り直す。待たないのは、作成に成功したのに
+      // 再取得の失敗で「作成に失敗しました」と出さないため
+      void queryClient.invalidateQueries({ queryKey: [GROUP_LIST_QUERY_KEY, 'list'] });
+      // テンプレート管理などのグループ選択肢にも新しいグループを出す
+      void queryClient.invalidateQueries({ queryKey: [GROUP_OPTIONS_QUERY_KEY] });
+    },
   });
 }

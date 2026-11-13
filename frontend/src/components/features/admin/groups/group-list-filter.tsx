@@ -65,7 +65,7 @@ export function GroupListFilter({
   };
 
   const handleSortOrderChange = (value: string | null) => {
-    const order = (value ?? '') as GroupSortOrder;
+    const order = (value as GroupSortOrder | null) ?? 'desc';
     setSortOrder(order);
     emit({ sortOrder: order });
   };
