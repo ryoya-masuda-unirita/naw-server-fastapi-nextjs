@@ -1,8 +1,26 @@
+from typing import Any
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assistant import AssistantCategoryMapping
+from app.models.assistant import Assistant, AssistantCategoryMapping
 from app.models.assistant_category import AssistantCategory
+
+# 並べ替えのキーにするカテゴリ名。移植元（`primaryCategoryNameExpression`）は、行が重複しない
+# よう、画面に表示される category と同じ「カテゴリIDの昇順で先頭」のカテゴリ名を使う。
+# カテゴリを持たないアシスタントは NULL になる。
+PRIMARY_CATEGORY_NAME: Any = (
+    select(AssistantCategory.name)
+    .join(
+        AssistantCategoryMapping,
+        AssistantCategoryMapping.category_id == AssistantCategory.id,
+    )
+    .where(AssistantCategoryMapping.assistant_id == Assistant.id)
+    .order_by(AssistantCategory.id.asc())
+    .limit(1)
+    .correlate(Assistant)
+    .scalar_subquery()
+)
 
 
 class AssistantCategoryMappingRepository:

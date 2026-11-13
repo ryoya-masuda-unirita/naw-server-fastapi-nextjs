@@ -1933,6 +1933,77 @@ class TestListGroupsSort:
         assert [g["name"] for g in response.json()["data"]] == ["new", "old"]
 
 
+async def _add_categorized_assistants(
+    session: AsyncSession, tenant_id: str, user_id: UUID, group_id: str | None = None
+) -> dict[str, str]:
+    """カテゴリ順の並べ替え確認用に、カテゴリ付きのアシスタントを3件作る。
+
+    カテゴリ名は ID の昇順に Charlie・Alpha・Bravo とする。a3 は Charlie と Alpha の2つを持ち、
+    表示用の先頭カテゴリ（ID 昇順）は Charlie になる。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        テスト用の DB セッション。
+    tenant_id : str
+        テナント ID。
+    user_id : UUID
+        カテゴリの更新ユーザー ID。
+    group_id : str | None
+        指定した場合、3件をこのグループに追加日時の順（a1, a2, a3）で所属させる。
+
+    Returns
+    -------
+    dict[str, str]
+        アシスタント名（a1〜a3）からアシスタント ID への対応。
+    """
+    category_names = {"cat-1": "Charlie", "cat-2": "Alpha", "cat-3": "Bravo"}
+    for category_id, name in category_names.items():
+        session.add(
+            AssistantCategory(
+                id=category_id,
+                tenant_id=tenant_id,
+                name=name,
+                updated_user_id=user_id,
+            )
+        )
+    categories_by_assistant = {
+        "a1": ["cat-2"],
+        "a2": ["cat-3"],
+        "a3": ["cat-1", "cat-2"],
+    }
+    ids: dict[str, str] = {}
+    for index, (name, category_ids) in enumerate(categories_by_assistant.items()):
+        assistant = Assistant(
+            tenant_id=tenant_id,
+            type=AssistantType.SAAS_CHAT,
+            name=name,
+            include_history=False,
+        )
+        session.add(assistant)
+        await session.flush()
+        ids[name] = assistant.id
+        for category_id in category_ids:
+            session.add(
+                AssistantCategoryMapping(
+                    assistant_id=assistant.id,
+                    category_id=category_id,
+                    tenant_id=tenant_id,
+                )
+            )
+        if group_id is not None:
+            session.add(
+                GroupAssistant(
+                    group_id=group_id,
+                    tenant_id=tenant_id,
+                    assistant_id=assistant.id,
+                    updated_at=datetime(2026, 1, 1 + index, tzinfo=timezone.utc),
+                )
+            )
+    await session.commit()
+    return ids
+
+
 @pytest.mark.asyncio
 class TestGroupMembersSort:
     """GET /api/admin/groups/{groupId}/assistants・prompt-templates の並べ替え（Issue #225）"""
@@ -2018,6 +2089,91 @@ class TestGroupMembersSort:
 
         assert response.status_code == 200
         assert [a["name"] for a in response.json()["content"]] == ["zulu", "alpha"]
+
+    async def test_assistants_sort_by_category_uses_first_category_name(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        group: Group,
+    ) -> None:
+        """sort=category で先頭カテゴリ（ID昇順）の名前順になり、行が重複しないこと"""
+        ids = await _add_categorized_assistants(
+            session, tenant.id, admin_user.id, group.id
+        )
+
+        async with client as c:
+            asc_res = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"sort": "category,asc"},
+            )
+            desc_res = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"sort": "category,desc"},
+            )
+
+        assert asc_res.status_code == 200
+        assert desc_res.status_code == 200
+        # Alpha(a1)・Bravo(a2)・Charlie(a3)。a3 は Alpha も持つが先頭は Charlie
+        assert [a["id"] for a in asc_res.json()["content"]] == [
+            ids["a1"],
+            ids["a2"],
+            ids["a3"],
+        ]
+        assert asc_res.json()["totalElements"] == 3
+        assert [a["id"] for a in desc_res.json()["content"]] == [
+            ids["a3"],
+            ids["a2"],
+            ids["a1"],
+        ]
+
+    async def test_assistants_sort_by_category_with_server_filter(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        group: Group,
+    ) -> None:
+        """サーバー種別で絞り込んだうえでカテゴリ順に並べられること"""
+        ids = await _add_categorized_assistants(
+            session, tenant.id, admin_user.id, group.id
+        )
+        # 絞り込みで除外されることを確かめるため、別種別のアシスタントを所属させる
+        secure = Assistant(
+            tenant_id=tenant.id,
+            type=AssistantType.SECURE,
+            name="secure",
+            include_history=False,
+        )
+        session.add(secure)
+        await session.flush()
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=secure.id
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/groups/{group.id}/assistants",
+                headers=admin_headers,
+                params={"type": "SAAS_CHAT", "sort": "category,desc"},
+            )
+
+        assert response.status_code == 200
+        assert [a["id"] for a in response.json()["content"]] == [
+            ids["a3"],
+            ids["a2"],
+            ids["a1"],
+        ]
+        assert response.json()["totalElements"] == 3
 
     async def test_prompt_templates_sort_by_added_at_reverses_rows_with_same_timestamp(
         self,

@@ -12,6 +12,9 @@ from app.models.assistant import (
     AssistantType,
     GroupAssistant,
 )
+from app.repositories.assistant_category_mapping_repository import (
+    PRIMARY_CATEGORY_NAME,
+)
 
 # 移植元は種別を varchar で持つため、宣言順ではなく文字列順で並べる
 _TYPE_SORT_COLUMN: Any = enum_as_string(Assistant.type)
@@ -20,8 +23,9 @@ _TYPE_SORT_COLUMN: Any = enum_as_string(Assistant.type)
 # secuaigent-client（AssistantSortField）は実際に"assistantType"を送信するため、
 # アシスタント種別の列に対応づける。"serverType"・"server"は移植元Javaのマップに
 # 存在した別名で、念のため同様に扱う。
-# "category"（カテゴリ名順）はM2Mの多重度により単純な列ソートに落とし込めないため、
-# 更新日時順にフォールバックする。対応表にないキーも更新日時順にする。
+# "category"（カテゴリ名順）は移植元と同じく、先頭カテゴリ（カテゴリID昇順）の名前で並べる。
+# 移植元は結合で行が重複しうるが、こちらは副問い合わせで1アシスタント1行に保つ。
+# 対応表にないキーは更新日時順にする。
 _SORT_COLUMNS: dict[str, Any] = {
     "name": Assistant.name,
     "type": _TYPE_SORT_COLUMN,
@@ -30,7 +34,7 @@ _SORT_COLUMNS: dict[str, Any] = {
     "server": _TYPE_SORT_COLUMN,
     "includeHistory": Assistant.include_history,
     "updatedAt": Assistant.updated_at,
-    "category": Assistant.updated_at,
+    "category": PRIMARY_CATEGORY_NAME,
 }
 
 
