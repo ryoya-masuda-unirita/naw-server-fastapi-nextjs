@@ -101,5 +101,11 @@ class LibraryGetResponse(BaseModel):
     data: str | None
 
 
+class LibraryContentResponse(BaseModel):
+    """ライブラリ本文取得（GET /api/libraries/{libraryId}/content）のレスポンス。"""
+
+    data: str
+
+
 class LibraryUpdateResponse(BaseModel):
     id: str

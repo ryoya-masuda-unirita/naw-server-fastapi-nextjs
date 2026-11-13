@@ -62,7 +62,12 @@ Angular 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/client`
 | NgRx signalStore（UI 状態部分） | Zustand store |
 | `withComputed` | `useMemo` |
 | `@Injectable({ providedIn: 'root' })` Service | TanStack Query hooks / Zustand（singleton） |
-| Angular Guard | React Router の `loader` / コンポーネント内での認証チェック |
+| Angular Guard（`canActivate`） | ルート要素を包むガードコンポーネント（`src/routes/guards.tsx`。`RequireAuth` 等） |
+| `loadComponent`（遅延読み込み） | `src/routes/index.tsx` の `lazyNamed()` + `page()`（`React.lazy` + `Suspense`） |
+| `<mat-icon>`（Material Symbols Outlined） | `MatIcon`（`src/components/shared/icons/mat-icon.tsx`） |
+| `<app-svg-icon>` | `SvgIcon`（`src/components/shared/icons/svg-icon.tsx`。移植元の全アイコンを移植済み） |
+| `<app-admin-page-shell>` | `AdminPageShell`（`src/components/layouts/admin-page-shell.tsx`） |
+| AuthStore の `isAdmin`・`isGroupAdmin`・`isGroupAdminOnly`・`canAccessAdminConsole`・`adminGroupIds` | `useAuthStore` の同名の値 |
 | `HttpInterceptor`（モック） | MSW（Mock Service Worker） |
 | `ngx-translate` | react-i18next |
 | `ChangeDetectionStrategy.OnPush` | `React.memo` / `useMemo` / `useCallback` による再レンダリング最適化 |
@@ -137,29 +142,103 @@ interface PagedResponse<T> {
 }
 ```
 
+`PagedResponse` は `src/types/api-response.type.ts` にある。ただし backend の一部 API はこの形でない（ユーザー一覧の `page`、`GET /api/admin/groups` の `{ data, total, page, size }` など）。移植元の型と backend の応答の違いは `docs/issue-279/api-backend-diff.md` に一覧がある。画面を移植するときは、使う API の行を先に確認する。
+
+### API パス・型・api-client（#279）
+
+- **API パス**は `src/lib/constants/api-paths.ts` の `API_PATHS` を使い、文字列を直書きしない。移植元 `api-paths.config.ts` の全パスに加え、移植元で画面ごとに持っていた定数（`TEMPLATE_LIST_API_PATH`・`ASSISTANT_LIST_API_PATH`・`TRAINING_DATA_API_PATH`・`USER_LIST_API_PATH`）のパスもここにある。キー名は移植元と同じ
+  - 移植元と違い、値に `/api` を含める（例: 移植元 `/rooms` → `/api/rooms`）。ログイン系の `/auth/...` だけは `/api` を付けない（api-client が `VITE_AUTH_API_URL` を前置する。#240）
+  - 足りないパスが見つかったら、画面のファイルではなく `API_PATHS` に足す
+- **API の型**は `src/types/` にある（移植元 `src/types/` と同じファイル名・構成。`chat/`・`admin/` 配下も同じ）。画面ごとに API の型を作り直さない。UI だけで使う型は画面側に置いてよい
+- **api-client**（`src/lib/api-client.ts`）
+  - `get` / `post` / `put` / `patch` / `delete`（`delete` の本文は `options.body`）。どのメソッドも `headers`・`params` を渡せる
+  - `params` の配列は同じキーを繰り返して送る（`tagIds=a&tagIds=b`）。`undefined`・`null` は送らない
+  - 本文が `FormData` ならそのまま multipart で送る（`Content-Type` を付けない）
+  - `responseType: 'text' | 'blob'`（既定 `json`）。204・空の本文は `null` を返す
+  - エラーは `ApiError`（`status`・`body`・`method`・`path`。`message` は `HTTP {status}`）を投げる。通信自体の失敗は `status: 0`
+  - 共通のエラートーストを出したくない（画面で個別に表示する）ときは `skipGlobalErrorToast: true`
+  - `http(s)://` で始まる絶対 URL はベース URL を付けずに送り、401 でもセッションを破棄しない（移植元の `*FromCustomUrl`。ローカルサーバ向け）
+  - SSE など `Response` をそのまま読むときは `apiClient.stream(path, { body, headers })`（共通のエラー処理は通らない）
+  - 移植元 `errorInterceptor` 相当（エラートースト・401 でログイン画面へ）は `hooks/use-api-error-interceptor.ts` が `main.tsx` で登録している。トーストは `showErrorToast` に渡す（トースト部品の移植後に接続する）
+- **共通 util**: `src/lib/utils/`（`api-datetime`・`display-date`・`validation`・`form-errors`・`scroll-to-error`・`tab-query-param`）、hooks は `use-debounced-value`・`use-tab-query-param`・`use-credit-usage`・`use-token-usage`
+
+### MSW のハンドラー（#279 で決定）
+
+- 置き場所は `src/mocks/handlers/{機能}.ts`（例: `rooms.ts`・`admin-users.ts`）。1ファイルが `xxxHandlers` 配列を export し、`src/mocks/handlers/index.ts` の `handlers` に足す
+- URL は `mockPath(API_PATHS.X)`（`src/mocks/utils.ts`）で書く。先頭がワイルドカードになり、ベース URL（`VITE_API_URL`・`VITE_AUTH_API_URL`）に関係なく一致する。パスパラメータは `mockPath(API_PATHS.ROOMS.DETAIL(':roomId'))` のように `:名前` を渡す
+- `handlers` はテスト全体（`src/test/setup.ts`）の既定の応答。テストごとに変えたい応答は、テストの中で `server.use(...)` で上書きする（`afterEach` で元に戻る）
+- 応答の形は backend（`backend/app/schemas`）の実際の応答に合わせる。移植元のモック（`core/mocks/handlers/*.mock.ts`）は backend と形が違う場合があるため、そのまま写さない
+- 現在 MSW はテストだけで使う（開発サーバーでのモック起動はしていない）
+
 ---
 
 ## ディレクトリ構造
 
+ページ（ルート 1 つ分の画面）は `src/routes/` に **URL と同じ階層**で置く。移植元の `features/admin/management/*`（URL は `/admin/*`）は `src/routes/admin/*` になる。
+
 ```
 src/
-├── routes/                 # ルーティング定義・ページコンポーネント
-│   ├── auth/               # 認証関連ページ
-│   ├── admin/              # 管理者向けページ
-│   └── chat/               # チャットページ
+├── routes/                       # ページ（URL と同じ階層）
+│   ├── index.tsx                 # ルート定義（全画面の枠を定義済み。画面の移植では触らない）
+│   ├── guards.tsx                # 権限ガード（移植元 core/guards）
+│   ├── auth/                     # /auth/login・/auth/password/reset
+│   ├── admin/                    # /admin/*（管理コンソール。移植元 features/admin/management）
+│   │   ├── users/  groups/  tenant/  chat-history/  assistants/  templates/  feedback/  training-data/
+│   ├── chat/                     # /chat/new・/chat/assistant・/chat/:roomId・/chat/viewer/:chatId・/chat/share/:shareId
+│   ├── library/                  # /library・/library/:id
+│   ├── chat-shared-history/      # /chat-shared-history/:roomId
+│   ├── feedback-preview/         # /feedback-preview/:roomId
+│   ├── users/                    # /users*（旧ユーザー管理）
+│   ├── reports/  settings/
 ├── components/
-│   ├── features/           # 機能固有コンポーネント
-│   │   ├── admin/
-│   │   └── chat/
-│   ├── layouts/            # レイアウトコンポーネント
-│   └── shared/             # 共通コンポーネント
-├── hooks/                  # TanStack Query hooks
-├── store/                  # Zustand stores
+│   ├── features/<機能>/          # その画面・機能だけで使う部品（例: features/admin/users/user-table.tsx、features/chat/...）
+│   ├── layouts/                  # 管理レイアウト・サイドバー・AdminPageShell・認証レイアウト
+│   └── shared/                   # 複数画面で使う共通部品（共通 UI は #278）。icons/ に SvgIcon・MatIcon
+├── hooks/                        # TanStack Query hooks（use-xxx.ts）
+├── store/                        # Zustand stores
 ├── lib/
-│   ├── api-client.ts       # fetch のラッパー
-│   └── constants/          # ルート定義・API パス定数
-└── types/                  # 型定義（API レスポンス型等）
+│   ├── api-client.ts             # fetch のラッパー
+│   └── constants/                # routes.ts（ルート定数）・layout.ts（サイドバー設定）・api-paths.ts（API パス）
+├── types/                        # 型定義（API レスポンス型等）
+└── test/                         # テストの共通設定・ヘルパー（render-app.tsx）
 ```
+
+### ルート・ガード・サイドバーの前提（#277 で定義済み）
+
+- **全画面のパス・ルートの枠・ガードは `src/routes/index.tsx` に定義済み**。未移植の画面は `src/routes/**` の仮ファイル（`NotPortedPage` で「未移植: 〇〇Component（#Issue番号）」を表示）になっている
+- ルート定数は `src/lib/constants/routes.ts` の `ROUTES`（移植元 `routes.config.ts` と同じ名前・同じ値）。遷移先は文字列を直書きせず `ROUTES.APP.ADMIN_GROUP_DETAIL(id)` 等を使う
+- ガードの割り当ては移植元と同じ（`/admin/*` は `RequireAdminConsole`、テナント管理者だけの画面は `RequireTenantAdmin`、グループ詳細は `RequireGroupAccess`、旧ユーザー管理・レポート・設定は `RequireAdmin`）。画面の中で権限を見たいときは `useAuthStore` の `isAdmin`・`isGroupAdminOnly`・`adminGroupIds` 等を使う
+- サイドバー（`src/components/layouts/sidebar.tsx`）のナビ項目・管理メニュー（権限別）・ユーザーメニューは定義済み。モード（通常・管理・戻る）は URL から決まる（`sidebar-mode.ts`）
+- サイドバーから開くダイアログは仮ファイルになっている。担当はそのファイルだけを書き換える（`open`・`onClose` の props は変えない）
+  - 新しいチャット: `src/components/features/chat/new-chat-dialog.tsx`（#284）
+  - チャット検索: `src/components/features/chat/chat-search-modal.tsx`（#287）
+  - クレジット確認: `src/components/layouts/usage-dialog.tsx`（担当未定）
+- `AdminLayout` のモバイル用の開くボタン（`open-mobile-sidebar`）は移植元にない仮のもの。移植元どおりページヘッダー（#278 の `PageHeader`）に開閉ボタンが入ったら消す
+- サイドバーは `/dashboard`・`/chat/new` へ移るたびに TanStack Query の `['assistants']`・`['prompt-templates']` を無効化する（移植元と同じ）。アシスタント一覧・テンプレート一覧の query key はこの 2 つを先頭にする
+- 用語集（`/glossary` 配下）・データソースは移植元で非表示にした機能のため、ルートもサイドバー項目も作らない
+- i18n 辞書（`public/i18n/ja.json`・`en.json`）は移植元を丸ごと移植済み。**画面の移植でキーを足さない**（移植元にないキーが必要なら、移植元の最新を確認し、辞書ごと移植元に揃える）。React 独自のキーは `AUTH.LOGIN.TENANT_ID_*` だけ
+
+### 画面を足す（未移植の画面を移植する）手順
+
+1. `src/routes/index.tsx` で担当画面のパスと import 先（仮ファイル）を確認する。**`routes/index.tsx`・`lib/constants/routes.ts`・`components/layouts/sidebar.tsx`・`lib/constants/layout.ts`・`public/i18n/*` は触らない**
+2. 仮ファイル（例: `src/routes/admin/users/user-list.tsx`）の中身を本物に置き換える。**export 名（例: `AdminUserListPage`）は変えない**（`routes/index.tsx` が名前で遅延読み込みしているため）
+3. 管理画面は `AdminPageShell` で包み、`header` に共通 UI（#278）の `PageHeader` を渡す（移植元の `<app-admin-page-shell [titleKey]="...">` に相当）
+
+   ```tsx
+   export function AdminUserListPage() {
+     return (
+       <AdminPageShell header={<PageHeader titleKey="ADMIN_CONSOLE.USER_MANAGEMENT" />}>
+         ...
+       </AdminPageShell>
+     );
+   }
+   ```
+
+4. その画面だけで使う部品は `src/components/features/<機能>/`、API 呼び出しは `src/hooks/use-xxx.ts`、型は `src/types/`、API パスは `src/lib/constants/api-paths.ts`（#279 で整備。足りなければ追加）に置く
+5. 子ルートを持つ画面（グループ詳細のタブ）は、親の画面に `<Outlet />` を置く（子ルートは定義済み）
+6. テストはページと同じ場所に `*.test.tsx` を置く。ガード・レイアウト込みで描画したいときは `src/test/render-app.tsx` の `renderApp(path)` と `setAuthUser(FIXTURE_TENANT_ADMIN)` 等を使う。`src/routes/index.test.tsx`・`guards.test.tsx` は画面の中身に依存しない（パスの一致と遷移先 URL だけを見る）ため直さなくてよい。ただし画面が描画時に API を呼ぶ場合、`guards.test.tsx` で MSW の未定義リクエストのエラーが出ることがあるので、そのときは `src/mocks/handlers/` に自分の API のハンドラーを足して `src/test/setup.ts` に登録する
+
+全画面の移植が終わったら `src/components/layouts/not-ported.tsx` とそのテストを消す。
 
 ---
 

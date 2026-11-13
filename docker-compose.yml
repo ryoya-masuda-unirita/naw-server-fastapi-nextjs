@@ -1,4 +1,5 @@
 services:
+  # backend の DB（PostgreSQL）
   postgres:
     image: postgres:18
     container_name: naw-fastapi-postgres
@@ -18,6 +19,7 @@ services:
       timeout: 5s
       retries: 20
 
+  # ログインセッションの保存先
   redis:
     image: redis:7
     container_name: naw-fastapi-redis
@@ -31,6 +33,7 @@ services:
       timeout: 5s
       retries: 20
 
+  # AWS（S3・SQS）の偽物。ユーザーの一括登録で使う
   localstack:
     image: localstack/localstack:3
     container_name: naw-fastapi-localstack
@@ -48,6 +51,7 @@ services:
       timeout: 5s
       retries: 20
 
+  # FastAPI の backend
   backend:
     build:
       context: ./backend

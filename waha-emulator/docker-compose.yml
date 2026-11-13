@@ -1,0 +1,34 @@
+# Waha! エミュレーターを単体で起動する Compose 定義。
+# 値は同じディレクトリの .env（.env.example をコピーして作る）から読み込む。
+services:
+  waha-emulator:
+    build: .
+    image: naw-waha-emulator:latest
+    container_name: naw-waha-emulator
+    # server-local が作ったストリームファイルに追記するため、server-local と UID/GID を揃える
+    user: "${WAHA_EMULATOR_UID:-1000}:${WAHA_EMULATOR_GID:-1000}"
+    ports:
+      - "${WAHA_EMULATOR_PORT:-8091}:8080"
+    environment:
+      WAHA_AUTHKEY: ${WAHA_AUTHKEY:?WAHA_AUTHKEY を .env に設定してください}
+      EXECUTE_WAIT_FOR_COMPLETION: ${EXECUTE_WAIT_FOR_COMPLETION:-true}
+      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # ログの時刻を server-local と揃える
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      # server-local のストリームファイルの出力先（server-local のコンテナでは
+      # /app/data/stream-output）を同じパスでマウントする。server-local が渡すパスを
+      # そのまま使えるため、server-local の STREAM_WAHA_OUTPUT_DIR は設定しなくてよい。
+      # ディレクトリがないと Docker が root 所有で作り、uid 1000 の server-local が
+      # 書けなくなるため、作らずに起動エラーにする（先に mkdir しておく）
+      - type: bind
+        source: ${WAHA_EMULATOR_STREAM_DIR:-../server-local/data/stream-output}
+        target: /app/data/stream-output
+        bind:
+          create_host_path: false
+    restart: unless-stopped

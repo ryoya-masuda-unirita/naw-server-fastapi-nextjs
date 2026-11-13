@@ -2,9 +2,9 @@ import '@testing-library/jest-dom';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import { authHandlers } from '@/mocks/handlers/auth';
+import { handlers } from '@/mocks/handlers';
 
-export const server = setupServer(...authHandlers);
+export const server = setupServer(...handlers);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
