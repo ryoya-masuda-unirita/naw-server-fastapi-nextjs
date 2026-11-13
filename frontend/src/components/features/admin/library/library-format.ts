@@ -31,6 +31,11 @@ export function calcTotalPages(total: number, pageSize: number): number {
  * 移植元は結果を待たずに「コピー済み」を出すので、失敗はコンソールにだけ残す。
  */
 export function copyText(text: string): void {
+  // http など非セキュアな配信では navigator.clipboard 自体がなく、writeText の呼び出しで同期的に落ちる
+  if (!navigator.clipboard) {
+    console.error('クリップボードを利用できません');
+    return;
+  }
   navigator.clipboard.writeText(text).catch((error: unknown) => {
     console.error('共有リンクのコピーに失敗しました', error);
   });

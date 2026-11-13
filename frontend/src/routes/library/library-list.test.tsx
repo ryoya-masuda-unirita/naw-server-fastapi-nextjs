@@ -353,6 +353,15 @@ describe('AdminLibraryPage（タグ管理）', () => {
     expect(params.get('sort')).toBe('updatedAt,desc');
   });
 
+  test('総件数が減って現在のページが範囲外になったら最終ページへ戻ること', async () => {
+    mockApis();
+    useLibraryTagsStore.getState().changePage(3);
+    setAuthUser(FIXTURE_TENANT_ADMIN);
+    renderApp('/library?tab=tags');
+
+    await waitFor(() => expect(useLibraryTagsStore.getState().page).toBe(1));
+  });
+
   test('名前を入力するまで作成ボタンが押せず、作成するとタグが登録されること', async () => {
     const log = mockApis();
     await renderTagsTab();

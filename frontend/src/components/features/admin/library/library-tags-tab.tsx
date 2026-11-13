@@ -53,6 +53,12 @@ export function LibraryTagsTab() {
   const totalPages = calcTotalPages(totalElements, TAGS_PAGE_SIZE);
   const countDisplay = formatCountDisplay(page, TAGS_PAGE_SIZE, totalElements);
 
+  // 最終ページの行をすべて消したとき、存在しないページに留まらないよう最終ページへ戻す
+  const { changePage } = store;
+  useEffect(() => {
+    if (listQuery.isSuccess && !listQuery.isFetching && page > totalPages) changePage(totalPages);
+  }, [listQuery.isSuccess, listQuery.isFetching, page, totalPages, changePage]);
+
   const selectedCount = items.filter((tag) => selectedIds.has(tag.id)).length;
   const allSelected = items.length > 0 && selectedCount === items.length;
   const someSelected = selectedCount > 0 && !allSelected;
