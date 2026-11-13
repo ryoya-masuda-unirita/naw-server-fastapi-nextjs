@@ -3,7 +3,9 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import File, FileStatus
+from app.models.assistant import Assistant, AssistantType
 from app.models.index import Index, IndexType
+from app.models.room import Room
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.repositories.file_repository import FileRepository
@@ -74,3 +76,71 @@ class TestFileRepository:
             )
 
             assert files == []
+
+
+class TestFindRoomIdsByIndexId:
+    """学習先フォルダからルームIDを引くテスト。"""
+
+    async def test_returns_distinct_room_ids_of_the_index(
+        self, session: AsyncSession
+    ) -> None:
+        """フォルダのファイルが持つルームIDを重複なく返し、room_id が NULL のファイルを除くこと"""
+        session.add(Tenant(id=TENANT_ID, name="File Repository Test", owner="admin"))
+        await session.commit()
+        user = User(
+            id=uuid4(),
+            tenant_id=TENANT_ID,
+            login_id="file-repository-admin",
+            name="File Repository Admin",
+            role=UserRole.ADMIN,
+            is_required_password_reset=False,
+        )
+        target = Index(tenant_id=TENANT_ID, type=IndexType.SAAS_GLOBAL, name="Target")
+        other = Index(tenant_id=TENANT_ID, type=IndexType.SAAS_GLOBAL, name="Other")
+        assistant = Assistant(
+            tenant_id=TENANT_ID,
+            type=AssistantType.SAAS_CHAT,
+            name="Assistant",
+            include_history=False,
+        )
+        session.add_all([user, target, other, assistant])
+        await session.commit()
+        rooms = [
+            Room(
+                tenant_id=TENANT_ID,
+                user_id=user.id,
+                name=f"r{i}",
+                default_assistant_id=assistant.id,
+            )
+            for i in range(3)
+        ]
+        session.add_all(rooms)
+        await session.commit()
+        for index, room_id in [
+            (target, rooms[0].id),
+            (target, rooms[0].id),
+            (target, rooms[1].id),
+            (target, None),
+            (other, rooms[2].id),
+        ]:
+            session.add(
+                File(
+                    tenant_id=TENANT_ID,
+                    name="f.txt",
+                    status=FileStatus.ENABLE,
+                    user_id=user.id,
+                    index_id=index.id,
+                    room_id=room_id,
+                )
+            )
+        await session.commit()
+
+        room_ids = await FileRepository.find_room_ids_by_index_id(
+            TENANT_ID, target.id, session
+        )
+        other_tenant_room_ids = await FileRepository.find_room_ids_by_index_id(
+            "other-tenant", target.id, session
+        )
+
+        assert sorted(room_ids) == sorted([rooms[0].id, rooms[1].id])
+        assert other_tenant_room_ids == []

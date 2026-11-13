@@ -24,6 +24,40 @@ class FileRepository:
     """ファイルのDBアクセス。"""
 
     @staticmethod
+    async def find_room_ids_by_index_id(
+        tenant_id: str, index_id: str, session: AsyncSession
+    ) -> list[str]:
+        """学習先フォルダ（インデックス）に紐づくファイルを持つルームIDを重複なしで取得する。
+
+        移植元 `FileRepository.findRoomIdsByIndexId` と同じく、`room_id` が NULL のファイルは除く。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        index_id : str
+            学習先フォルダ（インデックス）のID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[str]
+            ルームID一覧。該当がなければ空リスト。
+        """
+        stmt = (
+            select(File.room_id)
+            .where(
+                File.tenant_id == tenant_id,
+                File.index_id == index_id,
+                File.room_id.is_not(None),
+            )
+            .distinct()
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def find_latest_index_ids_by_room_ids(
         tenant_id: str, room_ids: Sequence[str], session: AsyncSession
     ) -> dict[str, str]:

@@ -1080,6 +1080,169 @@ class TestFeedbackRouter:
             assert len(items) == 1
             assert items[0]["room"]["name"] == "Responded Good"
 
+        async def _add_folder_files(
+            self,
+            session: AsyncSession,
+            tenant_id: str,
+            rooms_by_folder: dict[str, list[Room | None]],
+        ) -> dict[str, str]:
+            """フォルダごとに、指定したルームに紐づくファイルを作る。
+
+            Parameters
+            ----------
+            session : AsyncSession
+                テスト用の DB セッション。
+            tenant_id : str
+                テナントID。
+            rooms_by_folder : dict[str, list[Room | None]]
+                フォルダ名から、ファイルを紐づけるルームの一覧への対応。
+                None は room_id が NULL のファイル。
+
+            Returns
+            -------
+            dict[str, str]
+                フォルダ名からインデックスIDへの対応。
+            """
+            any_room = (await session.execute(select(Room))).scalars().first()
+            assert any_room is not None
+            user_id = any_room.user_id
+            index_ids: dict[str, str] = {}
+            for folder, rooms in rooms_by_folder.items():
+                index = Index(
+                    tenant_id=tenant_id, type=IndexType.SAAS_GLOBAL, name=folder
+                )
+                session.add(index)
+                await session.commit()
+                index_ids[folder] = index.id
+                for i, room in enumerate(rooms):
+                    session.add(
+                        File(
+                            tenant_id=tenant_id,
+                            name=f"{folder}-{i}.txt",
+                            status=FileStatus.ENABLE,
+                            user_id=user_id,
+                            index_id=index.id,
+                            room_id=room.id if room else None,
+                        )
+                    )
+            await session.commit()
+            return index_ids
+
+        async def _get_rated_rooms(self, session: AsyncSession) -> dict[str, Room]:
+            """評価済みの2ルーム（Responded Excellent・Responded Good）を名前で引く。
+
+            Parameters
+            ----------
+            session : AsyncSession
+                テスト用の DB セッション。
+
+            Returns
+            -------
+            dict[str, Room]
+                ルーム名からルームへの対応。
+            """
+            rooms = (await session.execute(select(Room))).scalars().all()
+            wanted = {"Responded Excellent", "Responded Good"}
+            return {room.name: room for room in rooms if room.name in wanted}
+
+        async def test_filters_by_folder_id(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            feedback_tenant: Tenant,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
+            """folderId 絞り込みで、そのフォルダのファイルを持つルームだけが返ること"""
+            rooms = await self._get_rated_rooms(session)
+            index_ids = await self._add_folder_files(
+                session,
+                feedback_tenant.id,
+                {
+                    # 同じルームに2件あっても1行、room_id が NULL のファイルは対象外
+                    "A": [rooms["Responded Good"], rooms["Responded Good"], None],
+                    "B": [rooms["Responded Excellent"]],
+                },
+            )
+
+            async with client as c:
+                response = await c.get(
+                    f"/api/admin/feedbackRoom?folderId={index_ids['A']}",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            feedbacks = response.json()["feedbacks"]
+            assert [i["room"]["name"] for i in feedbacks["content"]] == [
+                "Responded Good"
+            ]
+            assert feedbacks["totalElements"] == 1
+            assert feedbacks["content"][0]["indexId"] == index_ids["A"]
+
+        async def test_folder_id_without_files_returns_no_rooms(
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
+            """学習先ファイルを持つルームがないフォルダを指定すると0件になること"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?folderId=no-such-folder",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            feedbacks = response.json()["feedbacks"]
+            assert feedbacks["content"] == []
+            assert feedbacks["totalElements"] == 0
+
+        async def test_empty_folder_id_does_not_filter(
+            self,
+            client: AsyncClient,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
+            """folderId が空文字なら絞り込まないこと"""
+            async with client as c:
+                response = await c.get(
+                    "/api/admin/feedbackRoom?folderId=",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            room_names = {
+                item["room"]["name"] for item in response.json()["feedbacks"]["content"]
+            }
+            assert room_names == {"Responded Excellent", "Responded Good"}
+
+        async def test_folder_id_combines_with_rating_filter(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            feedback_tenant: Tenant,
+            admin_headers: dict[str, str],
+            feedback_dataset: dict[str, Any],
+        ) -> None:
+            """folderId と rating を同時に指定すると両方を満たすルームだけが返ること"""
+            rooms = await self._get_rated_rooms(session)
+            index_ids = await self._add_folder_files(
+                session,
+                feedback_tenant.id,
+                {"A": [rooms["Responded Good"], rooms["Responded Excellent"]]},
+            )
+
+            async with client as c:
+                response = await c.get(
+                    f"/api/admin/feedbackRoom?folderId={index_ids['A']}&rating=GOOD",
+                    headers=admin_headers,
+                )
+
+            assert response.status_code == 200
+            assert [
+                i["room"]["name"] for i in response.json()["feedbacks"]["content"]
+            ] == ["Responded Good"]
+
         async def test_sorts_by_level_ascending(
             self,
             client: AsyncClient,

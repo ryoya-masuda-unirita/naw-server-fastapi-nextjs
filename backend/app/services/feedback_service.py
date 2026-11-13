@@ -218,8 +218,33 @@ class FeedbackService:
     async def get_feedback_rooms(
         tenant_id: str, query: FeedbackRoomListRequest, session: AsyncSession
     ) -> FeedbackRoomListResponse:
-        """テナント内の評価済みルーム一覧を取得する。"""
+        """テナント内の評価済みルーム一覧を取得する。
+
+        `folderId` があれば、移植元と同じく先に `files.room_id` からそのフォルダのルームIDを
+        引き、そのルームだけに絞り込む（空文字は指定なしと同じ）。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        query : FeedbackRoomListRequest
+            検索条件。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        FeedbackRoomListResponse
+            ルーム評価の一覧。
+        """
         sort_column = _FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN[query.sortField]
+        folder_room_ids = (
+            await FileRepository.find_room_ids_by_index_id(
+                tenant_id, query.folderId, session
+            )
+            if query.folderId
+            else None
+        )
         rows, total = await RoomRepository.find_feedback_rooms(
             tenant_id,
             query.assistantId,
@@ -229,6 +254,7 @@ class FeedbackService:
             query.page,
             query.size,
             session,
+            room_ids=folder_room_ids,
         )
 
         index_ids = await FileRepository.find_latest_index_ids_by_room_ids(
