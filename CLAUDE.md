@@ -123,7 +123,7 @@ naw-server-fastapi-nextjs/
 
 `e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
-`embedding-adapter/`・`retrieval-adapter/` などは、移植に着手するときに `generative-ai-adapter/` 配下へ足す（「プロジェクト概要」の対応表を参照）。
+`generative-ai-adapter/` には core・生成AIアダプタ・検索アダプタ（`retrieval-adapter/`、#299）を移植済み。`embedding-adapter/` などは、移植に着手するときに `generative-ai-adapter/` 配下へ足す（「プロジェクト概要」の対応表を参照）。
 
 フロントエンド固有の規約は `frontend/.claude/CLAUDE.md`、バックエンド固有は `backend/.claude/CLAUDE.md` を参照すること。
 
