@@ -7,3 +7,19 @@ services:
     image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
   backend:
     image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
+
+  # チャットの回答用の LLM のモック（Azure OpenAI 互換。最後のユーザー発話をエコーする）。
+  # テナントの接続先（tenant_endpoints）を spec-seed.sql でここに向ける。新しいイメージは作らず、backend のイメージ（Python）で動かす
+  llm-mock:
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
+    command: ["python", "/mock/llm_mock.py"]
+    volumes:
+      - ./e2e-spec/docker/llm_mock.py:/mock/llm_mock.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
