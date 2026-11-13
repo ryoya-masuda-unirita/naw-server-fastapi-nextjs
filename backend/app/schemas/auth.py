@@ -13,7 +13,8 @@ class LoginRequest(BaseModel):
 class LoginKeyRequest(BaseModel):
     """ログインキー認証リクエスト"""
 
-    loginKey: str
+    # 移植元は null・空白でも 400 にせず、ユーザーが見つからない扱い（401）にする。
+    loginKey: str | None = None
 
 
 # 移植元`PasswordResetRequest`の`@NotBlank`の検査順とメッセージ。
@@ -45,14 +46,20 @@ class PasswordResetRequest(BaseModel):
         `field_validator`は未指定の項目に対して実行されず、Pydantic標準の
         `Field required`になってしまうため、項目の型チェックより前に検査する。
 
-        Args:
-            data: リクエストボディ（JSONをデコードした値）。
+        Parameters
+        ----------
+        data : Any
+            リクエストボディ（JSONをデコードした値）。
 
-        Returns:
+        Returns
+        -------
+        Any
             検査済みのリクエストボディ（そのまま返す）。
 
-        Raises:
-            ValueError: 必須項目が未指定・null・空白のみの場合。最初の1項目のメッセージ。
+        Raises
+        ------
+        ValueError
+            必須項目が未指定・null・空白のみの場合。最初の1項目のメッセージ。
         """
         if not isinstance(data, dict):
             return data
@@ -65,22 +72,30 @@ class PasswordResetRequest(BaseModel):
 
 
 class AuthGroupResponse(BaseModel):
-    """グループレスポンス"""
+    """所属グループ1件分（移植元 `AuthGroupResponse`）。"""
 
-    id: str
-    name: str
+    groupId: str
+    groupAdmin: bool
 
 
 class AuthResponse(BaseModel):
-    """認証レスポンス（ログイン・トークン取得・パスワードリセット）"""
+    """認証レスポンス（ログイン・トークン取得・パスワードリセット）。
+
+    移植元 `AuthResponse` は `@JsonInclude(NON_NULL)` のため、ルーターは
+    `response_model_exclude_none=True` で返し、None の項目は応答に出さない。
+    `loginStatus` を返すのは `/auth/login` だけ。パスワード再設定が必要なときは
+    `token`・`groups` も出さない。
+    """
 
     id: str
     name: str
     role: str
     token: str | None = None
-    groups: list[AuthGroupResponse] = []
-    loginStatus: str = "SUCCESS"
+    groups: list[AuthGroupResponse] | None = None
+    loginStatus: str | None = None
     reason: str | None = None
 
     class Config:
+        """Pydantic の設定。ORM オブジェクトからも作れるようにする。"""
+
         from_attributes = True

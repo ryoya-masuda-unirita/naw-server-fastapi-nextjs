@@ -32,6 +32,8 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body' | 'method' |
   skipGlobalErrorToast?: boolean;
   /** 401 でもセッションを破棄しない（移植元 SKIP_SESSION_INVALIDATION）。絶対URLへのリクエストは常に true 扱い。 */
   skipSessionInvalidation?: boolean;
+  /** X-Tenant-ID を付けない。ローカルサーバへの SSE（移植元の fetch 直呼びは付けない。テナントは textData で渡す）用。 */
+  omitTenantId?: boolean;
 }
 
 export interface ApiRequestOptionsWithBody extends ApiRequestOptions {
@@ -127,8 +129,12 @@ function hasBody(body: unknown): boolean {
   return body !== undefined && body !== null;
 }
 
-function buildHeaders(body: unknown, customHeaders?: Record<string, string>): Record<string, string> {
-  const tenantId = resolveTenantId();
+function buildHeaders(
+  body: unknown,
+  customHeaders?: Record<string, string>,
+  omitTenantId = false
+): Record<string, string> {
+  const tenantId = omitTenantId ? '' : resolveTenantId();
   return {
     ...(hasBody(body) && !isRawBody(body) && { 'Content-Type': 'application/json' }),
     // 移植元の authInterceptor と同じく、絶対URL（ローカルサーバ）を含む全リクエストに付ける
@@ -172,7 +178,7 @@ async function send(
     credentials: 'include',
     ...toRequestInit(options),
     method,
-    headers: buildHeaders(body, headers),
+    headers: buildHeaders(body, headers, options.omitTenantId),
     body: serializeBody(body),
   });
 }
@@ -185,6 +191,7 @@ const CUSTOM_OPTION_KEYS = [
   'responseType',
   'skipGlobalErrorToast',
   'skipSessionInvalidation',
+  'omitTenantId',
 ] as const;
 
 function toRequestInit(options: ApiRequestOptionsWithBody): RequestInit {

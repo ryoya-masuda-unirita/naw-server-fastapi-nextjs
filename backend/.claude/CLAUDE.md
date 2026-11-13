@@ -357,24 +357,32 @@ docker exec -i naw-fastapi-postgres psql -U root -d postgres < backend/seed.sql
 
 ### docstring
 
-**Google スタイル**で書く。引数・戻り値・例外がある関数には必ず記載すること。
+**NumPy 形式**で、日本語で書く（2026-11-13 のユーザー指示。Google 形式は使わない）。追加・変更する**すべての関数・メソッド・クラス**（`_` 付きの private も含む）に書き、引数・戻り値・例外があるものは `Parameters`・`Returns`・`Raises` の節を必ず書く（節名の下に `----------` の下線）。触ったファイルに Google 形式（`Args:` など）の docstring があれば、そのファイルの中は NumPy 形式に書き換える。
 
 ```python
 def example(name: str, count: int) -> list[str]:
     """概要を1行で書く。
 
-    Args:
-        name: 名前の説明。
-        count: 件数の説明。
+    Parameters
+    ----------
+    name : str
+        名前の説明。
+    count : int
+        件数の説明。
 
-    Returns:
+    Returns
+    -------
+    list[str]
         文字列のリスト。
 
-    Raises:
-        ValueError: count が負の場合。
+    Raises
+    ------
+    ValueError
+        count が負の場合。
     """
 ```
 
+- PR 前に `uv run ruff check --select D101,D102,D103,D105,D106,D107,D417 --config 'lint.pydocstyle.convention="numpy"' <変更したファイル>` で確かめる
 - 概要行は動詞で始める（「〜を取得する」「〜を検証する」など）
 - 引数・戻り値がない場合は該当セクションを省略してよい
 - テストメソッドには引数・戻り値セクション不要（日本語 docstring 1行のみ）

@@ -13,11 +13,13 @@ from app.models.password_history import PasswordHistory
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from app.models.user_import_job import UserImportJob, UserImportJobStatus
+from app.services.user_import_service import REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE
 from app.services.user_import_listener import UserImportListener
 
 
 @pytest.fixture
 async def import_tenant(session):
+    """テスト用テナント"""
     tenant = Tenant(
         id="tenant-user-import-test",
         name="User Import Test Tenant",
@@ -39,6 +41,7 @@ async def import_tenant(session):
 
 @pytest.fixture
 async def other_tenant(session):
+    """別テナント（テナント分離の確認用）"""
     tenant = Tenant(
         id="tenant-user-import-other",
         name="Other User Import Tenant",
@@ -60,6 +63,7 @@ async def other_tenant(session):
 
 @pytest.fixture
 async def import_admin_user(session, import_tenant):
+    """インポートを実行する管理者ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=import_tenant.id,
@@ -76,6 +80,7 @@ async def import_admin_user(session, import_tenant):
 
 @pytest.fixture
 async def import_normal_user(session, import_tenant):
+    """管理者ではない一般ユーザー"""
     user = User(
         id=uuid4(),
         tenant_id=import_tenant.id,
@@ -92,18 +97,21 @@ async def import_normal_user(session, import_tenant):
 
 @pytest.fixture
 def admin_headers(import_admin_user, import_tenant):
+    """管理者の認証ヘッダー"""
     token = create_access_token(import_admin_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
 def user_headers(import_normal_user, import_tenant):
+    """一般ユーザーの認証ヘッダー"""
     token = create_access_token(import_normal_user.login_id, import_tenant.id)
     return {"Authorization": f"Bearer {token}", "X-Tenant-ID": import_tenant.id}
 
 
 @pytest.fixture
 def client(override_get_session):
+    """テスト用の非同期 HTTP クライアント"""
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -111,19 +119,57 @@ class _FakeUserImportStorage:
     """S3実装の代わりに、アップロード内容をインメモリ辞書に保持するフェイク。"""
 
     def __init__(self) -> None:
+        """空のインメモリストレージを作る"""
         self._objects: dict[str, bytes] = {}
 
     async def upload(
         self, tenant_id: str, file_id: str, filename: str, content: bytes
     ) -> str:
+        """内容を保持して、ストレージ URL を返す
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID
+        file_id : str
+            ファイルID
+        filename : str
+            ファイル名
+        content : bytes
+            保存する中身
+
+        Returns
+        -------
+        str
+            保存先を表す s3:// 形式のストレージ URL
+        """
         storage_url = f"s3://test-bucket/{tenant_id}/{file_id}_{filename}"
         self._objects[storage_url] = content
         return storage_url
 
     async def download(self, storage_url: str) -> bytes:
+        """ストレージ URL に対応する内容を返す
+
+        Parameters
+        ----------
+        storage_url : str
+            upload が返したストレージ URL
+
+        Returns
+        -------
+        bytes
+            保存されている中身
+        """
         return self._objects[storage_url]
 
     async def delete(self, storage_url: str) -> None:
+        """ストレージ URL に対応する内容を削除する（無ければ何もしない）
+
+        Parameters
+        ----------
+        storage_url : str
+            upload が返したストレージ URL
+        """
         self._objects.pop(storage_url, None)
 
 
@@ -136,6 +182,17 @@ def mock_user_import_infra():
     async def _fake_send_import_message(
         import_job_id: str, tenant_id: str, storage_url: str
     ) -> None:
+        """SQS へ送るメッセージ本文を組み立てて記録する
+
+        Parameters
+        ----------
+        import_job_id : str
+            インポートジョブID
+        tenant_id : str
+            テナントID
+        storage_url : str
+            アップロード済みファイルのストレージ URL
+        """
         sent_messages.append(
             json.dumps(
                 {
@@ -165,16 +222,34 @@ def mock_user_import_infra():
 
 
 def _csv_file(content: str, filename: str = "users.csv"):
+    """CSV アップロード用の multipart 送信内容を作る
+
+    Parameters
+    ----------
+    content : str
+        CSV の中身
+    filename : str
+        アップロードするファイル名
+
+    Returns
+    -------
+    dict
+        httpx の files 引数に渡す辞書
+    """
     return {"file": (filename, content.encode(), "text/csv")}
 
 
 @pytest.mark.asyncio
 class TestUserImport:
+    """ユーザーインポート API のテスト"""
+
     async def test_import_users_creates_user_and_job(
         self, client, admin_headers, session, mock_user_import_infra
     ):
         """CSVインポートの受付がPENDINGになり、キュー受信処理後にユーザーとCOMPLETEDのジョブが作成されること"""
-        csv_content = "login_id,name,password,role,createLoginKey\nnew-import,New Import,Pass123!,USER,true\n"
+        csv_content = (
+            "login_id,name,password,role\nnew-import,New Import,Pass123!,USER\n"
+        )
 
         async with client as c:
             response = await c.post(
@@ -201,7 +276,7 @@ class TestUserImport:
             .one()
         )
         assert created.name == "New Import"
-        assert created.login_key is not None
+        assert created.login_key_hash is None
 
         password_history_count = (
             await session.execute(
@@ -392,6 +467,29 @@ class TestUserImport:
 
         assert response.status_code == 403
 
+    async def test_import_users_rejects_removed_create_login_key_column(
+        self, client, admin_headers, mock_user_import_infra
+    ):
+        """廃止した createLoginKey 列があるCSVは、移植元と同じメッセージでジョブがFAILEDになること"""
+        csv_content = (
+            "login_id,name,password,role,createLoginKey\n"
+            "with-column,With Column,Pass123!,USER,true\n"
+        )
+        async with client as c:
+            response = await c.post(
+                "/api/admin/users/import",
+                headers=admin_headers,
+                files=_csv_file(csv_content),
+            )
+            body = response.json()
+            detail = await c.get(
+                f"/api/admin/users/import/{body['jobId']}", headers=admin_headers
+            )
+
+        assert body["status"] == "FAILED"
+        assert mock_user_import_infra == []
+        assert REMOVED_COLUMN_CREATE_LOGIN_KEY_MESSAGE in detail.json()["errorDetails"]
+
     async def test_import_users_preserves_login_key_when_column_omitted(
         self, client, admin_headers, session, import_tenant, mock_user_import_infra
     ):
@@ -402,7 +500,7 @@ class TestUserImport:
             login_id="login-key-import",
             name="Before",
             role=UserRole.USER,
-            login_key="existing-login-key",
+            login_key_hash="existing-login-key-hash",
             is_required_password_reset=False,
         )
         session.add(user)
@@ -426,7 +524,7 @@ class TestUserImport:
 
         await session.refresh(user)
         assert user.name == "After"
-        assert user.login_key == "existing-login-key"
+        assert user.login_key_hash == "existing-login-key-hash"
 
     async def test_import_users_records_row_error_for_duplicate_group_id_and_continues(
         self, client, admin_headers, session, import_tenant, mock_user_import_infra

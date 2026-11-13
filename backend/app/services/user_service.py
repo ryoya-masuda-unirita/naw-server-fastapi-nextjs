@@ -18,6 +18,7 @@ from app.core.credit_quota import (
 )
 from app.core.sort import SortOrder, build_order_by, enum_as_string, find_order
 from app.core.password_policy import check_password_not_reused, verify_password_strength
+from app.core.login_key import generate_login_key, hash_login_key
 from app.core.security import hash_password
 from app.models.group import GroupUser
 from app.models.tenant import Tenant
@@ -29,6 +30,7 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     PagedUserResponse,
     UserCreateRequest,
+    LoginKeyAction,
     UserCreateResponse,
     UserProfileUpdateRequest,
     UserResponse,
@@ -38,6 +40,8 @@ from app.schemas.user import (
 
 
 class UserService:
+    """ユーザー管理（一覧・作成・更新・削除・プロフィール）の業務ロジック。"""
+
     # SQLModelはMapped[]注釈を使わないため、クラス属性アクセス（User.created_at等）は
     # mypy上InstrumentedAttributeではなくPydanticフィールド型として解釈される。
     # 実行時の型（InstrumentedAttribute）とは一致しないためAnyとする。
@@ -75,23 +79,37 @@ class UserService:
         `include_usage=True`の場合のみ許可され、有効な請求期間が存在する場合に限り
         DBクエリでその合計値によりソートする。
 
-        Args:
-            tenant_id: テナントID。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            sort: 並べ替え指定の並び。
-            search_text: loginId・name の部分一致検索文字列。
-            role: ロールフィルター（"USER"・"ADMIN"・"SYSTEM"）。
-            exclude_group_id: 除外グループID。指定したグループに所属するユーザーを除外する。
-            session: 非同期DBセッション。
-            include_usage: Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        search_text : str | None
+            loginId・name の部分一致検索文字列。
+        role : str | None
+            ロールフィルター（"USER"・"ADMIN"・"SYSTEM"）。
+        exclude_group_id : str | None
+            除外グループID。指定したグループに所属するユーザーを除外する。
+        session : AsyncSession
+            非同期DBセッション。
+        include_usage : bool
+            Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
-        Returns:
+        Returns
+        -------
+        PagedUserResponse
             ページネーション済みのユーザー一覧。
 
-        Raises:
-            HTTPException: `sort=totalCredits`が指定されているのに
-                `include_usage=False`の場合、または`role`が不正な値の場合400を返す。
+        Raises
+        ------
+        HTTPException
+            `sort=totalCredits`が指定されているのに
+            `include_usage=False`の場合、または`role`が不正な値の場合400を返す。
         """
         validate_total_credits_sort(sort, include_usage)
         role_filter = UserService._parse_role(role)
@@ -197,7 +215,11 @@ class UserService:
             content=content,
             totalElements=total,
             totalPages=total_pages,
-            page=page,
+            number=page,
+            numberOfElements=len(content),
+            first=page == 0,
+            last=page + 1 >= total_pages,
+            empty=not content,
             size=size,
         )
 
@@ -205,10 +227,14 @@ class UserService:
     def _escape_like_pattern(value: str) -> str:
         """LIKE検索のワイルドカード文字（% _ \\）をエスケープし前後に%を付与する。
 
-        Args:
-            value: エスケープ対象の検索文字列。
+        Parameters
+        ----------
+        value : str
+            エスケープ対象の検索文字列。
 
-        Returns:
+        Returns
+        -------
+        str
             LIKE検索にそのまま使用できるエスケープ済みパターン文字列。
         """
         escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -222,14 +248,20 @@ class UserService:
         値は`IllegalArgumentException`として400を返す。大文字小文字を区別し、空・空白のみは
         絞り込みなしとして扱う点も移植元と同じ。
 
-        Args:
-            role: リクエストで指定されたロールフィルター。
+        Parameters
+        ----------
+        role : str | None
+            リクエストで指定されたロールフィルター。
 
-        Returns:
+        Returns
+        -------
+        UserRole | None
             変換した UserRole。未指定・空白のみの場合は None。
 
-        Raises:
-            HTTPException: UserRole に存在しない値の場合400を返す。
+        Raises
+        ------
+        HTTPException
+            UserRole に存在しない値の場合400を返す。
         """
         if role is None or not role.strip():
             return None
@@ -247,12 +279,18 @@ class UserService:
     ) -> tuple[str, datetime]:
         """初期パスワードを生成し、パスワード履歴へ保存する。
 
-        Args:
-            user: 対象ユーザー。
-            tenant: パスワードポリシーを持つテナント。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user : User
+            対象ユーザー。
+        tenant : Tenant
+            パスワードポリシーを持つテナント。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[str, datetime]
             生成した平文パスワードと有効期限のタプル。
         """
         plain_password = UserService._generate_initial_password(tenant)
@@ -276,16 +314,24 @@ class UserService:
     ) -> UserCreateResponse:
         """ユーザーを新規作成し、初期パスワードを返す。
 
-        Args:
-            req: ユーザー作成リクエスト。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        req : UserCreateRequest
+            ユーザー作成リクエスト。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserCreateResponse
             作成したユーザー情報と初期パスワード。
 
-        Raises:
-            HTTPException: loginId が既に存在する場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            loginId が既に存在する場合 400 を返す。
         """
         existing = await UserRepository.find_by_login_id(
             req.loginId, tenant_id, session
@@ -298,11 +344,14 @@ class UserService:
 
         tenant = await UserService._get_tenant(tenant_id, session)
 
+        issued_login_key = generate_login_key() if req.issueLoginKey else None
         user = User(
             login_id=req.loginId,
             name=req.name,
             role=req.role,
-            login_key=req.loginKey,
+            login_key_hash=hash_login_key(issued_login_key)
+            if issued_login_key
+            else None,
             tenant_id=tenant_id,
             is_required_password_reset=True,
         )
@@ -315,10 +364,8 @@ class UserService:
         await session.commit()
         await session.refresh(user)
 
-        return UserCreateResponse(
-            **UserResponse.from_user(user).model_dump(),
-            initialPassword=plain_password,
-            passwordExpiredAt=expired_at,
+        return UserCreateResponse.from_user(
+            user, plain_password, expired_at, issued_login_key
         )
 
     @staticmethod
@@ -330,17 +377,26 @@ class UserService:
     ) -> UserUpdateResponse:
         """ユーザー情報を更新する。resetPassword=True の場合はパスワードを再生成する。
 
-        Args:
-            user_id: 更新対象ユーザーのloginId。
-            req: ユーザー更新リクエスト。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user_id : str
+            更新対象ユーザーのloginId。
+        req : UserUpdateRequest
+            ユーザー更新リクエスト。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserUpdateResponse
             更新後のユーザー情報。パスワードリセット時は initialPassword を含む。
 
-        Raises:
-            HTTPException: ユーザーが存在しない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない場合 404 を返す。
         """
         user = await UserService._get_user(user_id, tenant_id, session)
 
@@ -348,8 +404,12 @@ class UserService:
             user.name = req.name
         if req.role is not None:
             user.role = req.role
-        if req.loginKey is not None:
-            user.login_key = req.loginKey
+        issued_login_key: str | None = None
+        if req.loginKeyAction == LoginKeyAction.REISSUE:
+            issued_login_key = generate_login_key()
+            user.login_key_hash = hash_login_key(issued_login_key)
+        elif req.loginKeyAction == LoginKeyAction.REVOKE:
+            user.login_key_hash = None
 
         plain_password = None
         expired_at = None
@@ -365,20 +425,22 @@ class UserService:
         await session.commit()
         await session.refresh(user)
 
-        return UserUpdateResponse(
-            **UserResponse.from_user(user).model_dump(),
-            initialPassword=plain_password,
-            passwordExpiredAt=expired_at,
+        return UserUpdateResponse.from_user(
+            user, plain_password, expired_at, issued_login_key
         )
 
     @staticmethod
     async def delete_user(user_id: str, tenant_id: str, session: AsyncSession) -> None:
         """ユーザーを削除する。存在しない場合は何もしない。
 
-        Args:
-            user_id: 削除対象ユーザーのloginId。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user_id : str
+            削除対象ユーザーのloginId。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
         """
         user = await UserRepository.find_by_login_id(user_id, tenant_id, session)
         if user:
@@ -391,16 +453,24 @@ class UserService:
     ) -> UserResponse:
         """ログインユーザー自身のプロフィールを取得する。
 
-        Args:
-            login_id: ログインID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserResponse
             ユーザー情報。
 
-        Raises:
-            HTTPException: ユーザーが存在しない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない場合 404 を返す。
         """
         return UserResponse.from_user(
             await UserService._get_user(login_id, tenant_id, session)
@@ -415,18 +485,28 @@ class UserService:
     ) -> UserResponse:
         """ログインユーザー自身のパスワードを更新する。
 
-        Args:
-            login_id: ログインID。
-            req: プロフィール更新リクエスト。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        req : UserProfileUpdateRequest
+            プロフィール更新リクエスト。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        UserResponse
             更新後のユーザー情報。
 
-        Raises:
-            HTTPException: ユーザーが存在しない場合 404 を返す。
-            HTTPException: 新パスワードがポリシーを満たさない場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない場合 404 を返す。
+        HTTPException
+            新パスワードがポリシーを満たさない場合 400 を返す。
         """
         user = await UserService._get_user(login_id, tenant_id, session)
 
@@ -448,16 +528,24 @@ class UserService:
     async def _get_user(login_id: str, tenant_id: str, session: AsyncSession) -> User:
         """loginId でユーザーを取得する。存在しない場合は 404 を送出する。
 
-        Args:
-            login_id: ログインID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        login_id : str
+            ログインID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        User
             User オブジェクト。
 
-        Raises:
-            HTTPException: ユーザーが存在しない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            ユーザーが存在しない場合 404 を返す。
         """
         user = await UserRepository.find_by_login_id(login_id, tenant_id, session)
         if not user:
@@ -470,15 +558,22 @@ class UserService:
     async def _get_tenant(tenant_id: str, session: AsyncSession) -> Tenant:
         """テナントIDでテナントを取得する。存在しない場合は 400 を送出する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Tenant
             Tenant オブジェクト。
 
-        Raises:
-            HTTPException: テナントが存在しない場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            テナントが存在しない場合 400 を返す。
         """
         tenant = await TenantRepository.find_by_id(tenant_id, session)
         if not tenant:
@@ -491,14 +586,20 @@ class UserService:
     def _generate_initial_password(tenant: Tenant) -> str:
         """テナントのパスワードポリシーに準拠した初期パスワードを生成する。
 
-        Args:
-            tenant: パスワードポリシーを持つテナント。
+        Parameters
+        ----------
+        tenant : Tenant
+            パスワードポリシーを持つテナント。
 
-        Returns:
+        Returns
+        -------
+        str
             ランダム生成された初期パスワード文字列。
 
-        Raises:
-            ValueError: パスワードポリシーで文字種が1つも有効でない場合。
+        Raises
+        ------
+        ValueError
+            パスワードポリシーで文字種が1つも有効でない場合。
         """
         pool = ""
         required: list[str] = []
