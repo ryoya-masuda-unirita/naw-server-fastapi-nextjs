@@ -93,6 +93,7 @@ export function PwResetPage() {
           id="oldPassword"
           label={t('AUTH.PW_RESET.OLD_PASSWORD_LABEL')}
           type="password"
+          showPasswordToggle
           value={oldPassword}
           onChange={setOldPassword}
           disabled={mutation.isPending}
@@ -104,6 +105,7 @@ export function PwResetPage() {
           id="newPassword"
           label={t('AUTH.PW_RESET.NEW_PASSWORD_LABEL')}
           type="password"
+          showPasswordToggle
           value={newPassword}
           onChange={setNewPassword}
           disabled={mutation.isPending}
@@ -115,6 +117,7 @@ export function PwResetPage() {
           id="confirmPassword"
           label={t('AUTH.PW_RESET.CONFIRM_PASSWORD_LABEL')}
           type="password"
+          showPasswordToggle
           value={confirmPassword}
           onChange={setConfirmPassword}
           disabled={mutation.isPending}

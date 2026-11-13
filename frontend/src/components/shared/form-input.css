@@ -1,0 +1,44 @@
+/*
+ * 移植元 form/form-input/form-input.component.scss。
+ * 移植元は Angular のビューカプセル化でこの部品の中だけに効くので、ホストクラス .app-form-input でスコープする。
+ */
+.app-form-input .trigger-wrapper::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  transition: box-shadow 0.2s ease;
+}
+
+.app-form-input .trigger-wrapper:focus-within::before {
+  box-shadow: inset 0 0 0 2px var(--color-brand-primary);
+}
+
+.app-form-input .trigger-wrapper.has-error::before {
+  box-shadow: inset 0 0 0 1px var(--color-status-error);
+}
+
+.app-form-input .trigger-wrapper.is-disabled {
+  background-color: var(--color-bg-tertiary) !important;
+  cursor: not-allowed;
+}
+
+.app-form-input .trigger-wrapper.is-disabled::before {
+  box-shadow: inset 0 0 0 1px var(--color-text-disabled) !important;
+}
+
+.app-form-input input::placeholder {
+  color: var(--color-text-weak);
+  font-weight: 200 !important;
+}
+
+.app-form-input input:disabled {
+  color: var(--color-text-disabled);
+  opacity: 1;
+}
+
+.app-form-input input:disabled::placeholder {
+  color: var(--color-text-disabled) !important;
+}

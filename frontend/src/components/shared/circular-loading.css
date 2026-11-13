@@ -1,0 +1,6 @@
+/* 移植元 circular-loading/circular-loading.component.scss（.app-circular-loading でスコープ） */
+.app-circular-loading .chat-loading {
+  align-items: center;
+  gap: calc(var(--spacing) * 3);
+  display: flex;
+}
