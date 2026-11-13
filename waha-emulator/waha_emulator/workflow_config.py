@@ -10,6 +10,8 @@
 - `OUTPUT_DIR`・`REASONING_OUTPUT_PATH`・`TEXT_DATA_JSON_FILE_PATH` はエミュレーターが
   ジョブごとに決めるため書けない
 - ファイルがなければ `LLM_PROVIDER`（echo / azure_openai）から既定の定義を作る
+- `adapter` が `embedding` の定義は、埋め込みアダプタで学習・削除・同期を行う
+  （`operation` で選ぶ。プロパティは埋め込みアダプタの名前で書く）
 """
 
 import json
@@ -20,6 +22,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from embedding_adapter.app import App as EmbeddingApp
+from embedding_adapter.constants import (
+    EMBEDDING_VENDOR_MAP,
+    OUTPUT_TYPE_VDB_ADD,
+    OUTPUT_TYPE_VDB_DELETE,
+    OUTPUT_TYPE_VDB_NEW,
+    VDB_VENDOR_MAP,
+)
+from embedding_adapter.constants import PropertyIds as EmbeddingPropertyIds
 from generative_ai_adapter.app import App
 from generative_ai_adapter.constants import PropertyIds
 from generative_ai_adapter.vendor import VENDOR_MAP
@@ -35,10 +46,39 @@ OUTPUT_TYPES = frozenset(
 RESERVED_PROPERTIES = frozenset(
     {"OUTPUT_DIR", "REASONING_OUTPUT_PATH", "TEXT_DATA_JSON_FILE_PATH"}
 )
-DEFINITION_KEYS = frozenset({"outputType", "properties", "ragContextJson"})
+# 埋め込みアダプタでエミュレーターがジョブごとに決めるもの
+EMBEDDING_RESERVED_PROPERTIES = frozenset({"OUTPUT_DIR"})
+ADAPTER_GENERATIVE_AI = "generative-ai"
+ADAPTER_EMBEDDING = "embedding"
+ADAPTERS = frozenset({ADAPTER_GENERATIVE_AI, ADAPTER_EMBEDDING})
+OPERATION_LEARN = "learn"
+OPERATION_DELETE = "delete"
+OPERATION_SYNC = "sync"
+OPERATIONS = frozenset({OPERATION_LEARN, OPERATION_DELETE, OPERATION_SYNC})
+# 学習の出力モードは新規登録（3）が既定。テーブルがなければ作る（あれば消さずに追記する）ので、
+# 最初の学習でテーブルがなくても動く。追加登録（1）はテーブルがあるときだけ動く
+LEARN_OUTPUT_TYPES = frozenset({OUTPUT_TYPE_VDB_ADD, OUTPUT_TYPE_VDB_NEW})
+# server-local が splitLength を空で送ったときの分割文字数
+DEFAULT_SPLIT_LENGTH = 1000
+DEFINITION_KEYS = frozenset(
+    {
+        "adapter",
+        "outputType",
+        "properties",
+        "ragContextJson",
+        "operation",
+        "defaultSplitLength",
+    }
+)
 ROOT_KEYS = frozenset({"default", "services"})
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _VENDOR_ID_BY_NAME = {name.lower(): vendor_id for vendor_id, name in VENDOR_MAP.items()}
+_EMBEDDING_VENDOR_ID_BY_NAME = {
+    name.lower(): vendor_id for vendor_id, name in EMBEDDING_VENDOR_MAP.items()
+}
+_VDB_VENDOR_ID_BY_NAME = {
+    name.lower(): vendor_id for vendor_id, name in VDB_VENDOR_MAP.items()
+}
 
 # echo はキーなしで動くが、core のプロバイダ設定は URL・キー・モデル名を必須に
 # するため、使われない値を入れておく
@@ -56,23 +96,32 @@ class WorkflowConfigError(ValueError):
 
 @dataclass(frozen=True)
 class WorkflowDefinition:
-    """1 つのサービスで動かす生成AIアダプタの設定。
+    """1 つのサービスで動かすアダプタ（生成AI または埋め込み）の設定。
 
     Attributes
     ----------
     output_type : int
-        アダプタの出力モード（0=チャット用_回答、1=チャット用_コンテクスト（RAG）、
-        2=回答の本文だけ）。
+        アダプタの出力モード。生成AI: 0=チャット用_回答、1=チャット用_コンテクスト（RAG）、
+        2=回答の本文だけ。埋め込み: 1=VDB追加登録、2=VDB削除、3=VDB新規登録。
     properties : Mapping[int, str]
         アダプタのプロパティ（ID → 値）。
     rag_context_json : str | None
         RAG で index 6 に渡す RAG Context JSON のパス（`RAG_CONTEXT_JSON_ALLOW_ROOT`
         からの相対、または絶対パス）。検索アダプタを移植するまでの仮の入力。
+    adapter : str
+        動かすアダプタ（`generative-ai` または `embedding`）。
+    operation : str | None
+        埋め込みアダプタで何をするか（`learn`・`delete`・`sync`）。
+    default_split_length : int
+        学習で splitLength が空のときの分割文字数（埋め込みアダプタ）。
     """
 
     output_type: int = NORMAL_CHAT_OUTPUT_TYPE
     properties: Mapping[int, str] = field(default_factory=dict)
     rag_context_json: str | None = None
+    adapter: str = ADAPTER_GENERATIVE_AI
+    operation: str | None = None
+    default_split_length: int = DEFAULT_SPLIT_LENGTH
 
     def describe(self) -> str:
         """ログに出す要約（API キーなどの値は出さない）。
@@ -82,11 +131,30 @@ class WorkflowDefinition:
         str
             出力モード・ベンダー・モデル名。
         """
+        if self.adapter == ADAPTER_EMBEDDING:
+            return self._describe_embedding()
         vendor = self.properties.get(PropertyIds.VENDOR, "")
         model = self.properties.get(PropertyIds.MODEL_NAME, "")
         return (
             f"outputType={self.output_type}, vendor={VENDOR_MAP.get(vendor, vendor)}, "
             f"model={model}, ragContextJson={self.rag_context_json is not None}"
+        )
+
+    def _describe_embedding(self) -> str:
+        """埋め込みアダプタの定義のログ用の要約（接続先・キーは出さない）。
+
+        Returns
+        -------
+        str
+            operation・出力モード・ベンダー。
+        """
+        vendor = self.properties.get(EmbeddingPropertyIds.VENDOR, "")
+        vdb = self.properties.get(EmbeddingPropertyIds.VDB_VENDOR, "")
+        return (
+            f"adapter=embedding, operation={self.operation}, "
+            f"outputType={self.output_type}, "
+            f"vendor={EMBEDDING_VENDOR_MAP.get(vendor, vendor)}, "
+            f"vdb={VDB_VENDOR_MAP.get(vdb, vdb)}"
         )
 
 
@@ -153,13 +221,21 @@ def _expand_env(value: str, environ: Mapping[str, str]) -> str:
     return _ENV_REFERENCE.sub(replace, value)
 
 
-def _vendor_id(value: str) -> str:
+def _vendor_id(
+    value: str,
+    names: Mapping[str, str] = VENDOR_MAP,
+    ids_by_name: Mapping[str, str] = _VENDOR_ID_BY_NAME,
+) -> str:
     """ベンダーの名前を ID にする（ID ならそのまま）。
 
     Parameters
     ----------
     value : str
         ID（"0"〜"5"・"99"）または名前（"AzureOpenAI" など）。
+    names : Mapping[str, str]
+        ID → 名前の対応（アダプタごと）。
+    ids_by_name : Mapping[str, str]
+        小文字の名前 → ID の対応。
 
     Returns
     -------
@@ -171,15 +247,20 @@ def _vendor_id(value: str) -> str:
     WorkflowConfigError
         未知のベンダーのとき。
     """
-    if value in VENDOR_MAP:
+    if value in names:
         return value
-    vendor_id = _VENDOR_ID_BY_NAME.get(value.lower())
+    vendor_id = ids_by_name.get(value.lower())
     if vendor_id is None:
         raise WorkflowConfigError(f"VENDOR が不正です: {value}")
     return vendor_id
 
 
-def _properties(raw: Any, environ: Mapping[str, str], where: str) -> dict[int, str]:
+def _properties(
+    raw: Any,
+    environ: Mapping[str, str],
+    where: str,
+    adapter: str = ADAPTER_GENERATIVE_AI,
+) -> dict[int, str]:
     """プロパティの名前 → 値を ID → 値にし、アダプタの保存時チェックを通す。
 
     Parameters
@@ -190,6 +271,8 @@ def _properties(raw: Any, environ: Mapping[str, str], where: str) -> dict[int, s
         環境変数。
     where : str
         エラーメッセージに出す場所（`default` やサービス ID）。
+    adapter : str
+        アダプタ（名前 → ID の対応と保存時チェックがアダプタごとに違う）。
 
     Returns
     -------
@@ -203,11 +286,13 @@ def _properties(raw: Any, environ: Mapping[str, str], where: str) -> dict[int, s
     """
     if not isinstance(raw, dict):
         raise WorkflowConfigError(f"{where}: properties はオブジェクトにしてください")
-    ids = PropertyIds.by_name()
+    embedding = adapter == ADAPTER_EMBEDDING
+    ids = EmbeddingPropertyIds.by_name() if embedding else PropertyIds.by_name()
+    reserved = EMBEDDING_RESERVED_PROPERTIES if embedding else RESERVED_PROPERTIES
     result: dict[int, str] = {}
-    app = App()
+    app: App | EmbeddingApp = EmbeddingApp() if embedding else App()
     for name, value in raw.items():
-        if name in RESERVED_PROPERTIES:
+        if name in reserved:
             raise WorkflowConfigError(
                 f"{where}: {name} はエミュレーターが決めるため設定できません"
             )
@@ -217,7 +302,13 @@ def _properties(raw: Any, environ: Mapping[str, str], where: str) -> dict[int, s
             raise WorkflowConfigError(f"{where}: {name} の値は文字列にしてください")
         text = _expand_env(str(value), environ)
         if name == "VENDOR":
-            text = _vendor_id(text)
+            text = (
+                _vendor_id(text, EMBEDDING_VENDOR_MAP, _EMBEDDING_VENDOR_ID_BY_NAME)
+                if embedding
+                else _vendor_id(text)
+            )
+        elif embedding and name == "VDB_VENDOR":
+            text = _vendor_id(text, VDB_VENDOR_MAP, _VDB_VENDOR_ID_BY_NAME)
         try:
             app.validate_property(ids[name], text)
         except (RuntimeError, ValueError) as e:
@@ -253,6 +344,17 @@ def _definition(raw: Any, environ: Mapping[str, str], where: str) -> WorkflowDef
     unknown = set(raw) - DEFINITION_KEYS
     if unknown:
         raise WorkflowConfigError(f"{where}: 未知の項目です: {sorted(unknown)}")
+    adapter = raw.get("adapter", ADAPTER_GENERATIVE_AI)
+    if adapter not in ADAPTERS:
+        raise WorkflowConfigError(
+            f"{where}: adapter は generative-ai か embedding のどちらかです"
+        )
+    if adapter == ADAPTER_EMBEDDING:
+        return _embedding_definition(raw, environ, where)
+    if "operation" in raw or "defaultSplitLength" in raw:
+        raise WorkflowConfigError(
+            f"{where}: operation・defaultSplitLength は adapter が embedding のときだけです"
+        )
     output_type = raw.get("outputType", NORMAL_CHAT_OUTPUT_TYPE)
     if output_type not in OUTPUT_TYPES or isinstance(output_type, bool):
         raise WorkflowConfigError(f"{where}: outputType は 0・1・2 のどれかです")
@@ -263,6 +365,68 @@ def _definition(raw: Any, environ: Mapping[str, str], where: str) -> WorkflowDef
         output_type,
         _properties(raw.get("properties", {}), environ, where),
         rag_context_json,
+    )
+
+
+def _embedding_definition(
+    raw: dict[str, Any], environ: Mapping[str, str], where: str
+) -> WorkflowDefinition:
+    """埋め込みアダプタの定義を読む。
+
+    Parameters
+    ----------
+    raw : dict[str, Any]
+        JSON の定義（adapter は embedding）。
+    environ : Mapping[str, str]
+        環境変数。
+    where : str
+        エラーメッセージに出す場所。
+
+    Returns
+    -------
+    WorkflowDefinition
+        定義。出力モードは operation から決まる（学習は outputType で 1 か 3、既定 3。
+        削除は 2）。
+
+    Raises
+    ------
+    WorkflowConfigError
+        operation・outputType・defaultSplitLength・プロパティが不正なとき。
+    """
+    if "ragContextJson" in raw:
+        raise WorkflowConfigError(f"{where}: ragContextJson は埋め込みでは使えません")
+    operation = raw.get("operation")
+    if operation not in OPERATIONS:
+        raise WorkflowConfigError(
+            f"{where}: operation は learn・delete・sync のどれかです"
+        )
+    output_type = raw.get("outputType")
+    if operation == OPERATION_LEARN:
+        output_type = OUTPUT_TYPE_VDB_NEW if output_type is None else output_type
+        if output_type not in LEARN_OUTPUT_TYPES or isinstance(output_type, bool):
+            raise WorkflowConfigError(
+                f"{where}: 学習の outputType は 1（追加登録）か 3（新規登録）です"
+            )
+    elif output_type is not None:
+        raise WorkflowConfigError(
+            f"{where}: outputType は operation が learn のときだけ指定できます"
+        )
+    else:
+        output_type = OUTPUT_TYPE_VDB_DELETE if operation == OPERATION_DELETE else 0
+    split_length = raw.get("defaultSplitLength", DEFAULT_SPLIT_LENGTH)
+    if not isinstance(split_length, int) or isinstance(split_length, bool):
+        raise WorkflowConfigError(f"{where}: defaultSplitLength は整数にしてください")
+    if split_length <= 0:
+        raise WorkflowConfigError(
+            f"{where}: defaultSplitLength は 1 以上にしてください"
+        )
+    return WorkflowDefinition(
+        output_type,
+        _properties(raw.get("properties", {}), environ, where, ADAPTER_EMBEDDING),
+        None,
+        ADAPTER_EMBEDDING,
+        operation,
+        split_length,
     )
 
 
@@ -299,8 +463,13 @@ def parse_workflow_config(
     services = data.get("services", {})
     if not isinstance(services, dict):
         raise WorkflowConfigError("services はオブジェクトにしてください")
+    default = _definition(data["default"], env, "default")
+    if default.adapter != ADAPTER_GENERATIVE_AI:
+        raise WorkflowConfigError(
+            "default は adapter が generative-ai の定義にしてください"
+        )
     return WorkflowConfig(
-        _definition(data["default"], env, "default"),
+        default,
         {
             service_id: _definition(raw, env, f"services.{service_id}")
             for service_id, raw in services.items()

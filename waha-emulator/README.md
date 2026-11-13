@@ -2,7 +2,7 @@
 
 Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（FastAPI）のサービス（Issue #274）。`server-local/` から SECURE アシスタントのチャットを通しで動かすために、Waha! の代わりに置く。
 
-移植元のリポジトリには Waha! 本体がないため、API は `server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。検索・埋め込みのアダプタは、後続の Issue で移植してワークフローに差し込む。
+移植元のリポジトリには Waha! 本体がないため、API は `server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。学習・削除・同期は、移植した**埋め込みアダプタ**（#300）をワークフローに差し込んで動かす（ベクトルDB は PostgreSQL + pgvector）。検索のアダプタは、後続の Issue で移植してワークフローに差し込む。
 
 - 動作環境: Linux（Docker コンテナ）。ホストで直接動かしてもよい
 - セッションはメモリに持つ（再起動で消える）
@@ -29,8 +29,8 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 `execute` のサービス ID とパラメータで選ぶ。
 
 1. サービス ID に登録されたワークフロー（`WAHA_WORKFLOWS_FILE` の `services`）
-2. `splitLength`・`filepath` 付き → 学習（未対応の失敗）
-3. `start`・`end` 付き → 学習データの同期（未対応の失敗）
+2. `splitLength`・`filepath` 付き → 学習（サービス ID の登録がなければ未対応の失敗）
+3. `start`・`end` 付き → 学習データの同期（同上）
 4. それ以外 → 既定のワークフロー（`WAHA_WORKFLOWS_FILE` の `default`。ファイルがなければ `LLM_PROVIDER` から作る）
 
 ワークフローは**生成AIアダプタを 1 回動かす**。本物の Waha! のジョブと同じ順序（`set_property` → `connect` → `set_column_information` → `set_view_name` → `before_execute` → `write`）で呼び、アダプタが `OUTPUT_DIR/<ビュー名>` に書いた JSON（`{"answer": "...", "filepaths": [], "references": [], "imageExplanations": []}`）を `outputfile` にする。入力スロットは次のようにアダプタへ渡す。
@@ -81,6 +81,37 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - 不正な設定（未知の名前・不正な値・未知のベンダー）は起動時にエラーにする（アダプタの保存時チェック `validate_property` を通す）
 - 例は [config/workflows.example.json](./config/workflows.example.json)（Docker では `config/` が `/app/config` に読み取り専用でマウントされる）
 
+### 埋め込みアダプタのワークフロー（学習・削除・同期）
+
+`adapter` を `embedding` にした定義は、埋め込みアダプタで server-local の学習・削除・同期を動かす。`operation` でどれをするかを選び、**学習・削除・同期のサービス ID を別々に登録する**（server-local は学習・削除・同期のサービス名をインデックスごとに別々に持つ）。本物の Waha! の定義はどちらのリポジトリにもないため、server-local が読む出力の形（`file_service.py`・`waha_client.py`）から決めた。
+
+| operation | server-local の呼び出し | アダプタの動き | outputfile（TSV。行は CRLF 区切り） |
+|---|---|---|---|
+| `learn` | `file` スロットに学習するファイル、`splitLength`、`filepath`（参照元） | 出力モード 3（新規登録。既定）または 1（追加登録）で、分割してベクトルDB に保存する | `"ファイル ID"<TAB>"パート ID"` をチャンクごとに 1 行 |
+| `delete` | `file` スロットにパート ID を 1 行ずつ書いたテキスト | 行 ID からファイル ID を引き、出力モード 2（削除）で消す | 空 |
+| `sync` | `start`・`end` | アダプタは使わず、ベクトルDB の行（`ORDER BY fileid, id OFFSET start LIMIT end-start`）を読む | `"パス"<TAB>"パート ID"<TAB>"ファイル ID"` |
+
+- **学習の入力**: `file` スロットのファイルを使う。スロットが空なら `filepath` のパスを読む（`SOURCE_ALLOWED_DIR` の中のファイルだけ。未設定なら失敗にする）。`splitLength` が空なら定義の `defaultSplitLength`（既定 1000）。アップロードされたファイルは、ベクトルDB のパスを `<filepath>/<ファイル名>` に直す（同期で server-local がファイル名と参照元を取り出せるようにするため）
+- **同期の取り込み元**: アダプタが保存した行に入っているパス（学習時にアップロードか `filepath` で渡されたもの）だけ。ファイルサーバーなどの外部は探索しない。server-local は 1 回で抜けるため `start=0, end=100` の 100 行まで
+- **削除**: ベクトルDB の行は PostgreSQL（`VDB_VENDOR=PostgreSQL(PGVector)`）のときだけ。移植元の削除は GraphRAG のスキーマを参照するため、なければ作ってから消す。Graph 書き込みを有効にした場合の注意は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md) の「移植元と挙動を変えた点」
+- 定義の書き方は下の例。`properties` は埋め込みアダプタのプロパティ名（`URL`・`API_KEY`・`MODEL_NAME`・`VENDOR`（`Echo` はキー不要の確認用）・`TENANT_ID`・`VDB_VENDOR`・`VDB_URL`・`VDB_USER_NAME`・`VDB_PASSWORD`・`VDB_DATABASE_NAME`・`VDB_TABLE_NAME`・`GRAPH_WRITE_ENABLED` など。`OUTPUT_DIR` はジョブごとに決めるため書けない）
+
+```json
+{
+  "services": {
+    "learn-svc": {
+      "adapter": "embedding", "operation": "learn", "defaultSplitLength": 1000,
+      "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo",
+        "TENANT_ID": "tenant-a", "VDB_VENDOR": "PostgreSQL(PGVector)", "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector", "VDB_PASSWORD": "onprem_vector_password", "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs"}
+    }
+  }
+}
+```
+
+`sync-svc`・`delete-svc` は `operation` だけ変えて同じ `properties` にする。完全な例は [config/workflows.example.json](./config/workflows.example.json)。
+
 ### ストリームファイル（途中経過）
 
 `execute` に `streamfilepath` があれば、その値をアダプタのプロパティ 42 に渡す。アダプタ（`ReasoningOutputSink`、移植元と同じ）が、推論の差分・ライブラリ生成の差分を届いた順に次の 1 行ずつ追記する。ジョブが終わったらエミュレーターが `completed`（失敗なら `error`）を書く。
@@ -110,6 +141,7 @@ data:{"type":"completed"}
 |---|---|---|
 | `WAHA_AUTHKEY` | なし（必須） | `startsession` の `authkey` と照合する。server-local の `WAHA_AUTHKEY` と同じ値にする |
 | `EXECUTE_WAIT_FOR_COMPLETION` | `true` | `true`: execute はジョブの完了まで応答しない。`false`: すぐ応答する。server-local の同期 API・学習は execute の後に「間隔 × 回数」（既定 2 秒 × 10 回）しか結果を待たないため、`false` で LLM が遅いと失敗する |
+| `SOURCE_ALLOWED_DIR` | 未設定（Docker では `/mnt/file-server` を読み取り専用でマウントしたときだけ設定する） | 埋め込みの学習で `file` スロットが空のとき、`filepath` で渡されたパスを読んでよいディレクトリ。未設定だと `filepath` による学習は失敗にする（任意のファイルを読ませないため） |
 | `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する。未設定だと、セッションを開ければ（authkey を知っていれば）任意の既存ファイルに追記できるため、ホストで動かすときも設定する |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | `3600` | この時間使われていないセッション（実行中のジョブがないもの）を、次の `startsession` で破棄する。server-local は失敗時に `endsession` を呼ばない経路がある（学習データの同期など）ため |
 | `WAHA_WORKFLOWS_FILE` | 未設定 | サービス ID → ワークフローの JSON（上の「ワークフローの設定」）。空文字列は未設定。Docker では `/app/config/workflows.example.json` など |

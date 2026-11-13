@@ -12,8 +12,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.25 /uv /usr/local/bin/uv
 # コピーする（ソースのコピーより前にし、依存の層をキャッシュできるようにする）
 COPY generative-ai-adapter/generative-ai-core/pyproject.toml /app/generative-ai-adapter/generative-ai-core/pyproject.toml
 COPY generative-ai-adapter/generative-ai-adapter/pyproject.toml /app/generative-ai-adapter/generative-ai-adapter/pyproject.toml
+COPY generative-ai-adapter/embedding-adapter/pyproject.toml /app/generative-ai-adapter/embedding-adapter/pyproject.toml
 COPY generative-ai-adapter/generative-ai-core/src/ /app/generative-ai-adapter/generative-ai-core/src/
 COPY generative-ai-adapter/generative-ai-adapter/src/ /app/generative-ai-adapter/generative-ai-adapter/src/
+COPY generative-ai-adapter/embedding-adapter/src/ /app/generative-ai-adapter/embedding-adapter/src/
 COPY waha-emulator/pyproject.toml waha-emulator/uv.lock ./
 RUN uv sync --no-dev --frozen
 

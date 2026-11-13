@@ -28,6 +28,7 @@ from sqlmodel import SQLModel
 
 from tests.conftest import AUTH_KEY, ScriptedProvider, make_settings
 from waha_emulator.main import create_app as create_emulator_app
+from waha_emulator.workflows.registry import WorkflowRegistry
 
 SERVER_AUTH_HEADERS = {"X-SERVER-AUTH-KEY": "server-key"}
 WAHA_BASE_URL = "http://waha.test/"
@@ -103,6 +104,7 @@ async def connected(
     wait_for_completion: bool = True,
     provider: ScriptedProvider | None = None,
     result_max_retries: int = 50,
+    registry: WorkflowRegistry | None = None,
 ) -> AsyncIterator[Environment]:
     """エミュレーターと server-local を起動し、server-local の WahaClient をつなぐ。
 
@@ -116,6 +118,8 @@ async def connected(
         生成AIアダプタが使うプロバイダの代わり。None なら echo。
     result_max_retries : int
         WahaClient が result を待つ回数の上限。
+    registry : WorkflowRegistry | None
+        サービス ID → ワークフロー。None なら設定（既定は echo の生成AI）から作る。
 
     Yields
     ------
@@ -124,6 +128,7 @@ async def connected(
     """
     emulator = create_emulator_app(
         make_settings(EXECUTE_WAIT_FOR_COMPLETION=wait_for_completion),
+        registry=registry,
         chat_runtime_factory=(
             None if provider is None else provider.chat_runtime_factory
         ),

@@ -7,5 +7,7 @@
 !generative-ai-adapter/generative-ai-core/src/
 !generative-ai-adapter/generative-ai-adapter/pyproject.toml
 !generative-ai-adapter/generative-ai-adapter/src/
+!generative-ai-adapter/embedding-adapter/pyproject.toml
+!generative-ai-adapter/embedding-adapter/src/
 **/__pycache__
 **/*.pyc

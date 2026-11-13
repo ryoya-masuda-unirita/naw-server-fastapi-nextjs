@@ -10,10 +10,13 @@ dependencies = [
     "python-multipart>=0.0.12",
     # 生成AIアダプタ（ルートの generative-ai-adapter/ の uv ワークスペース。core も一緒に入る）
     "naw-generative-ai-adapter",
+    # 埋め込みアダプタ（同じワークスペース。ベクトルDB への登録・削除）
+    "naw-embedding-adapter",
 ]
 
 [tool.uv.sources]
 naw-generative-ai-adapter = { path = "../generative-ai-adapter/generative-ai-adapter", editable = true }
+naw-embedding-adapter = { path = "../generative-ai-adapter/embedding-adapter", editable = true }
 
 [dependency-groups]
 dev = [
