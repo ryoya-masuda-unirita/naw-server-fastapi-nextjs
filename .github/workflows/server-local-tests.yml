@@ -1,0 +1,81 @@
+# server-local（secuaigent-server-local の移植先。FastAPI + SQLite）のテストと Ruff を検証するワークフロー。
+# 書き方は backend-tests.yml に揃えている（各ステップの詳しい説明は backend-tests.yml を参照）。
+# Issue #311 で ruff に docstring の記載漏れを検出するルールを足したため、それを CI でも落とせるように新設した。
+
+name: server-localテスト
+
+on:
+  pull_request:
+    # PR 作成・更新時に走らせ、PR 画面のチェックに出す
+    paths:
+      - "server-local/**"
+      - ".github/workflows/server-local-tests.yml"
+  push:
+    # server-local を変更した push（PR のマージによる develop への push を含む）だけで走らせる
+    paths:
+      - "server-local/**"
+      - ".github/workflows/server-local-tests.yml"
+
+jobs:
+  # テストを実行する。server-local のテストは SQLite を tmp_path に作り、外部サービス（Waha!・NAW API）は
+  # フェイクに差し替えるため、DB などのサービスを立てずに全件を流せる。
+  # 設定もテスト内で組み立てるので .env の準備は要らない。
+  tests:
+    name: テスト
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server-local
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uvをインストール
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      # server-local/pyproject.toml の requires-python（3.12以上）に合わせている
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # --locked: uv.lock と pyproject.toml がずれていたら失敗させる
+      - name: 依存関係をインストール
+        run: uv sync --locked
+
+      - name: テストを実行
+        run: uv run pytest -q
+
+  # フォーマットとリンター（docstring の記載漏れを含む）を検証する。
+  # ローカルの pre-commit フック（.pre-commit-config.yaml）でも同じチェックをしているが、
+  # フックを通らないコミットを検出するため CI にも置く。--fix は付けず検証だけ行う。
+  # mypy は server-local の依存に入っておらず、実行すると既存の型エラーが出る（2026-11-13 時点で 28 件）ため、ここでは実行しない。
+  lint:
+    name: Ruffチェック
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server-local
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uvをインストール
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 依存関係をインストール
+        run: uv sync --locked
+
+      - name: フォーマットを検証
+        run: uv run ruff format --check .
+
+      # pyproject.toml の [tool.ruff.lint] で有効にした D101〜D107・D417 もここで検査される
+      - name: リンターを実行
+        run: uv run ruff check .

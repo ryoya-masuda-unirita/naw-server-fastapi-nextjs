@@ -20,6 +20,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _timestamps() -> list[sa.Column]:
+    """各テーブル共通の作成日時・更新日時の列を作る。
+
+    移植元の Liquibase と同じく、どちらも NOT NULL で DB 側の現在時刻を既定値にする。
+    ``sa.Column`` は 1 つのテーブルにしか属せないため、テーブルごとに新しく作る。
+
+    Returns
+    -------
+    list[sa.Column]
+        ``created_at`` と ``updated_at`` の列。
+    """
     return [
         sa.Column(
             "created_at",
@@ -37,6 +47,12 @@ def _timestamps() -> list[sa.Column]:
 
 
 def upgrade() -> None:
+    """初期テーブルとインデックスを作る。
+
+    移植元 Liquibase changelog の最終形に合わせ、message_contents（と message_id・
+    created_at のインデックス）、message_content_files、files、file_parts、
+    library_contents を作る。
+    """
     op.create_table(
         "message_contents",
         sa.Column("id", sa.String(32), primary_key=True),
@@ -113,6 +129,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """upgrade で作ったテーブルとインデックスを削除する。
+
+    外部キーで参照される側より先に参照する側を消すよう、作成と逆の順で削除する。
+    """
     op.drop_table("library_contents")
     op.drop_table("file_parts")
     op.drop_table("files")

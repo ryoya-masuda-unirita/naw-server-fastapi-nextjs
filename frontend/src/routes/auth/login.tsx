@@ -82,6 +82,7 @@ export function LoginPage() {
           supportText={t('AUTH.LOGIN.PASSWORD_SUPPORT')}
           placeholder={t('AUTH.LOGIN.PASSWORD_PLACEHOLDER')}
           type="password"
+          showPasswordToggle
           value={password}
           onChange={setPassword}
           disabled={isLoading}

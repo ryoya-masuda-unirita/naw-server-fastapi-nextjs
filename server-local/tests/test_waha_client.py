@@ -13,6 +13,23 @@ ENCODED_AUTH_KEY = "key%2B%2F%3D"
 def make_client(
     handler: Callable[[httpx.Request], httpx.Response], max_retries: int = 10
 ) -> tuple[WahaClient, httpx.AsyncClient]:
+    """Waha! へ通信せず handler が応答を返す WahaClient を作る。
+
+    URL エンコードが必要な文字（+ / =）を含む認証キーにして、クエリでの渡し方と
+    エラー文に出ないことを確かめられるようにする。結果待ちの間隔は 0 にする。
+
+    Parameters
+    ----------
+    handler : Callable[[httpx.Request], httpx.Response]
+        リクエストを受けて Waha! の応答を返す関数。
+    max_retries : int
+        結果のポーリングを繰り返す上限回数。
+
+    Returns
+    -------
+    tuple[WahaClient, httpx.AsyncClient]
+        クライアントと、テスト側で閉じるための httpx クライアント。
+    """
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     client = WahaClient(
         base_url="http://waha.test/",
@@ -29,6 +46,18 @@ async def test_start_session() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """リクエストを記録し、本文にセッション ID を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            本文が sess-1 の 200 応答。
+        """
         requests.append(request)
         return httpx.Response(200, text="sess-1")
 
@@ -45,6 +74,18 @@ async def test_upload_file() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """multipart の中身を確かめるためリクエストを記録し、成功を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            本文が OK の 200 応答。
+        """
         requests.append(request)
         return httpx.Response(200, text="OK")
 
@@ -71,6 +112,18 @@ async def test_execute_variants() -> None:
     urls: list[httpx.URL] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """パスとクエリを確かめるため URL を記録し、成功を返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            本文が OK の 200 応答。
+        """
         urls.append(request.url)
         return httpx.Response(200, text="OK")
 
@@ -117,6 +170,18 @@ async def test_get_results_success_after_running() -> None:
     count = 0
 
     def handler(_request: httpx.Request) -> httpx.Response:
+        """呼ばれた回数を数え、RUNNING を 2 回返してから SUCCESS を返す。
+
+        Parameters
+        ----------
+        _request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            ジョブ状態を本文に入れた 200 応答。
+        """
         nonlocal count
         count += 1
         return httpx.Response(200, text=next(bodies))
@@ -140,6 +205,18 @@ async def test_get_results_gives_up_after_max_retries() -> None:
     count = 0
 
     def handler(_request: httpx.Request) -> httpx.Response:
+        """呼ばれた回数を数え、ジョブが終わらない状態（RUNNING）を返し続ける。
+
+        Parameters
+        ----------
+        _request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            本文が RUNNING の 200 応答。
+        """
         nonlocal count
         count += 1
         return httpx.Response(200, text="RUNNING")
@@ -155,6 +232,18 @@ async def test_download_and_end_session() -> None:
     urls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """呼ばれた URL を記録し、回答の JSON を本文に返す。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            回答の JSON を本文にした 200 応答。
+        """
         urls.append(str(request.url))
         return httpx.Response(200, text='{"answer":"a"}')
 
@@ -220,6 +309,23 @@ async def test_connection_error_message_hides_authkey() -> None:
     """通信エラーは、クエリ（authkey）を除いた URL で移植元と同じ書式の例外にすること"""
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Waha! に接続できない状況を再現する。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            返さない（常に例外を投げる）。MockTransport の handler の型に合わせている。
+
+        Raises
+        ------
+        httpx.ConnectError
+            常に投げる。
+        """
         raise httpx.ConnectError("Connection refused", request=request)
 
     client, http = make_client(handler)
@@ -240,6 +346,23 @@ async def test_connection_error_without_message() -> None:
     """通信エラーのメッセージが空のときは、例外の型名を出すこと"""
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """メッセージが空の通信エラーを再現する。
+
+        Parameters
+        ----------
+        request : httpx.Request
+            WahaClient が送ったリクエスト。
+
+        Returns
+        -------
+        httpx.Response
+            返さない（常に例外を投げる）。MockTransport の handler の型に合わせている。
+
+        Raises
+        ------
+        httpx.ReadError
+            常にメッセージ空で投げる。
+        """
         raise httpx.ReadError("", request=request)
 
     client, http = make_client(handler)

@@ -26,12 +26,33 @@ CHUNK_BYTES = 100
 
 
 def make_limited_app() -> FastAPI:
-    """サイズ上限を小さくしたミドルウェアだけを付けたアプリ。"""
+    """サイズ上限を小さくしたミドルウェアだけを付けたアプリを作る。
+
+    本物のアプリの上限（数十 MB）だと送る量が大きすぎるため、上限を小さくして
+    multipart を受け取るだけのエンドポイントで上限の挙動を確かめる。
+
+    Returns
+    -------
+    FastAPI
+        /upload を持ち、上限 SMALL_LIMIT_BYTES のミドルウェアを付けたアプリ。
+    """
     limited = FastAPI()
     register_exception_handlers(limited)
 
     @limited.post("/upload")
     async def upload(request: Request) -> dict[str, int]:
+        """multipart を読み切り、受け取ったフィールド数を返す。
+
+        Parameters
+        ----------
+        request : Request
+            multipart のリクエスト。
+
+        Returns
+        -------
+        dict[str, int]
+            フィールド数を入れた応答。
+        """
         form = await request.form()
         return {"fields": len(form)}
 
@@ -40,6 +61,20 @@ def make_limited_app() -> FastAPI:
 
 
 def multipart_body(size: int) -> tuple[bytes, str]:
+    """指定バイト数のファイルを 1 つだけ入れた multipart の本文を手で組み立てる。
+
+    Content-Length の有無や分割送信を制御するため、httpx に任せず本文を直接作る。
+
+    Parameters
+    ----------
+    size : int
+        ファイル部分のバイト数。
+
+    Returns
+    -------
+    tuple[bytes, str]
+        multipart の本文と、境界文字列を含む Content-Type。
+    """
     boundary = "test-boundary"
     body = (
         f"--{boundary}\r\n"
@@ -52,12 +87,28 @@ def multipart_body(size: int) -> tuple[bytes, str]:
 
 
 async def post_limited(content: Any, headers: dict[str, str]) -> httpx.Response:
+    """上限を小さくしたアプリの /upload に本文を POST する。
+
+    Parameters
+    ----------
+    content : Any
+        送る本文。bytes なら Content-Length 付き、非同期イテレーターなら分割送信になる。
+    headers : dict[str, str]
+        リクエストヘッダー。
+
+    Returns
+    -------
+    httpx.Response
+        アプリの応答。
+    """
     transport = httpx.ASGITransport(app=make_limited_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         return await c.post("/upload", content=content, headers=headers)
 
 
 class TestMultipartSizeLimit:
+    """multipart のサイズ上限ミドルウェアのテスト。"""
+
     async def test_content_length_over_limit_returns_413(self) -> None:
         """Content-Length が上限を超える multipart は、受信前に 413 にすること"""
         body, content_type = multipart_body(SMALL_LIMIT_BYTES)
@@ -72,6 +123,13 @@ class TestMultipartSizeLimit:
         body, content_type = multipart_body(SMALL_LIMIT_BYTES)
 
         async def chunks() -> AsyncIterator[bytes]:
+            """本文を CHUNK_BYTES ずつ区切って送り、Content-Length の無い送信にする。
+
+            Yields
+            ------
+            bytes
+                本文の一部。
+            """
             for start in range(0, len(body), CHUNK_BYTES):
                 yield body[start : start + CHUNK_BYTES]
 
@@ -121,12 +179,28 @@ class TestMultipartSizeLimit:
 
 
 class TestUnhandledError:
+    """想定外の例外を 500 応答にする処理のテスト。"""
+
     async def test_unexpected_error_returns_500_with_cors_headers(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """想定外の例外の 500 にも、移植元と同じく CORS ヘッダーを付けること"""
 
         async def broken(*_args: Any, **_kwargs: Any) -> None:
+            """ファイル検索の代わりに、想定外の例外を投げる。
+
+            Parameters
+            ----------
+            *_args : Any
+                使わない位置引数。
+            **_kwargs : Any
+                使わないキーワード引数。
+
+            Raises
+            ------
+            RuntimeError
+                常に投げる。ハンドラーが詳細を隠して 500 にするか確かめるため。
+            """
             raise RuntimeError("想定外のエラー")
 
         monkeypatch.setattr(file_service, "search_files", broken)
@@ -145,6 +219,8 @@ class TestUnhandledError:
 
 
 class TestCleanupLoop:
+    """ストリーム出力の定期掃除ループのテスト。"""
+
     async def test_cleanup_loop_continues_after_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -153,6 +229,25 @@ class TestCleanupLoop:
         second_call = asyncio.Event()
 
         def flaky_cleanup(output_dir: str, _max_age_hours: int) -> int:
+            """1 回目だけ失敗し、2 回目以降は呼ばれたことをイベントで知らせる。
+
+            Parameters
+            ----------
+            output_dir : str
+                掃除対象のディレクトリ。
+            _max_age_hours : int
+                使わない保持時間。
+
+            Returns
+            -------
+            int
+                削除件数（常に 0）。
+
+            Raises
+            ------
+            RuntimeError
+                1 回目の呼び出しで投げる。ループが止まらないか確かめるため。
+            """
             calls.append(output_dir)
             if len(calls) == 1:
                 raise RuntimeError("想定外のエラー")

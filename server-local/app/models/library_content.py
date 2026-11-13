@@ -23,5 +23,8 @@ class LibraryContent(SQLModel, table=True):
     )
 
     def touch(self) -> None:
-        """@PreUpdate 相当。"""
+        """更新日時を現在時刻（UTC）にする。
+
+        移植元の @PreUpdate による自動更新の代わりに、更新処理から明示的に呼ぶ。
+        """
         self.updated_at = utcnow()

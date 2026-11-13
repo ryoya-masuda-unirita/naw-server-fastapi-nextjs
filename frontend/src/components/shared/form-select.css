@@ -1,0 +1,8 @@
+/* 移植元 form/form-select/form-select.component.scss。::ng-deep app-select は .app-select に置き換える */
+.app-form-select .form-select-wrapper.has-error .app-select .trigger-wrapper {
+  background-color: var(--color-bg-error) !important;
+}
+
+.app-form-select .form-select-wrapper.has-error .app-select .trigger-wrapper::before {
+  box-shadow: inset 0 0 0 1px var(--color-status-error) !important;
+}

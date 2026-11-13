@@ -159,7 +159,7 @@ interface PagedResponse<T> {
   - 共通のエラートーストを出したくない（画面で個別に表示する）ときは `skipGlobalErrorToast: true`
   - `http(s)://` で始まる絶対 URL はベース URL を付けずに送り、401 でもセッションを破棄しない（移植元の `*FromCustomUrl`。ローカルサーバ向け）
   - SSE など `Response` をそのまま読むときは `apiClient.stream(path, { body, headers })`（共通のエラー処理は通らない）
-  - 移植元 `errorInterceptor` 相当（エラートースト・401 でログイン画面へ）は `hooks/use-api-error-interceptor.ts` が `main.tsx` で登録している。トーストは `showErrorToast` に渡す（トースト部品の移植後に接続する）
+  - 移植元 `errorInterceptor` 相当（エラートースト・401 でログイン画面へ）は `hooks/use-api-error-interceptor.ts` が `main.tsx` で登録している。共通のエラートーストは `main.tsx` で `showErrorToast`（`components/shared/toast-store.ts`）を渡して接続済み（#278）
 - **共通 util**: `src/lib/utils/`（`api-datetime`・`display-date`・`validation`・`form-errors`・`scroll-to-error`・`tab-query-param`）、hooks は `use-debounced-value`・`use-tab-query-param`・`use-credit-usage`・`use-token-usage`
 
 ### MSW のハンドラー（#279 で決定）
@@ -193,7 +193,7 @@ src/
 ├── components/
 │   ├── features/<機能>/          # その画面・機能だけで使う部品（例: features/admin/users/user-table.tsx、features/chat/...）
 │   ├── layouts/                  # 管理レイアウト・サイドバー・AdminPageShell・認証レイアウト
-│   └── shared/                   # 複数画面で使う共通部品（共通 UI は #278）。icons/ に SvgIcon・MatIcon
+│   └── shared/                   # 複数画面で使う共通部品（共通 UI。使い方は `README.md`）。icons/ に SvgIcon・MatIcon・AppMatIcon
 ├── hooks/                        # TanStack Query hooks（use-xxx.ts）
 ├── store/                        # Zustand stores
 ├── lib/
@@ -213,7 +213,7 @@ src/
   - 新しいチャット: `src/components/features/chat/new-chat-dialog.tsx`（#284）
   - チャット検索: `src/components/features/chat/chat-search-modal.tsx`（#287）
   - クレジット確認: `src/components/layouts/usage-dialog.tsx`（担当未定）
-- `AdminLayout` のモバイル用の開くボタン（`open-mobile-sidebar`）は移植元にない仮のもの。移植元どおりページヘッダー（#278 の `PageHeader`）に開閉ボタンが入ったら消す
+- モバイルでサイドバーを開くボタンは移植元どおり `PageHeader`（`components/shared/page-header.tsx`）が持つ（`AdminLayout` の仮のボタンは #278 で削除した）。未移植の仮画面（`NotPortedPage`）も `PageHeader` を出す。本物の画面に置き換えるときは `AdminPageShell` の `header` に `PageHeader` を渡す
 - サイドバーは `/dashboard`・`/chat/new` へ移るたびに TanStack Query の `['assistants']`・`['prompt-templates']` を無効化する（移植元と同じ）。アシスタント一覧・テンプレート一覧の query key はこの 2 つを先頭にする
 - 用語集（`/glossary` 配下）・データソースは移植元で非表示にした機能のため、ルートもサイドバー項目も作らない
 - i18n 辞書（`public/i18n/ja.json`・`en.json`）は移植元を丸ごと移植済み。**画面の移植でキーを足さない**（移植元にないキーが必要なら、移植元の最新を確認し、辞書ごと移植元に揃える）。React 独自のキーは `AUTH.LOGIN.TENANT_ID_*` だけ

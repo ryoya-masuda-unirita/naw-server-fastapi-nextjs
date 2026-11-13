@@ -14,7 +14,20 @@ def cleanup_orphan_stream_files(output_dir: str, max_age_hours: int) -> int:
     """出力先直下の `*.txt` のうち、最終更新が古いものを削除する。
 
     SSE の終了時にはストリームファイルを消さない（移植元で調査用に残している）ため、
-    溜まり続けないように定期的に掃除する。
+    溜まり続けないように定期的に掃除する。走査中のファイル操作エラーは、
+    アプリを止めないよう警告ログに出し、それまでに消した件数を返す。
+
+    Parameters
+    ----------
+    output_dir : str
+        ストリームファイルの出力先ディレクトリ。
+    max_age_hours : int
+        残しておく時間（時間単位）。最終更新がこれより古いファイルを消す。
+
+    Returns
+    -------
+    int
+        削除したファイル数。出力先がなければ 0。
     """
     directory = Path(output_dir).resolve()
     if not directory.is_dir():
@@ -35,6 +48,19 @@ def cleanup_orphan_stream_files(output_dir: str, max_age_hours: int) -> int:
 
 
 async def run_cleanup_loop(output_dir: str, max_age_hours: int) -> None:
+    """ストリームファイルの掃除を 1 時間ごとに繰り返す。
+
+    移植元 StreamFileCleanupScheduler の @Scheduled(fixedRate = 3_600_000) に
+    相当し、アプリ起動時にバックグラウンドタスクとして動かす。ファイル操作は
+    イベントループを止めないよう別スレッドで行う。
+
+    Parameters
+    ----------
+    output_dir : str
+        ストリームファイルの出力先ディレクトリ。
+    max_age_hours : int
+        残しておく時間（時間単位）。
+    """
     while True:
         try:
             await asyncio.to_thread(

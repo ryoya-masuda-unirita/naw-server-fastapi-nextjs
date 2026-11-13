@@ -1,0 +1,31 @@
+/*
+ * 移植元 styles.css のうち Angular の要素セレクタ（app-button / app-checkbox）を使うルールのクラスセレクタ版。
+ * React には app-* 要素がないので、部品のホスト要素に同名クラス（.app-button など）を付けて同じ見た目にする。
+ * 元のルール: styles.css の `app-button.dialog-cancel-btn button`、`app-checkbox:has(...)`。
+ */
+
+/* Cancel button: neutral outline (overrides primary outline from app-button) */
+.app-button.dialog-cancel-btn button {
+  border-color: rgba(173, 173, 173, 0.9) !important;
+  color: var(--color-text-muted) !important;
+}
+
+@media (hover: hover) {
+  .app-button.dialog-cancel-btn button:hover {
+    background-color: rgb(0 0 0 / 0.05) !important;
+    border-color: rgba(173, 173, 173, 0.9) !important;
+    color: var(--color-text-muted) !important;
+  }
+}
+
+.app-button.dialog-cancel-btn button:active {
+  background-color: rgb(0 0 0 / 0.1) !important;
+}
+
+.app-checkbox:has(.input-checkbox-input:checked) .input-checkbox-icon-true {
+  opacity: 1;
+}
+
+.app-checkbox:has(.input-checkbox-input:indeterminate) .input-checkbox-icon-indeterminate {
+  opacity: 1;
+}

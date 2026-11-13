@@ -26,9 +26,29 @@ class UnhandledErrorMiddleware:
     """
 
     def __init__(self, app: ASGIApp) -> None:
+        """内側の ASGI アプリを受け取る。
+
+        Parameters
+        ----------
+        app : ASGIApp
+            このミドルウェアの内側で動く ASGI アプリ。
+        """
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """HTTP リクエストを内側に渡し、応答前の想定外の例外を 500 にする。
+
+        HTTP 以外（lifespan など）はそのまま内側に渡す。
+
+        Parameters
+        ----------
+        scope : Scope
+            ASGI のスコープ。
+        receive : Receive
+            リクエストを受け取る ASGI の関数。
+        send : Send
+            応答を送る ASGI の関数。
+        """
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -36,6 +56,15 @@ class UnhandledErrorMiddleware:
         response_started = False
 
         async def tracking_send(message: Message) -> None:
+            """応答の送信を始めたかを記録してから送る。
+
+            送信を始めた後の例外は 500 に差し替えられないため、その判定に使う。
+
+            Parameters
+            ----------
+            message : Message
+                送る ASGI のメッセージ。
+            """
             nonlocal response_started
             if message["type"] == "http.response.start":
                 response_started = True
@@ -57,10 +86,38 @@ class MultipartSizeLimitMiddleware:
     """
 
     def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        """内側の ASGI アプリとサイズの上限を受け取る。
+
+        Parameters
+        ----------
+        app : ASGIApp
+            このミドルウェアの内側で動く ASGI アプリ。
+        max_bytes : int
+            multipart のリクエスト本文全体の上限（バイト）。
+        """
         self.app = app
         self.max_bytes = max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """multipart のリクエストだけ、本文のサイズが上限を超えないか確かめる。
+
+        Content-Length が上限を超えていれば本文を読まずに 413 を返し、そうでなければ
+        受信した本文の量を数えながら内側に渡す。
+
+        Parameters
+        ----------
+        scope : Scope
+            ASGI のスコープ。
+        receive : Receive
+            リクエストを受け取る ASGI の関数。
+        send : Send
+            応答を送る ASGI の関数。
+
+        Raises
+        ------
+        HTTPException
+            受信中に上限を超えた場合（ステータス 413。例外ハンドラーで応答にする）。
+        """
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -88,6 +145,18 @@ class MultipartSizeLimitMiddleware:
         received = 0
 
         async def limited_receive() -> Message:
+            """本文を受け取り、受信した合計が上限を超えたら例外にする。
+
+            Returns
+            -------
+            Message
+                受け取った ASGI のメッセージ。
+
+            Raises
+            ------
+            HTTPException
+                受信した本文の合計が上限を超えた場合（ステータス 413）。
+            """
             nonlocal received
             message = await receive()
             if message["type"] == "http.request":
