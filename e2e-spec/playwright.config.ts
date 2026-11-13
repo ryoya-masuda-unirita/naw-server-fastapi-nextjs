@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
-import { BASE_URL } from './src/env.ts';
+import path from 'node:path';
+import { BASE_URL, REPORT_DIR } from './src/env.ts';
 
 /**
  * 結合テスト項目書に沿った E2E の設定。
@@ -16,7 +17,8 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['./src/reporter/spec-reporter.ts']],
-  outputDir: 'test-results',
+  // スクリーンショット・trace は集計と同じディレクトリに置く。出力先（E2E_SPEC_REPORT_DIR）を変えれば、同じモジュールで同時に流しても衝突しない
+  outputDir: path.join(REPORT_DIR, 'test-results'),
   use: {
     ...devices['Desktop Chrome'],
     baseURL: BASE_URL,

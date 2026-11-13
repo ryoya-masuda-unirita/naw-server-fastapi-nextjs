@@ -57,8 +57,9 @@ async function main(): Promise<number> {
 
   switch (command) {
     case 'run': {
-      await envUp(log);
       try {
+        // 起動の途中で失敗しても、できかけた環境を残さないよう、起動もこの try の中に入れる
+        await envUp(log);
         return runPlaywright(passThrough);
       } finally {
         if (values['keep-env']) log('--keep-env のため専用環境を残します（npm run env:down で破棄）');

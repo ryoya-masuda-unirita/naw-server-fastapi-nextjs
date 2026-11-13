@@ -19,7 +19,13 @@ export const BACKEND_PORT = Number(process.env.E2E_SPEC_BACKEND_PORT ?? DEFAULT_
 export const BASE_URL = process.env.E2E_SPEC_BASE_URL ?? `http://localhost:${FRONTEND_PORT}`;
 export const API_URL = process.env.E2E_SPEC_API_URL ?? `http://localhost:${BACKEND_PORT}`;
 
-export const COMPOSE_PROJECT_NAME = 'naw-e2e-spec';
+/**
+ * compose のプロジェクト名。複数のワークツリー・エージェントが同時に専用環境を起動するときは、
+ * 環境ごとに変える（ポートも変える）。ネットワーク・ボリューム・イメージ名がこの名前で分かれる。
+ */
+export const COMPOSE_PROJECT_NAME = process.env.E2E_SPEC_PROJECT ?? 'naw-e2e-spec';
+/** backend のイメージ名。プロジェクトごとに分け、別のワークツリーのビルドとタグが衝突しないようにする。 */
+export const BACKEND_IMAGE_NAME = `${COMPOSE_PROJECT_NAME}-backend`;
 export const COMPOSE_FILE = path.join(REPO_ROOT, 'docker-compose.demo.yml');
 /** demo のイメージ名（naw-demo-backend）を上書きして、既存の demo 環境のイメージに触れないようにする。 */
 export const COMPOSE_OVERRIDE_FILE = path.join(MODULE_ROOT, 'docker', 'compose.override.yml');

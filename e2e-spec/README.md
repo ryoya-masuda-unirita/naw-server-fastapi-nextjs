@@ -74,7 +74,14 @@ npm run env:down                     # 破棄（データごと）
 | `E2E_SPEC_BACKEND_PORT` | 58100 | backend のポート |
 | `E2E_SPEC_BASE_URL` / `E2E_SPEC_API_URL` | `http://localhost:<上のポート>` | 画面 / API の URL（ローカル以外は拒否） |
 | `E2E_SPEC_WORKERS` | 4 | テストの並列数 |
-| `E2E_SPEC_REPORT_DIR` | `reports/latest` | 集計の出力先（並列に流すときは変える） |
+| `E2E_SPEC_REPORT_DIR` | `reports/latest` | 集計・スクリーンショット・trace の出力先 |
+| `E2E_SPEC_PROJECT` | `naw-e2e-spec` | compose のプロジェクト名（ネットワーク・ボリューム・backend のイメージ名が分かれる） |
+
+**同じマシンで専用環境を同時に 2 つ以上動かすとき**（別のワークツリー・別のエージェントなど）は、`E2E_SPEC_PROJECT`・`E2E_SPEC_FRONTEND_PORT`・`E2E_SPEC_BACKEND_PORT` を環境ごとに変える。同じモジュールのディレクトリで同時に流すなら `E2E_SPEC_REPORT_DIR` も変える。
+
+```bash
+E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55274 E2E_SPEC_BACKEND_PORT=58101 E2E_SPEC_REPORT_DIR=reports/b npm run spec:all
+```
 
 ## 専用環境
 

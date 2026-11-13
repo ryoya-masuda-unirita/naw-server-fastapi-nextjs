@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
   API_URL,
+  BACKEND_IMAGE_NAME,
   BACKEND_PORT,
   BASE_URL,
   COMPOSE_FILE,
@@ -29,6 +30,7 @@ function composeEnv(): NodeJS.ProcessEnv {
     ...process.env,
     DEMO_FRONTEND_PORT: String(FRONTEND_PORT),
     DEMO_BACKEND_PORT: String(BACKEND_PORT),
+    E2E_SPEC_BACKEND_IMAGE: BACKEND_IMAGE_NAME,
   };
 }
 
