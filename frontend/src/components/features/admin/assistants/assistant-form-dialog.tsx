@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/shared/button';
 import { ComboboxMulti } from '@/components/shared/combobox-multi';
@@ -184,8 +184,12 @@ export function AssistantFormDialog({ assistant, options, onClose }: AssistantFo
   );
   const [touched, setTouched] = useState<Touched>({});
   const [isCopied, setIsCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 追加ダイアログで接続サーバー未選択のときに出る、値を持たない入力欄の文字（移植元は値を結び付けていない）
   const [placeholderModel, setPlaceholderModel] = useState('');
+
+  // ダイアログを閉じたあとに状態を更新しないよう、コピー表示のタイマーを止める
+  useEffect(() => () => clearTimeout(copiedTimerRef.current), []);
 
   const errors = validate(values);
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -243,7 +247,8 @@ export function AssistantFormDialog({ assistant, options, onClose }: AssistantFo
       return;
     }
     setIsCopied(true);
-    setTimeout(() => setIsCopied(false), COPIED_RESET_MS);
+    clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => setIsCopied(false), COPIED_RESET_MS);
   };
 
   const focusFirstInvalid = () => {

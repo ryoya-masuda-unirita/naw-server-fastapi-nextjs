@@ -128,8 +128,9 @@ async function fetchEndpointsByType(): Promise<Record<string, AssistantEndpointO
   return Object.fromEntries(entries);
 }
 
-async function fetchApiOptions(): Promise<Record<string, SelectOption[]>> {
-  const endpointsByType = await fetchEndpointsByType();
+function toApiOptions(
+  endpointsByType: Record<string, AssistantEndpointOptionResponse[]>,
+): Record<string, SelectOption[]> {
   return Object.fromEntries(
     Object.entries(endpointsByType).map(([type, endpoints]) => [
       type,
@@ -138,11 +139,10 @@ async function fetchApiOptions(): Promise<Record<string, SelectOption[]>> {
   );
 }
 
-async function fetchModelOptions(): Promise<Record<string, Record<string, SelectOption[]>>> {
-  const [endpointsByType, models] = await Promise.all([
-    fetchEndpointsByType(),
-    apiClient.get<AssistantModelResponse[]>(API_PATHS.ADMIN.ASSISTANTS.AI_MODELS),
-  ]);
+function toModelOptions(
+  endpointsByType: Record<string, AssistantEndpointOptionResponse[]>,
+  models: AssistantModelResponse[],
+): Record<string, Record<string, SelectOption[]>> {
   return Object.fromEntries(
     Object.entries(endpointsByType).map(([assistantType, endpoints]) => [
       assistantType,
@@ -158,8 +158,16 @@ async function fetchModelOptions(): Promise<Record<string, Record<string, Select
   );
 }
 
+/**
+ * 全グループの選択肢。移植元は size を渡さず既定の 20 件になるが、21 件目以降のチームが選べない・
+ * 一覧の「所属チーム」が空になるため、backend の上限（100）まで取る。
+ */
+const GROUP_OPTIONS_SIZE = 100;
+
 async function fetchGroupOptions(): Promise<SelectOption[]> {
-  const response = await apiClient.get<GroupApiResponse>(API_PATHS.ADMIN.ALL_GROUPS.LIST);
+  const response = await apiClient.get<GroupApiResponse>(API_PATHS.ADMIN.ALL_GROUPS.LIST, {
+    params: { size: GROUP_OPTIONS_SIZE },
+  });
   return response.data.map((group) => ({ value: group.id, label: group.name }));
 }
 
@@ -196,11 +204,16 @@ export function useAssistantOptions() {
     queryKey: [ASSISTANTS_QUERY_KEY, 'admin-options'],
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<AssistantOptions> => {
+      // 接続先 API とモデルは同じ接続先一覧から作るので、一覧は 1 回だけ取る
+      const endpointsByType = fetchEndpointsByType();
       const [categories, groups, serverApi, models, folders] = await Promise.allSettled([
         apiClient.get<AssistantCategoryApiItem[]>(API_PATHS.ADMIN.ASSISTANT_CATEGORIES.LIST),
         fetchGroupOptions(),
-        fetchApiOptions(),
-        fetchModelOptions(),
+        endpointsByType.then(toApiOptions),
+        Promise.all([
+          endpointsByType,
+          apiClient.get<AssistantModelResponse[]>(API_PATHS.ADMIN.ASSISTANTS.AI_MODELS),
+        ]).then(([endpoints, aiModels]) => toModelOptions(endpoints, aiModels)),
         fetchFolderOptions(),
       ]);
       return {

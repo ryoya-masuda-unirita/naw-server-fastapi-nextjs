@@ -151,6 +151,12 @@ export function AssistantTab({ onSelectionActiveChange }: AssistantTabProps) {
 
   const openDialog = (assistant?: AssistantApiItem) => setFormDialog({ assistant });
 
+  // 編集の初期値（接続先・モデル）は開く時点の選択肢で決まるので、未取得なら取ってから開く
+  const openEditDialog = async (assistant: AssistantApiItem) => {
+    if (!optionsQuery.data) await optionsQuery.refetch();
+    openDialog(assistant);
+  };
+
   return (
     <>
       <AssistantListActions
@@ -275,7 +281,7 @@ export function AssistantTab({ onSelectionActiveChange }: AssistantTabProps) {
                   <AssistantRowMenu
                     editLabelKey="ADMIN.ASSISTANT.EDIT_ASSISTANT"
                     testid={`assistant-menu-${item.id}`}
-                    onEdit={() => openDialog(item)}
+                    onEdit={() => void openEditDialog(item)}
                     onDelete={() => setDeletingIds([item.id])}
                   />
                 </div>
