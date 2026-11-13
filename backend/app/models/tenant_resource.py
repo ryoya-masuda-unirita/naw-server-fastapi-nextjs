@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class TenantResourceType(str, Enum):
+    """テナントリソースの種別の取りうる値。"""
+
     AZURE_OPENAI = "AZURE_OPENAI"
 
 

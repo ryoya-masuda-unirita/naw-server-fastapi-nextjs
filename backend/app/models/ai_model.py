@@ -8,6 +8,8 @@ from app.models.tenant_endpoint import EndpointType
 
 
 class AIModelEndpointType(str, Enum):
+    """AIモデルが使うエンドポイントの種別の取りうる値。"""
+
     AZURE_OPENAI_CHAT = "AZURE_OPENAI_CHAT"
     CLAUDE_CHAT = "CLAUDE_CHAT"
     GEMINI_CHAT = "GEMINI_CHAT"
@@ -34,6 +36,8 @@ CHAT_AI_MODEL_ENDPOINT_TYPES: dict[EndpointType, AIModelEndpointType] = {
 
 
 class AIModel(SQLModel, table=True):
+    """AIモデルのテーブル定義。"""
+
     __tablename__ = "ai_models"
 
     id: int | None = Field(default=None, primary_key=True)

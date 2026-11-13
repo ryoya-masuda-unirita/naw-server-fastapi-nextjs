@@ -63,15 +63,21 @@ def _build_responses_tool(tool: ToolConfig) -> dict:
     (built-in tools)の宣言をそのまま渡すだけで、このクライアント自身がWeb検索・MCP
     プロトコルを実装するわけではない。
 
-    Args:
-        tool: 変換対象のツール設定。
+    Parameters
+    ----------
+    tool : ToolConfig
+        変換対象のツール設定。
 
-    Returns:
+    Returns
+    -------
+    dict
         Responses APIの`tools`パラメータへ渡す辞書。
 
-    Raises:
-        ValueError: `name`が`web_search`/`mcp`のいずれでもない場合
-            (リクエストスキーマのバリデーションで通常は到達しない防御的分岐)。
+    Raises
+    ------
+    ValueError
+        `name`が`web_search`/`mcp`のいずれでもない場合
+        (リクエストスキーマのバリデーションで通常は到達しない防御的分岐)。
     """
     name = tool.name.lower()
     if name == "web_search":
@@ -103,11 +109,16 @@ def cap_max_tokens(requested: int | None, model_max_tokens: int) -> int | None:
     あるため、未指定時はNoneのまま返す（上限が必須のBedrockは呼び出し側でAIモデルの
     上限を補う。`docs/issue-249/02_基本設計.md`参照）。
 
-    Args:
-        requested: リクエストで指定された出力トークン数の上限。
-        model_max_tokens: AIモデルの上限(`ai_models.max_tokens`)。
+    Parameters
+    ----------
+    requested : int | None
+        リクエストで指定された出力トークン数の上限。
+    model_max_tokens : int
+        AIモデルの上限(`ai_models.max_tokens`)。
 
-    Returns:
+    Returns
+    -------
+    int | None
         切り詰めた上限。`requested`が未指定の場合はNone。
     """
     if requested is None:
@@ -158,19 +169,30 @@ class AzureLlmChatClient:
         (Chat Completions APIには、OpenAI側がサーバーサイドで実行を管理する
         web_search/mcpのような組み込みツールという概念自体が存在しないため)。
 
-        Args:
-            endpoint: テナントに紐づくAzure OpenAIエンドポイントURL。
-            api_key: テナントに紐づくAzure OpenAI APIキー。
-            deploy_name: 呼び出すデプロイ名（モデル名）。
-            messages: 会話履歴。
-            temperature: 応答のランダム性(0.0〜1.0)。
-            max_tokens: 出力トークン数の上限。未指定の場合はモデルの既定値に従う。
-            tools: 有効化するツール(web_search / mcp)。未指定・空の場合はツールなし。
-            response_format: 構造化出力の指定(例: `{"type": "json_object"}`)。
-                未指定の場合は自由文で応答する。tools指定時はResponses APIへ切り替わり
-                response_formatは使用しない(組み合わせ非対応)。
+        Parameters
+        ----------
+        endpoint : str
+            テナントに紐づくAzure OpenAIエンドポイントURL。
+        api_key : str
+            テナントに紐づくAzure OpenAI APIキー。
+        deploy_name : str
+            呼び出すデプロイ名（モデル名）。
+        messages : list[ChatMessage]
+            会話履歴。
+        temperature : float
+            応答のランダム性(0.0〜1.0)。
+        max_tokens : int | None
+            出力トークン数の上限。未指定の場合はモデルの既定値に従う。
+        tools : list[ToolConfig] | None
+            有効化するツール(web_search / mcp)。未指定・空の場合はツールなし。
+        response_format : dict | None
+            構造化出力の指定(例: `{"type": "json_object"}`)。
+            未指定の場合は自由文で応答する。tools指定時はResponses APIへ切り替わり
+            response_formatは使用しない(組み合わせ非対応)。
 
-        Yields:
+        Yields
+        ------
+        ChatStreamChunk
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
         """
         if tools:
@@ -236,16 +258,26 @@ class AzureLlmChatClient:
         完結し、その中間過程はSSEの専用イベントとして個別通知せず、最終テキストが
         通常のテキスト差分として配信される(移植元も同様の挙動)。
 
-        Args:
-            endpoint: テナントに紐づくAzure OpenAIエンドポイントURL。
-            api_key: テナントに紐づくAzure OpenAI APIキー。
-            deploy_name: 呼び出すデプロイ名（モデル名）。
-            messages: 会話履歴。
-            temperature: 応答のランダム性(0.0〜1.0)。
-            max_tokens: 出力トークン数の上限。未指定の場合はモデルの既定値に従う。
-            tools: 有効化するツール(web_search / mcp)。
+        Parameters
+        ----------
+        endpoint : str
+            テナントに紐づくAzure OpenAIエンドポイントURL。
+        api_key : str
+            テナントに紐づくAzure OpenAI APIキー。
+        deploy_name : str
+            呼び出すデプロイ名（モデル名）。
+        messages : list[ChatMessage]
+            会話履歴。
+        temperature : float
+            応答のランダム性(0.0〜1.0)。
+        max_tokens : int | None
+            出力トークン数の上限。未指定の場合はモデルの既定値に従う。
+        tools : list[ToolConfig]
+            有効化するツール(web_search / mcp)。
 
-        Yields:
+        Yields
+        ------
+        ChatStreamChunk
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
         """
         create_kwargs: dict = {
@@ -305,15 +337,21 @@ def _to_anthropic_content(
     （`image_url`パートにdata URL）で組み立てるが、Anthropic Messages APIは
     `image`パート（base64の`source`）しか受け付けず、そのまま送ると400になるため変換する。
 
-    Args:
-        content: 文字列、またはテキストパート・画像パートのリスト。
+    Parameters
+    ----------
+    content : str | list[dict[str, object]]
+        文字列、またはテキストパート・画像パートのリスト。
 
-    Returns:
+    Returns
+    -------
+    str | list[dict[str, object]]
         文字列はそのまま、リストはAnthropic形式のパートのリストに変換したもの。
 
-    Raises:
-        ValueError: base64のdata URLでない画像パート、または未知の種別のパートが
-            含まれる場合。
+    Raises
+    ------
+    ValueError
+        base64のdata URLでない画像パート、または未知の種別のパートが
+        含まれる場合。
     """
     if isinstance(content, str):
         return content
@@ -364,12 +402,16 @@ class BedrockLlmChatClient:
         （サービス）がストリーミング開始前にこのメソッドで検証し、400として拒否できる
         ようにする。
 
-        Args:
-            tools: 有効化するツール。
+        Parameters
+        ----------
+        tools : list[ToolConfig] | None
+            有効化するツール。
 
-        Raises:
-            ValueError: `tools`が指定された場合（Bedrock Mantleはサーバーサイドの
-                組み込みツール（web_search/mcp）に対応していないため）。
+        Raises
+        ------
+        ValueError
+            `tools`が指定された場合（Bedrock Mantleはサーバーサイドの
+            組み込みツール（web_search/mcp）に対応していないため）。
         """
         if tools:
             raise ValueError(
@@ -389,24 +431,36 @@ class BedrockLlmChatClient:
     ) -> AsyncIterator[ChatStreamChunk]:
         """Bedrock経由でClaudeモデルへ会話履歴を送信し、応答をストリーミングで受け取る。
 
-        Args:
-            endpoint: テナントに紐づくBedrock Mantleエンドポイント
-                （例: `https://bedrock-mantle.ap-northeast-1.api.aws/anthropic`）。
-            api_key: テナントに紐づくBedrock API key（Bearerトークン）。
-            model_id: 呼び出すモデルID（例: `anthropic.claude-haiku-4-5`）。
-            messages: 会話履歴。
-            temperature: 応答のランダム性(0.0〜1.0)。
-            max_tokens: 出力トークン数の上限。Anthropic Messages APIでは必須のため、
-                呼び出し元がAIモデルの上限で切り詰めた値（未指定時はAIモデルの上限）を渡す。
-            tools: 有効化するツール。対応していないため、指定された場合は例外にする
-                （呼び出し元は事前に`validate_request`で検証する）。
+        Parameters
+        ----------
+        endpoint : str
+            テナントに紐づくBedrock Mantleエンドポイント
+            （例: `https://bedrock-mantle.ap-northeast-1.api.aws/anthropic`）。
+        api_key : str
+            テナントに紐づくBedrock API key（Bearerトークン）。
+        model_id : str
+            呼び出すモデルID（例: `anthropic.claude-haiku-4-5`）。
+        messages : list[ChatMessage]
+            会話履歴。
+        temperature : float
+            応答のランダム性(0.0〜1.0)。
+        max_tokens : int
+            出力トークン数の上限。Anthropic Messages APIでは必須のため、
+            呼び出し元がAIモデルの上限で切り詰めた値（未指定時はAIモデルの上限）を渡す。
+        tools : list[ToolConfig] | None
+            有効化するツール。対応していないため、指定された場合は例外にする
+            （呼び出し元は事前に`validate_request`で検証する）。
 
-        Yields:
+        Yields
+        ------
+        ChatStreamChunk
             テキスト差分、および完了時の入出力トークン数を持つチャンク。
 
-        Raises:
-            ValueError: `tools`が指定された場合、またはメッセージに変換できない
-                添付パートが含まれる場合。
+        Raises
+        ------
+        ValueError
+            `tools`が指定された場合、またはメッセージに変換できない
+            添付パートが含まれる場合。
         """
         BedrockLlmChatClient.validate_request(tools)
 
@@ -464,14 +518,22 @@ class AzureLlmEmbeddingClient:
     ) -> EmbeddingResult:
         """Azure OpenAI Embeddingsモデルで入力テキストをベクトル化する。
 
-        Args:
-            endpoint: テナントに紐づくAzure OpenAIエンドポイントURL。
-            api_key: テナントに紐づくAzure OpenAI APIキー。
-            deploy_name: 呼び出すデプロイ名（モデル名）。
-            input_text: ベクトル化対象の入力テキスト。
-            dimensions: 出力ベクトルの次元数。未指定の場合はモデルの既定値に従う。
+        Parameters
+        ----------
+        endpoint : str
+            テナントに紐づくAzure OpenAIエンドポイントURL。
+        api_key : str
+            テナントに紐づくAzure OpenAI APIキー。
+        deploy_name : str
+            呼び出すデプロイ名（モデル名）。
+        input_text : str
+            ベクトル化対象の入力テキスト。
+        dimensions : int | None
+            出力ベクトルの次元数。未指定の場合はモデルの既定値に従う。
 
-        Returns:
+        Returns
+        -------
+        EmbeddingResult
             埋め込みベクトルと消費した入力トークン数。
         """
         create_kwargs: dict = {"model": deploy_name, "input": input_text}

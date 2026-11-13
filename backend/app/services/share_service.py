@@ -17,22 +17,32 @@ from app.schemas.share import (
 
 
 class ShareService:
+    """共有に関するビジネスロジック。"""
+
     @staticmethod
     async def _require_share(
         share_id: str, tenant_id: str, session: AsyncSession
     ) -> Share:
         """共有リンクIDとテナントIDで共有リンクを取得する。存在しなければ404。
 
-        Args:
-            share_id: 対象の共有リンクID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        share_id : str
+            対象の共有リンクID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Share
             該当する共有リンク。
 
-        Raises:
-            HTTPException: 共有リンクが存在しない場合は404。
+        Raises
+        ------
+        HTTPException
+            共有リンクが存在しない場合は404。
         """
         share = await ShareRepository.find_by_id_and_tenant_id(
             share_id, tenant_id, session
@@ -56,18 +66,27 @@ class ShareService:
         （新規に共有リンクを作り直さない）。共有リンクの保存と共有先グループの
         置き換えは1トランザクションでコミットする。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            req: 共有リンク作成・更新リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : ShareCreateRequest
+            共有リンク作成・更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        ShareDataResponse
             作成・更新した共有リンク。
 
-        Raises:
-            HTTPException: ルームが存在しない場合は404、所有者でない場合は403、
-                指定グループの一部がテナントに存在しない場合は400。
+        Raises
+        ------
+        HTTPException
+            ルームが存在しない場合は404、所有者でない場合は403、
+            指定グループの一部がテナントに存在しない場合は400。
         """
         await require_owned_room(tenant_id, current_user, req.roomId, session)
 
@@ -104,18 +123,27 @@ class ShareService:
         ルーム所有者本人、または共有先グループに所属するメンバーがアクセスできる。
         所有者本人でなければ読み取り専用として扱う。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            share_id: 対象の共有リンクID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        share_id : str
+            対象の共有リンクID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        ShareAccessDataResponse
             アクセス解決結果（ルームID・ルーム名・読み取り専用フラグ・共有先グループID一覧）。
 
-        Raises:
-            HTTPException: 共有リンクが存在しない場合は404、
-                所有者でも共有先グループのメンバーでもない場合は403。
+        Raises
+        ------
+        HTTPException
+            共有リンクが存在しない場合は404、
+            所有者でも共有先グループのメンバーでもない場合は403。
         """
         share = await ShareService._require_share(share_id, tenant_id, session)
         room = await RoomRepository.find_by_id_and_tenant_id(
@@ -153,15 +181,22 @@ class ShareService:
     ) -> None:
         """共有リンクを削除する。対象ルームの所有者本人のみ削除できる。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            share_id: 削除対象の共有リンクID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        share_id : str
+            削除対象の共有リンクID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 共有リンクが存在しない場合は404、
-                対象ルームの所有者でない場合は403。
+        Raises
+        ------
+        HTTPException
+            共有リンクが存在しない場合は404、
+            対象ルームの所有者でない場合は403。
         """
         share = await ShareService._require_share(share_id, tenant_id, session)
         await require_owned_room(tenant_id, current_user, share.room_id, session)

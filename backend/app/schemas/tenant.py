@@ -39,12 +39,16 @@ class TenantAdminPatchRequest(RequestModel):
 
 
 class TenantResourceResponse(BaseModel):
+    """テナントリソースのレスポンス。"""
+
     id: str
     type: str
     description: str | None = None
 
 
 class PlanResponse(BaseModel):
+    """プランのレスポンス。"""
+
     id: str
     name: str
     maxUsers: int
@@ -52,6 +56,8 @@ class PlanResponse(BaseModel):
 
 
 class SubscriptionResponse(BaseModel):
+    """サブスクリプションのレスポンス。"""
+
     id: str
     status: str
     startDate: date
@@ -62,6 +68,8 @@ class SubscriptionResponse(BaseModel):
 
 
 class TenantDetailResponse(BaseModel):
+    """テナント詳細のレスポンス。"""
+
     tenantId: str
     tenantName: str
     maxUsageBasedCreditsPerMonth: int

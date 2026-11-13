@@ -10,6 +10,8 @@ NAME_MAX_LENGTH = 32
 
 
 class PromptTemplate(SQLModel, table=True):
+    """プロンプトテンプレートのテーブル定義。"""
+
     __tablename__ = "prompt_templates"
 
     id: str = Field(

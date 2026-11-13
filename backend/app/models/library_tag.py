@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class LibraryTag(SQLModel, table=True):
+    """ライブラリタグのテーブル定義。"""
+
     __tablename__ = "library_tags"
     __table_args__ = (
         sa.UniqueConstraint("tenant_id", "name", name="uq_library_tags_tenant_id_name"),

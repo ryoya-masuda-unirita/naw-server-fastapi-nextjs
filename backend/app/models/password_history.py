@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class PasswordHistory(SQLModel, table=True):
+    """パスワード履歴のテーブル定義。"""
+
     __tablename__ = "password_histories"
     __table_args__ = (sa.Index("ix_password_histories_user_id", "user_id"),)
 

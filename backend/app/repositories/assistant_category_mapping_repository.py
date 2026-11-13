@@ -6,6 +6,8 @@ from app.models.assistant_category import AssistantCategory
 
 
 class AssistantCategoryMappingRepository:
+    """アシスタントとカテゴリの紐付けのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_categories_grouped_by_assistant_ids(
         assistant_ids: list[str], tenant_id: str, session: AsyncSession
@@ -15,12 +17,18 @@ class AssistantCategoryMappingRepository:
         アシスタントごとに個別クエリを発行するとN+1になるため、対象アシスタントID一覧に対する
         (assistant_id, AssistantCategory) の組を1クエリで取得しPython側で集約する。
 
-        Args:
-            assistant_ids: 対象のアシスタントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[AssistantCategory]]
             アシスタントIDをキーとしたカテゴリ一覧の辞書。
         """
         if not assistant_ids:
@@ -56,11 +64,16 @@ class AssistantCategoryMappingRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            assistant_id: 対象のアシスタントID。
-            tenant_id: テナントID。
-            category_ids: 紐付け先のカテゴリID集合（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_id : str
+            対象のアシスタントID。
+        tenant_id : str
+            テナントID。
+        category_ids : set[str]
+            紐付け先のカテゴリID集合（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(AssistantCategoryMapping).where(

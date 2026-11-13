@@ -5,15 +5,22 @@ from app.models.tenant import Tenant
 
 
 class TenantRepository:
+    """テナントのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_id(tenant_id: str, session: AsyncSession) -> Tenant | None:
         """テナントIDでテナントを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Tenant | None
             該当する Tenant。存在しない場合は None。
         """
         stmt = select(Tenant).where(Tenant.id == tenant_id)
@@ -24,11 +31,16 @@ class TenantRepository:
     async def update(tenant: Tenant, session: AsyncSession) -> Tenant:
         """テナントの変更を永続化する。
 
-        Args:
-            tenant: 更新対象の Tenant（属性は呼び出し側で変更済み）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant : Tenant
+            更新対象の Tenant（属性は呼び出し側で変更済み）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Tenant
             更新後の Tenant。
         """
         session.add(tenant)

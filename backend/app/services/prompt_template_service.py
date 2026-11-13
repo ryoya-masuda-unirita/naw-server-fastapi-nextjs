@@ -22,8 +22,22 @@ from app.schemas.prompt_template import (
 
 
 class PromptTemplateService:
+    """プロンプトテンプレートに関するビジネスロジック。"""
+
     @staticmethod
     def _is_tenant_admin(current_user: User) -> bool:
+        """テナント管理者かどうかを判定する。
+
+        Parameters
+        ----------
+        current_user : User
+            判定対象のユーザー。
+
+        Returns
+        -------
+        bool
+            テナント管理者の場合は True。
+        """
         return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
@@ -52,6 +66,28 @@ class PromptTemplateService:
         size: int,
         session: AsyncSession,
     ) -> PagedPromptTemplateResponse:
+        """プロンプトテンプレート一覧からページングレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        templates : list[PromptTemplate]
+            プロンプトテンプレート一覧。
+        total : int
+            条件に合う総件数。
+        tenant_id : str
+            テナントID。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        PagedPromptTemplateResponse
+            プロンプトテンプレート一覧のページングレスポンス。
+        """
         template_ids = [t.id for t in templates]
         groups_by_template_id = (
             await GroupPromptTemplateRepository.find_groups_grouped_by_template_ids(
@@ -77,15 +113,24 @@ class PromptTemplateService:
     ) -> PagedPromptTemplateResponse:
         """一般ユーザー向け: ログインユーザーの所属グループに紐づくテンプレート一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: 名前・説明の部分一致検索文字列。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedPromptTemplateResponse
             ページネーション済みプロンプトテンプレート一覧。
         """
         group_ids = await GroupUserRepository.find_belonging_group_ids(
@@ -116,18 +161,30 @@ class PromptTemplateService:
         自分が管理するグループに紐づくテンプレートのみに自動的に絞り込まれる
         （既存の `GET /api/admin/groups` と同じ方針で403にはしない）。
 
-        Args:
-            tenant_id: テナントID。
-            current_user: 認証済みユーザー。
-            search: 名前・説明の部分一致検索文字列。
-            team: チームフィルタ（グループID）。
-            exclude_group_id: 除外グループフィルタ（グループID）。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        team : str | None
+            チームフィルタ（グループID）。
+        exclude_group_id : str | None
+            除外グループフィルタ（グループID）。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedPromptTemplateResponse
             ページネーション済みプロンプトテンプレート一覧。
         """
         admin = PromptTemplateService._is_tenant_admin(current_user)
@@ -174,12 +231,18 @@ class PromptTemplateService:
     ) -> PromptTemplateCreateResponse:
         """プロンプトテンプレートを新規作成する。
 
-        Args:
-            tenant_id: テナントID。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        req : PromptTemplateCreateRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PromptTemplateCreateResponse
             作成したテンプレート（groupsはグループID集合）。
         """
         groups = await PromptTemplateService._resolve_groups(
@@ -219,17 +282,26 @@ class PromptTemplateService:
     ) -> PromptTemplateCreateResponse:
         """プロンプトテンプレートを更新する。グループ集合が指定されない場合は既存の紐付けを維持する。
 
-        Args:
-            template_id: 更新対象のプロンプトテンプレートID。
-            tenant_id: テナントID。
-            req: 更新リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_id : str
+            更新対象のプロンプトテンプレートID。
+        tenant_id : str
+            テナントID。
+        req : PromptTemplateCreateRequest
+            更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PromptTemplateCreateResponse
             更新後のテンプレート（groupsはグループID集合）。
 
-        Raises:
-            HTTPException: テンプレートが存在しない場合 404 を返す。
+        Raises
+        ------
+        HTTPException
+            テンプレートが存在しない場合 404 を返す。
         """
         template = await PromptTemplateRepository.find_by_id_and_tenant_id(
             template_id, tenant_id, session
@@ -279,10 +351,14 @@ class PromptTemplateService:
     ) -> None:
         """プロンプトテンプレートを削除する。存在しない場合は何もしない。
 
-        Args:
-            template_id: 削除対象のプロンプトテンプレートID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_id : str
+            削除対象のプロンプトテンプレートID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await PromptTemplateRepository.delete_by_id_and_tenant_id(
             template_id, tenant_id, session

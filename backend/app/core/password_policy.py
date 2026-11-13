@@ -11,10 +11,14 @@ from app.repositories.password_history_repository import PasswordHistoryReposito
 def _policy_error(message: str) -> HTTPException:
     """パスワードポリシー違反を表す 400 の例外を生成する。
 
-    Args:
-        message: クライアントに返すエラーメッセージ。
+    Parameters
+    ----------
+    message : str
+        クライアントに返すエラーメッセージ。
 
-    Returns:
+    Returns
+    -------
+    HTTPException
         ステータス 400 の HTTPException。
     """
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
@@ -27,13 +31,18 @@ def verify_password_strength(new_password: str, tenant: Tenant) -> None:
     項目のメッセージを返す。文字種の判定は Java の Character.isUpperCase /
     isLowerCase / isDigit に合わせて Unicode の文字カテゴリで行う。
 
-    Args:
-        new_password: 検証対象の新パスワード。
-        tenant: パスワードポリシーを持つテナント。
+    Parameters
+    ----------
+    new_password : str
+        検証対象の新パスワード。
+    tenant : Tenant
+        パスワードポリシーを持つテナント。
 
-    Raises:
-        HTTPException: 空白のみ・最小長未満・必須の文字種（大文字/小文字/数字/記号）を
-            含まない場合 400 を返す。
+    Raises
+    ------
+    HTTPException
+        空白のみ・最小長未満・必須の文字種（大文字/小文字/数字/記号）を
+        含まない場合 400 を返す。
     """
     if not new_password.strip():
         raise _policy_error("新パスワードの入力は必須です。")
@@ -66,14 +75,21 @@ async def check_password_not_reused(
 ) -> None:
     """新パスワードが直近の使用履歴に含まれていないか検証する。
 
-    Args:
-        user_id: 検証対象ユーザーのID。
-        new_password: 検証対象の新パスワード。
-        tenant: パスワード履歴件数のポリシーを持つテナント。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    user_id : uuid.UUID
+        検証対象ユーザーのID。
+    new_password : str
+        検証対象の新パスワード。
+    tenant : Tenant
+        パスワード履歴件数のポリシーを持つテナント。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Raises:
-        HTTPException: 直近の使用履歴に含まれる場合 400 を返す。
+    Raises
+    ------
+    HTTPException
+        直近の使用履歴に含まれる場合 400 を返す。
     """
     recent_hashes = await PasswordHistoryRepository.get_recent_hashes(
         user_id, tenant.pw_histories_limit, session

@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """マイグレーションを適用する。"""
     op.create_table(
         "libraries",
         sa.Column(
@@ -145,6 +146,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """マイグレーションを取り消す。"""
     op.drop_table("library_tag_mappings")
     op.drop_table("share_libraries")
     op.drop_table("libraries")

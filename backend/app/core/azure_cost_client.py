@@ -52,13 +52,19 @@ class AzureCostClient:
     ) -> list[AzureCostQueryResult]:
         """指定リソースのコストをAzure Cost Management APIから日次集計で取得する。
 
-        Args:
-            resource_id: コストを取得する対象のAzureリソースID。
-            start_date: 集計期間の開始日時。Noneの場合は`end_date`とあわせて
-                直近の請求月（THE_LAST_BILLING_MONTH相当）が使われる。
-            end_date: 集計期間の終了日時。
+        Parameters
+        ----------
+        resource_id : str
+            コストを取得する対象のAzureリソースID。
+        start_date : datetime | None
+            集計期間の開始日時。Noneの場合は`end_date`とあわせて
+            直近の請求月（THE_LAST_BILLING_MONTH相当）が使われる。
+        end_date : datetime | None
+            集計期間の終了日時。
 
-        Returns:
+        Returns
+        -------
+        list[AzureCostQueryResult]
             リソースタイプ・日付ごとのコスト集計結果一覧。該当行がない場合は空リスト。
         """
         settings = get_azure_cost_settings()
@@ -134,17 +140,24 @@ class AzureCostClient:
         あるため、レスポンスに含まれる`columns`（列メタデータ）から列名で位置を
         特定する。
 
-        Args:
-            columns: レスポンスの列メタデータ一覧（`QueryColumn`相当）。
-            rows: レスポンスの行データ一覧。
+        Parameters
+        ----------
+        columns : list[QueryColumn]
+            レスポンスの列メタデータ一覧（`QueryColumn`相当）。
+        rows : list[list[Any]]
+            レスポンスの行データ一覧。
 
-        Returns:
+        Returns
+        -------
+        list[AzureCostQueryResult]
             リソースタイプ・日付ごとのコスト集計結果一覧。列構成が想定と異なる
             行はログを出力して除外する。
 
-        Raises:
-            ValueError: 想定する列（`totalCost`, `UsageDate`, `ResourceType`,
-                `Currency`）のいずれかがレスポンスに含まれない場合。
+        Raises
+        ------
+        ValueError
+            想定する列（`totalCost`, `UsageDate`, `ResourceType`,
+            `Currency`）のいずれかがレスポンスに含まれない場合。
         """
         column_names = [column.name for column in columns]
         try:

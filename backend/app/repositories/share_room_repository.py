@@ -5,6 +5,8 @@ from app.models.share import ShareRoom
 
 
 class ShareRoomRepository:
+    """ルームの共有のDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_group_ids_by_room_id(
         room_id: str, tenant_id: str, session: AsyncSession
@@ -14,12 +16,18 @@ class ShareRoomRepository:
         `share_rooms`は`room_id`列を保持しているため、共有リンク（`shares`）を
         経由せず直接ルームIDで引ける。
 
-        Args:
-            room_id: 対象のルームID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        room_id : str
+            対象のルームID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[str]
             共有先グループID一覧。
         """
         stmt = select(ShareRoom.group_id).where(
@@ -34,12 +42,18 @@ class ShareRoomRepository:
     ) -> list[str]:
         """共有リンクIDに紐づく共有先グループID一覧を取得する。
 
-        Args:
-            share_id: 対象の共有リンクID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        share_id : str
+            対象の共有リンクID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[str]
             共有先グループID一覧。
         """
         stmt = select(ShareRoom.group_id).where(
@@ -60,12 +74,18 @@ class ShareRoomRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            share_id: 対象の共有リンクID。
-            room_id: 共有対象のルームID。
-            tenant_id: テナントID。
-            group_ids: 共有先グループID一覧（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        share_id : str
+            対象の共有リンクID。
+        room_id : str
+            共有対象のルームID。
+        tenant_id : str
+            テナントID。
+        group_ids : list[str]
+            共有先グループID一覧（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(ShareRoom).where(

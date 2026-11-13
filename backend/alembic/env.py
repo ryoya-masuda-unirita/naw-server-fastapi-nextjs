@@ -18,6 +18,7 @@ target_metadata = SQLModel.metadata
 
 
 def run_migrations_offline() -> None:
+    """DBに接続せず、SQL文を出力する形でマイグレーションを実行する。"""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
@@ -30,12 +31,20 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    """渡された接続でマイグレーションを実行する。
+
+    Parameters
+    ----------
+    connection : Connection
+        マイグレーションを実行するDB接続。
+    """
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
+    """非同期エンジンを作成し、マイグレーションを実行する。"""
     from app.core.config import get_settings
 
     settings = get_settings()
@@ -55,6 +64,7 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
+    """DBに接続してマイグレーションを実行する。"""
     asyncio.run(run_async_migrations())
 
 

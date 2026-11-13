@@ -12,6 +12,8 @@ from app.schemas.tenant_endpoint import (
 
 
 class TenantEndpointService:
+    """テナントエンドポイントに関するビジネスロジック。"""
+
     @staticmethod
     def _assert_local_server_only(endpoint_type: EndpointType) -> None:
         """LOCAL_SERVER以外のタイプに対する作成・更新・削除操作を拒否する。
@@ -19,11 +21,15 @@ class TenantEndpointService:
         移植元（Spring Boot）の`assertLocalServerOnly`と同じ制約。クラウドAIプロバイダーの
         接続情報（Azure OpenAI等）は本APIでは作成・更新・削除できない。
 
-        Args:
-            endpoint_type: 検証対象のエンドポイントタイプ。
+        Parameters
+        ----------
+        endpoint_type : EndpointType
+            検証対象のエンドポイントタイプ。
 
-        Raises:
-            HTTPException: LOCAL_SERVER以外の場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            LOCAL_SERVER以外の場合 400 を返す。
         """
         if endpoint_type != EndpointType.LOCAL_SERVER:
             raise HTTPException(
@@ -35,11 +41,15 @@ class TenantEndpointService:
     def _assert_valid_url(endpoint: str) -> None:
         """簡易的なURL形式チェックを行う。
 
-        Args:
-            endpoint: 検証対象のURL文字列。
+        Parameters
+        ----------
+        endpoint : str
+            検証対象のURL文字列。
 
-        Raises:
-            HTTPException: http(s)://で始まらない場合 400 を返す。
+        Raises
+        ------
+        HTTPException
+            http(s)://で始まらない場合 400 を返す。
         """
         if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
             raise HTTPException(
@@ -53,11 +63,16 @@ class TenantEndpointService:
     ) -> list[EndpointResponse]:
         """テナント内の全エンドポイント一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[EndpointResponse]
             エンドポイント一覧。
         """
         endpoints = await TenantEndpointRepository.find_by_tenant_id(tenant_id, session)
@@ -69,12 +84,18 @@ class TenantEndpointService:
     ) -> list[EndpointResponse]:
         """テナント内の指定タイプのエンドポイント一覧を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            endpoint_type: エンドポイントタイプ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        endpoint_type : EndpointType
+            エンドポイントタイプ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[EndpointResponse]
             エンドポイント一覧。
         """
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
@@ -88,16 +109,24 @@ class TenantEndpointService:
     ) -> EndpointResponse:
         """エンドポイントを作成する（LOCAL_SERVERタイプのみ）。
 
-        Args:
-            tenant_id: テナントID。
-            req: 作成リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        req : TenantEndpointCreateRequest
+            作成リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        EndpointResponse
             作成したエンドポイント。
 
-        Raises:
-            HTTPException: typeがLOCAL_SERVER以外の場合400、URL形式が不正な場合400を返す。
+        Raises
+        ------
+        HTTPException
+            typeがLOCAL_SERVER以外の場合400、URL形式が不正な場合400を返す。
         """
         TenantEndpointService._assert_local_server_only(req.type)
         TenantEndpointService._assert_valid_url(req.endpoint)
@@ -123,18 +152,27 @@ class TenantEndpointService:
     ) -> EndpointResponse:
         """エンドポイントを更新する（対象・更新後ともLOCAL_SERVERタイプのみ）。
 
-        Args:
-            endpoint_id: エンドポイントID。
-            tenant_id: テナントID。
-            req: 更新リクエスト。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        endpoint_id : str
+            エンドポイントID。
+        tenant_id : str
+            テナントID。
+        req : TenantEndpointUpdateRequest
+            更新リクエスト。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        EndpointResponse
             更新後のエンドポイント。
 
-        Raises:
-            HTTPException: エンドポイントが存在しない場合404、現在または更新後のtypeが
-                LOCAL_SERVER以外の場合400、URL形式が不正な場合400を返す。
+        Raises
+        ------
+        HTTPException
+            エンドポイントが存在しない場合404、現在または更新後のtypeが
+            LOCAL_SERVER以外の場合400、URL形式が不正な場合400を返す。
         """
         endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
             endpoint_id, tenant_id, session
@@ -167,13 +205,19 @@ class TenantEndpointService:
     ) -> None:
         """エンドポイントを削除する（LOCAL_SERVERタイプのみ）。
 
-        Args:
-            endpoint_id: エンドポイントID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        endpoint_id : str
+            エンドポイントID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: エンドポイントが存在しない場合404、typeがLOCAL_SERVER以外の場合400を返す。
+        Raises
+        ------
+        HTTPException
+            エンドポイントが存在しない場合404、typeがLOCAL_SERVER以外の場合400を返す。
         """
         endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
             endpoint_id, tenant_id, session
@@ -192,17 +236,25 @@ class TenantEndpointService:
     ) -> LocalServerEndpointResponse:
         """ローカルサーバーエンドポイントを取得する（apiKeyを含む）。
 
-        Args:
-            tenant_id: テナントID。
-            endpoint_id: エンドポイントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        endpoint_id : str
+            エンドポイントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LocalServerEndpointResponse
             apiKeyを含むエンドポイント情報。
 
-        Raises:
-            HTTPException: エンドポイントが存在しない、自テナントに属さない、
-                またはLOCAL_SERVERタイプでない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            エンドポイントが存在しない、自テナントに属さない、
+            またはLOCAL_SERVERタイプでない場合404を返す。
         """
         endpoint = await TenantEndpointRepository.find_by_id_and_tenant_id(
             endpoint_id, tenant_id, session
@@ -222,6 +274,18 @@ class TenantEndpointService:
 
     @staticmethod
     def _to_response(endpoint: TenantEndpoint) -> EndpointResponse:
+        """テナントエンドポイントのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        endpoint : TenantEndpoint
+            テナントエンドポイント。
+
+        Returns
+        -------
+        EndpointResponse
+            テナントエンドポイントのレスポンス。
+        """
         return EndpointResponse(
             id=endpoint.id,
             tenantId=endpoint.tenant_id,

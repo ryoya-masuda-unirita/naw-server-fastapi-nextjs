@@ -24,6 +24,24 @@ async def get_token_usages(
     current_user: User = Depends(require_admin_or_group_admin),
     session: AsyncSession = Depends(get_session),
 ) -> TokenUsageListResponse:
+    """トークン使用量の一覧を期間・ユーザーで絞り込んで返す。
+
+    Parameters
+    ----------
+    query : Annotated[TokenUsageListQuery, Query()]
+        期間・ユーザー・ページングのクエリパラメータ。
+    x_tenant_id : str
+        `X-Tenant-ID`ヘッダーで検証済みのテナントID。
+    current_user : User
+        操作しているユーザー。
+    session : AsyncSession
+        データベースセッション。
+
+    Returns
+    -------
+    TokenUsageListResponse
+        トークン使用量の一覧。
+    """
     return await TokenUsageService.list_token_usages(x_tenant_id, query, session)
 
 
@@ -34,4 +52,22 @@ async def get_token_usage_summary(
     current_user: User = Depends(require_admin_or_group_admin),
     session: AsyncSession = Depends(get_session),
 ) -> TokenUsageSummaryResponse:
+    """トークン使用量の期間集計を返す。
+
+    Parameters
+    ----------
+    query : Annotated[TokenUsagePeriodQuery, Query()]
+        期間のクエリパラメータ。
+    x_tenant_id : str
+        `X-Tenant-ID`ヘッダーで検証済みのテナントID。
+    current_user : User
+        操作しているユーザー。
+    session : AsyncSession
+        データベースセッション。
+
+    Returns
+    -------
+    TokenUsageSummaryResponse
+        トークン使用量の集計結果。
+    """
     return await TokenUsageService.get_summary(x_tenant_id, query, session)

@@ -19,6 +19,8 @@ _SATISFACTION_COLUMN_BY_STAR = {
 
 
 class MessageFeedbackRepository:
+    """メッセージへのフィードバックのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_id_and_tenant_id(
         feedback_id: str, tenant_id: str, session: AsyncSession
@@ -28,12 +30,18 @@ class MessageFeedbackRepository:
         移植元`MessageFeedbackRepository.findById`（JPA標準メソッド）相当。テナント分離の
         規約に沿い、`tenant_id`も条件に加える。
 
-        Args:
-            feedback_id: フィードバックID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        feedback_id : str
+            フィードバックID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageFeedback | None
             該当するフィードバック。存在しない場合はNone。
         """
         stmt = select(MessageFeedback).where(
@@ -63,12 +71,18 @@ class MessageFeedbackRepository:
     ) -> MessageFeedback | None:
         """メッセージIDとテナントIDでフィードバックを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 対象のメッセージID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str
+            対象のメッセージID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageFeedback | None
             該当するフィードバック。存在しない場合はNone。
         """
         stmt = select(MessageFeedback).where(
@@ -84,12 +98,18 @@ class MessageFeedbackRepository:
     ) -> set[str]:
         """フィードバックが登録済みのメッセージID集合を1クエリで取得する。
 
-        Args:
-            message_ids: 判定対象のメッセージID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        message_ids : list[str]
+            判定対象のメッセージID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        set[str]
             フィードバックが登録済みのメッセージID集合。
         """
         if not message_ids:
@@ -192,18 +212,29 @@ class MessageFeedbackRepository:
         過大にカウントされ得る。これは移植元（Spring Boot）のネイティブSQLと同一の挙動であり、
         本実装ではその仕様をそのまま踏襲する。
 
-        Args:
-            tenant_id: テナントID。
-            response_status: `has_response`/`no_response`のいずれか、または絞り込みなしのNone。
-            satisfaction: `star1`〜`star5`のいずれか、または絞り込みなしのNone。
-            sort_column: ソート対象カラム名（`display_name`/`feedback_message_count`/
-                `latest_updated_at`/`excellent`/`very_good`/`good`/`average`/`poor`のいずれか）。
-            sort_desc: 降順ならTrue。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        response_status : str | None
+            `has_response`/`no_response`のいずれか、または絞り込みなしのNone。
+        satisfaction : str | None
+            `star1`〜`star5`のいずれか、または絞り込みなしのNone。
+        sort_column : str
+            ソート対象カラム名（`display_name`/`feedback_message_count`/
+            `latest_updated_at`/`excellent`/`very_good`/`good`/`average`/`poor`のいずれか）。
+        sort_desc : bool
+            降順ならTrue。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Row], int]
             (集計結果の行一覧, 絞り込み後の総件数) のタプル。
         """
         stats = (
@@ -276,11 +307,16 @@ class MessageFeedbackRepository:
     async def save(feedback: MessageFeedback, session: AsyncSession) -> MessageFeedback:
         """フィードバックを新規作成または更新する。
 
-        Args:
-            feedback: 保存対象のフィードバック（新規または既存インスタンス）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        feedback : MessageFeedback
+            保存対象のフィードバック（新規または既存インスタンス）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageFeedback
             保存後のフィードバック。
         """
         session.add(feedback)

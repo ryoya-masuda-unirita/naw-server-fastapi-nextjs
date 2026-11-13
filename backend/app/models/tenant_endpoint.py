@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 
 class EndpointType(str, Enum):
+    """テナントエンドポイントの種別の取りうる値。"""
+
     LOCAL_SERVER = "LOCAL_SERVER"
     VDB = "VDB"
     AZURE_OPENAI_CHAT = "AZURE_OPENAI_CHAT"
@@ -18,6 +20,8 @@ class EndpointType(str, Enum):
 
 
 class TenantEndpoint(SQLModel, table=True):
+    """テナントエンドポイントのテーブル定義。"""
+
     __tablename__ = "tenant_endpoints"
 
     id: str = Field(

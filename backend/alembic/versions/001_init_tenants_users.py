@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """マイグレーションを適用する。"""
     op.create_table(
         "tenants",
         sa.Column("id", sa.String(32), nullable=False),
@@ -138,6 +139,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """マイグレーションを取り消す。"""
     op.drop_table("users")
     op.execute("DROP TYPE IF EXISTS userrole")
     op.drop_table("tenants")

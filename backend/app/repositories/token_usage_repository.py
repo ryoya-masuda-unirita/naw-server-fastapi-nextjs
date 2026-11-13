@@ -17,10 +17,30 @@ _ORDER_BY_COLUMNS: dict[str, InstrumentedAttribute] = {
 
 
 class TokenUsageRepository:
+    """トークン使用量のDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     def _base_conditions(
         tenant_id: str, from_: datetime, to: datetime, user_id: UUID | None
     ) -> list:
+        """テナント・期間・ユーザーで絞り込む共通の検索条件を組み立てる。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        from_ : datetime
+            集計期間の開始日時。
+        to : datetime
+            集計期間の終了日時。
+        user_id : UUID | None
+            絞り込むユーザーID。指定しない場合は None。
+
+        Returns
+        -------
+        list
+            where句に渡す条件の一覧。
+        """
         conditions = [
             TokenUsage.tenant_id == tenant_id,
             TokenUsage.created_at >= from_,
@@ -44,18 +64,30 @@ class TokenUsageRepository:
     ) -> tuple[list[TokenUsage], int]:
         """期間・ユーザーで絞り込んだトークン消費量を1ページ分取得する。
 
-        Args:
-            tenant_id: テナントID。
-            from_: 期間開始（この値以上）。
-            to: 期間終了（この値以下）。
-            user_id: 絞り込み対象のユーザーID。Noneなら絞り込まない。
-            page: 0始まりのページ番号。
-            size: 1ページあたりの件数。
-            order_by: ソート対象（`createdAt`または`totalTokens`）。
-            reverse: Trueなら降順。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        from_ : datetime
+            期間開始（この値以上）。
+        to : datetime
+            期間終了（この値以下）。
+        user_id : UUID | None
+            絞り込み対象のユーザーID。Noneなら絞り込まない。
+        page : int
+            0始まりのページ番号。
+        size : int
+            1ページあたりの件数。
+        order_by : str
+            ソート対象（`createdAt`または`totalTokens`）。
+        reverse : bool
+            Trueなら降順。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[TokenUsage], int]
             該当ページのレコード一覧と、絞り込み条件全体の総件数のタプル。
         """
         conditions = TokenUsageRepository._base_conditions(
@@ -88,14 +120,22 @@ class TokenUsageRepository:
     ) -> sa.Row:
         """期間・ユーザーで絞り込んだトークン消費量を集計する。
 
-        Args:
-            tenant_id: テナントID。
-            from_: 期間開始（この値以上）。
-            to: 期間終了（この値以下）。
-            user_id: 絞り込み対象のユーザーID。Noneなら絞り込まない。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        from_ : datetime
+            期間開始（この値以上）。
+        to : datetime
+            期間終了（この値以下）。
+        user_id : UUID | None
+            絞り込み対象のユーザーID。Noneなら絞り込まない。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        sa.Row
             各トークン数・クレジット数の合計値を持つRow(該当データがなければ全て0)。
         """
         conditions = TokenUsageRepository._base_conditions(
@@ -133,14 +173,22 @@ class TokenUsageRepository:
         組み立てる際、ページ内のユーザーごとに個別クエリを発行しない（N+1回避）ために使う。
         移植元(Spring Boot)`TokenUsageRepository.sumTotalCreditsByUserIdsInPeriod`に対応する。
 
-        Args:
-            tenant_id: テナントID。
-            from_: 請求期間の開始（この値以上）。
-            to: 請求期間の終了（この値以下）。
-            user_ids: 集計対象のユーザーID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        from_ : datetime
+            請求期間の開始（この値以上）。
+        to : datetime
+            請求期間の終了（この値以下）。
+        user_ids : list[UUID]
+            集計対象のユーザーID一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[UUID, int]
             ユーザーIDをキーとしたクレジット合計の辞書。`user_ids`が空の場合はクエリを
             発行せず空辞書を返す。
         """

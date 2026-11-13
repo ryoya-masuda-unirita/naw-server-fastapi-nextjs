@@ -43,11 +43,16 @@ async def verify_password_async(plain_password: str, hashed_password: str) -> bo
     イベントループを占有し他のリクエスト処理を遅延させる。asyncio.to_thread で
     別スレッドに退避させる。
 
-    Args:
-        plain_password: 検証対象の平文パスワード。
-        hashed_password: 比較対象のハッシュ化済みパスワード。
+    Parameters
+    ----------
+    plain_password : str
+        検証対象の平文パスワード。
+    hashed_password : str
+        比較対象のハッシュ化済みパスワード。
 
-    Returns:
+    Returns
+    -------
+    bool
         パスワードが一致すれば True。
     """
     return await asyncio.to_thread(verify_password, plain_password, hashed_password)
@@ -100,17 +105,26 @@ async def get_current_user(
     同様の優先順位（セッション認証が成立していればbearerトークンは検証しない）を
     採用しているため、これに揃える。
 
-    Args:
-        credentials: Authorization ヘッダーから取得した Bearer トークン（任意）。
-        session_id: Cookie から取得したセッションID（任意）。
-        redis_client: Redis 非同期クライアント。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    credentials : HTTPAuthorizationCredentials | None
+        Authorization ヘッダーから取得した Bearer トークン（任意）。
+    session_id : str | None
+        Cookie から取得したセッションID（任意）。
+    redis_client : redis.Redis
+        Redis 非同期クライアント。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    User
         認証済みの User オブジェクト。
 
-    Raises:
-        HTTPException: セッション・トークンいずれでも認証できない場合 401 を返す。
+    Raises
+    ------
+    HTTPException
+        セッション・トークンいずれでも認証できない場合 401 を返す。
     """
     if session_id:
         session_data = await session_store.get_session(session_id, redis_client)
@@ -152,9 +166,12 @@ def set_session_cookie(response: Response, session_id: str) -> None:
     採用しており、クライアントもCookie送信（withCredentials）前提で
     作られているため、ブラウザ経由の認証を成立させるにはCookie発行が必要になる。
 
-    Args:
-        response: Cookieを設定する対象のレスポンス。
-        session_id: 設定するセッションID。
+    Parameters
+    ----------
+    response : Response
+        Cookieを設定する対象のレスポンス。
+    session_id : str
+        設定するセッションID。
     """
     settings = get_settings()
     response.set_cookie(
@@ -170,8 +187,10 @@ def set_session_cookie(response: Response, session_id: str) -> None:
 def clear_session_cookie(response: Response) -> None:
     """セッションCookieを削除する（ログアウト時に使用）。
 
-    Args:
-        response: Cookieを削除する対象のレスポンス。
+    Parameters
+    ----------
+    response : Response
+        Cookieを削除する対象のレスポンス。
     """
     response.delete_cookie(key=session_store.SESSION_COOKIE_NAME)
 
@@ -191,14 +210,20 @@ async def require_admin(
 ) -> User:
     """ADMIN または SYSTEM ロールのユーザーのみ通過させる。
 
-    Args:
-        current_user: 認証済みユーザー。
+    Parameters
+    ----------
+    current_user : User
+        認証済みユーザー。
 
-    Returns:
+    Returns
+    -------
+    User
         認可済みの User オブジェクト。
 
-    Raises:
-        HTTPException: ロールが ADMIN/SYSTEM 以外の場合 403 を返す。
+    Raises
+    ------
+    HTTPException
+        ロールが ADMIN/SYSTEM 以外の場合 403 を返す。
     """
     if current_user.role not in (UserRole.ADMIN, UserRole.SYSTEM):
         raise HTTPException(
@@ -216,15 +241,22 @@ async def get_verified_tenant_id(
     JWT の tenant_id とリクエストヘッダーの値が異なると、認証済みユーザーが
     自分の所属しないテナントのデータへアクセスできてしまうため検証する。
 
-    Args:
-        x_tenant_id: リクエストヘッダーのテナントID。
-        current_user: JWT から認証されたユーザー。
+    Parameters
+    ----------
+    x_tenant_id : str
+        リクエストヘッダーのテナントID。
+    current_user : User
+        JWT から認証されたユーザー。
 
-    Returns:
+    Returns
+    -------
+    str
         検証済みのテナントID。
 
-    Raises:
-        HTTPException: ヘッダーと JWT の tenant_id が一致しない場合 403 を返す。
+    Raises
+    ------
+    HTTPException
+        ヘッダーと JWT の tenant_id が一致しない場合 403 を返す。
     """
     if x_tenant_id != current_user.tenant_id:
         raise HTTPException(
@@ -243,15 +275,22 @@ async def require_admin_for_tenant_path(
     移植元の`ensureTenantMatchesContext`相当。テナントIDをパスパラメータに含むエンドポイント
     （`/api/admin/tenants/{tenant_id}/...`）で使用する。
 
-    Args:
-        tenant_id: パスパラメータのテナントID。
-        current_user: テナント管理者であることを確認済みのユーザー。
+    Parameters
+    ----------
+    tenant_id : str
+        パスパラメータのテナントID。
+    current_user : User
+        テナント管理者であることを確認済みのユーザー。
 
-    Returns:
+    Returns
+    -------
+    str
         検証済みのテナントID。
 
-    Raises:
-        HTTPException: パスのtenant_idが認証済みユーザーのテナントと一致しない場合 403 を返す。
+    Raises
+    ------
+    HTTPException
+        パスのtenant_idが認証済みユーザーのテナントと一致しない場合 403 を返す。
     """
     if tenant_id != current_user.tenant_id:
         raise HTTPException(
@@ -270,16 +309,24 @@ async def require_admin_or_group_admin(
     移植元`AdminAuthorizationFilter`（`/api/admin/**`への一律フィルタ。ADMIN/SYSTEMロール
     またはグループ管理者のいずれかを許可）相当。
 
-    Args:
-        x_tenant_id: 検証済みテナントID。
-        current_user: 認証済みユーザー。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    x_tenant_id : str
+        検証済みテナントID。
+    current_user : User
+        認証済みユーザー。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    User
         認可済みの User オブジェクト。
 
-    Raises:
-        HTTPException: テナント管理者でも、いずれのグループの管理者でもない場合 403 を返す。
+    Raises
+    ------
+    HTTPException
+        テナント管理者でも、いずれのグループの管理者でもない場合 403 を返す。
     """
     if current_user.role in (UserRole.ADMIN, UserRole.SYSTEM):
         return current_user

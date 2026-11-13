@@ -25,21 +25,30 @@ ActiveSubscriptionAndPlan = tuple[Subscription, Plan] | None
 
 
 class TenantService:
+    """テナントに関するビジネスロジック。"""
+
     @staticmethod
     async def get_tenant_detail_response(
         tenant_id: str, session: AsyncSession
     ) -> TenantDetailResponse:
         """テナント詳細情報を取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        TenantDetailResponse
             テナント詳細レスポンス。
 
-        Raises:
-            HTTPException: テナントが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            テナントが存在しない場合404を返す。
         """
         tenant = await TenantRepository.find_by_id(tenant_id, session)
         if tenant is None:
@@ -57,17 +66,25 @@ class TenantService:
         送られたキーのみを更新対象とする。いずれのキーも送られていない場合は
         永続化を行わず、現状のテナント詳細を返す。
 
-        Args:
-            tenant_id: テナントID。
-            request: PATCHリクエストボディ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        request : TenantAdminPatchRequest
+            PATCHリクエストボディ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        TenantDetailResponse
             更新後（更新なしの場合は現状）のテナント詳細レスポンス。
 
-        Raises:
-            HTTPException: テナントが存在しない場合404、請求期間内の利用クレジットが
-                プラン枠＋新しい利用ベース上限以上で上限を下げられない場合400を返す。
+        Raises
+        ------
+        HTTPException
+            テナントが存在しない場合404、請求期間内の利用クレジットが
+            プラン枠＋新しい利用ベース上限以上で上限を下げられない場合400を返す。
         """
         tenant = await TenantRepository.find_by_id(tenant_id, session)
         if tenant is None:
@@ -120,16 +137,23 @@ class TenantService:
         有効なサブスクリプションが存在しない、プランのクレジット枠が未設定、または
         請求サイクルの起算日が算出できない場合はチェックをスキップする。
 
-        Args:
-            tenant_id: テナントID。
-            active: 呼び出し元で解決済みの有効なサブスクリプションとプランのタプル。
-                有効なサブスクリプションが存在しない場合はNone。
-            new_max: 新しく設定しようとする利用ベースクレジット上限。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        active : ActiveSubscriptionAndPlan
+            呼び出し元で解決済みの有効なサブスクリプションとプランのタプル。
+            有効なサブスクリプションが存在しない場合はNone。
+        new_max : int
+            新しく設定しようとする利用ベースクレジット上限。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: 請求期間内の利用クレジット合計が
-                「プランのクレジット枠 + new_max」以上の場合400を返す。
+        Raises
+        ------
+        HTTPException
+            請求期間内の利用クレジット合計が
+            「プランのクレジット枠 + new_max」以上の場合400を返す。
         """
         if active is None:
             return
@@ -166,16 +190,22 @@ class TenantService:
     ) -> TenantDetailResponse:
         """テナントエンティティからリソース・サブスクリプションを解決してレスポンスを組み立てる。
 
-        Args:
-            tenant: テナント。
-            session: 非同期DBセッション。
-            active: 呼び出し元で既に解決済みの有効なサブスクリプション・プラン。
-                未指定（省略時のデフォルト値であるNone）の場合はここで新たに解決する。
-                呼び出し元が「有効なサブスクリプションなし」を確定済みの場合と、
-                「未解決」の場合を区別できないため、更新系（PATCH）から渡す場合は
-                クレジット上限チェックの中で既に解決した結果を必ず渡すこと。
+        Parameters
+        ----------
+        tenant : Tenant
+            テナント。
+        session : AsyncSession
+            非同期DBセッション。
+        active : ActiveSubscriptionAndPlan
+            呼び出し元で既に解決済みの有効なサブスクリプション・プラン。
+            未指定（省略時のデフォルト値であるNone）の場合はここで新たに解決する。
+            呼び出し元が「有効なサブスクリプションなし」を確定済みの場合と、
+            「未解決」の場合を区別できないため、更新系（PATCH）から渡す場合は
+            クレジット上限チェックの中で既に解決した結果を必ず渡すこと。
 
-        Returns:
+        Returns
+        -------
+        TenantDetailResponse
             テナント詳細レスポンス。
         """
         # SQLAlchemyのAsyncSessionは単一コルーチンからの逐次利用が前提のため、
@@ -218,11 +248,16 @@ class TenantService:
     ) -> SubscriptionResponse:
         """SubscriptionエンティティからSubscriptionResponseを組み立てる。
 
-        Args:
-            subscription: サブスクリプション。
-            plan: サブスクリプションに紐づくプラン。
+        Parameters
+        ----------
+        subscription : Subscription
+            サブスクリプション。
+        plan : Plan
+            サブスクリプションに紐づくプラン。
 
-        Returns:
+        Returns
+        -------
+        SubscriptionResponse
             サブスクリプションレスポンス。
         """
         return SubscriptionResponse(
@@ -252,20 +287,30 @@ class TenantService:
 
         移植元Java版`TenantService.queryCost`に対応する。
 
-        Args:
-            tenant_id: 認証済みテナント管理者の所属テナントID。
-            resource_id: コストを取得する対象のリソースID。
-            from_: 集計期間の開始日時（ISO8601形式の文字列）。未指定の場合はNone。
-            to: 集計期間の終了日時（ISO8601形式の文字列）。未指定の場合はNone。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            認証済みテナント管理者の所属テナントID。
+        resource_id : str
+            コストを取得する対象のリソースID。
+        from_ : str | None
+            集計期間の開始日時（ISO8601形式の文字列）。未指定の場合はNone。
+        to : str | None
+            集計期間の終了日時（ISO8601形式の文字列）。未指定の場合はNone。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[TenantResourceCostResponse]
             リソースタイプ・日付ごとのコスト一覧。
 
-        Raises:
-            HTTPException: `resource_id`が`tenant_id`に紐づくリソースでない場合、
-                `from_`・`to`がISO8601形式として解釈できない場合、または
-                `from_`・`to`の一方のみが指定された場合400を返す。
+        Raises
+        ------
+        HTTPException
+            `resource_id`が`tenant_id`に紐づくリソースでない場合、
+            `from_`・`to`がISO8601形式として解釈できない場合、または
+            `from_`・`to`の一方のみが指定された場合400を返す。
         """
         resource = await TenantResourceRepository.find_by_id_and_tenant_id(
             resource_id, tenant_id, session
@@ -308,14 +353,20 @@ class TenantService:
         移植元Java版`OffsetDateTime.parse`に相当する。`Z`サフィックス（UTC）も
         受け付ける。
 
-        Args:
-            value: ISO8601形式の日時文字列。Noneの場合は変換せずNoneを返す。
+        Parameters
+        ----------
+        value : str | None
+            ISO8601形式の日時文字列。Noneの場合は変換せずNoneを返す。
 
-        Returns:
+        Returns
+        -------
+        datetime | None
             パース済みのdatetime。`value`がNoneの場合はNone。
 
-        Raises:
-            HTTPException: `value`がISO8601形式として解釈できない場合400を返す。
+        Raises
+        ------
+        HTTPException
+            `value`がISO8601形式として解釈できない場合400を返す。
         """
         if value is None:
             return None

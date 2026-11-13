@@ -70,6 +70,8 @@ class IndexResponse(BaseModel):
 
 
 class PagedIndexResponse(BaseModel):
+    """インデックス一覧のページングレスポンス。"""
+
     content: list[IndexResponse]
     totalElements: int
     number: int
@@ -92,9 +94,12 @@ class IndexAdditionalLearningForm:
     ) -> None:
         """追加学習フォームの各フィールドを保持する。
 
-        Args:
-            feedbackId: 追加学習のデータソースとするフィードバックID。
-            roomId: 追加学習のデータソースとするルームID。
+        Parameters
+        ----------
+        feedbackId : Annotated[str | None, Form()]
+            追加学習のデータソースとするフィードバックID。
+        roomId : Annotated[str | None, Form()]
+            追加学習のデータソースとするルームID。
         """
         self.feedback_id = feedbackId
         self.room_id = roomId

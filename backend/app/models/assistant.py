@@ -7,12 +7,16 @@ from sqlmodel import Field, SQLModel
 
 
 class AssistantType(str, Enum):
+    """アシスタントの種別の取りうる値。"""
+
     SECURE = "SECURE"
     SAAS_CHAT = "SAAS_CHAT"
     SAAS_RAG = "SAAS_RAG"
 
 
 class Assistant(SQLModel, table=True):
+    """アシスタントのテーブル定義。"""
+
     __tablename__ = "assistants"
 
     id: str = Field(

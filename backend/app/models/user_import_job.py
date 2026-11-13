@@ -7,6 +7,8 @@ from sqlmodel import Field, SQLModel
 
 
 class UserImportJobStatus(str, Enum):
+    """ユーザーインポートジョブの状態の取りうる値。"""
+
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
@@ -14,6 +16,8 @@ class UserImportJobStatus(str, Enum):
 
 
 class UserImportJob(SQLModel, table=True):
+    """ユーザーインポートジョブのテーブル定義。"""
+
     __tablename__ = "user_import_jobs"
 
     id: str = Field(

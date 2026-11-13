@@ -21,18 +21,26 @@ _SORT_COLUMNS: dict[str, Any] = {
 
 
 class IndexRepository:
+    """インデックスのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_id_and_tenant_id(
         index_id: str, tenant_id: str, session: AsyncSession
     ) -> Index | None:
         """インデックスIDとテナントIDでインデックスを取得する。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Index | None
             該当するIndex。存在しない場合はNone。
         """
         stmt = select(Index).where(Index.id == index_id, Index.tenant_id == tenant_id)
@@ -41,6 +49,20 @@ class IndexRepository:
 
     @staticmethod
     def _apply_search(stmt: Select, search: str | None) -> Select:
+        """インデックスの名前・説明に対する部分一致検索を条件に加える。
+
+        Parameters
+        ----------
+        stmt : Select
+            絞り込み前のクエリ。
+        search : str | None
+            検索文字列。空の場合は絞り込まない。
+
+        Returns
+        -------
+        Select
+            検索条件を加えたクエリ。
+        """
         if not search:
             return stmt
         pattern = escape_like_pattern(search.lower())
@@ -68,18 +90,30 @@ class IndexRepository:
         両方Noneでない場合）は、「自分の管理グループのアシスタントが使用しているインデックス」
         と「自分の管理グループに直接紐づくインデックス」の和集合として絞り込む。
 
-        Args:
-            tenant_id: テナントID。
-            search: 名前・説明の部分一致検索文字列。
-            group_id: グループIDでの絞り込み（指定時は`allowed_index_ids`/`allowed_group_ids`は無視する）。
-            allowed_index_ids: グループ管理者向けスコープ（アシスタント経由）。Noneなら絞り込みなし。
-            allowed_group_ids: グループ管理者向けスコープ（グループ直接紐付け経由）。Noneなら絞り込みなし。
-            sort: 並べ替え指定の並び（キーは"name"・"type"・"updatedAt"。それ以外は更新日時順）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        search : str | None
+            名前・説明の部分一致検索文字列。
+        group_id : str | None
+            グループIDでの絞り込み（指定時は`allowed_index_ids`/`allowed_group_ids`は無視する）。
+        allowed_index_ids : Collection[str] | None
+            グループ管理者向けスコープ（アシスタント経由）。Noneなら絞り込みなし。
+        allowed_group_ids : Collection[str] | None
+            グループ管理者向けスコープ（グループ直接紐付け経由）。Noneなら絞り込みなし。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"name"・"type"・"updatedAt"。それ以外は更新日時順）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[Index], int]
             (インデックス一覧, 総件数) のタプル。
         """
         stmt = select(Index).where(Index.tenant_id == tenant_id)
@@ -126,11 +160,16 @@ class IndexRepository:
     async def count_saas_indexes(tenant_id: str, session: AsyncSession) -> int:
         """テナント内のSAAS_GLOBALインデックス件数を取得する（新規作成時の上限チェック用）。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        int
             SAAS_GLOBALインデックスの件数。
         """
         stmt = select(func.count()).where(
@@ -143,11 +182,16 @@ class IndexRepository:
     async def create(index: Index, session: AsyncSession) -> Index:
         """インデックスを新規作成する。
 
-        Args:
-            index: 作成するインデックス。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index : Index
+            作成するインデックス。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Index
             作成したインデックス。
         """
         session.add(index)
@@ -159,11 +203,16 @@ class IndexRepository:
     async def update(index: Index, session: AsyncSession) -> Index:
         """インデックスを更新する。
 
-        Args:
-            index: 更新するインデックス。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index : Index
+            更新するインデックス。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Index
             更新後のインデックス。
         """
         session.add(index)
@@ -177,9 +226,12 @@ class IndexRepository:
 
         `indexes_endpoints`・`indexes_groups`はDBのON DELETE CASCADEにより連動削除される。
 
-        Args:
-            index: 削除するインデックス。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index : Index
+            削除するインデックス。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(index)
         await session.commit()
@@ -194,12 +246,18 @@ class IndexRepository:
         対象インデックスID一覧に対する`(index_id, TenantEndpoint)`のペアを1クエリで
         取得しPython側で集約する。
 
-        Args:
-            index_ids: 対象のインデックスID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_ids : list[str]
+            対象のインデックスID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[TenantEndpoint]]
             インデックスIDをキーとしたテナントエンドポイント一覧の辞書。
         """
         if not index_ids:
@@ -227,12 +285,18 @@ class IndexRepository:
     ) -> dict[str, list[str]]:
         """インデックスID一覧に対応するグループID一覧を1クエリでまとめて取得する。
 
-        Args:
-            index_ids: 対象のインデックスID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_ids : list[str]
+            対象のインデックスID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[str]]
             インデックスIDをキーとしたグループID一覧の辞書。
         """
         if not index_ids:
@@ -258,11 +322,16 @@ class IndexRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            index_id: 対象のインデックスID。
-            tenant_id: テナントID。
-            endpoint_ids: 紐付け先のエンドポイントID集合（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            対象のインデックスID。
+        tenant_id : str
+            テナントID。
+        endpoint_ids : Collection[str]
+            紐付け先のエンドポイントID集合（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(IndexEndpoint).where(
@@ -288,11 +357,16 @@ class IndexRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            index_id: 対象のインデックスID。
-            tenant_id: テナントID。
-            group_ids: 紐付け先のグループID集合（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            対象のインデックスID。
+        tenant_id : str
+            テナントID。
+        group_ids : Collection[str]
+            紐付け先のグループID集合（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(IndexGroup).where(

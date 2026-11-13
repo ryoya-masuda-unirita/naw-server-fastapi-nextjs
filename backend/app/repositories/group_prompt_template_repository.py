@@ -18,19 +18,28 @@ _SORT_COLUMNS: dict[str, Any] = {
 
 
 class GroupPromptTemplateRepository:
+    """グループとプロンプトテンプレートの紐付けのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_one(
         group_id: str, tenant_id: str, template_id: str, session: AsyncSession
     ) -> GroupPromptTemplate | None:
         """グループ・テンプレートの組み合わせでGroupPromptTemplateを取得する。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            template_id: プロンプトテンプレートID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        template_id : str
+            プロンプトテンプレートID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        GroupPromptTemplate | None
             該当する GroupPromptTemplate。存在しない場合は None。
         """
         stmt = select(GroupPromptTemplate).where(
@@ -53,16 +62,26 @@ class GroupPromptTemplateRepository:
     ) -> tuple[list[tuple[GroupPromptTemplate, PromptTemplate]], int]:
         """グループに紐づくプロンプトテンプレートをページネーションで取得する（PromptTemplateを結合）。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            search: テンプレート名・説明の部分一致検索文字列。
-            sort: 並べ替え指定の並び（キーは"name"・"addedAt"。それ以外は追加日時順）。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        search : str | None
+            テンプレート名・説明の部分一致検索文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び（キーは"name"・"addedAt"。それ以外は追加日時順）。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[tuple[GroupPromptTemplate, PromptTemplate]], int]
             ((GroupPromptTemplate, PromptTemplate) のリスト, 総件数) のタプル。
         """
         stmt = (
@@ -107,11 +126,16 @@ class GroupPromptTemplateRepository:
     ) -> None:
         """グループにプロンプトテンプレートを追加する（セッションに登録するのみ。コミットは呼び出し側で行う）。
 
-        Args:
-            group_id: グループID。
-            tenant_id: テナントID。
-            template_id: 追加するプロンプトテンプレートID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_id : str
+            グループID。
+        tenant_id : str
+            テナントID。
+        template_id : str
+            追加するプロンプトテンプレートID。
+        session : AsyncSession
+            非同期DBセッション。
         """
         session.add(
             GroupPromptTemplate(
@@ -125,9 +149,12 @@ class GroupPromptTemplateRepository:
     ) -> None:
         """グループからプロンプトテンプレートを除外する。
 
-        Args:
-            group_prompt_template: 削除対象の GroupPromptTemplate。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_prompt_template : GroupPromptTemplate
+            削除対象の GroupPromptTemplate。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.delete(group_prompt_template)
         await session.commit()
@@ -141,12 +168,18 @@ class GroupPromptTemplateRepository:
         テンプレートごとに個別クエリを発行するとN+1になるため、対象テンプレートID一覧に対する
         (prompt_template_id, group_id, group_name) の組を1クエリで取得しPython側で集約する。
 
-        Args:
-            template_ids: 対象のプロンプトテンプレートID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_ids : list[str]
+            対象のプロンプトテンプレートID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[tuple[str, str]]]
             プロンプトテンプレートIDをキーとした (グループID, グループ名) 一覧の辞書。
         """
         if not template_ids:
@@ -181,12 +214,18 @@ class GroupPromptTemplateRepository:
         グループごとに個別クエリを発行するとN+1になるため、対象グループID一覧に対する
         (group_id, prompt_template_id, prompt_template_name) の組を1クエリで取得しPython側で集約する。
 
-        Args:
-            group_ids: 対象のグループID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        group_ids : list[str]
+            対象のグループID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[tuple[str, str]]]
             グループIDをキーとした (プロンプトテンプレートID, プロンプトテンプレート名) 一覧の辞書。
         """
         if not group_ids:
@@ -225,11 +264,16 @@ class GroupPromptTemplateRepository:
 
         コミットは呼び出し側で行う。
 
-        Args:
-            template_id: 対象のプロンプトテンプレートID。
-            tenant_id: テナントID。
-            group_ids: 紐付け先のグループID集合（実在確認済みのものを渡すこと）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        template_id : str
+            対象のプロンプトテンプレートID。
+        tenant_id : str
+            テナントID。
+        group_ids : set[str]
+            紐付け先のグループID集合（実在確認済みのものを渡すこと）。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(
             delete(GroupPromptTemplate).where(

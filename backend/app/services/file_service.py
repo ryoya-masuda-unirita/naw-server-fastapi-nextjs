@@ -29,6 +29,8 @@ DELETED_FILE_DOWNLOAD_MESSAGE = "削除済みのファイルはダウンロー�
 
 
 class FileService:
+    """学習データファイルに関するビジネスロジック。"""
+
     @staticmethod
     async def _get_index_or_404(
         index_id: str, tenant_id: str, session: AsyncSession
@@ -39,16 +41,24 @@ class FileService:
         `index.getType()`を呼び出しNPEになりうる潜在バグがあるため、FastAPI版では
         明示的に404を返すよう修正する。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Index
             該当するIndex。
 
-        Raises:
-            HTTPException: インデックスが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            インデックスが存在しない場合404を返す。
         """
         index = await IndexRepository.find_by_id_and_tenant_id(
             index_id, tenant_id, session
@@ -64,14 +74,20 @@ class FileService:
     def _parse_status(status_str: str | None) -> FileStatus | None:
         """クエリ・フォームの`status`文字列を`FileStatus`に変換する。
 
-        Args:
-            status_str: `ENABLE`・`DISABLE`・`DELETED`のいずれか、またはNone。
+        Parameters
+        ----------
+        status_str : str | None
+            `ENABLE`・`DISABLE`・`DELETED`のいずれか、またはNone。
 
-        Returns:
+        Returns
+        -------
+        FileStatus | None
             変換後の`FileStatus`。`status_str`がNoneまたは空文字の場合はNone。
 
-        Raises:
-            HTTPException: 未知の値が指定された場合400を返す。
+        Raises
+        ------
+        HTTPException
+            未知の値が指定された場合400を返す。
         """
         if not status_str:
             return None
@@ -90,12 +106,18 @@ class FileService:
 
         移植元`FileService.resolveUserIdFilter`相当。
 
-        Args:
-            user_id_filter: クエリで指定された`userId`（loginIdまたはUUID文字列）。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        user_id_filter : str | None
+            クエリで指定された`userId`（loginIdまたはUUID文字列）。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        uuid.UUID | None
             解決済みのユーザーUUID。指定なし、または該当ユーザーがいない場合はNone。
         """
         if not user_id_filter:
@@ -117,11 +139,16 @@ class FileService:
     async def _to_response(file: File, updated_by: str | None) -> FileResponse:
         """`File`エンティティをレスポンススキーマに変換する。
 
-        Args:
-            file: 変換対象のFile。
-            updated_by: 解決済みの更新者名（呼び出し側で一括解決したものを渡す）。
+        Parameters
+        ----------
+        file : File
+            変換対象のFile。
+        updated_by : str | None
+            解決済みの更新者名（呼び出し側で一括解決したものを渡す）。
 
-        Returns:
+        Returns
+        -------
+        FileResponse
             変換後のFileResponse。
         """
         return FileResponse(
@@ -145,6 +172,22 @@ class FileService:
     async def _to_single_response(
         file: File, tenant_id: str, session: AsyncSession
     ) -> FileResponse:
+        """ファイルのモデルからレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        file : File
+            対象のファイル。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        FileResponse
+            ファイルのレスポンス。
+        """
         updated_by = None
         if file.user_id is not None:
             user = await UserRepository.find_by_id_and_tenant_id(
@@ -162,6 +205,28 @@ class FileService:
         size: int,
         session: AsyncSession,
     ) -> PagedFileResponse:
+        """ファイル一覧からページングレスポンスを組み立てる。
+
+        Parameters
+        ----------
+        files : list[File]
+            対象のファイル一覧。
+        total : int
+            条件に合う総件数。
+        tenant_id : str
+            テナントID。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            データベースセッション。
+
+        Returns
+        -------
+        PagedFileResponse
+            ファイル一覧のページングレスポンス。
+        """
         user_ids = {f.user_id for f in files if f.user_id is not None}
         users_by_id = await UserRepository.find_by_ids(user_ids, tenant_id, session)
         content = [
@@ -192,21 +257,36 @@ class FileService:
     ) -> PagedFileResponse:
         """ファイル一覧をページネーションで取得する。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            user_id_filter: 絞り込み対象のユーザー（loginIdまたはUUID）。
-            updated_at_from: 更新日時の範囲開始（この値以上）。
-            updated_at_to: 更新日時の範囲終了（この値より前）。
-            display_name: 表示名の部分一致検索文字列。
-            file_name: ファイル名の部分一致検索文字列。
-            status_str: 絞り込み対象のステータス文字列。
-            sort: 並べ替え指定の並び。
-            page: ページ番号（0始まり）。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        user_id_filter : str | None
+            絞り込み対象のユーザー（loginIdまたはUUID）。
+        updated_at_from : datetime | None
+            更新日時の範囲開始（この値以上）。
+        updated_at_to : datetime | None
+            更新日時の範囲終了（この値より前）。
+        display_name : str | None
+            表示名の部分一致検索文字列。
+        file_name : str | None
+            ファイル名の部分一致検索文字列。
+        status_str : str | None
+            絞り込み対象のステータス文字列。
+        sort : Sequence[SortOrder]
+            並べ替え指定の並び。
+        page : int
+            ページ番号（0始まり）。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        PagedFileResponse
             ページネーション済みファイル一覧。
         """
         resolved_user_id = await FileService._resolve_user_id_filter(
@@ -244,21 +324,33 @@ class FileService:
     ) -> FileResponse:
         """ファイルをアップロードする。
 
-        Args:
-            index_id: インデックスID。
-            tenant_id: テナントID。
-            current_user: アップロードを行うユーザー。
-            form: アップロードフォーム（`name`・`displayName`・`reference`等）。
-            upload: アップロードされたファイル。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            アップロードを行うユーザー。
+        form : FileUploadForm
+            アップロードフォーム（`name`・`displayName`・`reference`等）。
+        upload : UploadFile
+            アップロードされたファイル。
+        storage : FileStorage
+            ファイルストレージ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        FileResponse
             作成されたファイルのレスポンス。
 
-        Raises:
-            HTTPException: `name`が未指定・空の場合400、インデックスが存在しない場合404、
-                `LOCAL`インデックスの場合400、当月クレジット上限超過の場合429を返す。
+        Raises
+        ------
+        HTTPException
+            `name`が未指定・空の場合400、インデックスが存在しない場合404、
+            `LOCAL`インデックスの場合400、当月クレジット上限超過の場合429を返す。
         """
         if not form.name:
             # `files.name`はNOT NULLのため、未指定のまま保存処理に進ませない
@@ -297,19 +389,29 @@ class FileService:
         移植元にはない`index_id`とのクロスチェックを行い、別インデックス配下の
         ファイルIDを誤って（あるいは意図的に）指定してもダウンロードできないようにする。
 
-        Args:
-            index_id: インデックスID。
-            file_id: ファイルID。
-            tenant_id: テナントID。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        file_id : str
+            ファイルID。
+        tenant_id : str
+            テナントID。
+        storage : FileStorage
+            ファイルストレージ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[File, bytes]
             (ファイルのメタデータ, ファイルの内容) のタプル。
 
-        Raises:
-            HTTPException: ファイルが存在しない、または保存先の実体が見つからない場合404、
-                削除済みの場合400を返す。
+        Raises
+        ------
+        HTTPException
+            ファイルが存在しない、または保存先の実体が見つからない場合404、
+            削除済みの場合400を返す。
         """
         file = await FileRepository.find_by_id_and_tenant_id(
             file_id, tenant_id, session
@@ -353,23 +455,36 @@ class FileService:
         のみ更新する。`upload`が指定されている場合は、移植元同様に既存ファイルを物理削除
         した上で新規ファイルとして再作成する（置換更新）。
 
-        Args:
-            index_id: インデックスID。
-            file_id: ファイルID。
-            tenant_id: テナントID。
-            current_user: 更新を行うユーザー。
-            form: 更新フォーム。
-            upload: 添付ファイル（未添付ならNone）。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        file_id : str
+            ファイルID。
+        tenant_id : str
+            テナントID。
+        current_user : User
+            更新を行うユーザー。
+        form : FileUpdateForm
+            更新フォーム。
+        upload : UploadFile | None
+            添付ファイル（未添付ならNone）。
+        storage : FileStorage
+            ファイルストレージ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        FileResponse
             更新後のファイルのレスポンス。
 
-        Raises:
-            HTTPException: ファイルが存在しない場合404、削除済みのファイルの場合・
-                `status=DELETED`をPATCHで指定した場合400、ファイル添付時に当月クレジット
-                上限を超過している場合429を返す。
+        Raises
+        ------
+        HTTPException
+            ファイルが存在しない場合404、削除済みのファイルの場合・
+            `status=DELETED`をPATCHで指定した場合400、ファイル添付時に当月クレジット
+            上限を超過している場合429を返す。
         """
         file = await FileRepository.find_by_id_and_tenant_id(
             file_id, tenant_id, session
@@ -445,18 +560,27 @@ class FileService:
     ) -> None:
         """ファイルを削除する。
 
-        Args:
-            index_id: インデックスID。
-            file_id: ファイルID。
-            tenant_id: テナントID。
-            physical_delete: Trueならレコードごと物理削除、falseなら論理削除
-                （`status = DELETED`）。いずれもストレージ上の実体は削除する。
-            storage: ファイルストレージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        file_id : str
+            ファイルID。
+        tenant_id : str
+            テナントID。
+        physical_delete : bool
+            Trueならレコードごと物理削除、falseなら論理削除
+            （`status = DELETED`）。いずれもストレージ上の実体は削除する。
+        storage : FileStorage
+            ファイルストレージ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Raises:
-            HTTPException: インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
-                ファイルが存在しない場合404を返す。
+        Raises
+        ------
+        HTTPException
+            インデックスが存在しない場合404、`LOCAL`インデックスの場合400、
+            ファイルが存在しない場合404を返す。
         """
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
         file_creation.ensure_not_local(index)

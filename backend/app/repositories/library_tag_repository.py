@@ -7,29 +7,42 @@ from app.models.library_tag import LibraryTag
 def _escape_like(value: str) -> str:
     """LIKE句のワイルドカード文字（%, _, \\）をエスケープする。
 
-    Args:
-        value: エスケープ対象の検索文字列。
+    Parameters
+    ----------
+    value : str
+        エスケープ対象の検索文字列。
 
-    Returns:
+    Returns
+    -------
+    str
         エスケープ済みの検索文字列。
     """
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class LibraryTagRepository:
+    """ライブラリタグのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def exists_by_tenant_id_and_name(
         tenant_id: str, name: str, session: AsyncSession, exclude_id: str | None = None
     ) -> bool:
         """同一テナント内に同名のライブラリタグが存在するかを判定する。
 
-        Args:
-            tenant_id: テナントID。
-            name: タグ名。
-            session: 非同期DBセッション。
-            exclude_id: 判定から除外するタグID（更新時、自分自身との重複を除くため）。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        name : str
+            タグ名。
+        session : AsyncSession
+            非同期DBセッション。
+        exclude_id : str | None
+            判定から除外するタグID（更新時、自分自身との重複を除くため）。
 
-        Returns:
+        Returns
+        -------
+        bool
             同名のタグが存在する場合True。
         """
         conditions = [LibraryTag.tenant_id == tenant_id, LibraryTag.name == name]
@@ -45,11 +58,16 @@ class LibraryTagRepository:
     ) -> list[LibraryTag]:
         """テナント内のライブラリタグを名前順に全件取得する。
 
-        Args:
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[LibraryTag]
             名前順のライブラリタグ一覧。
         """
         stmt = (
@@ -70,14 +88,22 @@ class LibraryTagRepository:
     ) -> tuple[list[LibraryTag], int]:
         """テナント内のライブラリタグをページング・検索付きで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            search: タグ名の部分一致検索文字列。Noneまたは空文字なら絞り込まない。
-            page: 0始まりのページ番号。
-            size: 1ページあたりの件数。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        search : str | None
+            タグ名の部分一致検索文字列。Noneまたは空文字なら絞り込まない。
+        page : int
+            0始まりのページ番号。
+        size : int
+            1ページあたりの件数。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        tuple[list[LibraryTag], int]
             (該当ページのライブラリタグ一覧, 全体件数) のタプル。
         """
         conditions = [LibraryTag.tenant_id == tenant_id]
@@ -106,12 +132,18 @@ class LibraryTagRepository:
     ) -> LibraryTag | None:
         """IDとテナントIDでライブラリタグを取得する。
 
-        Args:
-            tag_id: ライブラリタグID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tag_id : str
+            ライブラリタグID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTag | None
             該当するライブラリタグ。存在しない場合はNone。
         """
         stmt = select(LibraryTag).where(
@@ -126,12 +158,18 @@ class LibraryTagRepository:
     ) -> list[LibraryTag]:
         """テナントIDとID一覧に合致するライブラリタグを取得する。存在しないIDは無視される。
 
-        Args:
-            tenant_id: テナントID。
-            ids: 対象のライブラリタグID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        ids : list[str]
+            対象のライブラリタグID一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[LibraryTag]
             該当するライブラリタグ一覧。
         """
         if not ids:
@@ -146,11 +184,16 @@ class LibraryTagRepository:
     async def create(tag: LibraryTag, session: AsyncSession) -> LibraryTag:
         """ライブラリタグを新規作成する。
 
-        Args:
-            tag: 作成するライブラリタグ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tag : LibraryTag
+            作成するライブラリタグ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTag
             作成したライブラリタグ。
         """
         session.add(tag)
@@ -162,11 +205,16 @@ class LibraryTagRepository:
     async def update(tag: LibraryTag, session: AsyncSession) -> LibraryTag:
         """ライブラリタグを更新する。
 
-        Args:
-            tag: 更新するライブラリタグ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tag : LibraryTag
+            更新するライブラリタグ。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        LibraryTag
             更新後のライブラリタグ。
         """
         session.add(tag)
@@ -180,10 +228,14 @@ class LibraryTagRepository:
     ) -> None:
         """テナントIDとID一覧に合致するライブラリタグを一括削除する。存在しないIDは無視される。
 
-        Args:
-            tenant_id: テナントID。
-            ids: 削除対象のライブラリタグID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        ids : list[str]
+            削除対象のライブラリタグID一覧。
+        session : AsyncSession
+            非同期DBセッション。
         """
         if not ids:
             return

@@ -18,6 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """マイグレーションを適用する。"""
     op.create_table(
         "tenant_resources",
         sa.Column("id", sa.String(36), nullable=False),
@@ -40,6 +41,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """マイグレーションを取り消す。"""
     op.drop_index("idx_tenant_resources_tenant_id", table_name="tenant_resources")
     op.drop_table("tenant_resources")
     sa.Enum(name="tenantresourcetype").drop(op.get_bind(), checkfirst=True)

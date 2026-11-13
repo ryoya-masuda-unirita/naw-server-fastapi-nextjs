@@ -5,6 +5,8 @@ from app.models.message import MessageContent, MessageContentStatus, MessageFile
 
 
 class MessageContentRepository:
+    """メッセージ内容のDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def save(content: MessageContent, session: AsyncSession) -> MessageContent:
         """メッセージ内容を新規追加してコミットする。
@@ -12,11 +14,16 @@ class MessageContentRepository:
         メッセージ送信(SSEストリーミング)完了後の永続化は、リクエストのDIスコープとは
         独立した新規セッションで行われるため、呼び出し元は保存専用のセッションを渡すこと。
 
-        Args:
-            content: 保存対象のメッセージ内容。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        content : MessageContent
+            保存対象のメッセージ内容。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageContent
             保存後のメッセージ内容（DBが払い出した値を反映済み）。
         """
         session.add(content)
@@ -30,12 +37,18 @@ class MessageContentRepository:
     ) -> MessageContent | None:
         """メッセージ内容IDとテナントIDから対象を1件取得する（再生成対象の解決用）。
 
-        Args:
-            content_id: メッセージ内容ID。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        content_id : str
+            メッセージ内容ID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageContent | None
             該当するメッセージ内容。存在しない場合はNone。
         """
         stmt = select(MessageContent).where(
@@ -56,15 +69,24 @@ class MessageContentRepository:
     ) -> MessageContent:
         """既存のメッセージ内容を再生成結果で上書き保存する（`question`は変更しない）。
 
-        Args:
-            content: 更新対象のメッセージ内容（同一セッションで取得済みのもの）。
-            status: 更新後のステータス。
-            answer: 更新後の回答本文。
-            context: 更新後のRAGコンテキスト（SAAS_CHATの場合はNone）。
-            file_paths: 更新後の参照ファイルパス（カンマ区切り文字列）。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        content : MessageContent
+            更新対象のメッセージ内容（同一セッションで取得済みのもの）。
+        status : MessageContentStatus
+            更新後のステータス。
+        answer : str
+            更新後の回答本文。
+        context : str | None
+            更新後のRAGコンテキスト（SAAS_CHATの場合はNone）。
+        file_paths : str | None
+            更新後の参照ファイルパス（カンマ区切り文字列）。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        MessageContent
             更新後のメッセージ内容。
         """
         content.status = status
@@ -82,12 +104,18 @@ class MessageContentRepository:
     ) -> list[MessageContent]:
         """メッセージID一覧に対応するメッセージ内容を1クエリで取得する。
 
-        Args:
-            message_ids: 取得対象のメッセージID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        message_ids : list[str]
+            取得対象のメッセージID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[MessageContent]
             メッセージ内容一覧。
         """
         if not message_ids:
@@ -105,12 +133,18 @@ class MessageContentRepository:
     ) -> dict[str, list[MessageFile]]:
         """メッセージ内容ID一覧に対応する添付ファイルを1クエリでまとめて取得する。
 
-        Args:
-            message_content_ids: 対象のメッセージ内容ID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        message_content_ids : list[str]
+            対象のメッセージ内容ID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[MessageFile]]
             メッセージ内容IDをキーとした添付ファイル一覧の辞書。
         """
         grouped: dict[str, list[MessageFile]] = {
@@ -140,11 +174,16 @@ class MessageContentRepository:
         `created_at`/`updated_at`(サーバー側生成値)を参照しないため、`refresh`は
         あえて行わない（行うとファイル数分のSELECTが発生しN+1になる）。
 
-        Args:
-            files: 保存対象の添付ファイル一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        files : list[MessageFile]
+            保存対象の添付ファイル一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[MessageFile]
             保存後の添付ファイル一覧。
         """
         for file in files:

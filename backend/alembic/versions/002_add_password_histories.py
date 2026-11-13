@@ -19,6 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # 1. password_histories テーブルを作成
+    """マイグレーションを適用する。"""
     op.create_table(
         "password_histories",
         sa.Column(
@@ -53,6 +54,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # password カラムを復元
+    """マイグレーションを取り消す。"""
     op.add_column(
         "users",
         sa.Column("password", sa.String(255), nullable=False),

@@ -18,17 +18,26 @@ async def require_owned_room(
     ルーム所有権チェックのため、特定のserviceに属させずcore/に置く
     （service間の直接呼び出しは禁止のため）。
 
-    Args:
-        tenant_id: テナントID。
-        current_user: 認証済みユーザー。
-        room_id: 検証対象のルームID。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    current_user : User
+        認証済みユーザー。
+    room_id : str
+        検証対象のルームID。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    Room
         所有権が確認できたルーム。
 
-    Raises:
-        HTTPException: ルームが存在しない場合は404、所有者でない場合は403。
+    Raises
+    ------
+    HTTPException
+        ルームが存在しない場合は404、所有者でない場合は403。
     """
     room = await RoomRepository.find_by_id_and_tenant_id(room_id, tenant_id, session)
     if room is None:
@@ -52,13 +61,20 @@ async def can_view_room(
     グループ・管理者バイパスを考慮しないため、この関数とは別に`require_owned_room`
     を使う）。
 
-    Args:
-        tenant_id: テナントID。
-        current_user: 認証済みユーザー。
-        room: 判定対象のルーム。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    current_user : User
+        認証済みユーザー。
+    room : Room
+        判定対象のルーム。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    bool
         閲覧できる場合True。
     """
     if room.user_id == current_user.id:
@@ -83,17 +99,26 @@ async def require_viewable_room(
 
     存在しないルームIDは404、閲覧権限がない場合は403を返す。
 
-    Args:
-        tenant_id: テナントID。
-        current_user: 認証済みユーザー。
-        room_id: 検証対象のルームID。
-        session: 非同期DBセッション。
+    Parameters
+    ----------
+    tenant_id : str
+        テナントID。
+    current_user : User
+        認証済みユーザー。
+    room_id : str
+        検証対象のルームID。
+    session : AsyncSession
+        非同期DBセッション。
 
-    Returns:
+    Returns
+    -------
+    Room
         閲覧権限が確認できたルーム。
 
-    Raises:
-        HTTPException: ルームが存在しない場合は404、閲覧権限がない場合は403。
+    Raises
+    ------
+    HTTPException
+        ルームが存在しない場合は404、閲覧権限がない場合は403。
     """
     room = await RoomRepository.find_by_id_and_tenant_id(room_id, tenant_id, session)
     if room is None:

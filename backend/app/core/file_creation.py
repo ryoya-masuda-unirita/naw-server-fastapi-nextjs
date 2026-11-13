@@ -21,11 +21,15 @@ from app.repositories.file_repository import FileRepository
 def ensure_not_local(index: Index) -> None:
     """ローカルAPIサーバ向けインデックスへのファイル操作を拒否する。
 
-    Args:
-        index: 検証対象のインデックス。
+    Parameters
+    ----------
+    index : Index
+        検証対象のインデックス。
 
-    Raises:
-        HTTPException: `index.type == LOCAL`の場合400を返す。
+    Raises
+    ------
+    HTTPException
+        `index.type == LOCAL`の場合400を返す。
     """
     if index.type == IndexType.LOCAL:
         raise HTTPException(
@@ -52,25 +56,41 @@ async def create_file_record(
     移植元`FileService.createFileWithAzureStorage`相当。本Issue（#87・#92）のスコープでは
     コンテンツ抽出（Tika）・分割・ベクトルDB登録（Issue #88スコープ）は行わない。
 
-    Args:
-        index: 保存先インデックス。
-        name: ファイルの内部名。
-        display_name: 表示名。
-        reference: 参照情報。
-        current_user: 作成を行うユーザー。
-        upload: アップロードされたファイル。
-        tenant_id: テナントID。
-        storage: ファイルストレージ。
-        session: 非同期DBセッション。
-        feedback_id: 追加学習のデータソースがフィードバックの場合の紐付け先ID（Issue #92）。
-        room_id: 追加学習のデータソースがルームの場合の紐付け先ID（Issue #92）。
+    Parameters
+    ----------
+    index : Index
+        保存先インデックス。
+    name : str
+        ファイルの内部名。
+    display_name : str | None
+        表示名。
+    reference : str | None
+        参照情報。
+    current_user : User
+        作成を行うユーザー。
+    upload : UploadFile
+        アップロードされたファイル。
+    tenant_id : str
+        テナントID。
+    storage : FileStorage
+        ファイルストレージ。
+    session : AsyncSession
+        非同期DBセッション。
+    feedback_id : str | None
+        追加学習のデータソースがフィードバックの場合の紐付け先ID（Issue #92）。
+    room_id : str | None
+        追加学習のデータソースがルームの場合の紐付け先ID（Issue #92）。
 
-    Returns:
+    Returns
+    -------
+    File
         作成された File。
 
-    Raises:
-        HTTPException: ストレージ保存後のDB保存に失敗した場合、保存済みの実体を
-            ロールバック削除した上で例外を送出する（移植元の例外時Blob削除を踏襲）。
+    Raises
+    ------
+    HTTPException
+        ストレージ保存後のDB保存に失敗した場合、保存済みの実体を
+        ロールバック削除した上で例外を送出する（移植元の例外時Blob削除を踏襲）。
     """
     file_id = uuid.uuid4().hex
     content = await upload.read()

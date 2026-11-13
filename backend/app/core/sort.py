@@ -38,10 +38,14 @@ class SortOrder:
 def parse_sort(sort: str | Sequence[str]) -> list[SortOrder]:
     """`sort` クエリパラメータの値を並べ替え指定の並びに変換する。
 
-    Args:
-        sort: `sort` の値。複数指定された場合はその並び。
+    Parameters
+    ----------
+    sort : str | Sequence[str]
+        `sort` の値。複数指定された場合はその並び。
 
-    Returns:
+    Returns
+    -------
+    list[SortOrder]
         指定順の並べ替え指定。キーが1つもなければ空リスト。
     """
     # str も Sequence[str] なので、1文字ずつに分解されないよう先に包む
@@ -69,15 +73,31 @@ def sort_query(default: str) -> Callable[..., list[SortOrder]]:
     `sort=`（空文字）のようにキーが1つも残らない指定は、その API の既定の並び順にする。
     FastAPI は空文字を既定値に置き換えないため、ここで補う。
 
-    Args:
-        default: その API の既定の並び順（例: "updatedAt,desc"）。
+    Parameters
+    ----------
+    default : str
+        その API の既定の並び順（例: "updatedAt,desc"）。
 
-    Returns:
+    Returns
+    -------
+    Callable[..., list[SortOrder]]
         `Depends` に渡す依存関数。
     """
     default_orders = parse_sort(default)
 
     def dependency(sort: list[str] = Query([default])) -> list[SortOrder]:
+        """並べ替えのクエリパラメータを解析する。未指定の場合は既定の並べ替えを返す。
+
+        Parameters
+        ----------
+        sort : list[str]
+            並べ替え指定の文字列一覧。
+
+        Returns
+        -------
+        list[SortOrder]
+            並べ替え指定の並び。
+        """
         return parse_sort(sort) or list(default_orders)
 
     return dependency
@@ -86,11 +106,16 @@ def sort_query(default: str) -> Callable[..., list[SortOrder]]:
 def find_order(orders: Sequence[SortOrder], property_name: str) -> SortOrder | None:
     """指定したキーの最初の並べ替え指定を返す。
 
-    Args:
-        orders: 並べ替え指定の並び。
-        property_name: 探すキー。
+    Parameters
+    ----------
+    orders : Sequence[SortOrder]
+        並べ替え指定の並び。
+    property_name : str
+        探すキー。
 
-    Returns:
+    Returns
+    -------
+    SortOrder | None
         最初に見つかった並べ替え指定。なければ None。
     """
     return next((o for o in orders if o.property == property_name), None)
@@ -104,16 +129,34 @@ def enum_as_string(column: Any) -> Any:
     なってしまうため、文字列にキャストして揃える。SQLite は ENUM を文字列で持つため、
     テスト DB ではキャストの有無で並びは変わらない。
 
-    Args:
-        column: ネイティブ ENUM の列。
+    Parameters
+    ----------
+    column : Any
+        ネイティブ ENUM の列。
 
-    Returns:
+    Returns
+    -------
+    Any
         `CAST(列 AS VARCHAR)` の列式。
     """
     return cast(column, String)
 
 
 def _directed(column: Any, descending: bool) -> Any:
+    """並べ替えの向きに応じて昇順または降順の指定を付ける。
+
+    Parameters
+    ----------
+    column : Any
+        並べ替え対象の列。
+    descending : bool
+        降順にする場合は True。
+
+    Returns
+    -------
+    Any
+        昇順または降順を指定した列。
+    """
     return column.desc() if descending else column.asc()
 
 
@@ -133,15 +176,23 @@ def build_order_by(
     最後に一意な列（`tie_breaker`）を加え、同値の行の並びを確定させる。移植元は同値の行の
     並びを DB 任せにしているが、ページ境界で行が重複・欠落しないようにするため加える。
 
-    Args:
-        orders: 並べ替え指定の並び。
-        columns: キーから列式への対応表。
-        fallback: 対応表にあるキーが1つもないときに使う列式。
-        tie_breaker: 行を一意に決める列式（主キー等）。
-        tie_breaker_ascending: True なら最終キーを常に昇順にする。False なら先頭の
-            並べ替えと同じ方向にし、降順が昇順の完全な逆順になるようにする。
+    Parameters
+    ----------
+    orders : Sequence[SortOrder]
+        並べ替え指定の並び。
+    columns : Mapping[str, Any]
+        キーから列式への対応表。
+    fallback : Any
+        対応表にあるキーが1つもないときに使う列式。
+    tie_breaker : Any
+        行を一意に決める列式（主キー等）。
+    tie_breaker_ascending : bool
+        True なら最終キーを常に昇順にする。False なら先頭の
+        並べ替えと同じ方向にし、降順が昇順の完全な逆順になるようにする。
 
-    Returns:
+    Returns
+    -------
+    list[Any]
         `order_by()` に渡す句の並び。
     """
     directed_columns = [

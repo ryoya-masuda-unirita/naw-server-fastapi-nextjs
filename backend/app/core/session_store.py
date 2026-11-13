@@ -10,6 +10,18 @@ _SESSION_KEY_PREFIX = "session:"
 
 
 def _session_key(session_id: str) -> str:
+    """セッションIDからRedisのキーを組み立てる。
+
+    Parameters
+    ----------
+    session_id : str
+        セッションID。
+
+    Returns
+    -------
+    str
+        Redisのキー。
+    """
     return f"{_SESSION_KEY_PREFIX}{session_id}"
 
 
@@ -18,12 +30,18 @@ async def create_session(
 ) -> str:
     """セッションを作成し、Redisに保存してセッションIDを返す。
 
-    Args:
-        login_id: 認証済みユーザーのログインID。
-        tenant_id: 認証済みユーザーのテナントID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    login_id : str
+        認証済みユーザーのログインID。
+    tenant_id : str
+        認証済みユーザーのテナントID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    str
         発行したセッションID。
     """
     session_id = secrets.token_urlsafe(32)
@@ -37,11 +55,16 @@ async def get_session(
 ) -> dict[str, str] | None:
     """セッションIDに対応する認証情報をRedisから取得する。
 
-    Args:
-        session_id: Cookieから取得したセッションID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    session_id : str
+        Cookieから取得したセッションID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
 
-    Returns:
+    Returns
+    -------
+    dict[str, str] | None
         `login_id`・`tenant_id`を含む辞書。セッションが存在しない、または保存データが
         壊れている場合は`None`（呼び出し元でbearerフォールバックに回すため、例外は
         送出しない）。
@@ -65,9 +88,12 @@ async def get_session(
 async def delete_session(session_id: str, redis_client: redis.Redis) -> None:
     """セッションをRedisから削除する。
 
-    Args:
-        session_id: 削除対象のセッションID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    session_id : str
+        削除対象のセッションID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
     """
     await redis_client.delete(_session_key(session_id))
 
@@ -75,8 +101,11 @@ async def delete_session(session_id: str, redis_client: redis.Redis) -> None:
 async def touch_session(session_id: str, redis_client: redis.Redis) -> None:
     """セッションのTTLを延長する。
 
-    Args:
-        session_id: 延長対象のセッションID。
-        redis_client: Redis非同期クライアント。
+    Parameters
+    ----------
+    session_id : str
+        延長対象のセッションID。
+    redis_client : redis.Redis
+        Redis非同期クライアント。
     """
     await redis_client.expire(_session_key(session_id), SESSION_TTL_SECONDS)

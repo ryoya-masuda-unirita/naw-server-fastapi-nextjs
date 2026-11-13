@@ -32,10 +32,14 @@ _VALUE_ERROR_PREFIX = "Value error, "
 def error_response_body(message: str | None) -> dict[str, Any]:
     """移植元`ErrorResponse`と同じ本文を作る。
 
-    Args:
-        message: エラーメッセージ。
+    Parameters
+    ----------
+    message : str | None
+        エラーメッセージ。
 
-    Returns:
+    Returns
+    -------
+    dict[str, Any]
         `timestamp`（UNIX秒の整数）と`message`を持つ本文。
     """
     return {"timestamp": int(time.time()), "message": message}
@@ -46,10 +50,14 @@ def validation_error_message(errors: Sequence[Any]) -> str:
 
     移植元は複数のエラーを連結せず、最初の1件のメッセージだけを返すため合わせる。
 
-    Args:
-        errors: `RequestValidationError.errors()`の戻り値。
+    Parameters
+    ----------
+    errors : Sequence[Any]
+        `RequestValidationError.errors()`の戻り値。
 
-    Returns:
+    Returns
+    -------
+    str
         最初の1件のメッセージ。一覧が空なら`DEFAULT_VALIDATION_MESSAGE`。
     """
     if not errors:
@@ -67,10 +75,14 @@ def _http_exception_message(detail: Any) -> str:
     `detail`には文字列を渡す規約だが、それ以外が渡されてもクライアントが`message`を
     文字列として扱えるよう文字列化する。
 
-    Args:
-        detail: `HTTPException`に渡された`detail`。
+    Parameters
+    ----------
+    detail : Any
+        `HTTPException`に渡された`detail`。
 
-    Returns:
+    Returns
+    -------
+    str
         応答の`message`に載せる文字列。
     """
     return detail if isinstance(detail, str) else str(detail)
@@ -81,11 +93,16 @@ async def _handle_http_exception(
 ) -> Response:
     """`HTTPException`（存在しないURLの404・405を含む）を移植元の形で返す。
 
-    Args:
-        _request: リクエスト（未使用）。
-        exc: 送出された例外。
+    Parameters
+    ----------
+    _request : Request
+        リクエスト（未使用）。
+    exc : StarletteHTTPException
+        送出された例外。
 
-    Returns:
+    Returns
+    -------
+    Response
         例外のステータスと`{"timestamp", "message"}`の応答。
     """
     # 204・304などは本文を持てないため、FastAPI標準と同じく本文なしで返す。
@@ -103,11 +120,16 @@ async def _handle_request_validation_error(
 ) -> JSONResponse:
     """入力チェックのエラーを、移植元と同じく400で返す。
 
-    Args:
-        request: リクエスト（ログにパスを残すため）。
-        exc: 送出された例外。
+    Parameters
+    ----------
+    request : Request
+        リクエスト（ログにパスを残すため）。
+    exc : RequestValidationError
+        送出された例外。
 
-    Returns:
+    Returns
+    -------
+    JSONResponse
         400と`{"timestamp", "message"}`の応答。
     """
     errors = exc.errors()
@@ -130,8 +152,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     FastAPIの`HTTPException`は`starlette`の`HTTPException`のサブクラスのため、
     `starlette`側に登録すればルーティングの404・405も含めて変換できる。
 
-    Args:
-        app: 登録先のアプリ。
+    Parameters
+    ----------
+    app : FastAPI
+        登録先のアプリ。
     """
     app.exception_handler(StarletteHTTPException)(_handle_http_exception)
     app.exception_handler(RequestValidationError)(_handle_request_validation_error)

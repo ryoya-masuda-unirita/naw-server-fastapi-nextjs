@@ -5,18 +5,26 @@ from app.models.message import Message, MessageContent, MessageFeedback
 
 
 class MessageRepository:
+    """メッセージのDBアクセスをまとめたリポジトリ。"""
+
     @staticmethod
     async def find_by_tenant_id_and_id(
         tenant_id: str, message_id: str, session: AsyncSession
     ) -> Message | None:
         """メッセージIDとテナントIDでメッセージを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 対象のメッセージID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str
+            対象のメッセージID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Message | None
             該当するメッセージ。存在しない場合はNone。
         """
         stmt = select(Message).where(
@@ -31,12 +39,18 @@ class MessageRepository:
     ) -> Message | None:
         """メッセージ内容IDから、それが属するメッセージを取得する。
 
-        Args:
-            tenant_id: テナントID。
-            message_content_id: 対象のメッセージ内容ID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_content_id : str
+            対象のメッセージ内容ID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        Message | None
             該当するメッセージ。存在しない場合はNone。
         """
         stmt = (
@@ -56,12 +70,18 @@ class MessageRepository:
     ) -> list[Message]:
         """メッセージID一覧とテナントIDでメッセージ一覧を1クエリで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            message_ids: 取得対象のメッセージID一覧。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_ids : list[str]
+            取得対象のメッセージID一覧。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[Message]
             メッセージ一覧。
         """
         if not message_ids:
@@ -78,12 +98,18 @@ class MessageRepository:
     ) -> bool:
         """メッセージIDとテナントIDでメッセージが存在するかを判定する。
 
-        Args:
-            tenant_id: テナントID。
-            message_id: 対象のメッセージID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        message_id : str
+            対象のメッセージID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        bool
             存在すればTrue。
         """
         stmt = select(Message.id).where(
@@ -98,12 +124,18 @@ class MessageRepository:
     ) -> list[tuple[Message, MessageFeedback | None]]:
         """指定ルームのメッセージ一覧を、フィードバックとあわせて1クエリで取得する。
 
-        Args:
-            tenant_id: テナントID。
-            room_id: 対象のルームID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        room_id : str
+            対象のルームID。
+        session : AsyncSession
+            非同期DBセッション。
 
-        Returns:
+        Returns
+        -------
+        list[tuple[Message, MessageFeedback | None]]
             (メッセージ, フィードバック) のタプル一覧。フィードバック未登録時はNone。
         """
         stmt = (
@@ -125,9 +157,12 @@ class MessageRepository:
         子孫メッセージ・メッセージ内容はDBの`ON DELETE CASCADE`に任せるため、
         対象メッセージ本体を1回`DELETE`するだけでよい。
 
-        Args:
-            message: 削除対象のメッセージ。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        message : Message
+            削除対象のメッセージ。
+        session : AsyncSession
+            非同期DBセッション。
         """
         await session.execute(delete(Message).where(Message.id == message.id))
         await session.commit()

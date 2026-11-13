@@ -35,11 +35,16 @@ def _held_back_length(s: str, marker: str) -> int:
     マーカーがチャンク境界をまたぐ場合に備え、確定させずに保留すべき末尾の
     長さを求める。
 
-    Args:
-        s: 判定対象の文字列。
-        marker: 区切りマーカー文字列。
+    Parameters
+    ----------
+    s : str
+        判定対象の文字列。
+    marker : str
+        区切りマーカー文字列。
 
-    Returns:
+    Returns
+    -------
+    int
         保留すべき末尾の文字数(該当なしは0)。
     """
     max_len = min(len(s), len(marker) - 1)
@@ -61,6 +66,7 @@ class LibraryStreamRouter:
     """
 
     def __init__(self) -> None:
+        """ストリーム振り分けの状態を初期化する。"""
         self._raw: list[str] = []
         self._pending: str = ""
         self._state: _State = "BEFORE_TITLE"
@@ -71,10 +77,14 @@ class LibraryStreamRouter:
     def feed(self, delta: str) -> list[tuple[str, str]]:
         """LLMからのテキストデルタを1件処理し、新たに確定した区分テキストを返す。
 
-        Args:
-            delta: LLMから受信したテキストデルタ。
+        Parameters
+        ----------
+        delta : str
+            LLMから受信したテキストデルタ。
 
-        Returns:
+        Returns
+        -------
+        list[tuple[str, str]]
             `(区分, テキスト)`のリスト。区分は`"title"`/`"content"`/`"comment"`。
         """
         if not delta:
@@ -86,12 +96,26 @@ class LibraryStreamRouter:
     def flush(self) -> list[tuple[str, str]]:
         """ストリーム完了時に呼ぶ。保留中バッファを残らず吐き出す。
 
-        Returns:
+        Returns
+        -------
+        list[tuple[str, str]]
             `(区分, テキスト)`のリスト。
         """
         return self._process(end=True)
 
     def _process(self, *, end: bool) -> list[tuple[str, str]]:
+        """保留中のバッファからマーカーを探し、確定した区分のテキストを取り出す。
+
+        Parameters
+        ----------
+        end : bool
+            True の場合、ストリームの終端として保留中のバッファをすべて処理する。
+
+        Returns
+        -------
+        list[tuple[str, str]]
+            `(区分, テキスト)`のリスト。
+        """
         emitted: list[tuple[str, str]] = []
         while True:
             if self._state == "IN_COMMENT":

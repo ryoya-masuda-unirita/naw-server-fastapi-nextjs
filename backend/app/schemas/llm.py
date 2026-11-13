@@ -120,16 +120,23 @@ async def parse_llm_chat_form(
     移植元`LlmController.chat`は`@RequestPart("textData")`でリクエスト本体(JSON)を、
     `attachmentFiles`で添付ファイルを受け取る。
 
-    Args:
-        textData: リクエスト本体(JSON)。
-        attachmentFiles: 会話履歴の発話に添付するファイル。
+    Parameters
+    ----------
+    textData : Annotated[UploadFile | str, Form()]
+        リクエスト本体(JSON)。
+    attachmentFiles : Annotated[list[UploadFile] | None, File()]
+        会話履歴の発話に添付するファイル。
 
-    Returns:
+    Returns
+    -------
+    LlmChatRequest
         検証済みのLLMチャットリクエスト。
 
-    Raises:
-        RequestValidationError: `textData`がUTF-8のJSONオブジェクトとして解釈できない
-            場合、または項目の検証に失敗した場合（いずれも400）。
+    Raises
+    ------
+    RequestValidationError
+        `textData`がUTF-8のJSONオブジェクトとして解釈できない
+        場合、または項目の検証に失敗した場合（いずれも400）。
     """
     return await parse_text_data_form(
         LlmChatRequest, textData, {"attachmentFiles": attachmentFiles}

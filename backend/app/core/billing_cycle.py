@@ -13,11 +13,16 @@ def current_billing_reset_instant_utc(
 ) -> datetime | None:
     """`now_utc`が属する現在の請求期間の開始日時(UTC 0時)を算出する。
 
-    Args:
-        contract_start: 契約開始日。
-        now_utc: 現在時刻(UTC)。
+    Parameters
+    ----------
+    contract_start : date
+        契約開始日。
+    now_utc : datetime
+        現在時刻(UTC)。
 
-    Returns:
+    Returns
+    -------
+    datetime | None
         現在の請求期間の開始日時(UTC)。`now_utc`が契約開始日より前の場合は`None`。
     """
     today_utc = now_utc.astimezone(timezone.utc).date()
@@ -33,11 +38,16 @@ def next_billing_reset_instant_utc(
 ) -> datetime | None:
     """`now_utc`が属する現在の請求期間の次の開始日時(UTC 0時)を算出する。
 
-    Args:
-        contract_start: 契約開始日。
-        now_utc: 現在時刻(UTC)。
+    Parameters
+    ----------
+    contract_start : date
+        契約開始日。
+    now_utc : datetime
+        現在時刻(UTC)。
 
-    Returns:
+    Returns
+    -------
+    datetime | None
         次回請求リセット日時(UTC)。現在の請求期間が特定できない場合は`None`。
     """
     reset_instant = current_billing_reset_instant_utc(contract_start, now_utc)
@@ -55,12 +65,18 @@ def _find_reset_instant_utc(
 ) -> datetime | None:
     """`today_utc`が含まれる請求期間の開始日時を、契約開始日から順に境界を辿って探す。
 
-    Args:
-        today_utc: 判定対象の日付(UTC)。
-        first_period_start: 探索の起点となる期間開始日（通常は契約開始日）。
-        base_day: 締め日の基準となる暦日。
+    Parameters
+    ----------
+    today_utc : date
+        判定対象の日付(UTC)。
+    first_period_start : date
+        探索の起点となる期間開始日（通常は契約開始日）。
+    base_day : int
+        締め日の基準となる暦日。
 
-    Returns:
+    Returns
+    -------
+    datetime | None
         該当する請求期間の開始日時(UTC)。`today_utc`が`first_period_start`より前なら`None`。
     """
     period_start = first_period_start
@@ -79,15 +95,22 @@ def _find_reset_instant_utc(
 def _next_boundary_exclusive(period_start: date, base_day: int) -> date:
     """区間`[period_start, next)`の右端（排他）となる次サイクル開始日を算出する。
 
-    Args:
-        period_start: 現在の期間開始日。
-        base_day: 締め日の基準となる暦日（契約開始日の日）。
+    Parameters
+    ----------
+    period_start : date
+        現在の期間開始日。
+    base_day : int
+        締め日の基準となる暦日（契約開始日の日）。
 
-    Returns:
+    Returns
+    -------
+    date
         次サイクルの開始日。
 
-    Raises:
-        ValueError: 想定外の請求境界日の場合。
+    Raises
+    ------
+    ValueError
+        想定外の請求境界日の場合。
     """
     year, month = period_start.year, period_start.month
     days_in_month = calendar.monthrange(year, month)[1]
@@ -116,11 +139,16 @@ def _next_boundary_exclusive(period_start: date, base_day: int) -> date:
 def _add_month(year: int, month: int) -> tuple[int, int]:
     """年月に1ヶ月加算する。
 
-    Args:
-        year: 年。
-        month: 月(1-12)。
+    Parameters
+    ----------
+    year : int
+        年。
+    month : int
+        月(1-12)。
 
-    Returns:
+    Returns
+    -------
+    tuple[int, int]
         1ヶ月加算後の(年, 月)のタプル。
     """
     if month == 12:

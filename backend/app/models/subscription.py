@@ -7,6 +7,8 @@ from sqlmodel import Field, SQLModel
 
 
 class SubscriptionStatus(str, Enum):
+    """サブスクリプションの状態の取りうる値。"""
+
     ACTIVE = "ACTIVE"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
