@@ -113,6 +113,7 @@ export class ShardCrawler {
     skippedShared: 0,
     claimedShared: 0,
     replayFailures: 0,
+    placeholderStates: 0,
     relogins: 0,
     stoppedBy: 'queue-empty',
   };
@@ -263,6 +264,7 @@ export class ShardCrawler {
       this.stats.states++;
       this.log(`状態 ${stateKey}（深さ ${node.depth}）`);
 
+      if (await oracle.isPlaceholder()) this.stats.placeholderStates++;
       const stateFindings = await oracle.inspectState();
       await this.recordFindings(page, stateFindings, node.path);
       candidates = this.buildActions(enumeration, stateKey);

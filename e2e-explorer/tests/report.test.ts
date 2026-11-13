@@ -38,6 +38,7 @@ function shardReport(shardId: string, role: string, findings: Finding[]): ShardR
       skippedShared: 1,
       claimedShared: 2,
       replayFailures: 0,
+      placeholderStates: 1,
       relogins: 0,
       stoppedBy: 'queue-empty',
     },

@@ -81,6 +81,11 @@ document.getElementById('f').addEventListener('submit', (e) => {
     `<form aria-label="必須" onsubmit="event.preventDefault(); fetch('/api/echo', {method:'POST', body:'{}'})">
 <label>必須の欄 <input name="must" required></label><button type="submit">送る</button></form>`
   ),
+  '/placeholder': page(
+    '仮画面',
+    `<p>未移植: SampleComponent（#999）</p><div style="width:3000px;height:20px;background:#ccc">枠の不具合</div>
+<button type="button">何もしない</button>`
+  ),
   '/noop': page('何もしない', `<button type="button">押しても何もない</button>`),
   '/focus-style': page(
     'フォーカスで見た目が変わる',

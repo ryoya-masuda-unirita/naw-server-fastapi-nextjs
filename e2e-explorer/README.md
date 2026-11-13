@@ -92,33 +92,41 @@ npm run explore:all
 
 #### 今の担当範囲の分け方
 
-`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。今の `frontend/` の画面（ログイン・パスワード再設定・ダッシュボード）に合わせて、次のように分けています。
+`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。`frontend/` の全画面のルート（`routes/index.tsx`。多くは「未移植」の仮画面）に合わせて、次の 9 つのまとまりに分け、権限と組み合わせた 15 の担当範囲があります。
 
-| 担当範囲 | まとまり | 起点 | 範囲（URL のパス） | 権限 | テナント |
-|---|---|---|---|---|---|
-| `auth-anonymous` | 認証画面 | `/auth/login` | `^/auth(/\|$)` | 未ログイン | なし |
-| `dashboard-admin` | ダッシュボードと共通のサイドバー | `/dashboard` | `^/$`・`^/dashboard(/\|$)` | テナント管理者（`admin`・ADMIN） | `e2e-dashboard-admin` |
-| `dashboard-user` | 同上 | 同上 | 同上 | 一般ユーザー（`user01`・USER） | `e2e-dashboard-user` |
-| `account-admin` | ログイン後のパスワード再設定 | `/auth/pw-reset` | `^/auth/pw-reset$` | テナント管理者 | `e2e-account-admin` |
-| `account-user` | 同上 | 同上 | 同上 | 一般ユーザー | `e2e-account-user` |
+| まとまり | 起点 | 範囲（URL のパス） | 権限 |
+|---|---|---|---|
+| `auth` | `/auth/login` | `^/auth(/login)?$` | 未ログイン |
+| `account` | `/auth/password/reset` | `^/auth/password/reset$` | 未ログイン・管理者・一般 |
+| `chat` | `/dashboard` | `/`・`/dashboard`・`/chat/…`・`/chat-shared-history/…`・`/feedback-preview/…`（サイドバーもここで調べる） | 管理者・一般 |
+| `library` | `/library` | `^/library(/\|$)` | 管理者・一般 |
+| `legacy-admin` | `/users` | `/users`・`/reports`・`/settings` 配下（テナント管理者だけ。一般ユーザーには何も表示されない） | 管理者・一般 |
+| `admin-people` | `/admin/users` | `/admin/users`・`/admin/groups` 配下（一般ユーザーは管理コンソールに入れず戻される。権限ガードの確認を兼ねる） | 管理者・一般 |
+| `admin-assistants` | `/admin/assistants` | `/admin/assistants`・`templates`・`training-data` 配下 | 管理者 |
+| `admin-history` | `/admin/chat-history` | `/admin/chat-history`・`feedback` 配下 | 管理者 |
+| `admin-tenant` | `/admin/tenant` | `/admin/tenant`・`management` 配下 | 管理者 |
 
-権限は seed にある `ADMIN`（テナント管理者）と `USER`（一般ユーザー）、未ログインの 3 つです。`SYSTEM` 権限のユーザーは seed にないため対象外です。
+担当範囲の ID は `<まとまり>-<権限>`（例: `chat-admin`）、ログインする 13 の担当範囲は `e2e-<担当範囲>` のテナントを持ちます。権限は seed にある `ADMIN`（テナント管理者 `admin`）と `USER`（一般ユーザー `user01`。グループ管理者ではない）、未ログインの 3 つです。`SYSTEM` 権限のユーザーとグループ管理者は seed にないため対象外です。
+
+#### 未移植の仮画面の扱い
+
+移植が終わっていない画面は「未移植: 〇〇（#番号）」と出す仮画面（`NotPortedPage`）です。仮画面は製品の画面ではないため、`oracle.placeholderMarkers`（既定 `未移植: `）を含む画面では、「操作しても何も起きない」「操作できる要素がない」を疑いにしません。表示崩れ・axe は、画面ごとに同じ枠（サイドバー・ヘッダー）が出るだけなので、場所を `[未移植の仮画面]` に 1 つにまとめて記録します（枠そのものの不具合は見つかる）。API のエラー・コンソールのエラー・画面の例外は仮画面でも疑いにします（仮画面の文字そのもののはみ出しだけは見ません）。仮画面に着いた状態の数は、レポートの担当範囲の表の「仮画面」の列に出ます。画面が移植されて仮画面でなくなれば、自動で通常の判定になります。
 
 #### 画面が増えたら
 
-`groups` に画面のまとまりを足します。例: ユーザー管理の画面が移植されたら
+画面が移植されて操作が増えたら、`groups` のまとまりを細かく分けると、並列で速く調べられます。例: ユーザー管理（`/admin/users`）が大きくなったら、`admin-people` の範囲を `^/admin/groups(/|$)` に絞り、次を足します。
 
 ```json
 {
-  "id": "users",
-  "description": "ユーザー管理（一覧・登録・編集・削除）",
+  "id": "admin-users",
+  "description": "管理コンソールのユーザー管理（一覧・登録・編集・削除）",
   "startPath": "/admin/users",
   "include": ["^/admin/users(/|$)"],
   "roles": ["admin", "user"]
 }
 ```
 
-を足すと、`users-admin` と `users-user` の担当範囲ができます（一般ユーザーで管理画面を開いたときの振る舞いも調べられる）。範囲が他のまとまりと重ならないようにしてください。`env:up` を流し直すと、新しい担当範囲のテナントも作られます。
+これで `admin-users-admin` と `admin-users-user` の担当範囲ができます。範囲が他のまとまりと重ならないようにしてください。`env:up` を流し直すと、新しい担当範囲のテナントも作られます。
 
 ## 実行方法
 
@@ -146,15 +154,15 @@ npm run explore:all -- --out reports/today --workers 2 --max-minutes 5
 
 ```bash
 npm run shards                                  # 担当範囲の一覧
-npm run explore:all -- --shard dashboard-admin  # 起動 → この担当範囲だけ巡回 → 破棄
+npm run explore:all -- --shard chat-admin  # 起動 → この担当範囲だけ巡回 → 破棄
 ```
 
 環境を起動したまま、担当範囲を別々に（別のターミナル・別のサブエージェントから）実行して、後でまとめることもできます。
 
 ```bash
 npm run env:up                                                     # 起動・マイグレーション・seed・全担当範囲のテナント作成
-npm run explore -- --shard dashboard-admin --out reports/run1      # それぞれ同じ --out を指定する
-npm run explore -- --shard dashboard-user  --out reports/run1      # （調査済みの一覧も共有される）
+npm run explore -- --shard chat-admin --out reports/run1      # それぞれ同じ --out を指定する
+npm run explore -- --shard chat-user  --out reports/run1      # （調査済みの一覧も共有される）
 npm run merge -- --out reports/run1                                 # まとめ直す（explore も終了時にまとめる）
 npm run env:down                                                    # 破棄（データごと）
 ```
@@ -218,7 +226,8 @@ npm run env:down                                                    # 破棄（�
 | `oracle.axe` / `axeImpacts` | axe を使うか / 記録する重大度 | true / critical・serious |
 | `oracle.viewports` | 表示崩れを見る画面幅 | 1280x800・375x812 |
 | `oracle.expectedHttp` | 想定内とする 4xx（`method`・`path`・`status`・`pagePath`（応答時の画面のパス）・`onlyAfterAbnormalInput`） | 認証画面でのセッション確認の 401、異常値を送信した直後の 400・401・403・422・429 |
-| `oracle.ignoreConsole` | 無視するコンソールのメッセージ（正規表現） | `Failed to load resource`（HTTP の判定で拾うため） |
+| `oracle.placeholderMarkers` | 画面の文字にこれが含まれたら未移植の仮画面として扱う（疑いの判定を一部省く） | `未移植: ` |
+| `oracle.ignoreConsole` | 無視するコンソールのメッセージ（正規表現） | `Failed to load resource`・`[API] Forbidden:` など 4xx の API ログ（どちらも HTTP の判定で拾うため。5xx のログは無視しない） |
 | `crawl.inputKinds` | 入れる値の種類 | `empty`・`whitespace`・`max`・`maxPlus1`・`symbols`・`markup`・`emoji`・`negative`・`long`・`mixed` |
 | `crawl.defaultMaxLength` / `longLength` | maxlength のない欄の「最大」/ 長い文字列の長さ | 255 / 5000 |
 | `crawl.dialogs` | ダイアログへの応答 | `accept` |
@@ -226,7 +235,7 @@ npm run env:down                                                    # 破棄（�
 | `crawl.sharedRegions` / `sharedRegistryPerRole` | 共通の領域 / 権限ごとに分けるか | `aside`・`header`・`nav`・`[role=navigation]` / false |
 | `tenants.perShard` / `prefix` | 担当範囲ごとにテナントを作るか / テナント ID の接頭辞 | true / `e2e-` |
 | `roles` | 権限（`anonymous: true` または `loginId`・`password`・`sourceTenantId`） | anonymous・admin・user |
-| `groups` | 画面のまとまり（`id`・`description`・`startPath`・`include`・`roles`） | auth・dashboard・account |
+| `groups` | 画面のまとまり（`id`・`description`・`startPath`・`include`・`roles`） | 上の 9 つ |
 | `environment.composeFile` / `projectName` | 専用環境 | `docker/compose.yml` / `naw-e2e-explorer` |
 
 数の欄には文字を入れられないため、種類ごとに数の境界値（`2147483647`・`2147483648`・`-1`・`1e3` など）に置き換えます。

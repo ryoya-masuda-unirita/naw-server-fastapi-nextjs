@@ -69,6 +69,8 @@ export interface ExplorerConfig {
     axeImpacts: string[];
     viewports: Viewport[];
     overflowTolerancePx: number;
+    /** 画面の文字にこの文字列が含まれていたら、未移植の仮画面として扱う（疑いの判定を一部省く）。 */
+    placeholderMarkers: string[];
     expectedHttp: ExpectedHttpRule[];
     ignoreConsole: string[];
   };

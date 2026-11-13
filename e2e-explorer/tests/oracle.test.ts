@@ -139,6 +139,19 @@ test('ignores focus-only style changes when judging no effect', async ({ page })
   expect(kinds(findings)).toContain('no-effect');
 });
 
+test('does not judge placeholder screens as no effect', async ({ page }) => {
+  /** 未移植の仮画面では「何も起きない」を疑いにせず、表示崩れは場所を 1 つにまとめて記録すること */
+  const oracle = await openPage(page, testConfig(), '/placeholder');
+  expect(await oracle.isPlaceholder()).toBe(true);
+  const findings = await act(page, oracle, () => page.getByRole('button', { name: '何もしない' }).click());
+  expect(kinds(findings)).not.toContain('no-effect');
+  const layout = await oracle.inspectState();
+  expect(layout.length).toBeGreaterThan(0);
+  expect(layout.every((f) => f.location.startsWith('[未移植の仮画面]'))).toBe(true);
+  // 仮画面の文字のはみ出しは見ない
+  expect(layout.some((f) => f.message.includes('文字が枠からはみ出す'))).toBe(false);
+});
+
 test('does not flag submits blocked by native validation', async ({ page }) => {
   /** ブラウザの入力チェックで送信が止まった場合は「何も起きない」にならないこと */
   const oracle = await openPage(page, testConfig(), '/required');

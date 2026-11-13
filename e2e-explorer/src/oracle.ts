@@ -5,6 +5,7 @@ import {
   drainRejections,
   ELEMENT_ID_ATTR,
   enumerateElements,
+  hasPlaceholderMarker,
   inspectBlank,
   inspectLayout,
   installChangeWatcher,
@@ -67,6 +68,8 @@ const MESSAGE_MAX_LENGTH = 500;
 const LAYOUT_REPORT_LIMIT = 5;
 const ABORTED_ERROR = 'net::ERR_ABORTED';
 const SETTLE_POLL_MS = 50;
+/** 仮画面での表示崩れ・axe の疑いの場所。 */
+export const PLACEHOLDER_LOCATION = '[未移植の仮画面]';
 
 export interface SettleResult {
   elapsedMs: number;
@@ -308,6 +311,16 @@ export class Oracle {
   }
 
   /** 操作の直前に呼ぶ。DOM の変化を数え始める。 */
+  /**
+   * 未移植の仮画面か。仮画面は製品の画面ではなく開発用の目印なので、操作しても何も起きない・
+   * 操作できる要素が少ないといった判定は意味がなく、疑いにしない。
+   */
+  async isPlaceholder(): Promise<boolean> {
+    const markers = this.config.oracle.placeholderMarkers;
+    if (markers.length === 0) return false;
+    return this.page.evaluate(hasPlaceholderMarker, markers).catch(() => false);
+  }
+
   async armChangeWatcher(): Promise<void> {
     this.lastActivity = Date.now();
     await this.page.evaluate(installChangeWatcher).catch((e: unknown) => {
@@ -347,6 +360,7 @@ export class Oracle {
 
     // 遷移の途中で評価できないときは、真っ白かどうかを判定しない（次の状態で判定される）
     const blank = await this.page.evaluate(inspectBlank).catch(() => null);
+    const placeholder = await this.isPlaceholder();
     if (blank && blank.textLength === 0 && blank.mediaCount === 0) {
       this.record(rawFinding('blank-screen', location, '本文の文字も画像もない'));
     }
@@ -356,12 +370,12 @@ export class Oracle {
       const anyEffect =
         changes !== 0 || urlChanged || observation.requests > 0 || observation.dialogs > 0 || observation.popups > 0;
       const expectsEffect = info.actionKind === 'click' || info.actionKind === 'fill-submit' || info.actionKind === 'fill-enter';
-      if (!anyEffect && expectsEffect && !info.nativeInvalid) {
+      if (!anyEffect && expectsEffect && !info.nativeInvalid && !placeholder) {
         this.record(rawFinding('no-effect', location, '画面の変化・遷移・通信・ダイアログのどれもなかった'));
       }
     }
 
-    if (enumeration && enumeration.elements.length === 0 && !(blank && blank.textLength === 0)) {
+    if (!placeholder && enumeration && enumeration.elements.length === 0 && !(blank && blank.textLength === 0)) {
       this.record(
         rawFinding(
           'dead-end',
@@ -396,7 +410,10 @@ export class Oracle {
   /** 状態ごとに 1 回だけ行う判定（表示崩れ・アクセシビリティ）。 */
   async inspectState(): Promise<RawFinding[]> {
     const page = this.page;
-    const location = this.pagePath();
+    // 仮画面は画面ごとに同じ枠（サイドバー・ヘッダー）が出るだけなので、場所を 1 つにまとめ、
+    // 枠の不具合が仮画面の数だけ別の疑いとして並ばないようにする
+    const placeholder = await this.isPlaceholder();
+    const location = placeholder ? PLACEHOLDER_LOCATION : this.pagePath();
     const findings: RawFinding[] = [];
     const original = page.viewportSize();
     const tolerance = this.config.oracle.overflowTolerancePx;
@@ -424,7 +441,8 @@ export class Oracle {
           })
         );
       }
-      for (const item of layout.textOverflow) {
+      // 仮画面の文字は開発用の目印で、製品の見た目ではないため、文字のはみ出しは見ない
+      for (const item of placeholder ? [] : layout.textOverflow) {
         findings.push(
           rawFinding('element-overflow', `${location} @${viewport.name}`, `${item.selector} の文字が枠からはみ出す`, {
             viewport,

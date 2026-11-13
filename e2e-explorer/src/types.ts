@@ -83,6 +83,8 @@ export interface ShardStats {
   skippedShared: number;
   claimedShared: number;
   replayFailures: number;
+  /** 未移植の仮画面（placeholderMarkers に合う画面）に着いた状態の数。疑いの判定を一部省いている。 */
+  placeholderStates: number;
   relogins: number;
   stoppedBy: 'queue-empty' | 'max-actions' | 'max-minutes' | 'error';
 }

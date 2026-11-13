@@ -156,6 +156,17 @@ test('does not report every action as slow on a polling page', async ({ browser 
   expect(report.findings.filter((f) => f.kind === 'slow-action')).toEqual([]);
 });
 
+test('counts placeholder states and does not report them as no effect', async ({ browser }) => {
+  /** 仮画面に着いた状態を数え、その画面の無反応のボタンを疑いにしないこと */
+  const config = testConfig({
+    maxDepth: 0,
+    groups: [{ id: 'ph', startPath: '/placeholder', include: ['^/placeholder$'], roles: ['anonymous'] }],
+  });
+  const { report } = await crawl(browser, config);
+  expect(report.stats.placeholderStates).toBe(1);
+  expect(report.findings.filter((f) => f.kind === 'no-effect')).toEqual([]);
+});
+
 test('skips external links and excluded elements', async ({ browser }) => {
   /** 別オリジンへのリンクと除外指定の要素は操作しないこと */
   const { report, log } = await crawl(browser, testConfig({ maxDepth: 0 }));

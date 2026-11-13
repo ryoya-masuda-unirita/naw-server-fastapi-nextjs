@@ -52,19 +52,16 @@ test('builds idempotent tenant provisioning sql', () => {
   const config = loadConfig();
   const shards = expandShards(config);
   const plans = planTenants(config, shards);
-  expect(plans.map((p) => p.tenantId)).toEqual([
-    'e2e-dashboard-admin',
-    'e2e-dashboard-user',
-    'e2e-account-admin',
-    'e2e-account-user',
-  ]);
+  expect(plans).toHaveLength(13);
+  expect(plans.slice(0, 3).map((p) => p.tenantId)).toEqual(['e2e-account-admin', 'e2e-account-user', 'e2e-chat-admin']);
   expect(plans[0].loginIds).toEqual(['admin', 'user01']);
   const sql = buildTenantSql(plans);
   expect(sql).toContain("SELECT * FROM tenants WHERE id = 'test-tenant'");
   expect(sql).toContain('INSERT INTO tenants SELECT * FROM e2e_tenant ON CONFLICT (id) DO NOTHING;');
-  expect(sql).toContain("md5('e2e-dashboard-admin:admin')::uuid");
-  expect(sql.match(/ON CONFLICT \(login_id, tenant_id\) DO NOTHING/g)).toHaveLength(8);
-  expect(sql.match(/AND NOT EXISTS \(SELECT 1 FROM password_histories/g)).toHaveLength(8);
+  expect(sql).toContain("md5('e2e-chat-admin:admin')::uuid");
+  // テナントごとに admin・user01 の 2 ユーザー
+  expect(sql.match(/ON CONFLICT \(login_id, tenant_id\) DO NOTHING/g)).toHaveLength(26);
+  expect(sql.match(/AND NOT EXISTS \(SELECT 1 FROM password_histories/g)).toHaveLength(26);
   expect(sql.trim().endsWith('COMMIT;')).toBe(true);
 });
 

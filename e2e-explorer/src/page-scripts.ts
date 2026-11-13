@@ -256,6 +256,12 @@ export function readChangeWatcher(): number {
   return w.__e2eExplorerChanges;
 }
 
+/** 画面の文字に、仮画面の目印のどれかが含まれるか。 */
+export function hasPlaceholderMarker(markers: string[]): boolean {
+  const text = document.body?.innerText ?? '';
+  return markers.some((marker) => marker.length > 0 && text.includes(marker));
+}
+
 export interface BlankInspection {
   textLength: number;
   mediaCount: number;

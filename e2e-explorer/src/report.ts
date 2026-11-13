@@ -165,11 +165,11 @@ export function renderMarkdown(merged: MergedReport): string {
   );
 
   lines.push('## 担当範囲', '');
-  lines.push('| 担当範囲 | 権限 | テナント | 状態 | 操作 | 共有で飛ばした | 担当外 | 再生失敗 | 時間 | 終了理由 |');
-  lines.push('|---|---|---|---|---|---|---|---|---|---|');
+  lines.push('| 担当範囲 | 権限 | テナント | 状態 | 仮画面 | 操作 | 共有で飛ばした | 担当外 | 再生失敗 | 時間 | 終了理由 |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
   for (const s of merged.shards) {
     lines.push(
-      `| ${s.shardId} | ${s.role} | ${s.tenantId ?? '-'} | ${s.stats.states} | ${s.stats.actions} | ${s.stats.skippedShared} | ` +
+      `| ${s.shardId} | ${s.role} | ${s.tenantId ?? '-'} | ${s.stats.states} | ${s.stats.placeholderStates ?? 0} | ${s.stats.actions} | ${s.stats.skippedShared} | ` +
         `${s.outOfScope.length} | ${s.stats.replayFailures} | ${Math.round(s.durationMs / 1000)}s | ${s.stats.stoppedBy}` +
         `${s.error ? `（${mdCell(s.error)}）` : ''} |`
     );

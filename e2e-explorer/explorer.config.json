@@ -27,10 +27,21 @@
     "slowResponseMs": 3000,
     "slowActionMs": 5000,
     "axe": true,
-    "axeImpacts": ["critical", "serious"],
+    "axeImpacts": [
+      "critical",
+      "serious"
+    ],
     "viewports": [
-      { "name": "desktop", "width": 1280, "height": 800 },
-      { "name": "mobile", "width": 375, "height": 812 }
+      {
+        "name": "desktop",
+        "width": 1280,
+        "height": 800
+      },
+      {
+        "name": "mobile",
+        "width": 375,
+        "height": 812
+      }
     ],
     "overflowTolerancePx": 1,
     "expectedHttp": [
@@ -38,24 +49,56 @@
         "description": "ログイン画面などの認証画面を開いたときのセッション確認（未ログインなら 401 が正しい）",
         "method": "GET",
         "path": "^/api/auth$",
-        "status": [401],
+        "status": [
+          401
+        ],
         "pagePath": "^/auth/"
       },
       {
         "description": "異常値を送信した直後の入力エラー・認証エラー・回数制限",
-        "status": [400, 401, 403, 422, 429],
+        "status": [
+          400,
+          401,
+          403,
+          422,
+          429
+        ],
         "onlyAfterAbnormalInput": true
       }
     ],
-    "ignoreConsole": ["^Failed to load resource"]
+    "ignoreConsole": [
+      "^Failed to load resource",
+      "^\\[API\\] (Bad Request|Unauthorized|Forbidden|Unprocessable Entity|Too Many Requests):"
+    ],
+    "placeholderMarkers": [
+      "未移植: "
+    ]
   },
   "crawl": {
-    "inputKinds": ["empty", "whitespace", "max", "maxPlus1", "symbols", "markup", "emoji", "negative", "long", "mixed"],
+    "inputKinds": [
+      "empty",
+      "whitespace",
+      "max",
+      "maxPlus1",
+      "symbols",
+      "markup",
+      "emoji",
+      "negative",
+      "long",
+      "mixed"
+    ],
     "defaultMaxLength": 255,
     "longLength": 5000,
     "dialogs": "accept",
-    "excludeSelectors": ["[data-e2e-explorer-skip]"],
-    "sharedRegions": ["aside", "header", "nav", "[role=navigation]"],
+    "excludeSelectors": [
+      "[data-e2e-explorer-skip]"
+    ],
+    "sharedRegions": [
+      "aside",
+      "header",
+      "nav",
+      "[role=navigation]"
+    ],
     "sharedRegistryPerRole": false
   },
   "tenants": {
@@ -83,24 +126,112 @@
   "groups": [
     {
       "id": "auth",
-      "description": "認証画面（ログイン・パスワード再設定）を未ログインで",
+      "description": "ログイン画面（未ログイン）",
       "startPath": "/auth/login",
-      "include": ["^/auth(/|$)"],
-      "roles": ["anonymous"]
-    },
-    {
-      "id": "dashboard",
-      "description": "ログイン後のトップ・ダッシュボードと、全画面に共通のサイドバー",
-      "startPath": "/dashboard",
-      "include": ["^/$", "^/dashboard(/|$)"],
-      "roles": ["admin", "user"]
+      "include": [
+        "^/auth(/login)?$"
+      ],
+      "roles": [
+        "anonymous"
+      ]
     },
     {
       "id": "account",
-      "description": "ログイン後のパスワード再設定（ユーザーメニューから開く画面）",
-      "startPath": "/auth/pw-reset",
-      "include": ["^/auth/pw-reset$"],
-      "roles": ["admin", "user"]
+      "description": "パスワード再設定（ログイン前後どちらからも開ける。ユーザーメニューのパスワード設定の行き先）",
+      "startPath": "/auth/password/reset",
+      "include": [
+        "^/auth/password/reset$"
+      ],
+      "roles": [
+        "anonymous",
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "id": "chat",
+      "description": "ダッシュボード（新規チャット）・チャット画面・共有履歴・フィードバックのプレビュー。サイドバー（共通の領域）もここで調べる",
+      "startPath": "/dashboard",
+      "include": [
+        "^/$",
+        "^/dashboard$",
+        "^/chat(/|$)",
+        "^/chat-shared-history(/|$)",
+        "^/feedback-preview(/|$)"
+      ],
+      "roles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "id": "library",
+      "description": "ライブラリ（一覧・詳細）",
+      "startPath": "/library",
+      "include": [
+        "^/library(/|$)"
+      ],
+      "roles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "id": "legacy-admin",
+      "description": "旧ユーザー管理・レポート・設定（テナント管理者だけ。一般ユーザーは何も表示されない）",
+      "startPath": "/users",
+      "include": [
+        "^/(users|reports|settings)(/|$)"
+      ],
+      "roles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "id": "admin-people",
+      "description": "管理コンソールのユーザー・グループ。一般ユーザーは管理コンソールに入れず新規チャットへ戻される（権限ガードの確認を兼ねる）",
+      "startPath": "/admin/users",
+      "include": [
+        "^/admin/(users|groups)(/|$)"
+      ],
+      "roles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "id": "admin-assistants",
+      "description": "管理コンソールのアシスタント・テンプレート・学習データ",
+      "startPath": "/admin/assistants",
+      "include": [
+        "^/admin/(assistants|templates|training-data)(/|$)"
+      ],
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "id": "admin-history",
+      "description": "管理コンソールのチャット履歴・フィードバック",
+      "startPath": "/admin/chat-history",
+      "include": [
+        "^/admin/(chat-history|feedback)(/|$)"
+      ],
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "id": "admin-tenant",
+      "description": "管理コンソールのテナント設定・ホーム",
+      "startPath": "/admin/tenant",
+      "include": [
+        "^/admin/(tenant|management)(/|$)"
+      ],
+      "roles": [
+        "admin"
+      ]
     }
   ],
   "environment": {
