@@ -171,7 +171,10 @@ class AssistantService:
 
     @staticmethod
     async def _build_responses(
-        assistants: list[Assistant], tenant_id: str, session: AsyncSession
+        assistants: list[Assistant],
+        tenant_id: str,
+        session: AsyncSession,
+        include_endpoint_label: bool = False,
     ) -> list[AssistantGetResponse]:
         """アシスタント一覧に紐づくエンドポイント・グループ・カテゴリを1クエリずつ一括取得し、レスポンスを組み立てる。
 
@@ -179,6 +182,7 @@ class AssistantService:
             assistants: 変換対象のアシスタント一覧。
             tenant_id: テナントID。
             session: 非同期DBセッション。
+            include_endpoint_label: Trueのとき`endpoints[].label`を入れる（管理者向け一覧用）。
 
         Returns:
             アシスタントレスポンス一覧。
@@ -186,7 +190,7 @@ class AssistantService:
         assistant_ids = [a.id for a in assistants]
         endpoints_map = (
             await AssistantEndpointRepository.find_endpoints_grouped_by_assistant_id(
-                assistant_ids, tenant_id, session
+                assistant_ids, tenant_id, session, include_label=include_endpoint_label
             )
         )
         groups_map = (
@@ -448,7 +452,7 @@ class AssistantService:
         )
 
         content = await AssistantService._build_responses(
-            assistants, tenant_id, session
+            assistants, tenant_id, session, include_endpoint_label=True
         )
         return PagedAssistantResponse(
             content=content, totalElements=total, number=page, size=size

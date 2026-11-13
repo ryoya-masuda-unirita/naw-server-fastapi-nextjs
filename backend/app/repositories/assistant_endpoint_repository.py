@@ -54,19 +54,30 @@ class AssistantEndpointRepository:
 
     @staticmethod
     async def find_endpoints_grouped_by_assistant_id(
-        assistant_ids: list[str], tenant_id: str, session: AsyncSession
+        assistant_ids: list[str],
+        tenant_id: str,
+        session: AsyncSession,
+        include_label: bool = False,
     ) -> dict[str, list[AssistantEndpointItemResponse]]:
         """アシスタントID一覧に対して、それぞれの紐づくエンドポイント情報を1クエリでまとめて取得する。
 
         アシスタントごとに個別クエリを発行するとN+1になるため、対象アシスタントID一覧に対する
         (AssistantEndpoint, TenantEndpoint) の結合結果を1クエリで取得しPython側で集約する。
 
-        Args:
-            assistant_ids: 対象のアシスタントID一覧。
-            tenant_id: テナントID。
-            session: 非同期DBセッション。
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+        include_label : bool
+            True のとき `label` にテナントエンドポイント名を入れる（管理者向け一覧用）。
 
-        Returns:
+        Returns
+        -------
+        dict[str, list[AssistantEndpointItemResponse]]
             アシスタントIDをキーとしたエンドポイント情報一覧の辞書。
         """
         if not assistant_ids:
@@ -89,12 +100,53 @@ class AssistantEndpointRepository:
             grouped[assistant_endpoint.assistant_id].append(
                 AssistantEndpointItemResponse(
                     id=tenant_endpoint.id,
+                    label=tenant_endpoint.endpoint_name if include_label else None,
                     model=assistant_endpoint.model,
                     type=tenant_endpoint.type,
                     url=tenant_endpoint.endpoint,
                 )
             )
         return grouped
+
+    @staticmethod
+    async def find_models_by_assistant_id(
+        assistant_ids: list[str], tenant_id: str, session: AsyncSession
+    ) -> dict[str, str]:
+        """アシスタントごとの `model`（最初に紐づくエンドポイントの値）を1クエリで取得する。
+
+        移植元 `GetMessagesResponse` は `assistant.getEndpoints().get(0).getModel()` を
+        `model` として返す（SECURE のアシスタントではブラウザがこれを Waha! のサービスIDとして
+        送る）。移植元は並び順を決めていないため、ここでは `endpoint_id` が最小の行を採用する。
+
+        Parameters
+        ----------
+        assistant_ids : list[str]
+            対象のアシスタントID一覧。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        dict[str, str]
+            アシスタントID -> model。エンドポイントが紐づかないアシスタントは含まれない。
+        """
+        if not assistant_ids:
+            return {}
+        stmt = (
+            select(AssistantEndpoint.assistant_id, AssistantEndpoint.model)
+            .where(
+                AssistantEndpoint.assistant_id.in_(assistant_ids),
+                AssistantEndpoint.tenant_id == tenant_id,
+            )
+            .order_by(AssistantEndpoint.assistant_id, AssistantEndpoint.endpoint_id)
+        )
+        result = await session.execute(stmt)
+        models: dict[str, str] = {}
+        for assistant_id, model in result.all():
+            models.setdefault(assistant_id, model)
+        return models
 
     @staticmethod
     async def find_tenant_endpoints_grouped_by_assistant_id(

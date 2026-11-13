@@ -398,7 +398,8 @@ class TestGetAssistantsEndpoints:
         assert endpoints[0]["model"] == "gpt-4o"
         assert endpoints[0]["type"] == "AZURE_OPENAI_CHAT"
         assert endpoints[0]["url"] == "https://example.openai.azure.com"
-        assert "label" not in endpoints[0]
+        # 移植元は label を管理者向け一覧だけに入れる（それ以外は null で項目は出る）
+        assert endpoints[0]["label"] is None
         assert "apiKey" not in endpoints[0]
 
     async def test_returns_empty_endpoints_when_not_linked(
@@ -535,6 +536,8 @@ class TestGetAssistantsCategory:
         body = response.json()
         assert body[0]["category"]["id"] == assistant_category.id
         assert body[0]["categories"][0]["id"] == assistant_category.id
+        # 移植元は updatedAt を設定しないため、項目は出るが常に null
+        assert body[0]["category"]["updatedAt"] is None
 
 
 @pytest.mark.asyncio
@@ -990,6 +993,18 @@ class TestDeleteAssistant:
 @pytest.mark.asyncio
 class TestListAdminAssistants:
     """GET /api/admin/assistants"""
+
+    async def test_endpoints_include_label(
+        self, client, admin_headers, assistant_with_endpoint, tenant_endpoint
+    ):
+        """管理者向け一覧の endpoints[].label にテナントエンドポイント名が入ること（Issue #309）"""
+        async with client as c:
+            response = await c.get("/api/admin/assistants", headers=admin_headers)
+
+        assert response.status_code == 200
+        endpoint = response.json()["content"][0]["endpoints"][0]
+        assert endpoint["label"] == tenant_endpoint.endpoint_name
+        assert endpoint["id"] == tenant_endpoint.id
 
     async def test_tenant_admin_sees_all_assistants(
         self, client, session, tenant, admin_headers, assistant

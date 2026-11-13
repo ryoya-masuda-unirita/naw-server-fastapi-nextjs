@@ -91,8 +91,16 @@ class EndpointResponse(BaseModel):
 
 
 class AssistantResponse(BaseModel):
+    """メッセージ一覧に添える参照アシスタント（移植元 `GetMessagesResponse.AssistantResponse`）。
+
+    `model` は最初に紐づくエンドポイントの model。SECURE ではブラウザがこれを Waha! の
+    サービスIDとして送る。エンドポイントが無いときは null。
+    """
+
     id: str
     type: str
+    includeHistory: bool
+    model: str | None
     endpoints: list[EndpointResponse]
 
 

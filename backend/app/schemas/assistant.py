@@ -11,16 +11,29 @@ from app.models.tenant_endpoint import EndpointType
 
 
 class AssistantEndpointItemResponse(BaseModel):
+    """アシスタントに紐づくエンドポイント1件分（移植元 `AssistantGetResponse.EndpointResponse`）。
+
+    `label`（テナントエンドポイントの名前）は、移植元では管理者向け一覧
+    （GET /api/admin/assistants）だけに入り、それ以外は null。
+    """
+
     id: str
+    label: str | None = None
     model: str
     type: EndpointType
     url: str
 
 
 class AssistantCategoryItemResponse(BaseModel):
+    """アシスタントに付いたカテゴリ1件分（移植元 `AssistantCategoryGetResponse`）。
+
+    `updatedAt` は移植元では値を設定しないため、常に null（項目だけ出す）。
+    """
+
     id: str
     name: str
     description: str | None
+    updatedAt: datetime | None = None
 
 
 class AssistantGetResponse(BaseModel):

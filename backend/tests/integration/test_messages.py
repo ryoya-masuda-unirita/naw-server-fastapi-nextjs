@@ -589,6 +589,45 @@ class TestMessageRouter:
             assert [m["id"] for m in body["messages"]] == [owned_message.id]
             assert [a["id"] for a in body["assistants"]] == [message_assistant.id]
 
+        async def test_assistants_include_history_and_model(
+            self,
+            client,
+            owner_headers,
+            owned_room,
+            owned_message,
+            message_assistant,
+            message_chat_endpoint,
+        ):
+            """assistants に includeHistory と model（紐づくエンドポイントの model）が入ること（Issue #309）"""
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 200
+            assistant = response.json()["assistants"][0]
+            assert assistant["includeHistory"] is False
+            assert assistant["model"] == "gpt-4o"
+            # 移植元は endpoints[] に model を持たせない（assistant 直下だけ）
+            assert all("model" not in e for e in assistant["endpoints"])
+
+        async def test_assistant_model_is_null_without_endpoints(
+            self, client, owner_headers, owned_room, owned_message, message_assistant
+        ):
+            """エンドポイントが無いアシスタントの model は null になること（キーは出る）"""
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assistant = response.json()["assistants"][0]
+            assert assistant["model"] is None
+            assert assistant["endpoints"] == []
+
         async def test_get_messages_with_shared_group_member_returns_200(
             self,
             client,
