@@ -34,6 +34,7 @@ from generative_ai_core.provider.clients.bedrock import (
     BedrockMessagesTransport,
     extract_text,
     generation_body,
+    json_payload,
     request_target,
     to_messages_payload,
 )
@@ -59,6 +60,17 @@ MODEL = "anthropic.claude-haiku-4-5"
 API_KEY = "bedrock-key-fixture"
 SUPPORTED = '{"answer":true,"reason":"supported"}'
 RAG_ANSWER = '{"answer":"rag answer","id":[1]}'
+# オンプレの実機（#454）で Claude が返した RAG の回答の文字列。コードフェンスに包まれ、
+# 頼んでいない question キーも付いている
+FENCED_ANSWER = (
+    "```json\n"
+    "{\n"
+    '    "question": "パスワードは何文字以上にする必要がありますか？",\n'
+    '    "answer": "パスワードは12文字以上にする必要があります。",\n'
+    '    "id": [1]\n'
+    "}\n"
+    "```"
+)
 
 
 class Provider:
@@ -431,6 +443,19 @@ class TestChat:
         assert "HTTP 401" in result.failure.summary
         assert API_KEY not in result.failure.summary
 
+    def test_chat_answer_with_code_fence_is_unchanged(
+        self, router: respx.MockRouter
+    ) -> None:
+        """通常のチャットの返答に含まれるコードフェンスは、取り除かれないこと"""
+        text = "例です。\n```python\nprint(1)\n```"
+        Provider(router, [text])
+
+        result = BedrockMessagesTransport(_configuration()).chat(
+            _configuration(), _chat_request(), _context()
+        )
+
+        assert result.answer == text
+
 
 class TestImage:
     """画像の添付と画像説明。"""
@@ -523,6 +548,69 @@ class TestRag:
         assert not result.answer_present
         assert len(provider.requests) == 1
 
+    def test_fenced_answer_with_extra_key_is_accepted(
+        self, router: respx.MockRouter
+    ) -> None:
+        """実機の返答（フェンス付き・question キー付き）でも、検証を通って成功になること"""
+        provider = Provider(router, [FENCED_ANSWER, SUPPORTED])
+
+        result = BedrockMessagesTransport(_configuration()).rag(
+            _configuration(), _rag_request(), _context(Capability.RAG)
+        )
+
+        assert result.answer_present
+        assert result.answer == "パスワードは12文字以上にする必要があります。"
+        assert result.reference_ids == (1,)
+        assert len(provider.requests) == 2
+
+    def test_fenced_validation_is_accepted(self, router: respx.MockRouter) -> None:
+        """検証の返答がフェンス付きでも、検証を通って成功になること"""
+        Provider(router, [RAG_ANSWER, '```json\n{"answer": true}\n```'])
+
+        result = BedrockMessagesTransport(_configuration()).rag(
+            _configuration(), _rag_request(), _context(Capability.RAG)
+        )
+
+        assert result.answer_present
+
+    def test_fenced_failed_validation_is_no_answer(
+        self, router: respx.MockRouter
+    ) -> None:
+        """検証の返答がフェンス付きの偽なら、回答なしになること"""
+        Provider(router, [RAG_ANSWER, '```json\n{"answer": false}\n```'])
+
+        result = BedrockMessagesTransport(_configuration()).rag(
+            _configuration(), _rag_request(), _context(Capability.RAG)
+        )
+
+        assert not result.answer_present
+
+    def test_fenced_answer_without_id_is_rejected(
+        self, router: respx.MockRouter
+    ) -> None:
+        """フェンス付きでも id がなければ回答なしになり、検証は呼ばれないこと"""
+        provider = Provider(router, ['```json\n{"answer":"rag answer"}\n```'])
+
+        result = BedrockMessagesTransport(_configuration()).rag(
+            _configuration(), _rag_request(), _context(Capability.RAG)
+        )
+
+        assert not result.answer_present
+        assert len(provider.requests) == 1
+
+    def test_fenced_answer_without_answer_key_is_rejected(
+        self, router: respx.MockRouter
+    ) -> None:
+        """フェンス付きでも answer の型が違えば、回答なしになること"""
+        provider = Provider(router, ['```json\n{"answer":{"x":1},"id":[1]}\n```'])
+
+        result = BedrockMessagesTransport(_configuration()).rag(
+            _configuration(), _rag_request(), _context(Capability.RAG)
+        )
+
+        assert not result.answer_present
+        assert len(provider.requests) == 1
+
 
 class TestClient:
     """クライアントとプロバイダの登録。"""
@@ -561,3 +649,58 @@ class TestClient:
         assert "SUPPORTED" not in {
             s.status.name for s in matrix[CoreProviderId.Anthropic]
         }
+
+
+class TestJsonPayload:
+    """返答の本文から JSON を取り出す前処理。"""
+
+    def test_plain_json_is_unchanged(self) -> None:
+        """前後にフェンスも説明もない JSON は、そのまま返ること"""
+        assert json_payload(RAG_ANSWER) == RAG_ANSWER
+
+    def test_fenced_json_with_language_is_unwrapped(self) -> None:
+        """言語名つきのコードフェンスで包まれた JSON は、中の JSON が返ること"""
+        text = '```json\n{"answer":"a","id":[1]}\n```'
+
+        assert json_payload(text) == '{"answer":"a","id":[1]}'
+
+    def test_fenced_json_without_language_is_unwrapped(self) -> None:
+        """言語名なしのコードフェンスで包まれた JSON は、中の JSON が返ること"""
+        text = '```\n{"answer":"a","id":[1]}\n```'
+
+        assert json_payload(text) == '{"answer":"a","id":[1]}'
+
+    def test_json_with_surrounding_text_is_extracted(self) -> None:
+        """前後に説明文がある JSON は、中の JSON が返ること"""
+        text = '次のとおりです。\n{"answer":"a","id":[1]}\n以上です。'
+
+        assert json_payload(text) == '{"answer":"a","id":[1]}'
+
+    def test_braces_inside_string_value_are_kept(self) -> None:
+        """文字列の値に括弧があっても、JSON 全体が返り、値の途中で切れないこと"""
+        text = '```json\n{"answer":"設定は {name} と } で書く","id":[1]}\n```'
+
+        assert json_payload(text) == '{"answer":"設定は {name} と } で書く","id":[1]}'
+
+    def test_braces_in_surrounding_text_are_skipped(self) -> None:
+        """説明文の中に { } があっても、読める JSON が取り出されること"""
+        text = '設定は {name} の形式です。\n{"answer":"x","id":[1]}\n以上です。'
+
+        assert json_payload(text) == '{"answer":"x","id":[1]}'
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "JSON ではない文章です",
+            '{"answer": "閉じていない"',
+            "  ```json\nJSON ではない\n```  ",
+        ],
+    )
+    def test_unreadable_text_is_returned_as_is(self, text: str) -> None:
+        """読めない返答は、そのまま返り、読み取りで却下される形のままであること"""
+        assert json_payload(text) == text
+
+    def test_none_and_empty_are_kept(self) -> None:
+        """None は None、空文字は空文字のままであること"""
+        assert json_payload(None) is None
+        assert json_payload("") == ""

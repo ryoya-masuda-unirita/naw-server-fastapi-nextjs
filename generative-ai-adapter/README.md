@@ -96,7 +96,7 @@ docker run -d --name naw-vdb -e POSTGRES_DB=onprem_vector -e POSTGRES_USER=onpre
 | `1` AzureOpenAI | `{URL}/openai/deployments/{モデル名}/chat/completions?api-version=2025-01-01-preview`（`api-key`） |
 | `5` SecuAiGent | クラウドの `POST {URL}/api/llm/chat`（multipart + SSE）。`API_KEY` は loginKey（`/auth/login-key` で JWT を取る）、`Tenant ID` は `X-Tenant-ID`。推論・ライブラリ生成の途中経過を受け取る。tools・textData に対応 |
 | `2` Anthropic・`3` VertexAI・`4` GoogleAIStudio | 移植元と同じく「未対応」の理由付き失敗（`UNSUPPORTED_PROVIDER_CAPABILITY`） |
-| `97` Bedrock（Python 版だけ） | Bedrock Mantle の Anthropic 形式の入口 `{URL}/v1/messages` を非ストリーミングで呼ぶ（`Authorization: Bearer`・`anthropic-version`。`x-api-key` は付けない。Mantle が両方あると拒否するため）。`URL` は `https://bedrock-mantle.<リージョン>.api.aws/anthropic`、`API_KEY` は Bedrock API key、`MODEL_NAME` は `anthropic.claude-haiku-4-5` など。**移植元にない拡張**（下記） <!-- bedrock-ext --> |
+| `97` Bedrock（Python 版だけ） | Bedrock Mantle の Anthropic 形式の入口 `{URL}/v1/messages` を非ストリーミングで呼ぶ（`Authorization: Bearer`・`anthropic-version`。`x-api-key` は付けない。Mantle が両方あると拒否するため）。`URL` は `https://bedrock-mantle.<リージョン>.api.aws/anthropic`、`API_KEY` は Bedrock API key、`MODEL_NAME` は `anthropic.claude-haiku-4-5` など。RAG の回答・検証の返答は、コードフェンスや前後の説明文があっても、中の JSON を取り出して読む（Claude は JSON をフェンスで包んで返すため）。**移植元にない拡張**（下記） <!-- bedrock-ext --> |
 | `99` Echo（Python 版だけ） | キーなし。質問をそのまま回答にし、8 文字ずつ `reasoning_delta` も流す。確認用 |
 
 ### 移植元にない拡張（Bedrock、#436）
