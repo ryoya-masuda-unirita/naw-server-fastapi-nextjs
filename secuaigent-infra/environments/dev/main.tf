@@ -144,6 +144,11 @@ module "github_actions" {
   cloudfront_distribution_arn = module.frontend.distribution_arn
   tfstate_bucket_name         = var.tfstate_bucket_name
   github_repository           = var.github_repository
+  ecr_repository_arn          = module.ecr.repository_arn
+  ecs_cluster_arn             = module.ecs.cluster_arn
+  ecs_cluster_name            = module.ecs.cluster_name
+  ecs_service_arn             = module.ecs.service_arn
+  ecs_migrate_task_family     = module.ecs.migrate_task_family
 }
 
 module "bastion" {
