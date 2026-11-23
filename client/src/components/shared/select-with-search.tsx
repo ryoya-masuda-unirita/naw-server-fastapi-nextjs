@@ -16,6 +16,23 @@ const VIEWPORT_MARGIN_PX = 8;
 const DROPDOWN_MAX_HEIGHT_PX = 300;
 const DROPDOWN_MIN_HEIGHT_PX = 120;
 
+/**
+ * 選択肢が検索語に一致するか。ラベル（アシスタント名など）またはカテゴリに含まれていればよい。
+ *
+ * 移植元の `filteredOptions` はラベルだけで絞り込むが、新規チャットのダイアログの案内文は
+ * 「アシスタント表示名・カテゴリで検索できます」としており、カテゴリを入力すると 0 件になる食い違いがあった。
+ * 案内文どおりに動かすため、ここは移植元と違えてカテゴリも対象にする（#396）。
+ * カテゴリを持たない選択肢はラベルだけで判定する。
+ *
+ * @param option 判定する選択肢
+ * @param query 小文字にした検索語
+ */
+function matchesQuery<T>(option: SelectOption<T>, query: string): boolean {
+  return (
+    option.label.toLowerCase().includes(query) || (option.category?.toLowerCase().includes(query) ?? false)
+  );
+}
+
 interface DropdownStyle {
   top: string;
   left: string;
@@ -77,7 +94,7 @@ export function SelectWithSearch<T = string>({
 
   const selectedOption = options.find((opt) => opt.value === value) ?? null;
   const query = searchQuery.toLowerCase();
-  const filteredOptions = query ? options.filter((opt) => opt.label.toLowerCase().includes(query)) : options;
+  const filteredOptions = query ? options.filter((opt) => matchesQuery(opt, query)) : options;
 
   // 移植元は effect で input.value を書き換えている。入力中は検索語、それ以外は選択中のラベルを出す
   const triggerInputValue = isOpen && searchQuery ? searchQuery : (selectedOption?.label ?? '');

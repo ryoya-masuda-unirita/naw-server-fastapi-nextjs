@@ -59,6 +59,44 @@ describe('SelectWithSearch', () => {
       expect(options[1]).toHaveTextContent('Grape');
     });
 
+    test('カテゴリ名を入力すると、そのカテゴリの選択肢に絞り込めること', async () => {
+      const user = userEvent.setup();
+      render(<SelectWithSearch options={FIXTURE_OPTIONS} />);
+      await user.click(screen.getByRole('textbox'));
+      await screen.findByRole('listbox');
+      // 「果物」は Grape のカテゴリ。ラベル（Apple・Orange・Grape）には含まれない
+      await user.type(screen.getByRole('textbox'), '果物');
+      const options = screen.getAllByRole('option');
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveTextContent('Grape');
+    });
+
+    test('カテゴリの大文字・小文字を区別せずに絞り込めること', async () => {
+      const user = userEvent.setup();
+      const options: SelectOption[] = [
+        { label: 'Alpha', value: 'alpha', category: 'Business' },
+        { label: 'Beta', value: 'beta', category: 'Support' },
+      ];
+      render(<SelectWithSearch options={options} />);
+      await user.click(screen.getByRole('textbox'));
+      await screen.findByRole('listbox');
+      await user.type(screen.getByRole('textbox'), 'BUSI');
+      const filtered = screen.getAllByRole('option');
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0]).toHaveTextContent('Alpha');
+    });
+
+    test('カテゴリがない選択肢はラベルで絞り込めること', async () => {
+      const user = userEvent.setup();
+      render(<SelectWithSearch options={FIXTURE_OPTIONS} />);
+      await user.click(screen.getByRole('textbox'));
+      await screen.findByRole('listbox');
+      await user.type(screen.getByRole('textbox'), 'oran');
+      const options = screen.getAllByRole('option');
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveTextContent('Orange');
+    });
+
     test('一致する選択肢がなければ空表示の文言が出ること', async () => {
       const user = userEvent.setup();
       render(<SelectWithSearch options={FIXTURE_OPTIONS} />);
@@ -142,6 +180,20 @@ describe('SelectWithSearch', () => {
       await user.type(mobileInput, 'gra');
       const listbox = container.querySelector('.combobox-list__body') as HTMLElement;
       expect(listbox.querySelectorAll('[role="option"]')).toHaveLength(1);
+    });
+
+    test('モバイル幅のドロワーでもカテゴリ名で絞り込めること', async () => {
+      setViewportWidth(MOBILE_WIDTH);
+      const user = userEvent.setup();
+      const { container } = render(<SelectWithSearch options={FIXTURE_OPTIONS} />);
+      await user.click(container.querySelector('.trigger-wrapper') as HTMLElement);
+      await waitFor(() => expect(container.querySelector('.combobox-list__sp-input')).toBeInTheDocument());
+      const mobileInput = container.querySelector('.combobox-list__sp-input') as HTMLInputElement;
+      await user.type(mobileInput, '果物');
+      const listbox = container.querySelector('.combobox-list__body') as HTMLElement;
+      const options = listbox.querySelectorAll('[role="option"]');
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveTextContent('Grape');
     });
   });
 });
