@@ -16,6 +16,7 @@ infra/
 
 ## 初回セットアップ手順（新しいAWSアカウントへの構築時、`terraform destroy`後の再構築時も同様）
 
+> **#383で`project_name`の既定値を`naw-fastapi-issue160`から`naw-fastapi`に変えた**ため、旧名で作った既存の環境に適用するとほぼ全リソース（RDS・ECR・ECS・S3など）の作り直しになる。S3のバケット名にはAWSアカウントIDを含める（バケット名は全世界で一意なため）。
 > **この手順と構成は、新しいAWSアカウントへの新規構築を前提にしている。** #382で構成を`modules/`+`environments/dev`に分けたときに、state の key を`infra/terraform.tfstate`から`dev/terraform.tfstate`に変えた。旧構成で作った既存の環境（旧 key の state がある）にそのまま適用すると、state が空の新 key に対して作成を試みて、名前の衝突で失敗する。既存の環境を引き継ぐ場合は、先に state オブジェクトを新 key へコピーすること（`terraform.tfstate`を`dev/terraform.tfstate`へ。`moved`ブロックは使っていない）。
 
 tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`infra/bootstrap/`）で管理する。メインがバケットを管理すると、`terraform destroy`で「stateの置き場所」ごと消え、バケットが無い状態から作り直す必要があったため。メインを`destroy`してもstateは残る（`prevent_destroy`付き）。

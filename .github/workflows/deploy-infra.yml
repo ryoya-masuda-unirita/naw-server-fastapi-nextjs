@@ -61,7 +61,7 @@ jobs:
             exit 1
           fi
           # ALBの名前は32文字までなので、接尾辞の分を見込んで30文字までにする
-          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
+          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$ ]]; then
             echo "::error::PROJECT_NAME の値が不正です(小文字・数字・ハイフンの3〜30文字)。"
             exit 1
           fi

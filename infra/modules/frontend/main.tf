@@ -130,9 +130,12 @@ resource "aws_cloudfront_function" "strip_backend_prefix" {
   code    = file("${path.module}/functions/strip_backend_prefix.js")
 }
 
-// フロントエンド(SPA)の静的ファイルを置くS3バケット
+data "aws_caller_identity" "current" {}
+
+// フロントエンド(SPA)の静的ファイルを置くS3バケット。
+// S3のバケット名は全世界で一意なので、プロジェクト名だけだと他アカウントと衝突しうる。アカウントIDを含めて避ける。
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.project_name}-frontend"
+  bucket = "${var.project_name}-frontend-${data.aws_caller_identity.current.account_id}"
 
   // 中身が空でないとterraform destroyが失敗するため、destroy時にオブジェクトごと削除させる
   force_destroy = true

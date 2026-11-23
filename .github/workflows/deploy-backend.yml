@@ -33,7 +33,7 @@ jobs:
             echo "::error::GitHubのVariable PROJECT_NAME が未登録です。インフラのリソース名の元になる名前(例: naw-fastapi)を登録してください。"
             exit 1
           fi
-          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
+          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$ ]]; then
             echo "::error::PROJECT_NAME の値が不正です(小文字・数字・ハイフンの3〜30文字)。"
             exit 1
           fi

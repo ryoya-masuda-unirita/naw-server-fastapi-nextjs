@@ -1,6 +1,9 @@
+data "aws_caller_identity" "current" {}
+
 // ユーザーインポート用CSVを一時保存するS3バケット。backendがアップロード・SQSリスナーが読み込みに使う。
+// S3のバケット名は全世界で一意なので、プロジェクト名だけだと他アカウントと衝突しうる。アカウントIDを含めて避ける。
 resource "aws_s3_bucket" "user_import" {
-  bucket = "${var.project_name}-user-import-jobs"
+  bucket = "${var.project_name}-user-import-jobs-${data.aws_caller_identity.current.account_id}"
 
   // 中身が空でないとterraform destroyが失敗するため、destroy時にオブジェクトごと削除させる
   force_destroy = true

@@ -9,6 +9,12 @@ variable "region" {
 variable "project_name" {
   type    = string
   default = "naw-fastapi"
+
+  // CIの検査(deploy-infra.yml・deploy-backend.yml)と同じ形式。ハイフンで始まる・終わる名前は、ALBやS3の名前として不正
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$", var.project_name))
+    error_message = "project_name は小文字・数字・ハイフンの3〜30文字で、ハイフンで始まらず終わらないこと。"
+  }
 }
 
 variable "github_repository" {
