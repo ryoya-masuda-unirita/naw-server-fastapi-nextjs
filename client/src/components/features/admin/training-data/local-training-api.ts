@@ -2,6 +2,7 @@ import { apiClient, type ApiRequestOptions, type QueryParams } from '@/lib/api-c
 import { API_PATHS } from '@/lib/constants/api-paths';
 import type { PagedResponse } from '@/types/api-response.type';
 import type {
+  AdditionalLearningTarget,
   LocalServerEndpoint,
   TrainingDataApiItem,
   TrainingDataFileApiResponse,
@@ -159,6 +160,30 @@ export async function syncLocalFolder(folder: TrainingDataApiItem, userId: strin
   await apiClient.post(
     server.url(API_PATHS.LOCAL_SERVER.SYNC(folder.id)),
     { userId, syncServiceName: folder.get },
+    server.options,
+  );
+}
+
+/**
+ * 移植元 `LocalTrainingApiService.addAdditionalLearning`。
+ * 対象は `feedbackId` か `roomId` のどちらか一方だけ送る。
+ */
+export async function addLocalAdditionalLearning(
+  folder: TrainingDataApiItem,
+  target: AdditionalLearningTarget,
+  userId: string,
+  content: File,
+): Promise<void> {
+  const server = await resolveLocalServer(folder);
+  await apiClient.post(
+    server.url(API_PATHS.LOCAL_SERVER.ADDITIONAL_LEARNING(folder.id)),
+    toLocalFormData({
+      creationServiceName: folder.add,
+      feedbackId: 'feedbackId' in target ? target.feedbackId : undefined,
+      roomId: 'roomId' in target ? target.roomId : undefined,
+      userId,
+      content,
+    }),
     server.options,
   );
 }

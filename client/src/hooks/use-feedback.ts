@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { addIfLocalFolder } from '@/components/features/admin/feedback/feedback-local-learning';
 import { LEARNING_FOLDERS_QUERY_KEY } from '@/hooks/use-training-data';
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
@@ -10,6 +11,7 @@ import type {
 } from '@/types/admin/feedback.types';
 import type { PagedResponse } from '@/types/api-response.type';
 import type { RoomFeedbackRating } from '@/types/chat/chat-room.type';
+import type { AdditionalLearningTarget } from '@/types/training-data.types';
 
 // 移植元 feedback-list の FeedbackMessageApiService・FeedbackRoomService・FeedbackUserApiService・
 // FeedbackListOptionsService をまとめたもの。
@@ -134,18 +136,20 @@ export function useLearningFolders() {
 export interface AddAdditionalLearningVariables {
   indexId: string;
   /** 回答精度タブは `feedbackId`、満足度タブは `roomId` を送る（混ぜない） */
-  target: { feedbackId: string } | { roomId: string };
+  target: AdditionalLearningTarget;
   content: File;
 }
 
 /**
  * 追加学習の登録（移植元 `addAdditionalLearning`）。成功したら両タブの一覧を読み直す。
- * 失敗の通知は api-client の共通エラートーストが出す
+ * 失敗の通知は api-client の共通エラートースト（ローカル用サーバーの HTTP 以外の失敗は `viaLocalServer`）が出す
  */
 export function useAddAdditionalLearning() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ indexId, target, content }: AddAdditionalLearningVariables) => {
+    mutationFn: async ({ indexId, target, content }: AddAdditionalLearningVariables) => {
+      // ローカルの学習先フォルダはローカル用サーバーへ送る（クラウドは断るため）
+      if (await addIfLocalFolder(indexId, target, content)) return;
       const body = new FormData();
       if ('feedbackId' in target) body.append('feedbackId', target.feedbackId);
       else body.append('roomId', target.roomId);
