@@ -32,7 +32,7 @@ services:
       dockerfile: ../e2e-spec/docker/frontend.Dockerfile
       args:
         # ブラウザ（ホスト）から見た backend の URL。ビルド時にバンドルへ埋め込まれる
-        VITE_API_URL: http://localhost:${DEMO_BACKEND_PORT:-58100}
+        VITE_API_URL: http://localhost:${DEMO_BACKEND_PORT:?src/environment.ts が渡す}
     environment: !reset {}
     volumes:
       - ./e2e-spec/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro

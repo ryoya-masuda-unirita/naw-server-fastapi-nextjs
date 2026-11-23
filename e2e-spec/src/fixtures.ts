@@ -47,7 +47,7 @@ export const test = base.extend<Fixtures>({
       await loginPage.login(user);
       // ログイン画面を出た直後は別の URL を経由してダッシュボードへ移る。着地を待たないと、
       // 続く page.goto がこの移動に割り込まれて失敗する（静的配信で応答が速いと 09-35・19-17 で出た）
-      await baseExpect(loginPage.page).toHaveURL(new RegExp(DASHBOARD_PATH));
+      await baseExpect(loginPage.page).toHaveURL((url) => url.pathname === DASHBOARD_PATH);
       return user;
     });
   },

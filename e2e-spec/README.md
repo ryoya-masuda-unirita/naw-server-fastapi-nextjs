@@ -24,7 +24,7 @@ Issue: #316
 
 ## 準備（初回だけ）
 
-- Docker（compose v2）と Node.js 22.18 以上
+- Docker（compose v2.24 以上。`docker/compose.override.yml` が `!reset` を使う）と Node.js 22.18 以上
 
 ```bash
 cd e2e-spec
