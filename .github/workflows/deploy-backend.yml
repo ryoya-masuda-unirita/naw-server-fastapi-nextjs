@@ -108,11 +108,11 @@ jobs:
       - name: Run DB migration task
         id: run-migration
         run: |
-          NETWORK_CONFIG=$(aws ecs describe-services \
-            --cluster ${ECS_CLUSTER} --services ${ECS_SERVICE} \
-            --query 'services[0].networkConfiguration' --output json)
-          if [ -z "${NETWORK_CONFIG}" ] || [ "${NETWORK_CONFIG}" = "null" ]; then
-            echo "::error::サービス ${ECS_SERVICE} のネットワーク設定を取得できません。サービスが存在することを確認してください。"
+          SERVICE_INFO=$(aws ecs describe-services --cluster ${ECS_CLUSTER} --services ${ECS_SERVICE} --output json)
+          NETWORK_CONFIG=$(echo "${SERVICE_INFO}" | jq -c '.services[0].networkConfiguration // empty')
+          # クラスタ名・サービス名が違うと、servicesが空でfailuresに理由(MISSINGなど)が入る
+          if [ -z "${NETWORK_CONFIG}" ]; then
+            echo "::error::サービス ${ECS_SERVICE}(クラスタ ${ECS_CLUSTER})のネットワーク設定を取得できません。failures: $(echo "${SERVICE_INFO}" | jq -c '.failures')"
             exit 1
           fi
           RUN_RESULT=$(aws ecs run-task \
