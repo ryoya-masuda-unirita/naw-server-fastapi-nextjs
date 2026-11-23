@@ -56,11 +56,11 @@ async def upload_question_history_and_attachment(
         json_data = to_compact_json(histories)
         logger.info(
             "Preparing histories.json: wahaSessionId=%s, filename=%s, slot=%s, "
-            "content=%s",
+            "count=%s",
             session_id,
             HISTORY_FILENAME,
             SLOT_HISTORY,
-            json_data,
+            len(histories),
         )
         await waha.upload_file(
             filename=HISTORY_FILENAME,

@@ -194,11 +194,12 @@ async def test_access_token_is_not_logged(
     fake_waha: FakeWahaClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """textData のログにアクセストークンを出さず、Waha! には送ること"""
+    """ログにアクセストークンの値を出さず（有無だけ出し）、Waha! には送ること"""
     with caplog.at_level(logging.DEBUG):
         await client.post(CONTENT_URL, files=multipart_files(TEXT_DATA))
     assert "token-abc" not in caplog.text
-    assert '"accessToken":"***"' in caplog.text
+    # トークンの値は出さず、あるかどうかだけを出す
+    assert "hasAccessToken=True" in caplog.text
     upload = next(u for u in fake_waha.uploads if u.slot == "textdata")
     assert json.loads(upload.content)["accessToken"] == "token-abc"
 

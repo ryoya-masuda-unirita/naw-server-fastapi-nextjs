@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from starlette.datastructures import UploadFile
 
 from app.core.jsonutil import encode_bytes
@@ -295,6 +295,44 @@ class RetrievalAnswer(BaseModel):
     answer: str | None = None
     filepaths: list[str] | None = None
     references: list[Reference] | None = None
+
+    @classmethod
+    def from_output_file(cls, response: str | None) -> "RetrievalAnswer":
+        """Waha! の outputfile（JSON 文字列）を読み取る。
+
+        解析に失敗したときの例外のメッセージに、入力の値を含めない。pydantic の
+        ``ValidationError`` は、``input_value=`` として入力（回答の本文）の一部を
+        文字列に含めるため、そのままログ・DB・クライアントへの応答に出すと、会話の
+        本文が漏れる。項目の場所とエラーの種類だけを伝える。
+
+        Parameters
+        ----------
+        response : str | None
+            Waha! の outputfile の内容。
+
+        Returns
+        -------
+        RetrievalAnswer
+            読み取った回答。
+
+        Raises
+        ------
+        ValueError
+            JSON として読めない、または項目の型が想定と違う場合。入力の値は含めない。
+        """
+        try:
+            return cls.model_validate_json(response)  # type: ignore[arg-type]
+        except ValidationError as e:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc']) or '(全体)'}: {err['msg']}"
+                for err in e.errors(
+                    include_input=False, include_url=False, include_context=False
+                )
+            )
+            # from None: 元の例外（入力の値を含む）を、トレースバックに連鎖させない
+            raise ValueError(
+                f"Waha! の出力ファイルが想定した形式ではありません: {problems}"
+            ) from None
 
     def context_text(self) -> str | None:
         """回答の根拠にした断片の本文を改行でつなぎ、メッセージ内容の context にする。
