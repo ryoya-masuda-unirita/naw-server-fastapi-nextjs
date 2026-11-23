@@ -828,6 +828,168 @@ class TestGetUsersExcludeGroup:
         assert login_ids == {admin_user.login_id, normal_user.login_id}
 
 
+class TestGetUsersLoginIds:
+    """GET /api/admin/users の loginIds のテスト"""
+
+    async def test_returns_only_exact_match_login_ids(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
+        """loginIdsに完全一致するユーザーだけが返り、含むだけのログインIDは返らないこと"""
+        session.add(
+            User(
+                id=uuid4(),
+                tenant_id=tenant.id,
+                login_id=f"{normal_user.login_id}x",
+                name="含むだけの人",
+                role=UserRole.USER,
+                is_required_password_reset=False,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params=[
+                    ("loginIds", normal_user.login_id),
+                    ("loginIds", admin_user.login_id),
+                ],
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert {u["loginId"] for u in body["content"]} == {
+            normal_user.login_id,
+            admin_user.login_id,
+        }
+        assert body["totalElements"] == 2
+
+    async def test_unspecified_login_ids_returns_all(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
+        """loginIdsを指定しない場合は絞り込まれないこと"""
+        async with client as c:
+            response = await c.get("/api/admin/users", headers=admin_headers)
+
+        assert response.status_code == 200
+        login_ids = {u["loginId"] for u in response.json()["content"]}
+        assert login_ids == {admin_user.login_id, normal_user.login_id}
+
+    async def test_other_tenant_login_id_is_not_returned(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        """他テナントのユーザーのログインIDを指定しても返らないこと"""
+        other_tenant = Tenant(id="tenant-users-other-lid", name="Other", owner="admin")
+        session.add(other_tenant)
+        await session.commit()
+        session.add(
+            User(
+                id=uuid4(),
+                tenant_id=other_tenant.id,
+                login_id="other-tenant-user",
+                name="他テナントの人",
+                role=UserRole.USER,
+                is_required_password_reset=False,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params=[
+                    ("loginIds", "other-tenant-user"),
+                    ("loginIds", admin_user.login_id),
+                ],
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [u["loginId"] for u in body["content"]] == [admin_user.login_id]
+        assert body["totalElements"] == 1
+
+    async def test_system_role_login_id_is_not_returned(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        admin_user: User,
+    ) -> None:
+        """SYSTEMロールのログインIDを指定しても、管理画面の一覧と同じく返らないこと"""
+        session.add(
+            User(
+                id=uuid4(),
+                tenant_id=tenant.id,
+                login_id="system-login-id",
+                name="連携システム",
+                role=UserRole.SYSTEM,
+                is_required_password_reset=False,
+            )
+        )
+        await session.commit()
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params=[
+                    ("loginIds", "system-login-id"),
+                    ("loginIds", admin_user.login_id),
+                ],
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [u["loginId"] for u in body["content"]] == [admin_user.login_id]
+        assert body["totalElements"] == 1
+
+    async def test_filter_works_with_usage_and_credit_sort(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        session: AsyncSession,
+        tenant: Tenant,
+        credit_plan: Plan,
+        admin_user: User,
+        normal_user: User,
+    ) -> None:
+        """利用量の付与・利用クレジット順の並べ替えと併用しても絞り込みが効くこと"""
+        await _create_active_subscription(session, tenant.id, credit_plan.id)
+
+        async with client as c:
+            response = await c.get(
+                "/api/admin/users",
+                headers=admin_headers,
+                params={
+                    "loginIds": normal_user.login_id,
+                    "includeUsage": "true",
+                    "sort": "totalCredits,desc",
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [u["loginId"] for u in body["content"]] == [normal_user.login_id]
+        assert body["totalElements"] == 1
+
+
 class TestCreateUser:
     """POST /api/admin/users のテスト"""
 

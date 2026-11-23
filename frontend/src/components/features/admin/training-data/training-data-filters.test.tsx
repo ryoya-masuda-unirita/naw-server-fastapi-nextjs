@@ -15,15 +15,12 @@ function renderFilters() {
         periodOptions={[]}
         selectedPeriod={null}
         filterPeriodRange={null}
-        statusOptions={[]}
-        selectedStatus={null}
         countDisplay="1-10 / 25"
         totalPages={3}
         currentPage={1}
         onSearchQuery={vi.fn()}
         onUserChange={vi.fn()}
         onPeriodChange={vi.fn()}
-        onStatusChange={vi.fn()}
         onPageChange={vi.fn()}
       />
     </MemoryRouter>,

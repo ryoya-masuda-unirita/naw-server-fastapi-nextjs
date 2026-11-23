@@ -86,9 +86,17 @@ class TokenUsageService:
             session,
         )
 
+        # 行ごとにユーザーを引くとN+1になるため、ページ内のuserIdをまとめて1回で引く。
+        user_ids = {
+            token_usage.user_id
+            for token_usage in token_usages
+            if token_usage.user_id is not None
+        }
+        users_by_id = await UserRepository.find_by_ids(user_ids, tenant_id, session)
+
         return TokenUsageListResponse(
             contents=[
-                TokenUsageItemResponse.from_token_usage(token_usage)
+                TokenUsageItemResponse.from_token_usage(token_usage, users_by_id)
                 for token_usage in token_usages
             ],
             totalCount=total_count,

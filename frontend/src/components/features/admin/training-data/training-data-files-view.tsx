@@ -6,13 +6,11 @@ import { cx } from '@/components/shared/class-names';
 import { Dialog } from '@/components/shared/dialog';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import type { PeriodChange, PeriodOption } from '@/components/shared/period-filter-utils';
-import type { SelectOption } from '@/components/shared/types';
 import {
   downloadTrainingFile,
   useAddTrainingFiles,
   useDeleteTrainingFiles,
   useRenameTrainingFile,
-  useToggleTrainingFileLearning,
   useTrainingDataFiles,
   useTrainingFilterUsers,
   useUpdateTrainingFile,
@@ -29,9 +27,9 @@ import { DEFAULT_CHUNK_SIZE_PRESET } from './training-data-chunk-size';
 import { TrainingDataEditModal } from './training-data-edit-modal';
 import {
   buildFileUserFilterOptions,
-  initialLearningEnabled,
   resolveFileUpdatedByNames,
 } from './training-data-files-helper';
+import { applyLinkPrefix } from './training-data-link-prefix';
 import { TrainingDataFilters } from './training-data-filters';
 import { TrainingDataTable, type EditingNames } from './training-data-table';
 import {
@@ -70,12 +68,18 @@ function defaultEditValues(file?: TrainingDataFile): EditFileValues {
     displayName: file?.displayName || '',
     reference: file?.reference || '',
     chunkSize: file?.chunkSize || DEFAULT_CHUNK_SIZE_PRESET,
-    status: initialLearningEnabled(file),
   };
 }
 
 function nameWithoutExtension(fileName: string): string {
   return fileName.replace(/\.[^/.]+$/, '');
+}
+
+/** 編集ダイアログでファイルを選ぶ前の状態（取り消したときに戻す） */
+interface BeforeFileSelection {
+  editingFile: TrainingDataFile | null;
+  displayName: string;
+  reference: string;
 }
 
 /** 削除の確認待ち。`deselectAll` は選択をまとめて削除したときだけ true */
@@ -109,7 +113,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const deleteFiles = useDeleteTrainingFiles(indexId);
   const updateFile = useUpdateTrainingFile(indexId);
   const renameFile = useRenameTrainingFile(indexId);
-  const toggleLearning = useToggleTrainingFileLearning(indexId);
 
   const files = useMemo(
     () => resolveFileUpdatedByNames(filesQuery.data?.data ?? [], filterUsers),
@@ -147,17 +150,21 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const [editValues, setEditValues] = useState<EditFileValues>(defaultEditValues());
   const [editFilePreview, setEditFilePreview] = useState<string | null>(null);
   const [editUploadFile, setEditUploadFile] = useState<File | null>(null);
+  const [editPreviewFailed, setEditPreviewFailed] = useState(false);
+  // ファイルを選ぶ前の入力。選んだファイルを取り消したときに、書き換えた欄を戻すために持つ
+  const beforeFileSelectionRef = useRef<BeforeFileSelection | null>(null);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  // 画像の読み込みが終わったとき、まだそのファイルが選ばれているかを確かめる
+  const editUploadFileRef = useRef<File | null>(null);
+  const changeEditUploadFile = (file: File | null) => {
+    editUploadFileRef.current = file;
+    setEditUploadFile(file);
+  };
 
   const userOptions = useMemo(
     () => buildFileUserFilterOptions(filterUsers, (key) => t(key)),
     [filterUsers, t],
   );
-  const statusOptions: SelectOption[] = [
-    { value: '', label: t('LEARNING_DATA.ALL_SETTINGS') },
-    { value: 'ON', label: 'ON' },
-    { value: 'OFF', label: 'OFF' },
-  ];
 
   // ---- 選択 ----
 
@@ -281,7 +288,7 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   };
 
   const handleApplyLinkPrefix = () => {
-    setAddRows((rows) => rows.map((row) => ({ ...row, reference: linkPrefix + row.displayName })));
+    setAddRows((rows) => applyLinkPrefix(rows, linkPrefix));
   };
 
   const isAddFilesValid =
@@ -319,7 +326,9 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const openEditDialog = (file: TrainingDataFile | null) => {
     setEditingFile(file);
     setEditFilePreview(file?.image ?? null);
-    setEditUploadFile(null);
+    changeEditUploadFile(null);
+    setEditPreviewFailed(false);
+    beforeFileSelectionRef.current = null;
     setEditValues(defaultEditValues(file ?? undefined));
     setSubmitted(false);
     setIsEditOpen(true);
@@ -327,11 +336,20 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
 
   const handleEditFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || isEditSubmitting) return;
 
+    // 取り消したときに戻せるよう、最初にファイルを選ぶ前の入力を覚えておく
+    if (!editUploadFile) {
+      beforeFileSelectionRef.current = {
+        editingFile,
+        displayName: editValues.displayName,
+        reference: editValues.reference,
+      };
+    }
     // 移植元は追加のときだけ選んだファイルを保持する（編集のときは保持せず、差し替えが送られない）。
     // 選んだファイルが画面にだけ反映されて送られないのは意図とずれるため、編集でも保持する
-    setEditUploadFile(file);
+    changeEditUploadFile(file);
+    setEditPreviewFailed(false);
     if (!editingFile) {
       setEditValues((values) => ({
         ...values,
@@ -344,12 +362,40 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
     }
 
     if (file.type.startsWith('image/')) {
+      // 読み込むまでは前のプレビュー（既存の学習データの画像）を出さない。読み込みが終わる前に
+      // 別のファイルを選び直したり取り消したりしたときは、このファイルのプレビューを出さない
+      setEditFilePreview(null);
       const reader = new FileReader();
-      reader.onload = (loaded) => setEditFilePreview(loaded.target?.result as string);
+      reader.onload = (loaded) => {
+        if (editUploadFileRef.current !== file) return;
+        setEditFilePreview(loaded.target?.result as string);
+      };
+      reader.onerror = () => {
+        if (editUploadFileRef.current !== file) return;
+        setEditPreviewFailed(true);
+      };
       reader.readAsDataURL(file);
     } else {
       setEditFilePreview(null);
     }
+  };
+
+  // 選んだファイルを取り消す。プレビューと選んだファイルの両方を捨て、書き換えた欄を戻す（NAW-1409・NAW-1412）
+  const handleRemoveEditUploadFile = () => {
+    const before = beforeFileSelectionRef.current;
+    if (!before || isEditSubmitting) return;
+
+    beforeFileSelectionRef.current = null;
+    changeEditUploadFile(null);
+    setEditPreviewFailed(false);
+    setEditingFile(before.editingFile);
+    setEditFilePreview(before.editingFile?.image ?? null);
+    // 編集は参照資料のリンクだけ、追加は表示名と参照資料のリンクを戻す
+    setEditValues((values) =>
+      before.editingFile
+        ? { ...values, reference: before.reference }
+        : { ...values, displayName: before.displayName, reference: before.reference },
+    );
   };
 
   const isEditFormValid = (['displayName', 'reference', 'chunkSize'] as const).every(
@@ -363,7 +409,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
     setIsEditSubmitting(true);
     try {
       if (editingFile) {
-        const status = editValues.status ? 'ENABLE' : 'DISABLE';
         await updateFile.mutateAsync({
           fileId: editingFile.id,
           data: {
@@ -372,7 +417,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
             ...(editValues.chunkSize !== (editingFile.chunkSize || DEFAULT_CHUNK_SIZE_PRESET)
               ? { chunkSize: editValues.chunkSize }
               : {}),
-            status,
           },
           currentFile: files.find((file) => file.id === editingFile.id),
           defaultChunkSize: DEFAULT_CHUNK_SIZE_PRESET,
@@ -385,7 +429,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
             displayName: editValues.displayName,
             reference: editValues.reference,
             chunkSize: editValues.chunkSize,
-            status: editValues.status ? 'ENABLE' : 'DISABLE',
           },
         ]);
       }
@@ -464,15 +507,12 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
         periodOptions={PERIOD_OPTIONS}
         selectedPeriod={filter.selectedPeriod ?? null}
         filterPeriodRange={filter.filterPeriodRange ?? null}
-        statusOptions={statusOptions}
-        selectedStatus={filter.selectedStatus ?? null}
         countDisplay={countDisplay}
         totalPages={totalPages}
         currentPage={filter.pageIndex}
         onSearchQuery={(query) => updateFilesFilter({ query })}
         onUserChange={(value) => updateFilesFilter({ userId: value ?? '' })}
         onPeriodChange={handlePeriodChange}
-        onStatusChange={(value) => updateFilesFilter({ selectedStatus: value })}
         onPageChange={(pageIndex) => updateFilesFilter({ pageIndex })}
       />
 
@@ -498,9 +538,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
           onUpdateEditingValue={handleUpdateEditingValue}
           onDownload={handleDownload}
           onEditLearningData={openEditDialog}
-          onToggleLearning={(file) =>
-            toggleLearning.mutate({ fileId: file.id, currentStatus: file.status })
-          }
           onDeleteFile={(file) => setPendingDelete({ ids: [file.id], deselectAll: false })}
           onPageChange={(pageIndex) => updateFilesFilter({ pageIndex })}
         />
@@ -598,9 +635,12 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
           submitted={submitted}
           editingFile={editingFile}
           editFilePreview={editFilePreview}
+          uploadFile={editUploadFile}
+          previewLoadFailed={editPreviewFailed}
+          fileLocked={isEditSubmitting}
           onChange={setEditValues}
           onEditFileChange={handleEditFileChange}
-          onRemovePreview={() => setEditFilePreview(null)}
+          onRemoveUploadFile={handleRemoveEditUploadFile}
         />
       </Dialog>
 

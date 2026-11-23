@@ -39,8 +39,6 @@ export interface EditFileValues {
   displayName: string;
   reference: string;
   chunkSize: string;
-  /** 学習に使うか */
-  status: boolean;
 }
 
 export type EditFileField = 'displayName' | 'reference' | 'chunkSize';

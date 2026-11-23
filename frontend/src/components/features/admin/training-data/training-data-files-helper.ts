@@ -12,8 +12,6 @@ import type {
 /** ファイルを学習に使っていないときの既定（未指定の並べ替え方向） */
 const DEFAULT_SORT_ORDER = 'desc';
 
-type ApiFileStatus = 'ENABLE' | 'DISABLE' | 'DELETED';
-
 /** `GET /api/admin/indexes/{id}/files` のクエリ */
 export interface TrainingDataFileListApiParams {
   page: number;
@@ -23,17 +21,7 @@ export interface TrainingDataFileListApiParams {
   updatedAtTo?: string;
   displayName?: string;
   fileName?: string;
-  status?: ApiFileStatus;
   sort?: string;
-}
-
-function mapUiStatusToApi(status: string | null | undefined): ApiFileStatus | undefined {
-  if (!status) return undefined;
-  const upper = status.toUpperCase();
-  if (upper === 'ON') return 'ENABLE';
-  if (upper === 'OFF') return 'DISABLE';
-  if (upper === 'ENABLE' || upper === 'DISABLE' || upper === 'DELETED') return upper;
-  return undefined;
 }
 
 /**
@@ -71,7 +59,6 @@ export function toFileListApiParams(
     updatedAtTo: dateRange.to,
     displayName: query || undefined,
     fileName: query || undefined,
-    status: mapUiStatusToApi(filter.selectedStatus),
     sort,
   };
 }
@@ -116,11 +103,6 @@ export function triggerBlobDownload(blob: Blob, fileName: string): void {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
-}
-
-/** 追加ではスイッチを表示しないため、ファイルが無いときは学習に使う状態（オン）で登録する */
-export function initialLearningEnabled(file: TrainingDataFile | undefined): boolean {
-  return file ? file.status === 'ENABLE' : true;
 }
 
 /** 一覧の「更新日時」の表示（移植元の `date: 'yyyy/MM/dd HH:mm'`）。解釈できない値は空にする */

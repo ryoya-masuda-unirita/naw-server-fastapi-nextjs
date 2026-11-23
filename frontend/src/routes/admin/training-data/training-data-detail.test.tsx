@@ -6,6 +6,7 @@ import { API_PATHS } from '@/lib/constants/api-paths';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
 import { FIXTURE_TENANT_ADMIN, renderApp, setAuthUser } from '@/test/render-app';
+import { LEARNING_FOLDERS_QUERY_KEY } from '@/hooks/use-training-data';
 import { useTrainingDataStore } from '@/store/training-data-store';
 
 const INDEX_ID = 'i1';
@@ -219,9 +220,10 @@ describe('TrainingDataDetailPage', () => {
       // 表示名の無いファイルはファイル名を表示名にし、更新者はユーザーの表示名にする
       expect(within(rows[0]).getByText('manual-link')).toBeInTheDocument();
       expect(within(rows[0]).getByText('山田太郎')).toBeInTheDocument();
-      expect(within(rows[0]).getByText('LEARNING_DATA.STATUS_ON')).toBeInTheDocument();
+      // 学習設定（ON / OFF）の列は出さない（NAW-1405）
+      expect(screen.queryByText('LEARNING_DATA.STATUS_ON')).not.toBeInTheDocument();
+      expect(screen.queryByText('LEARNING_DATA.STATUS_OFF')).not.toBeInTheDocument();
       expect(within(rows[1]).getByText('rules.txt')).toBeInTheDocument();
-      expect(within(rows[1]).getByText('LEARNING_DATA.STATUS_OFF')).toBeInTheDocument();
       expect(screen.getByText('1-2件 / 2件')).toBeInTheDocument();
     });
 
@@ -279,50 +281,25 @@ describe('TrainingDataDetailPage', () => {
       });
     });
 
-    test('学習設定の絞り込みが ENABLE で送られること', async () => {
+    test('学習設定の絞り込みがなく、一覧の取得で status を送らないこと', async () => {
       const log = mockApis();
       await renderPage();
-      const user = userEvent.setup({ applyAccept: false });
 
-      await user.click(screen.getByText('LEARNING_DATA.ALL_SETTINGS'));
-      await user.click(await screen.findByText('ON'));
-
-      await waitFor(() => {
-        const params = log.fileListParams[log.fileListParams.length - 1];
-        expect(params.get('status')).toBe('ENABLE');
-      });
+      expect(screen.queryByText('LEARNING_DATA.ALL_SETTINGS')).not.toBeInTheDocument();
+      expect(log.fileListParams.every((params) => !params.has('status'))).toBe(true);
     });
   });
 
   describe('学習設定', () => {
-    test('学習設定をOFFにすると画面が先に更新され、API に DISABLE が送られること', async () => {
-      const log = mockApis();
-      await renderPage();
-      const user = userEvent.setup({ applyAccept: false });
-
-      await openFileMenu(user, 0);
-      await user.click(await screen.findByTestId('training-data-file-toggle-learning'));
-
-      await waitFor(() => expect(log.patchedFiles).toHaveLength(1));
-      expect(log.patchedFiles[0].fileId).toBe('f1');
-      expect(log.patchedFiles[0].params.get('status')).toBe('DISABLE');
-      const rows = screen.getAllByTestId('training-data-file-row');
-      expect(within(rows[0]).getByText('LEARNING_DATA.STATUS_OFF')).toBeInTheDocument();
-    });
-
-    test('更新に失敗したとき、学習設定が元に戻ること', async () => {
+    test('行のメニューに学習設定の ON・OFF の切り替えが出ないこと', async () => {
       mockApis();
-      server.use(http.patch(FILE_PATH, () => HttpResponse.json({ message: 'ng' }, { status: 500 })));
       await renderPage();
       const user = userEvent.setup({ applyAccept: false });
 
       await openFileMenu(user, 0);
-      await user.click(await screen.findByTestId('training-data-file-toggle-learning'));
 
-      await waitFor(() => {
-        const rows = screen.getAllByTestId('training-data-file-row');
-        expect(within(rows[0]).getByText('LEARNING_DATA.STATUS_ON')).toBeInTheDocument();
-      });
+      expect(await screen.findByTestId('training-data-file-edit-settings')).toBeInTheDocument();
+      expect(screen.queryByTestId('training-data-file-toggle-learning')).not.toBeInTheDocument();
     });
   });
 
@@ -410,6 +387,9 @@ describe('TrainingDataDetailPage', () => {
       await user.type(screen.getByTestId('training-data-add-link-prefix'), 'https://x/');
       await user.click(screen.getByTestId('training-data-add-apply-prefix'));
       expect(screen.getByTestId('training-data-add-reference')).toHaveValue('https://x/guide');
+      // 押し直しても同じ接頭辞が重ならない
+      await user.click(screen.getByTestId('training-data-add-apply-prefix'));
+      expect(screen.getByTestId('training-data-add-reference')).toHaveValue('https://x/guide');
 
       await user.click(screen.getByTestId('training-data-add-submit'));
 
@@ -420,6 +400,30 @@ describe('TrainingDataDetailPage', () => {
       // backend はファイルを付けるとき name を必須にしている
       expect(log.uploaded[0].params.get('name')).toBe('guide.pdf');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+
+    test('先頭に一括追加は、編集したリンクに付き、入力し直した文字を使うこと', async () => {
+      mockApis();
+      await renderPage();
+      const user = userEvent.setup({ applyAccept: false });
+
+      await openAddDialog(user);
+      const input = document.getElementById('file-upload') as HTMLInputElement;
+      await user.upload(input, new File(['a'], 'guide.pdf', { type: 'application/pdf' }));
+      const reference = await screen.findByTestId('training-data-add-reference');
+      await user.clear(reference);
+      await user.type(reference, 'edited');
+
+      const prefix = screen.getByTestId('training-data-add-link-prefix');
+      await user.type(prefix, 'A/');
+      await user.click(screen.getByTestId('training-data-add-apply-prefix'));
+      expect(reference).toHaveValue('A/edited');
+
+      // 文字を変えて押し直すと、変えた文字が使われる（最初に適用した文字が使われ続けない）
+      await user.clear(prefix);
+      await user.type(prefix, 'B/');
+      await user.click(screen.getByTestId('training-data-add-apply-prefix'));
+      expect(reference).toHaveValue('B/A/edited');
     });
 
     test('表示名を空にすると完了を押せず、送信されないこと', async () => {
@@ -448,7 +452,7 @@ describe('TrainingDataDetailPage', () => {
   });
 
   describe('学習データの設定の編集', () => {
-    test('表示名・リンク名・学習設定を変更して保存できること', async () => {
+    test('表示名・リンク名を変更して保存でき、学習設定のスイッチは出ず status は送らないこと', async () => {
       const log = mockApis();
       await renderPage();
       const user = userEvent.setup({ applyAccept: false });
@@ -466,10 +470,52 @@ describe('TrainingDataDetailPage', () => {
       const patch = log.patchedFiles[0];
       expect(patch.fileId).toBe('f1');
       expect(patch.params.get('displayName')).toBe('改訂版');
-      expect(patch.params.get('status')).toBe('ENABLE');
+      expect(patch.params.has('status')).toBe(false);
+      expect(screen.queryByTestId('training-data-edit-status')).not.toBeInTheDocument();
       // チャンク分割を変えていないので送らない。ファイルも選んでいない
       expect(patch.params.has('splitLength')).toBe(false);
       expect(patch.hasFile).toBe(false);
+    });
+
+    test('選んだファイルを × で取り消すと、保存でファイルが送られず、書き換えた欄が戻ること', async () => {
+      const log = mockApis();
+      await renderPage();
+      const user = userEvent.setup({ applyAccept: false });
+
+      await openFileMenu(user, 0);
+      await user.click(await screen.findByTestId('training-data-file-edit-settings'));
+      await user.upload(
+        await screen.findByTestId('training-data-edit-file-input'),
+        new File(['b'], 'new.pdf', { type: 'application/pdf' }),
+      );
+      expect(screen.getByTestId('training-data-edit-reference')).toHaveValue('new.pdf');
+
+      // 画像以外はチップで出て、そこから取り消せる
+      const chip = screen.getByTestId('training-data-edit-file-chip');
+      await user.click(within(chip).getByRole('button'));
+
+      expect(screen.queryByTestId('training-data-edit-file-chip')).not.toBeInTheDocument();
+      expect(screen.getByTestId('training-data-edit-reference')).toHaveValue('manual-link');
+      await user.click(screen.getByTestId('training-data-edit-submit'));
+
+      await waitFor(() => expect(log.patchedFiles).toHaveLength(1));
+      expect(log.patchedFiles[0].hasFile).toBe(false);
+    });
+
+    test('取り消したあとに同じファイルを選び直せること', async () => {
+      mockApis();
+      await renderPage();
+      const user = userEvent.setup({ applyAccept: false });
+
+      await openFileMenu(user, 0);
+      await user.click(await screen.findByTestId('training-data-file-edit-settings'));
+      const file = new File(['b'], 'new.pdf', { type: 'application/pdf' });
+      await user.upload(await screen.findByTestId('training-data-edit-file-input'), file);
+      await user.click(within(screen.getByTestId('training-data-edit-file-chip')).getByRole('button'));
+      await user.upload(screen.getByTestId('training-data-edit-file-input'), file);
+
+      expect(screen.getByTestId('training-data-edit-file-chip')).toBeInTheDocument();
+      expect(screen.getByTestId('training-data-edit-reference')).toHaveValue('new.pdf');
     });
 
     test('リンク名が未設定のファイルは、入力するまで保存できないこと', async () => {
@@ -588,6 +634,20 @@ describe('TrainingDataDetailPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 
+    test('更新に成功したら、フィードバック一覧の学習先フォルダの一覧を取り直す印が付くこと', async () => {
+      mockApis({ index: FIXTURE_LOCAL_INDEX });
+      const { queryClient } = await renderPage();
+      queryClient.setQueryData(LEARNING_FOLDERS_QUERY_KEY, []);
+      const user = userEvent.setup({ applyAccept: false });
+
+      await openEditFolder(user);
+      await user.click(screen.getByTestId('admin-training-data-edit-folder-submit'));
+
+      await waitFor(() =>
+        expect(queryClient.getQueryState(LEARNING_FOLDERS_QUERY_KEY)?.isInvalidated).toBe(true),
+      );
+    });
+
     test('クラウド接続のフォルダは接続先とサービスIDの欄が出ず、既存の接続先で更新されること', async () => {
       const log = mockApis();
       await renderPage();
@@ -632,7 +692,50 @@ describe('TrainingDataDetailPage', () => {
       await user.click(screen.getByTestId('training-data-detail-delete-confirm'));
 
       await waitFor(() => expect(log.deletedFolders).toEqual([INDEX_ID]));
-      expect(backSpy).toHaveBeenCalledWith(-1);
+      await waitFor(() => expect(backSpy).toHaveBeenCalledWith(-1));
+    });
+
+    test('削除が終わってから前の画面へ戻り、学習先フォルダの一覧を取り直す印が付くこと', async () => {
+      const log = mockApis();
+      let respond: () => void = () => {};
+      server.use(
+        http.delete(DETAIL_PATH, ({ params }) => {
+          log.deletedFolders.push(String(params.id));
+          return new Promise<Response>((resolve) => {
+            respond = () => resolve(new HttpResponse(null, { status: 204 }));
+          });
+        }),
+      );
+      const { router, queryClient } = await renderPage();
+      queryClient.setQueryData(LEARNING_FOLDERS_QUERY_KEY, []);
+      const user = userEvent.setup({ applyAccept: false });
+      const backSpy = vi.spyOn(router, 'navigate');
+
+      await user.click(screen.getByTestId('training-data-detail-menu-button'));
+      await user.click(await screen.findByTestId('training-data-detail-delete-folder'));
+      await user.click(await screen.findByTestId('training-data-detail-delete-confirm'));
+      await waitFor(() => expect(log.deletedFolders).toEqual([INDEX_ID]));
+
+      // 応答が返るまでは戻らない（戻ると削除前の一覧が出ることがある）
+      expect(backSpy).not.toHaveBeenCalled();
+      respond();
+      await waitFor(() => expect(backSpy).toHaveBeenCalledWith(-1));
+      expect(queryClient.getQueryState(LEARNING_FOLDERS_QUERY_KEY)?.isInvalidated).toBe(true);
+    });
+
+    test('削除に失敗したら前の画面へ戻らず詳細にとどまること', async () => {
+      mockApis();
+      server.use(http.delete(DETAIL_PATH, () => HttpResponse.json({ message: 'ng' }, { status: 500 })));
+      const { router } = await renderPage();
+      const user = userEvent.setup({ applyAccept: false });
+      const backSpy = vi.spyOn(router, 'navigate');
+
+      await user.click(screen.getByTestId('training-data-detail-menu-button'));
+      await user.click(await screen.findByTestId('training-data-detail-delete-folder'));
+      await user.click(await screen.findByTestId('training-data-detail-delete-confirm'));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(backSpy).not.toHaveBeenCalled();
     });
   });
 

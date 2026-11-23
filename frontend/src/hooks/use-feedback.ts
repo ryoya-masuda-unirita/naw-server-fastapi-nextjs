@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LEARNING_FOLDERS_QUERY_KEY } from '@/hooks/use-training-data';
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import type { AssistantApiItem } from '@/types/admin/assistant.types';
@@ -113,7 +114,7 @@ export function useFeedbackAssistants() {
  */
 export function useLearningFolders() {
   return useQuery({
-    queryKey: [FEEDBACK_QUERY_KEY, 'learning-folders'],
+    queryKey: LEARNING_FOLDERS_QUERY_KEY,
     staleTime: OPTIONS_STALE_TIME_MS,
     queryFn: async (): Promise<LearningFolder[]> => {
       const res = await apiClient.get<

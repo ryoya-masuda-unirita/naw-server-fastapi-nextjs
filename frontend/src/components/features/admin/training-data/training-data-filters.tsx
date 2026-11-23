@@ -7,7 +7,6 @@ import type {
   PeriodRange,
 } from '@/components/shared/period-filter-utils';
 import { SearchInput } from '@/components/shared/search-input';
-import { Select } from '@/components/shared/select';
 import { SelectWithSearch } from '@/components/shared/select-with-search';
 import type { SelectOption } from '@/components/shared/types';
 
@@ -18,15 +17,12 @@ interface TrainingDataFiltersProps {
   periodOptions: PeriodOption[];
   selectedPeriod: string | null;
   filterPeriodRange: PeriodRange | null;
-  statusOptions: SelectOption[];
-  selectedStatus: string | null;
   countDisplay: string;
   totalPages: number;
   currentPage: number;
   onSearchQuery: (query: string) => void;
   onUserChange: (value: string | null) => void;
   onPeriodChange: (change: PeriodChange) => void;
-  onStatusChange: (value: string | null) => void;
   onPageChange: (page: number) => void;
 }
 
@@ -38,15 +34,12 @@ export function TrainingDataFilters({
   periodOptions,
   selectedPeriod,
   filterPeriodRange,
-  statusOptions,
-  selectedStatus,
   countDisplay,
   totalPages,
   currentPage,
   onSearchQuery,
   onUserChange,
   onPeriodChange,
-  onStatusChange,
   onPageChange,
 }: TrainingDataFiltersProps) {
   const { t } = useTranslation();
@@ -91,14 +84,6 @@ export function TrainingDataFilters({
             range={filterPeriodRange}
             testidPrefix="training-data-file-period"
             onSelectionChange={onPeriodChange}
-          />
-          <Select
-            className="md:w-40 w-full"
-            size="small"
-            placeholder={t('LEARNING_DATA.ALL_SETTINGS')}
-            options={statusOptions}
-            value={selectedStatus || null}
-            onValueChange={onStatusChange}
           />
         </div>
       </div>
