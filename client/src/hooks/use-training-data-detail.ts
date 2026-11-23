@@ -25,10 +25,12 @@ import {
   syncLocalFolder,
   updateLocalFile,
 } from '@/components/features/admin/training-data/local-training-api';
-import { apiClient, ApiError, type QueryParams } from '@/lib/api-client';
+import {
+  requireUserId,
+  viaLocalServer,
+} from '@/components/features/admin/training-data/local-server-call';
+import { apiClient, type QueryParams } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
-import i18n from 'i18next';
-import { useToastStore } from '@/components/shared/toast-store';
 import { useAuthStore } from '@/store/auth-store';
 import type { UserApiItem } from '@/types/admin/user.types';
 import type { PagedResponse } from '@/types/api-response.type';
@@ -65,30 +67,6 @@ function isLocalFolder(folder: TrainingDataApiItem | undefined): folder is Local
   return folder?.type === 'LOCAL';
 }
 
-/**
- * ローカル用サーバーへの操作を実行する。
- * ApiError はクラウドの API と同じく共通のエラートーストが出す。接続先が取れない・ユーザーが取れないなど
- * HTTP 以外の失敗は共通のトーストに乗らず何も出ないため、ここで表示する（移植元と同じ）。
- */
-async function viaLocalServer<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    if (!(error instanceof ApiError)) {
-      useToastStore.getState().error(i18n.t('COMMON.MESSAGES.ERROR.GENERAL'));
-    }
-    throw error;
-  }
-}
-
-/** ローカル用サーバーへ送る更新者。取れないときは更新者なしで送らず、失敗させる */
-function requireUserId(userId: string | undefined): string {
-  if (!userId) {
-    throw new Error('ログイン中のユーザーが取れないため、ローカル用サーバーへ送れません');
-  }
-  return userId;
-}
-
 function detailKey(id: string) {
   return [TRAINING_DATA_QUERY_KEY, 'detail', id] as const;
 }
@@ -97,13 +75,17 @@ function filesKeyPrefix(id: string) {
   return [TRAINING_DATA_QUERY_KEY, 'files', id] as const;
 }
 
+/** 移植元 `TrainingApiService.getById`。キャッシュせず、呼ぶたびにクラウドから取る */
+export async function fetchTrainingFolder(id: string): Promise<TrainingDataApiItem> {
+  return indexRowToApiItem(await apiClient.get<IndexRow>(API_PATHS.INDEXES.DETAIL(id)));
+}
+
 /** 移植元 `TrainingApiService.getById`。画面を開くたび・戻るたびに読み直す */
 export function useTrainingDataDetail(id: string) {
   return useQuery({
     queryKey: detailKey(id),
     refetchOnWindowFocus: false,
-    queryFn: async (): Promise<TrainingDataApiItem> =>
-      indexRowToApiItem(await apiClient.get<IndexRow>(API_PATHS.INDEXES.DETAIL(id))),
+    queryFn: () => fetchTrainingFolder(id),
   });
 }
 

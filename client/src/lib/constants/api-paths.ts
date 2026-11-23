@@ -164,6 +164,8 @@ export const API_PATHS = {
     FILES: (indexId: string) => `api/admin/indexes/${indexId}/files`,
     FILE: (indexId: string, fileId: string) => `api/admin/indexes/${indexId}/files/${fileId}`,
     SYNC: (indexId: string) => `api/admin/indexes/${indexId}/sync`,
+    // ローカル用サーバーの受け口の綴り（Leaning）に合わせる
+    ADDITIONAL_LEARNING: (indexId: string) => `api/admin/indexes/${indexId}/additionalLeaning`,
   },
 
   // ─── User: Glossary ───────────────────────────────────────

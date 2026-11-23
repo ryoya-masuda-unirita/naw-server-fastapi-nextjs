@@ -97,3 +97,6 @@ export interface TrainingDataApiResponse {
   page: number;
   size: number;
 }
+
+/** 追加学習の対象。回答精度タブは `feedbackId`、満足度タブは `roomId` のどちらか一方だけ送る */
+export type AdditionalLearningTarget = { feedbackId: string } | { roomId: string };
