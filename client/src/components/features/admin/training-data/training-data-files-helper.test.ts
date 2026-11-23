@@ -113,46 +113,25 @@ describe('fileRowToTrainingDataFile', () => {
 });
 
 describe('resolveFileUpdaters', () => {
-  const NAMES = new Map([['yamada', '山田太郎']]);
-  const CLOUD = { kind: 'CLOUD' } as const;
-
-  test('uses the name the api returns for a cloud file', () => {
-    /** クラウドは API が更新者名を返すので、それをそのまま出す */
-    expect(resolveFileUpdaters([FIXTURE_FILE], CLOUD)[0].updater).toEqual({
+  test('uses the updater name of the file', () => {
+    /** 更新者の名前（クラウドは API が返す名前、ローカルは一覧を取るときに引いた名前）をそのまま出す */
+    expect(resolveFileUpdaters([FIXTURE_FILE])[0].updater).toEqual({
       kind: 'USER',
       name: '山田太郎',
     });
   });
 
-  test('shows a deleted user for a cloud file without a name', () => {
+  test('shows a deleted user when the id is there but the name is not', () => {
     /** 更新者の ID はあるが名前が無い（削除されたユーザーなど）ときは、ID を出さず「削除されたユーザー」にする */
     const file = { ...FIXTURE_FILE, updatedBy: '' };
 
-    expect(resolveFileUpdaters([file], CLOUD)[0].updater).toEqual({ kind: 'DELETED' });
+    expect(resolveFileUpdaters([file])[0].updater).toEqual({ kind: 'DELETED' });
   });
 
   test('shows unknown for a file without an updater id', () => {
-    /** 更新者の ID が無いときは「Unknown」にする */
+    /** 更新者の ID が無いときは「Unknown」にする。名前があっても ID が無ければ Unknown */
     const file = { ...FIXTURE_FILE, userId: undefined };
 
-    expect(resolveFileUpdaters([file], CLOUD)[0].updater).toEqual({ kind: 'UNKNOWN' });
-  });
-
-  test('looks the name up by the login id for a local file', () => {
-    /** ローカルのファイルの更新者はログイン ID。ユーザーが見つかれば表示名にする */
-    const file = { ...FIXTURE_FILE, userId: 'yamada', updatedBy: 'yamada' };
-
-    const [row] = resolveFileUpdaters([file], { kind: 'LOCAL', nameByLoginId: NAMES });
-
-    expect(row.updater).toEqual({ kind: 'USER', name: '山田太郎' });
-  });
-
-  test('shows a deleted user for a local file whose login id is not found', () => {
-    /** ログイン ID でユーザーを引けないときも、ログイン ID は出さず「削除されたユーザー」にする */
-    const file = { ...FIXTURE_FILE, userId: 'retired', updatedBy: 'retired' };
-
-    const [row] = resolveFileUpdaters([file], { kind: 'LOCAL', nameByLoginId: NAMES });
-
-    expect(row.updater).toEqual({ kind: 'DELETED' });
+    expect(resolveFileUpdaters([file])[0].updater).toEqual({ kind: 'UNKNOWN' });
   });
 });

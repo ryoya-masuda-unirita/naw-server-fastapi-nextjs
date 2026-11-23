@@ -12,21 +12,15 @@ import {
   useDeleteTrainingFiles,
   useRenameTrainingFile,
   useTrainingDataFiles,
-  useLocalUpdaterNames,
   useUpdateTrainingFile,
 } from '@/hooks/use-training-data-detail';
 import { useTrainingDataStore } from '@/store/training-data-store';
-import type {
-  TrainingDataApiItem,
-  TrainingDataFile,
-} from '@/types/training-data.types';
+import type { TrainingDataApiItem, TrainingDataFile } from '@/types/training-data.types';
 import { TrainingDataActionBar } from './training-data-action-bar';
 import { TrainingDataAddModal } from './training-data-add-modal';
 import { DEFAULT_CHUNK_SIZE_PRESET } from './training-data-chunk-size';
 import { TrainingDataEditModal } from './training-data-edit-modal';
-import {
-  resolveFileUpdaters,
-} from './training-data-files-helper';
+import { resolveFileUpdaters } from './training-data-files-helper';
 import { applyLinkPrefix } from './training-data-link-prefix';
 import { TrainingDataFilters } from './training-data-filters';
 import { TrainingDataTable, type EditingNames } from './training-data-table';
@@ -52,7 +46,11 @@ const PERIOD_OPTIONS: PeriodOption[] = [
 
 /** 移植元のダイアログの幅。ローカル接続とクラウド接続で指定の書き方が違う */
 const DIALOG_WIDTHS = {
-  LOCAL: { edit: 'min(800px, 90vw)', deleteOne: 'min(800px, 90vw)', deleteMany: 'min(550px, 90vw)' },
+  LOCAL: {
+    edit: 'min(800px, 90vw)',
+    deleteOne: 'min(800px, 90vw)',
+    deleteMany: 'min(550px, 90vw)',
+  },
   SAAS_GLOBAL: {
     edit: 'min(800px, calc(100vw - 32px))',
     deleteOne: 'min(550px, calc(100vw - 32px))',
@@ -113,15 +111,10 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const updateFile = useUpdateTrainingFile(indexId, data);
   const renameFile = useRenameTrainingFile(indexId, data);
 
-  const localUpdaterNames = useLocalUpdaterNames(data, filesQuery.data?.data ?? NO_FILES);
-  // クラウドは API が更新者名を返す。ローカルは更新者名を持たないため、ログイン ID で引いた名前を使う
+  // 更新者の欄は、クラウドは API が返す名前、ローカルは一覧を取るときにログイン ID から引いた名前
   const files = useMemo(
-    () =>
-      resolveFileUpdaters(
-        filesQuery.data?.data ?? NO_FILES,
-        isLocal ? { kind: 'LOCAL', nameByLoginId: localUpdaterNames } : { kind: 'CLOUD' },
-      ),
-    [filesQuery.data, isLocal, localUpdaterNames],
+    () => resolveFileUpdaters(filesQuery.data?.data ?? NO_FILES),
+    [filesQuery.data],
   );
   const total = filesQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / filter.pageSize));
@@ -130,10 +123,7 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   // 移植元でも日本語の固定文字列（辞書にキーがない）
   const countDisplay = total === 0 ? '0件' : `${from}-${to}件 / ${total}件`;
   const isFilesLoading =
-    filesQuery.isFetching ||
-    addFiles.isPending ||
-    deleteFiles.isPending ||
-    updateFile.isPending;
+    filesQuery.isFetching || addFiles.isPending || deleteFiles.isPending || updateFile.isPending;
 
   const [selectedFiles, setSelectedFiles] = useState<TrainingDataFile[]>([]);
   const [isRenamingMode, setIsRenamingMode] = useState(false);
@@ -238,7 +228,9 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
     field: 'displayName' | 'reference',
     value: string,
   ) => {
-    setEditingNames((edits) => (edits[id] ? { ...edits, [id]: { ...edits[id], [field]: value } } : edits));
+    setEditingNames((edits) =>
+      edits[id] ? { ...edits, [id]: { ...edits[id], [field]: value } } : edits,
+    );
   };
 
   const handleSaveRename = () => {

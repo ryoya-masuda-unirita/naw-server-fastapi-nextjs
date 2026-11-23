@@ -736,6 +736,61 @@ describe('TrainingDataDetailPage', () => {
       expect(screen.queryByText('retired')).not.toBeInTheDocument();
     });
 
+    test('名前を引く前の行を出さず、実在のユーザーが削除されたユーザーと出る瞬間が無いこと', async () => {
+      let releaseUsers: () => void = () => undefined;
+      const usersGate = new Promise<void>((resolve) => {
+        releaseUsers = resolve;
+      });
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), async () => {
+          await usersGate;
+          return HttpResponse.json({
+            content: [
+              { id: 'uuid-1', loginId: 'yamada', name: '山田太郎', role: 'USER', loginKey: null, isRequiredPasswordReset: false, totalCredits: 0 },
+            ],
+            totalElements: 1,
+            totalPages: 1,
+            page: 0,
+            size: 10,
+          });
+        }),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'yamada', updatedBy: 'yamada' })),
+      });
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp(`/admin/training-data/${INDEX_ID}`);
+
+      // ユーザーの応答が返るまで、一覧の行も「削除されたユーザー」も出さない
+      await waitFor(() => expect(document.querySelector('[data-testid="training-data-detail-title"]')).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(screen.queryAllByTestId('training-data-file-updated-by')).toHaveLength(0);
+      expect(screen.queryByText('LEARNING_DATA.UPDATED_BY_DELETED')).not.toBeInTheDocument();
+
+      releaseUsers();
+      await waitFor(() => expect(screen.getAllByText('山田太郎').length).toBeGreaterThan(0));
+    });
+
+    test('名前を引けなかったときは、全行を削除されたユーザーと出さず、一覧の取得の失敗として扱うこと', async () => {
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), () =>
+          HttpResponse.json({ message: 'ng' }, { status: 500 }),
+        ),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'yamada', updatedBy: 'yamada' })),
+      });
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp(`/admin/training-data/${INDEX_ID}`);
+
+      await waitFor(() => expect(screen.queryByTestId('training-data-detail-title')).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(screen.queryAllByTestId('training-data-file-updated-by')).toHaveLength(0);
+      expect(screen.queryByText('LEARNING_DATA.UPDATED_BY_DELETED')).not.toBeInTheDocument();
+    });
+
     test('接続先が登録されていないときは、どこにも送らずエラーを表示すること', async () => {
       const log = mockApis({ index: { ...FIXTURE_LOCAL_INDEX, tenantEndpoints: [] } });
       useToastStore.getState().clear();

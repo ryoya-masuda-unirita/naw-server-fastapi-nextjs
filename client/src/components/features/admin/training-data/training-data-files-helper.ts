@@ -54,29 +54,18 @@ export function toFileListApiParams(
   };
 }
 
-/** 更新者の名前の引き方。クラウドは API が名前を返す。ローカルはファイルの `userId`（ログイン ID）で引く */
-export type FileUpdaterNameSource =
-  | { kind: 'CLOUD' }
-  | { kind: 'LOCAL'; nameByLoginId: ReadonlyMap<string, string> };
-
-function resolveFileUpdater(
-  file: TrainingDataFile,
-  source: FileUpdaterNameSource,
-): TrainingDataFileUpdater {
+function resolveFileUpdater(file: TrainingDataFile): TrainingDataFileUpdater {
   if (!file.userId) return { kind: 'UNKNOWN' };
-  const name = source.kind === 'CLOUD' ? file.updatedBy : source.nameByLoginId.get(file.userId);
-  return name ? { kind: 'USER', name } : { kind: 'DELETED' };
+  return file.updatedBy ? { kind: 'USER', name: file.updatedBy } : { kind: 'DELETED' };
 }
 
 /**
  * 一覧の更新者の欄を決める（移植元 `resolveFileUpdaters`）。
- * 名前を引けたら名前、更新者の ID はあるが引けなければ「削除されたユーザー」、ID が無ければ「Unknown」。
+ * 名前があれば名前、更新者の ID はあるが名前が無ければ「削除されたユーザー」、ID が無ければ「Unknown」。
+ * 名前（`updatedBy`）は、クラウドは API が返し、ローカルは一覧を取るときにログイン ID から引く。
  */
-export function resolveFileUpdaters(
-  files: TrainingDataFile[],
-  source: FileUpdaterNameSource,
-): TrainingDataFileRow[] {
-  return files.map((file) => ({ ...file, updater: resolveFileUpdater(file, source) }));
+export function resolveFileUpdaters(files: TrainingDataFile[]): TrainingDataFileRow[] {
+  return files.map((file) => ({ ...file, updater: resolveFileUpdater(file) }));
 }
 
 /** ダウンロードの開始を待ってから URL を失効させるまでの時間 */

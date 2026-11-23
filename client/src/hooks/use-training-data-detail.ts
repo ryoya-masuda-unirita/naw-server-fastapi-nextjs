@@ -102,36 +102,43 @@ export function useTrainingDataDetail(id: string) {
   });
 }
 
-/** 取得前・対象なしのときの空の対応。毎回新しい Map を返すと、これに依存する計算が描画のたびにやり直しになる */
-const NO_NAMES: ReadonlyMap<string, string> = new Map();
-
 /**
  * ローカルの学習先フォルダの更新者名（ログイン ID → 表示名）。
  * ローカル用サーバーは更新者名を持たないため、表示しているページの更新者のログイン ID だけでユーザーを引く
  * （テナントの全ユーザーを取ると、ユーザー数に比例して表示が遅くなる。移植元 NAW-1424）。
  */
-export function useLocalUpdaterNames(
-  folder: TrainingDataApiItem | undefined,
-  files: TrainingDataFile[],
-): ReadonlyMap<string, string> {
-  const loginIds = isLocalFolder(folder)
-    ? [...new Set(files.map((file) => file.userId).filter((id): id is string => !!id))].sort()
-    : [];
-  const query = useQuery({
-    queryKey: [TRAINING_DATA_QUERY_KEY, 'local-updaters', loginIds],
-    enabled: loginIds.length > 0,
-    placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-    queryFn: async (): Promise<ReadonlyMap<string, string>> => {
-      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
-        // backend は searchText・role を必須にしているため、絞り込みなしでも空文字を送る
-        params: { page: 0, size: loginIds.length, searchText: '', role: '', loginIds },
-      });
-      const users = normalizeAdminUsersListBody(raw, { pageIndex: 1, pageSize: loginIds.length });
-      return new Map(users.data.map((user) => [user.userId, user.displayName]));
-    },
+async function fetchUpdaterNamesByLoginId(files: TrainingDataFile[]): Promise<Map<string, string>> {
+  const loginIds = [
+    ...new Set(files.map((file) => file.userId).filter((id): id is string => !!id)),
+  ];
+  if (loginIds.length === 0) return new Map();
+  const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
+    // backend は searchText・role を必須にしているため、絞り込みなしでも空文字を送る
+    params: { page: 0, size: loginIds.length, searchText: '', role: '', loginIds },
   });
-  return query.data ?? NO_NAMES;
+  const users = normalizeAdminUsersListBody(raw, { pageIndex: 1, pageSize: loginIds.length });
+  return new Map(users.data.map((user) => [user.userId, user.displayName]));
+}
+
+/**
+ * ローカルの一覧を取り、更新者の欄に出す名前を引いてから返す。
+ * 名前を引く前に行を出すと、実在のユーザーが一瞬「削除されたユーザー」と出る。名前を引けなかったとき
+ * （通信の失敗など）も同じ誤表示になるため、一覧の取得の失敗として扱う（移植元と同じ）。
+ */
+async function listLocalFilesWithUpdaterNames(
+  folder: TrainingDataApiItem,
+  filter: TrainingDataFileFilter,
+): Promise<TrainingDataFileApiResponse> {
+  const response = await listLocalFiles(folder, filter);
+  const nameByLoginId = await fetchUpdaterNamesByLoginId(response.data);
+  return {
+    ...response,
+    // 引けなかったログイン ID は空にする（ID は出さず、一覧が「削除されたユーザー」と出す）
+    data: response.data.map((file) => ({
+      ...file,
+      updatedBy: (file.userId && nameByLoginId.get(file.userId)) || '',
+    })),
+  };
 }
 
 /**
@@ -145,16 +152,13 @@ export function useTrainingDataFiles(
 ) {
   return useQuery({
     // ローカルのフォルダは接続先が違うため、種類と接続先もキーに含める
-    queryKey: [
-      ...filesKeyPrefix(id),
-      filter,
-      folder?.type,
-      folder?.localServerEndpointId,
-    ],
+    queryKey: [...filesKeyPrefix(id), filter, folder?.type, folder?.localServerEndpointId],
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<TrainingDataFileApiResponse> => {
-      if (isLocalFolder(folder)) return viaLocalServer(() => listLocalFiles(folder, filter));
+      if (isLocalFolder(folder)) {
+        return viaLocalServer(() => listLocalFilesWithUpdaterNames(folder, filter));
+      }
       const raw = await apiClient.get<PagedResponse<FileRow>>(API_PATHS.INDEXES.FILES(id), {
         params: { ...toFileListApiParams(filter) } as QueryParams,
       });
