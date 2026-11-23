@@ -10,6 +10,7 @@ import {
   type TestLibraryTag,
 } from '../src/api-library.ts';
 import { addGroupUsers, createGroup, deleteGroup } from '../src/api-team.ts';
+import { SEED_GROUP_ID } from '../src/api-service-settings.ts';
 import { expect, test as base } from '../src/fixtures.ts';
 import {
   COMMON_MESSAGES,
@@ -378,6 +379,10 @@ test.describe('09_ライブラリ', () => {
       const group = await createGroup(admin, `${data.prefix}-g`);
       data.groupId = group.id;
       await addGroupUsers(admin, group.id, [ADMIN_USER_ID, otherUser.id]);
+      // ライブラリを作る POST /api/messages は、所属グループに割り当てられたアシスタントしか使えない（#446）。
+      // この専用グループには基本のアシスタントが割り当てられていないため、割り当て済みの seed のグループにも入れる。
+      // ユーザーを消すと所属も消えるので、後片付けは不要
+      await addGroupUsers(admin, SEED_GROUP_ID, [otherUser.id]);
       const other = await loginApi(otherUser);
       data.other = other;
 
