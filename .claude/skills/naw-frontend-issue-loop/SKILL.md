@@ -70,7 +70,7 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
 
 エージェントの完了報告を受け取り、以下のいずれかを確認する。
 
-- **PR作成に成功**: PR URLをユーザーに報告する
+- **PR作成に成功**: `naw-pr-workflow` の「マージ判定と自動マージ」に従い、条件を満たせばマージする（CI 待ちを含む）。満たさなければマージせず理由を報告する。結果と PR URL をユーザーに報告する
 - **BLOCKEDで終了**: 理由を簡潔にユーザーに報告する（詳細はIssueコメントを参照するよう案内してよい）
 
 いずれの場合も、対象Issueの処理は「1周」として扱い、次のサイクルに進む。

@@ -90,6 +90,24 @@ Closes #XX
 
 指摘への対応方針: 🔴 致命的は必ず修正、🟡 注意・🔵 提案は AI が判断する。
 
+## マージ判定と自動マージ
+
+PR を積み上げず、マージしてよい PR は AI が自動でマージする。次の条件を**すべて**満たしたときだけマージする。1つでも満たさなければマージせず、理由を報告する。
+
+1. ベースが `develop` である（スタック PR は、親 PR がマージされ、ベースが `develop` に切り替わってから判定する）
+2. CI の全ジョブが完了して成功している（`gh pr checks <PR番号> --watch`。pending / failure ではマージしない。Project ステータス同期の失敗だけは原因を確認したうえで例外）
+3. PR の差分を自分で読んでレビューした（移植元との一致、テストが修正を検証しているか、スコープ外の変更がないか。code-review.md を鵜呑みにしない）
+4. `code-review.md` に未対応の 🔴 がない
+5. `08_動作確認.md` に未確認事項が残っていない（残っていれば人に確認する）
+
+```bash
+gh pr merge <PR番号> --repo ryoya-masuda-unirita/naw-server-fastapi-nextjs --merge
+```
+
+- マージ方式は従来どおり merge commit（`--merge`）
+- マージ後、`develop` の CI が通ったことを確認する
+- ブランチ保護（必須チェック）がないため、`--auto` は CI を待たず即マージする。`--auto` は使わず、上の確認を済ませてから `--merge` する
+
 ## 動作確認のスクリーンショット
 
 ブラウザでの動作確認をPlaywright等で行った際は、スクリーンショットを `docs/issue-X/screenshots/`（NAWチケットあり: `docs/issue-X-NAW-XXXX/screenshots/`）に保存し、`08_動作確認.md` から `![説明](./screenshots/ファイル名.png)` の形式で参照する。
