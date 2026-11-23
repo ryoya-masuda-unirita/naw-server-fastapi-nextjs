@@ -22,7 +22,6 @@ import {
   chooseCustomPeriod,
   COUNT_PATTERN,
   filterRow,
-  groupOrder,
   topPager,
 } from '../src/pages/service-list-controls.ts';
 import { FILE_COLUMN, TRAINING_DATA_PATH, TRAINING_MESSAGES as M, TRAINING_PERIOD_PREFIX } from '../src/pages/training-data.page.ts';
@@ -47,6 +46,10 @@ const ADMIN_NAME = '管理者';
 const FOLDER_NAME_MAX_LENGTH = 255;
 const PAGE_SIZE = 10;
 const SEED_FILE_COUNT = 11;
+const FILTER_REMOVED_REASON =
+  '移植元の最新の学習データ詳細に学習設定（ON/OFF）の列と絞り込みが無いため（NAW-1405 で画面から削除。#375 で移植済み）。項目書 V1.1.0 の期待は現行の画面では成り立たない';
+const SORT_REMOVED_REASON =
+  '移植元の最新の学習データ詳細にファイル一覧の並べ替えの操作が無いため（NAW-1427 で画面から削除。#392 で移植済み）。項目書 V1.1.0 の期待は現行の画面では成り立たない';
 const LOCAL_SERVER_REASON =
   '専用環境にローカル API サーバー（Waha! Transformer）が無く、ローカル接続のフォルダでデータを操作すると「ローカルAPIサーバへのリクエストを処理できません。」になるため';
 
@@ -228,76 +231,31 @@ test.describe('17_学習データ', () => {
     await expect.poll(() => trainingDataPage.fileNames()).toEqual([seedFileName(10)]);
   });
 
-  test('[17-16] 詳細設定フィルター（ON）', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    await trainingDataPage.chooseStatus(M.statusOn);
-    // 学習設定 ON のデータだけが出る（OFF のファイル02 は出ない）
-    await expect
-      .poll(async () => {
-        const statuses = await trainingDataPage.columnTexts(FILE_COLUMN.status);
-        return statuses.length > 0 && statuses.every((status) => status === M.statusOn);
-      })
-      .toBe(true);
-    expect(await trainingDataPage.fileNames()).not.toContain(seedFileName(2));
+  // 17-16〜17-21 は、移植元の最新（secuaigent の develop）の詳細画面に、学習設定の絞り込み・並べ替えが無いため未実施にする。
+  // 移植元は NAW-1405 で学習設定（ON/OFF）の列・絞り込み・並べ替えを、NAW-1427 で並べ替え全体を画面から外した（#375・#392 で移植済み）。
+  // 詳細の絞り込みは「検索」と「期間」だけで、並べ替えの操作は無い。項目書（V1.1.0）の期待は移植元の現行の画面では成り立たない。
+  test('[17-16] 詳細設定フィルター（ON）', async () => {
+    test.skip(true, FILTER_REMOVED_REASON);
   });
 
-  test('[17-17] 詳細設定フィルター（OFF）', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    await trainingDataPage.chooseStatus(M.statusOff);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([seedFileName(2)]);
-    expect(await trainingDataPage.columnTexts(FILE_COLUMN.status)).toEqual([M.statusOff]);
+  test('[17-17] 詳細設定フィルター（OFF）', async () => {
+    test.skip(true, FILTER_REMOVED_REASON);
   });
 
-  test('[17-18] 詳細並替（更新日時）', async ({ trainingDataPage, adminApi, prefix }) => {
-    const { folder, names } = await makeFolder(adminApi, prefix, ['a', 'b', 'c']);
-    await trainingDataPage.gotoDetail(folder.id, folder.name);
-    await trainingDataPage.sortBy(M.sortUpdated);
-    await trainingDataPage.sortBy(M.desc);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([...names].reverse());
-    await trainingDataPage.sortBy(M.asc);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual(names);
+  test('[17-18] 詳細並替（更新日時）', async () => {
+    test.skip(true, SORT_REMOVED_REASON);
   });
 
-  test('[17-19] 詳細並替（表示名）', async ({ trainingDataPage, adminApi, prefix }) => {
-    const { folder } = await makeFolder(adminApi, prefix, ['b', 'c', 'a']);
-    await trainingDataPage.gotoDetail(folder.id, folder.name);
-    await trainingDataPage.sortBy(M.sortName);
-    await trainingDataPage.sortBy(M.asc);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([`${prefix}-a`, `${prefix}-b`, `${prefix}-c`]);
-    await trainingDataPage.sortBy(M.desc);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([`${prefix}-c`, `${prefix}-b`, `${prefix}-a`]);
+  test('[17-19] 詳細並替（表示名）', async () => {
+    test.skip(true, SORT_REMOVED_REASON);
   });
 
-  test('[17-20] 詳細並替（更新者）', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    // ファイル01〜09（管理者 8 件とユーザー1 の 1 件）に絞って、1 ページに 2 人が並ぶようにする
-    await trainingDataPage.search('ファイル0');
-    await expect(trainingDataPage.rows).toHaveCount(SEED_FILE_COUNT - 2);
-    await trainingDataPage.sortBy(M.sortUpdatedBy);
-    // 更新者でまとまる（2 人が 1 つずつのまとまりになる）
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy)).length).toBe(2);
-    const initial = groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy));
-    // 昇順と降順で、2 人の並びが入れ替わる
-    await trainingDataPage.sortBy(M.asc);
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy))).toEqual([...initial].reverse());
-    await trainingDataPage.sortBy(M.desc);
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy))).toEqual(initial);
+  test('[17-20] 詳細並替（更新者）', async () => {
+    test.skip(true, SORT_REMOVED_REASON);
   });
 
-  test('[17-21] 詳細並替（学習設定）', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    // ファイル01〜09（学習設定 OFF のファイル02 を含む）に絞って、1 ページに ON と OFF が並ぶようにする
-    await trainingDataPage.search('ファイル0');
-    await expect(trainingDataPage.rows).toHaveCount(SEED_FILE_COUNT - 2);
-    await trainingDataPage.sortBy(M.sortLearning);
-    // 学習設定でまとまる（ON と OFF が 1 つずつのまとまりになる）
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.status)).length).toBe(2);
-    const initial = groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.status));
-    // 昇順と降順で、ON と OFF の並びが入れ替わる
-    await trainingDataPage.sortBy(M.asc);
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.status))).toEqual([...initial].reverse());
-    await trainingDataPage.sortBy(M.desc);
-    await expect.poll(async () => groupOrder(await trainingDataPage.columnTexts(FILE_COLUMN.status))).toEqual(initial);
+  test('[17-21] 詳細並替（学習設定）', async () => {
+    test.skip(true, SORT_REMOVED_REASON);
   });
 
   test('[17-22] 詳細ページ送り', async ({ trainingDataPage, page }) => {
