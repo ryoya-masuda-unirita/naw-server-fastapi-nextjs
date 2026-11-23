@@ -84,6 +84,82 @@
         "VDB_DATABASE_NAME": "onprem_vector",
         "VDB_TABLE_NAME": "docs"
       }
+    },
+    "kb-learn-*": {
+      "adapter": "embedding",
+      "operation": "learn",
+      "defaultSplitLength": 1000,
+      "properties": {
+        "VENDOR": "Bedrock",
+        "URL": "https://bedrock-runtime.ap-northeast-1.amazonaws.com",
+        "API_KEY": "${BEDROCK_API_KEY}",
+        "MODEL_NAME": "amazon.titan-embed-text-v1",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs_{name}"
+      }
+    },
+    "kb-sync-*": {
+      "adapter": "embedding",
+      "operation": "sync",
+      "properties": {
+        "VENDOR": "Bedrock",
+        "URL": "https://bedrock-runtime.ap-northeast-1.amazonaws.com",
+        "API_KEY": "${BEDROCK_API_KEY}",
+        "MODEL_NAME": "amazon.titan-embed-text-v1",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs_{name}"
+      }
+    },
+    "kb-delete-*": {
+      "adapter": "embedding",
+      "operation": "delete",
+      "properties": {
+        "VENDOR": "Bedrock",
+        "URL": "https://bedrock-runtime.ap-northeast-1.amazonaws.com",
+        "API_KEY": "${BEDROCK_API_KEY}",
+        "MODEL_NAME": "amazon.titan-embed-text-v1",
+        "TENANT_ID": "tenant-default",
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "vector-db:5432",
+        "VDB_USER_NAME": "onprem_vector",
+        "VDB_PASSWORD": "onprem_vector_password",
+        "VDB_DATABASE_NAME": "onprem_vector",
+        "VDB_TABLE_NAME": "docs_{name}"
+      }
+    },
+    "bedrock-rag-*": {
+      "outputType": 1,
+      "properties": {
+        "VENDOR": "Bedrock",
+        "URL": "https://bedrock-mantle.ap-northeast-1.api.aws/anthropic",
+        "API_KEY": "${BEDROCK_API_KEY}",
+        "MODEL_NAME": "anthropic.claude-haiku-4-5"
+      },
+      "retrieval": {
+        "properties": {
+          "VENDOR": "Bedrock",
+          "URL": "https://bedrock-runtime.ap-northeast-1.amazonaws.com",
+          "API_KEY": "${BEDROCK_API_KEY}",
+          "MODEL_NAME": "amazon.titan-embed-text-v1",
+          "VDB_VENDOR": "PostgreSQL(PGVector)",
+          "VDB_URL": "vector-db:5432",
+          "VDB_USER_NAME": "onprem_vector",
+          "VDB_PASSWORD": "onprem_vector_password",
+          "VDB_DATABASE_NAME": "onprem_vector",
+          "VDB_TABLE_NAME": "docs_{name}",
+          "SEARCH_COUNT": "5"
+        }
+      }
     }
   }
 }
