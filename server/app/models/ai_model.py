@@ -17,6 +17,7 @@ class AIModelEndpointType(str, Enum):
     OPENAI_WEB_SEARCH_CHAT = "OPENAI_WEB_SEARCH_CHAT"
     AZURE_OPENAI_EMBEDDING = "AZURE_OPENAI_EMBEDDING"
     BEDROCK_CHAT = "BEDROCK_CHAT"
+    BEDROCK_EMBEDDING = "BEDROCK_EMBEDDING"  # bedrock-ext
 
 
 # チャット（LLMチャットAPI・メッセージ送信）で扱えるAIモデルの種別と、それに対応する

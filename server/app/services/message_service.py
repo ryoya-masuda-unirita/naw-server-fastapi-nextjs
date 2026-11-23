@@ -9,6 +9,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.attachment_media import build_user_content
+from app.core.bedrock_embedding import (  # bedrock-ext
+    BEDROCK_EMBEDDING_MODEL_ID,
+    BedrockLlmEmbeddingClient,
+)
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
@@ -89,6 +93,11 @@ logger = logging.getLogger(__name__)
 # 移植元Java版`MessageService.EMBEDDING_MODEL_NAME`に対応する。RAG検索用の埋め込みは
 # テナントエンドポイントのモデル設定を参照せず、この固定デプロイ名を使う。
 EMBEDDING_MODEL_NAME = "text-embedding-ada-002"
+# RAG の質問の埋め込みに使える接続先の種別。Azure OpenAI に加えて、Bedrock（Titan）も使える
+_EMBEDDING_ENDPOINT_TYPES = (
+    EndpointType.AZURE_OPENAI_EMBEDDING,
+    EndpointType.BEDROCK_EMBEDDING,  # bedrock-ext
+)
 
 # SAAS_RAGのチャット応答クレジット計算に使うtoken_weight。移植元`buildRagContext`が
 # 返す`StreamMessageContentContext.tokenWeight`は、SAAS_CHATと異なりAIモデルの
@@ -1400,7 +1409,7 @@ class MessageService:
                 for endpoint in sorted(
                     index_endpoints_map.get(index.id, []), key=lambda e: e.id
                 )
-                if endpoint.type == EndpointType.AZURE_OPENAI_EMBEDDING
+                if endpoint.type in _EMBEDDING_ENDPOINT_TYPES
             ),
             None,
         )
@@ -1421,14 +1430,23 @@ class MessageService:
         # 複数存在する場合の選び方を決定的にする（埋め込みエンドポイント選択と同様）。
         vdb = min(vdb_endpoints, key=lambda e: e.id)
 
+        use_bedrock = embedding_endpoint.type == EndpointType.BEDROCK_EMBEDDING
         try:
-            embedding_result = await AzureLlmEmbeddingClient.create_embedding(
-                embedding_endpoint.endpoint,
-                embedding_endpoint.api_key,
-                EMBEDDING_MODEL_NAME,
-                user_input,
-                None,
-            )
+            if use_bedrock:  # bedrock-ext
+                embedding_result = await BedrockLlmEmbeddingClient.create_embedding(
+                    embedding_endpoint.endpoint,
+                    embedding_endpoint.api_key,
+                    BEDROCK_EMBEDDING_MODEL_ID,
+                    user_input,
+                )
+            else:
+                embedding_result = await AzureLlmEmbeddingClient.create_embedding(
+                    embedding_endpoint.endpoint,
+                    embedding_endpoint.api_key,
+                    EMBEDDING_MODEL_NAME,
+                    user_input,
+                    None,
+                )
         except Exception:
             # AzureAiSearchVectorStoreClient.similarity_searchと同様、ストリーミング
             # 開始前のエラーはHTTPステータスで返す必要があるため、Azure OpenAI
@@ -1476,9 +1494,18 @@ class MessageService:
         # 移植元`contentBuilder.append(doc.getText())`同様、区切り文字なしで連結する。
         rag_context = "".join(context_parts)
 
-        embedding_model = await AIModelRepository.find_by_endpoint_type_and_name(
-            AIModelEndpointType.AZURE_OPENAI_EMBEDDING, EMBEDDING_MODEL_NAME, session
-        )
+        if use_bedrock:  # bedrock-ext
+            embedding_model = await AIModelRepository.find_by_endpoint_type_and_name(
+                AIModelEndpointType.BEDROCK_EMBEDDING,
+                BEDROCK_EMBEDDING_MODEL_ID,
+                session,
+            )
+        else:
+            embedding_model = await AIModelRepository.find_by_endpoint_type_and_name(
+                AIModelEndpointType.AZURE_OPENAI_EMBEDDING,
+                EMBEDDING_MODEL_NAME,
+                session,
+            )
         embedding_token_weight = (
             positive_token_weight(float(embedding_model.token_weight))
             if embedding_model is not None

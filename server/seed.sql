@@ -658,6 +658,11 @@ INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
 SELECT 'BEDROCK_CHAT', 'anthropic.claude-haiku-4-5', 64000, true, 1.0
 WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'anthropic.claude-haiku-4-5');
 
+-- クラウドの RAG・埋め込み API で使う Bedrock の埋め込みモデル（Titan G1、1536 次元）。bedrock-ext
+INSERT INTO ai_models (endpoint_type, name, max_tokens, active, token_weight)
+SELECT 'BEDROCK_EMBEDDING', 'amazon.titan-embed-text-v1', 8192, true, 1.0
+WHERE NOT EXISTS (SELECT 1 FROM ai_models WHERE name = 'amazon.titan-embed-text-v1');
+
 -- 動作確認用Bedrockエンドポイント (id固定)
 -- 実機確認する場合は api_key を実際のBedrock API keyに、endpointを実際のリージョンの
 -- Bedrock Mantleエンドポイントに書き換えること
