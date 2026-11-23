@@ -24,6 +24,14 @@ terraform {
 // ここでprofileを固定するとCI側に存在しないプロファイル名でエラーになる。
 provider "aws" {
   region = var.region
+
+  // Projectタグを全リソースに付ける。リソースごとに手書きすると付け忘れが起きるため。
+  // ただしAuto Scalingグループが起動するEC2には伝播しないので、ASGのtagブロックは別に残している。
+  default_tags {
+    tags = {
+      Project = var.project_name
+    }
+  }
 }
 
 // 各モジュールは入力と出力だけでつなぐ。依存の向きは
@@ -116,6 +124,7 @@ module "github_actions" {
   frontend_bucket_arn         = module.frontend.bucket_arn
   cloudfront_distribution_arn = module.frontend.distribution_arn
   tfstate_bucket_name         = var.tfstate_bucket_name
+  github_repository           = var.github_repository
 }
 
 module "bastion" {

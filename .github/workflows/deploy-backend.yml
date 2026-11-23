@@ -11,11 +11,8 @@ permissions:
 
 env:
   AWS_REGION: ap-northeast-1
-  ECR_REPOSITORY: naw-fastapi-issue160-backend
-  ECS_CLUSTER: naw-fastapi-issue160-cluster
-  ECS_SERVICE: naw-fastapi-issue160-backend
-  ECS_MIGRATE_TASK_FAMILY: naw-fastapi-issue160-backend-migrate
-  ECS_CAPACITY_PROVIDER: naw-fastapi-issue160-cp
+  # インフラ(deploy-infra.yml)のTF_VAR_project_nameと同じVariable。リソース名はここから組み立てる(下のステップ)
+  PROJECT_NAME: ${{ vars.PROJECT_NAME }}
 
 jobs:
   deploy:
@@ -26,6 +23,27 @@ jobs:
     steps:
       # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとbackend/配下のファイルにアクセスできない)
       - uses: actions/checkout@v4
+
+      # インフラ側(infra/modules)が作るリソース名と同じ規則で、プロジェクト名から組み立てる。
+      # envの値は他のenvを参照できないため、ステップで組み立てて$GITHUB_ENVに書き出す。
+      # 未登録・不正のまま進むと、存在しないリソースを指して分かりにくい失敗になるので、先に検査する。
+      - name: Resolve resource names
+        run: |
+          if [ -z "$PROJECT_NAME" ]; then
+            echo "::error::GitHubのVariable PROJECT_NAME が未登録です。インフラのリソース名の元になる名前(例: naw-fastapi)を登録してください。"
+            exit 1
+          fi
+          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$ ]]; then
+            echo "::error::PROJECT_NAME の値が不正です(小文字・数字・ハイフンの3〜30文字)。"
+            exit 1
+          fi
+          {
+            echo "ECR_REPOSITORY=${PROJECT_NAME}-backend"
+            echo "ECS_CLUSTER=${PROJECT_NAME}-cluster"
+            echo "ECS_SERVICE=${PROJECT_NAME}-backend"
+            echo "ECS_MIGRATE_TASK_FAMILY=${PROJECT_NAME}-backend-migrate"
+            echo "ECS_CAPACITY_PROVIDER=${PROJECT_NAME}-cp"
+          } >> "$GITHUB_ENV"
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のawsコマンド/dockerのECR操作はこの認証情報を使う
       - name: Configure AWS credentials

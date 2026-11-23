@@ -7,7 +7,6 @@ Issue #160 でTerraform化したAWSインフラ（dev/staging用、本番なし�
 ```
 infra/
 ├── bootstrap/        # tfstate用S3バケットのみ。メインとは別state（初回に一度だけ作る）
-├── route53/          # Route53ホストゾーンのみ。メインとは別state（理由は後述）
 ├── environments/dev/ # メイン構成。各モジュールを組み合わせる（terraformはここで実行する）
 ├── modules/          # network・rds・elasticache・ecr・alb・ecs・frontend・github-actions・bastion・user-import
 └── scripts/          # 踏み台経由のseed投入スクリプトなど
@@ -17,6 +16,7 @@ infra/
 
 ## 初回セットアップ手順（新しいAWSアカウントへの構築時、`terraform destroy`後の再構築時も同様）
 
+> **#383で`project_name`の既定値を`naw-fastapi-issue160`から`naw-fastapi`に変えた**ため、旧名で作った既存の環境に適用するとほぼ全リソース（RDS・ECR・ECS・S3など）の作り直しになる。S3のバケット名にはAWSアカウントIDを含める（バケット名は全世界で一意なため）。
 > **この手順と構成は、新しいAWSアカウントへの新規構築を前提にしている。** #382で構成を`modules/`+`environments/dev`に分けたときに、state の key を`infra/terraform.tfstate`から`dev/terraform.tfstate`に変えた。旧構成で作った既存の環境（旧 key の state がある）にそのまま適用すると、state が空の新 key に対して作成を試みて、名前の衝突で失敗する。既存の環境を引き継ぐ場合は、先に state オブジェクトを新 key へコピーすること（`terraform.tfstate`を`dev/terraform.tfstate`へ。`moved`ブロックは使っていない）。
 
 tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`infra/bootstrap/`）で管理する。メインがバケットを管理すると、`terraform destroy`で「stateの置き場所」ごと消え、バケットが無い状態から作り直す必要があったため。メインを`destroy`してもstateは残る（`prevent_destroy`付き）。
@@ -50,15 +50,13 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
    AWS_PROFILE=oic terraform init -backend-config=backend.hcl
    ```
 
-3. `infra/environments/dev/terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）
+3. `infra/environments/dev/terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）。`project_name`を既定値（`naw-fastapi`）から変える場合は、CIのVariable `PROJECT_NAME`も同じ値にする
 4. `AWS_PROFILE=oic terraform apply`を実行する
 5. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
 
 > `infra/`の変更を含むpushでも、インフラは自動適用されない（`deploy.yml`が警告を出す）。backend/frontendより先に、`gh workflow run deploy.yml -f run_infra=true`で反映すること。
 
-### Route53（もう不要）
-
-以前は上記に加えて`infra/route53/`でのホストゾーン作成・ムームードメイン側のネームサーバー登録も初回セットアップに含まれていたが、Issue #195でカスタムドメイン運用自体を廃止したため、現在は不要（詳細は次のセクション参照）。CloudFrontはデフォルトドメイン（`*.cloudfront.net`）でそのまま使える。
+> 独自ドメイン（Route53・ACM・ワイルドカード）は #195 で廃止した。そのための別 state の`infra/route53/`は、#383 で削除した。CloudFrontはデフォルトドメイン（`*.cloudfront.net`）で配信する。
 
 ### GitHub Actionsからのデプロイ（CI/CD）の初回セットアップ
 
@@ -87,6 +85,9 @@ gh secret set SECRET_KEY --body "<terraform.tfvarsのsecret_key>"
 gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh variable set KEY_PAIR_NAME --body "<terraform.tfvarsのkey_pair_name>"
+# プロジェクト名（リソース名の元。deploy-infra.ymlはTF_VAR_project_nameで渡し、deploy-backend.ymlはクラスタ名などを組み立てる）。
+# terraform.tfvarsでproject_nameを変えた場合は同じ値にすること（既定値はnaw-fastapi）。未登録だとデプロイは失敗する
+gh variable set PROJECT_NAME --body "naw-fastapi"
 # bootstrapで作ったstate用バケット名（deploy-infra.ymlのterraform initとplan/applyで使う。未登録だとインフラのジョブは失敗する）
 gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=../../bootstrap output -raw state_bucket_name)"
 
@@ -101,42 +102,6 @@ gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access 
 #### 3. 動作確認
 
 `develop`に適当な変更をpushし、Actionsタブで`Deploy`ワークフローが起動し、変更のあった`backend`/`frontend`のジョブが成功すること（`infra`ジョブはスキップされること）を確認する。インフラは`gh workflow run deploy.yml -f run_infra=true`で手動起動して確認する。
-
-## なぜRoute53だけ別ディレクトリ（別state）にしているか
-
-**（Issue #195以降、メインの`infra/`構成からは独自ドメインを一切参照しなくなり、以下は`infra/route53/`にのみ関係する過去の経緯）**
-
-**「メイン側で気軽に`terraform destroy`しても、Route53ホストゾーンだけは絶対に消えないようにするため」。**
-
-- Route53ホストゾーンは、作成時に発行されるNSレコードをムームードメイン側に手動登録する必要がある（後述）
-- ホストゾーンを消すとNSが変わり、再登録＋DNS伝播待ち（数時間〜48時間）が再び必要になる
-- 動作確認のたびにメイン側のリソース（ECS/RDS等）は作っては壊す運用にしたいが、そのたびにNSを再登録するのは非現実的
-- そこで、ホストゾーンだけ**別state**に切り出し、メイン側は`data "aws_route53_zone"`で**参照のみ**にした
-
-```
-【最初の1回だけ】
-cd infra/route53 && terraform apply   # ホストゾーン作成、NS取得してムームーに登録
-
-【以降、何度でも】
-cd infra/environments/dev && terraform apply/destroy   # ホストゾーンは data参照のみなので絶対に消えない
-```
-
-`lifecycle { prevent_destroy = true }`という手もあったが、これは`terraform destroy`（引数なし）自体が使えなくなる（`-target`が必須になる）副作用があるため、state分離の方を採用した。
-
-Issue #195でカスタムドメイン運用自体を廃止し、メイン側は`data "aws_route53_zone"`の参照も含め独自ドメインへの依存を完全に無くした。`infra/route53/`のホストゾーンはメイン構成から孤立した状態で残っており、完全に不要と判断すれば`infra/route53/`で個別に`terraform destroy`してよい（残しておいても月額$0.50程度）。
-
-## ムームードメイン側の設定（Issue #195で不要化。`infra/route53/`を使い続ける場合のみ参照）
-
-- ドメイン: `secuaigent-ryoyamasuda.tech`
-- ムームードメインの「ネームサーバ設定変更」で「**GMOペパボ以外のネームサーバを使用する**」を選択し、`infra/route53/`で作成したホストゾーンのNS4つ（`terraform output name_servers`で確認）を登録する
-- 反映確認: `dig NS secuaigent-ryoyamasuda.tech @8.8.8.8 +short` でAWSのNS（`awsdns`を含むもの）が返れば反映済み。反映には数分〜数時間かかる（伝播中はムームー側のデフォルトNSが返る）
-- **自動更新設定**: ムームードメインの「ドメイン一覧」→ 対象ドメインをクリック→ドメイン詳細画面に「自動更新」の状態が表示される。デフォルトは「未設定」（＝自動更新オフ）。`.tech`ドメインは初年度が安く2年目以降の更新料が高い（$6,800/年相当）ため、意図しない自動更新課金を避けたい場合は「未設定」のままにしておく
-
-## Route53のNSレコードとホストゾーンの料金
-
-- ホストゾーン: 最初の25ゾーンまで $0.50/月（日割りなし）。**作成から12時間以内に削除すれば無料**（[AWS公式](https://aws.amazon.com/route53/pricing/)）
-- DNSクエリ: 100万クエリあたり$0.40（動作確認レベルの利用では実質無視できる額）
-- NSレコード自体は「担当DNSサーバーの指名」であり、Route53側では課金対象ではない（ホストゾーンの存在自体に対する課金）
 
 ## デプロイ手順（apply後に必要な作業）
 
@@ -223,7 +188,6 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
 - S3バケット（frontend）・ECRリポジトリ（backend）は、中身が入っている状態だと`terraform destroy`が失敗する。`force_destroy`（S3）・`force_delete`（ECR）を設定済みなので、これらの属性変更を反映するため**destroy前に一度`terraform apply`が必要**
 - RDSは`skip_final_snapshot = true`のため最終スナップショットを求められず即削除される
 - CloudFrontの削除が最も遅い（無効化→エッジ撤去のため15〜40分）。destroy全体で20〜45分程度を見込む
-- メイン側の`terraform destroy`はRoute53ホストゾーンには影響しない（別state・Issue #195以降は参照すらしていないため）。ホストゾーンごと消したい場合のみ`infra/route53/`で別途`terraform destroy`する
 
 ## セキュリティグループのegress方針
 

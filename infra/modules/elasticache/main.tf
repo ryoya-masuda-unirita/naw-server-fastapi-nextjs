@@ -2,8 +2,7 @@ resource "aws_elasticache_subnet_group" "main" {
   name       = "${var.project_name}-elasticache-subnet-group"
   subnet_ids = var.private_subnet_ids
   tags = {
-    Name    = "${var.project_name}-elasticache-subnet-group"
-    Project = var.project_name
+    Name = "${var.project_name}-elasticache-subnet-group"
   }
 }
 
@@ -17,7 +16,6 @@ resource "aws_elasticache_replication_group" "main" {
   security_group_ids   = [var.elasticache_sg_id]
 
   tags = {
-    Name    = "${var.project_name}-redis"
-    Project = var.project_name
+    Name = "${var.project_name}-redis"
   }
 }

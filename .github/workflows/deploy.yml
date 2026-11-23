@@ -32,7 +32,6 @@ jobs:
           filters: |
             infra:
               - "infra/**"
-              - "!infra/route53/**"
             backend:
               - "backend/**"
             frontend:

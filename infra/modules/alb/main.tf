@@ -9,8 +9,7 @@ resource "aws_lb" "main" {
   subnets            = var.public_subnet_ids
 
   tags = {
-    Name    = "${var.project_name}-alb"
-    Project = var.project_name
+    Name = "${var.project_name}-alb"
   }
 }
 
@@ -33,8 +32,7 @@ resource "aws_lb_target_group" "backend" {
   }
 
   tags = {
-    Name    = "${var.project_name}-tg"
-    Project = var.project_name
+    Name = "${var.project_name}-tg"
   }
 }
 
