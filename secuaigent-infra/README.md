@@ -66,7 +66,7 @@ tfstate用S3バケットは、メインの`secuaigent-infra/`構成とは別のs
 
 #### 2. GitHub Secrets / Variables を登録する
 
-デプロイに使うSecrets/Variablesのうち、`AWS_ROLE_ARN`・`FRONTEND_BUCKET_NAME`・`CLOUDFRONT_DISTRIBUTION_ID`は`terraform output`で取得できる。それ以外（`DB_PASSWORD`等）は`terraform.tfvars`と同じ値を使う。`gh` CLI（[GitHub CLI](https://cli.github.com/)、要ログイン済み）で以下のように一括登録できる。
+デプロイに使うSecrets/Variablesのうち、`AWS_ROLE_ARN`・`FRONTEND_BUCKET_NAME`・`CLOUDFRONT_DISTRIBUTION_ID`は`terraform output`で取得できる。それ以外は`terraform.tfvars`と同じ値を使う（DBのパスワードとアプリの秘密鍵は、Terraformが自動生成してSecrets Managerに保存するため、登録不要。#386）。`gh` CLI（[GitHub CLI](https://cli.github.com/)、要ログイン済み）で以下のように一括登録できる。
 
 ```bash
 cd secuaigent-infra/environments/dev
@@ -77,8 +77,6 @@ gh variable set FRONTEND_BUCKET_NAME --body "$(terraform output -raw frontend_bu
 gh variable set CLOUDFRONT_DISTRIBUTION_ID --body "$(terraform output -raw cloudfront_distribution_id)"
 
 # terraform.tfvarsと同じ値を使うもの（<...>は実際の値に置き換える）
-gh secret set DB_PASSWORD --body "<terraform.tfvarsのdb_password>"
-gh secret set SECRET_KEY --body "<terraform.tfvarsのsecret_key>"
 # ALLOWED_SSH_CIDRS/ALLOWED_ADMIN_CIDRSはlist(string)型のvariableのため、TF_VAR_経由で渡す値は
 # カンマ区切り文字列ではなくHCL/JSON配列表記にすること（例: ["1.2.3.4/32","5.6.7.8/32"]）。
 # カンマ区切り文字列を渡すと"Invalid number literal"等のパースエラーでterraform planが失敗する。
@@ -165,15 +163,17 @@ DBマイグレーション（`alembic upgrade head`）自体はIssue #197以降�
 シードデータ（`seed.sql`）投入は非冪等（再実行で重複・エラーの恐れ）なため引き続きCI/CDには含めず、環境構築時（destroy後の再構築時含む）にスクリプトで手動実行する。
 
 ```bash
-PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
+PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
   bash secuaigent-infra/scripts/seed_via_bastion.sh
 ```
+
+- DBのパスワードは、`DB_PASSWORD`を環境変数で渡さなければ、Secrets Manager（`terraform output backend_secret_name`のシークレット）から自動で取得する（AWS CLIとjqが必要。権限がある`AWS_PROFILE`で実行すること）
 
 - `terraform output`から`rds_endpoint`・`bastion_public_ip`を自動取得し、SSHトンネルの確立→マイグレーション適用→`seed.sql`投入→トンネルの後始末まで1コマンドで行う
 - CI/CDで既にマイグレーション済みの場合は、`--skip-migrate`を付けてseed投入のみ行うこともできる
 
 ```bash
-PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
+PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
   bash secuaigent-infra/scripts/seed_via_bastion.sh --skip-migrate
 ```
 
@@ -198,7 +198,25 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
 - **メジャーバージョンを上げるとき**: `engine_version`（モジュールの入力）を変えるだけでは足りない。データの移行を伴うので、スナップショットを取ってから、手動で計画する。パラメータグループは、名前にメジャーを含み、新しいものを先に作る（`create_before_destroy`）ので、食い違わない
 - **マイナーバージョンは固定しない**: 自動のマイナー更新と矛盾して、更新のたびに差分が出るため
 - **pgvector・アプリ用ロール**: 移植元の`scripts/db-init`（pgvectorの拡張とアプリ用ロールの作成）は、持ち込んでいない。`server/`（このRDSをアプリのDBとして使う側）は、pgvectorを使っていない。一方、`generative-ai-adapter/embedding-adapter`は、ベクトルDBの種類として「PostgreSQL(PGVector)」を扱えるが、接続先は、アダプタの設定（`VectorDBConfig`）で指定される別のDB（`onprem/vector-db`など）で、**このRDSが自動的にその役を担うわけではない**。このRDSをベクトルDBとして使う場合は、事前に`CREATE EXTENSION vector`と、アプリ用ロールの作成が要る。その場合は、別の変更として扱うこと
-- **DBパスワード**: 変数`db_password`のまま。自動生成とSecrets Managerは、別の変更（#386）で扱う
+- **DBパスワード**: Terraformが自動生成する（`random_password`）。人が決めない。保存先と取得方法は、次の「シークレット（Secrets Manager）」を参照
+
+## シークレット（Secrets Manager）
+
+DBの接続文字列とアプリの秘密鍵は、ECSのタスク定義に平文で持たせず、Secrets Managerのシークレット`<プロジェクト名>/backend`に保存する（#386）。ECSは、タスクの起動時に、実行ロールがここから値を取り出して、環境変数（`DATABASE_URL`・`SECRET_KEY`）として注入する。アプリのコード（`server/`）は、これまでどおり環境変数で受け取る。
+
+| キー | 内容 | 使う人 |
+|---|---|---|
+| `DATABASE_URL` | `postgresql+asyncpg://<ユーザー>:<パスワード>@<ホスト>:5432/<DB名>`（Terraformが組み立てる） | アプリ（ECSが注入） |
+| `SECRET_KEY` | アプリの秘密鍵（Terraformが生成） | アプリ（ECSが注入） |
+| `DB_PASSWORD` | RDSのマスターパスワード | 人がDBに接続するとき（踏み台のシード投入など） |
+
+- **取得**: `aws secretsmanager get-secret-value --secret-id "$(terraform output -raw backend_secret_name)" --query SecretString --output text | jq`（値が画面に出るので、取り扱いに注意）
+- **値を変える**: パスワード・秘密鍵は、Terraformが管理している。コンソールや`aws`で手で書き換えても、次の`terraform apply`で元に戻る。**変更の手順は、確認できていないため書かない**。特に、RDSのパスワードは、Terraformが`apply_immediately`を既定（false）のまま変更するため、次のメンテナンスウィンドウまでRDS側に反映されず、シークレットの値と食い違って、アプリがDBに接続できなくなるおそれがある。変える必要が出たら、先に手順を計画すること（別の変更で扱う）
+- **読める人**: タスクの**実行ロール**だけが、このシークレットを読める。アプリの**タスクロール**には付けていない（アプリは環境変数で受け取るだけで、Secrets Managerを呼ばない）
+- **tfstateには値が残る**: 値はTerraformが生成・保存するため、tfstateにも入る。tfstateは、非公開・暗号化のS3バケットにある（`infra/bootstrap`）。今回の改善は、タスク定義・ECSのコンソール・API・CIが登録し直すタスク定義のリビジョンに、値が載らなくなること
+- **削除**: 開発用のため、シークレットの削除待ち期間はない（`destroy`後に、同じ名前で作り直せる）。削除すると、値は復元できない
+- **費用**: シークレットの保管料とAPI呼び出しの料金がかかる（単価は未確認のため、金額は書かない）
+- **対象外**: 自動ローテーション、顧客管理のKMSキー（既定のAWS管理キーを使う）、DBの接続ユーザーの分離（アプリ用ロールの作成）
 
 ## コスト
 
