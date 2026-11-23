@@ -7,6 +7,13 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+// マスターパスワードは人が決めず、Terraformが生成する。記号を含めないのは、接続文字列(URL)に埋め込んでも
+// エスケープが要らないようにするため。値は、出力(master_password)でsecretsモジュールに渡し、Secrets Managerに保存する。
+resource "random_password" "master" {
+  length  = 32
+  special = false
+}
+
 locals {
   // パラメータグループのファミリは、エンジンのメジャーバージョンから決める(食い違いを防ぐ)
   pg_major = split(".", var.engine_version)[0]
@@ -40,7 +47,7 @@ resource "aws_db_instance" "main" {
   // tfstateと同様、DBの中身も保存時に暗号化する(後から変えるとDBの再作成になる)
   storage_encrypted      = true
   username               = "root"
-  password               = var.db_password
+  password               = random_password.master.result
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.rds_sg_id]
   parameter_group_name   = aws_db_parameter_group.main.name
