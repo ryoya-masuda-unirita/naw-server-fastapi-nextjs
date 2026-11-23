@@ -130,6 +130,7 @@ resource "aws_cloudfront_function" "strip_backend_prefix" {
   publish = true
   code    = file("${path.module}/functions/strip_backend_prefix.js")
 }
+
 // フロントエンド(SPA)の静的ファイルを置くS3バケット
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.project_name}-frontend"

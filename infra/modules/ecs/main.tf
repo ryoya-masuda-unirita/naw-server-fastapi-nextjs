@@ -279,6 +279,7 @@ resource "aws_ecs_task_definition" "backend_migrate" {
     ignore_changes = [container_definitions]
   }
 }
+
 // ECSタスク自体（コンテナ）が起動する際に「引き受ける」ロール。
 // assume_role_policyでこのロールを引き受けられる主体をecs-tasks.amazonaws.comに限定している。
 // 実際の権限（何ができるか）は下のaws_iam_role_policy_attachmentでアタッチする。
