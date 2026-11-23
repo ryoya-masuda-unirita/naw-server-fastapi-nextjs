@@ -183,6 +183,23 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
 
 `terraform output cloudfront_domain_name`で確認したCloudFrontのデフォルトドメイン（`https://<distribution-id>.cloudfront.net/`）にアクセスする。テナントIDはURL（サブドメイン）からではなく、ログイン画面で入力する（Issue #193）。
 
+## データストアの設定（RDS・ElastiCache・ECR）
+
+移植元`secuaigent-infra`の設定値に揃えている（#385）。
+
+| 対象 | 設定 |
+|---|---|
+| RDS（PostgreSQL） | バージョンは**18**（メジャーのみ指定、マイナーはAWSに任せる）、`db.t4g.micro`・gp3・20GB、**保存時に暗号化**、自動バックアップ**7日**、自動マイナー更新あり、専用のパラメータグループ（`<プロジェクト名>-pg18`、パラメータは既定のまま）、マルチAZなし、公開なし、最終スナップショットなし |
+| ElastiCache（Redis） | バージョンは**7.1**、`cache.t4g.micro` 1ノード、ポート6379、**保存時の暗号化あり**、**通信の暗号化（TLS）なし**（backendが平文の`redis://`で接続しているため）、自動フェイルオーバーなし |
+| ECR | タグのないイメージを、プッシュから**30日**で削除する。タグ付き（`latest`・コミットSHA）は消さない |
+
+- **バージョンの選び方**: ローカルの開発環境（`docker-compose.yml`の`postgres:18`・`redis:7`）とメジャーバージョンを合わせている。移植元の既定値`16.4`は、パラメータグループ（PostgreSQL 18用）と食い違い、現在のリージョンには存在しないため、使わない
+- **再作成になる変更**: RDSの暗号化とElastiCacheの暗号化は、作成後に変えられない。既存の環境に適用すると、RDS・ElastiCacheが再作成される（データは消える）。**RDSは`skip_final_snapshot = true`のため、削除時に最終スナップショットも取られず、自動バックアップもインスタンスと一緒に消える**。新アカウントへの新規構築が前提で、既存の環境に適用する場合は、先に手動でスナップショットを取ること。なお、`destroy`で環境を片づける運用のため、`prevent_destroy`は付けていない
+- **メジャーバージョンを上げるとき**: `engine_version`（モジュールの入力）を変えるだけでは足りない。データの移行を伴うので、スナップショットを取ってから、手動で計画する。パラメータグループは、名前にメジャーを含み、新しいものを先に作る（`create_before_destroy`）ので、食い違わない
+- **マイナーバージョンは固定しない**: 自動のマイナー更新と矛盾して、更新のたびに差分が出るため
+- **pgvector・アプリ用ロール**: 移植元の`scripts/db-init`（pgvectorの拡張とアプリ用ロールの作成）は、持ち込んでいない。`server/`（このRDSをアプリのDBとして使う側）は、pgvectorを使っていない。一方、`generative-ai-adapter/embedding-adapter`は、ベクトルDBの種類として「PostgreSQL(PGVector)」を扱えるが、接続先は、アダプタの設定（`VectorDBConfig`）で指定される別のDB（`onprem/vector-db`など）で、**このRDSが自動的にその役を担うわけではない**。このRDSをベクトルDBとして使う場合は、事前に`CREATE EXTENSION vector`と、アプリ用ロールの作成が要る。その場合は、別の変更として扱うこと
+- **DBパスワード**: 変数`db_password`のまま。自動生成とSecrets Managerは、別の変更（#386）で扱う
+
 ## コスト
 
 ECSは**Fargate（0.5 vCPU / 1 GB、1タスク常時稼働）+ NAT Gateway（1台）**で、EC2（t4g.nano 1台）だった頃より固定費が増える（#384。移植元と同じ構成に揃えたため）。
