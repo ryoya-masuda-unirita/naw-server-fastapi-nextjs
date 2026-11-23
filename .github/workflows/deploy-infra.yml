@@ -40,9 +40,22 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      # backendのS3設定(main.tf)を元に、リモートstateへ接続する
+      # state用バケット名はアカウントごとに異なるため、GitHubのVariable(TF_STATE_BUCKET)で渡す。
+      # 未登録のままだとinitの失敗理由が分かりにくいので、先に検査する。
+      - name: Check state bucket variable
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          if [ -z "$TF_STATE_BUCKET" ]; then
+            echo "::error::GitHubのVariable TF_STATE_BUCKET が未登録です。infra/bootstrap の出力 state_bucket_name を登録してください。"
+            exit 1
+          fi
+
+      # backendのS3設定(main.tf)にバケット名を足して、リモートstateへ接続する
       - name: Terraform Init
-        run: terraform init
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: terraform init -backend-config="bucket=${TF_STATE_BUCKET}"
       
       - name: Terraform Format Check
         run: terraform fmt -check -diff
@@ -57,6 +70,7 @@ jobs:
           TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
+          TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
         run: terraform plan -out=tfplan
       
       - name: Terraform Apply
@@ -66,4 +80,5 @@ jobs:
           TF_VAR_allowed_ssh_cidrs: ${{ secrets.ALLOWED_SSH_CIDRS }}
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
+          TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
         run: terraform apply -auto-approve tfplan

@@ -1,11 +1,17 @@
 name: Deploy
 
-# 初回セットアップ(インフラ全体apply・GitHub Secrets/Variables登録)完了に伴い、
-# developへのpushで自動デプロイされるトリガーを有効化した。
+# developへのpushでは、backend/frontendだけを自動デプロイする。
+# インフラ(terraform apply)は、構成を作り直す間に意図せず適用されないよう、手動実行で
+# run_infraをtrueにしたときだけ実行する(#381)。
 on:
   push:
     branches: [develop]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      run_infra:
+        description: "インフラ(terraform apply)も実行する"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -16,7 +22,6 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      infra: ${{ steps.filter.outputs.infra }}
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
@@ -25,19 +30,16 @@ jobs:
         id: filter
         with:
           filters: |
-            infra:
-              - "infra/**"
-              - "!infra/route53/**"
             backend:
               - "backend/**"
             frontend:
               - "frontend/**"
 
-  # infra/**が変更されていれば deploy-infra.yml を呼び出す(secrets: inherit で
-  # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)
+  # 手動実行でrun_infraがtrueのときだけ deploy-infra.yml を呼び出す(secrets: inherit で
+  # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)。pushではスキップされる。
+  # 手動実行はpush以外でパスの変更判定の比較元が定まらないため、判定には頼らない。
   infra:
-    needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_infra
     uses: ./.github/workflows/deploy-infra.yml
     secrets: inherit
 
