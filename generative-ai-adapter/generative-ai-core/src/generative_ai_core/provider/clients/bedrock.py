@@ -163,6 +163,7 @@ def generation_body(options: CoreGenerationOptions) -> dict[str, Any]:
     """生成パラメータを Messages API の項目にする。
 
     温度と top_p は、指定されたときだけ送る（OpenAI 系の既定の 0.7 は引き継がない）。
+    両方が指定されたときは、温度だけを送る（新しい Claude のモデルは同時の指定を拒否する）。
     Messages API にない frequency_penalty・presence_penalty・reasoning_effort・
     verbosity は送らない。
 
@@ -183,7 +184,9 @@ def generation_body(options: CoreGenerationOptions) -> dict[str, Any]:
     }
     if options.temperature is not None:
         body["temperature"] = options.temperature
-    if options.top_p is not None:
+    # 新しい Claude のモデルは、温度と top_p を同時に指定すると拒否するため、
+    # 両方あるときは温度だけを送る
+    if options.top_p is not None and options.temperature is None:
         body["top_p"] = options.top_p
     if options.stop is not None:
         body["stop_sequences"] = [options.stop]

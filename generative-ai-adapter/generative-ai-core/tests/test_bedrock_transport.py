@@ -308,6 +308,20 @@ class TestMessagesFormat:
             "stop_sequences": ["END"],
         }
 
+    def test_top_p_is_dropped_when_temperature_is_given(self) -> None:
+        """温度と top_p が両方あるときは、温度だけが送られること"""
+        body = generation_body(CoreGenerationOptions(temperature=0.2, top_p=0.9))
+
+        assert body["temperature"] == 0.2
+        assert "top_p" not in body
+
+    def test_top_p_alone_is_sent(self) -> None:
+        """top_p だけがあるときは、top_p が送られること"""
+        body = generation_body(CoreGenerationOptions(top_p=0.9))
+
+        assert body["top_p"] == 0.9
+        assert "temperature" not in body
+
     def test_unsupported_options_are_ignored(self) -> None:
         """Messages API にないオプションは送られず、エラーにもならないこと"""
         body = generation_body(
@@ -472,16 +486,16 @@ class TestRag:
     ) -> None:
         """検証の呼び出しは、温度と最大トークン数だけを引き継ぐこと"""
         provider = Provider(router, [RAG_ANSWER, SUPPORTED])
-        options = CoreGenerationOptions(temperature=0.1, top_p=0.9, stop="END")
+        options = CoreGenerationOptions(temperature=0.1, stop="END", max_tokens=77)
 
         BedrockMessagesTransport(_configuration()).rag(
             _configuration(), _rag_request(options), _context(Capability.RAG)
         )
 
-        assert provider.body(0)["top_p"] == 0.9
+        assert provider.body(0)["stop_sequences"] == ["END"]
         validation = provider.body(1)
         assert validation["temperature"] == 0.1
-        assert "top_p" not in validation
+        assert validation["max_tokens"] == 77
         assert "stop_sequences" not in validation
 
     def test_failed_validation_is_no_answer(self, router: respx.MockRouter) -> None:
