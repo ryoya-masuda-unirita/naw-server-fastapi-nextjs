@@ -149,6 +149,7 @@ module "github_actions" {
   ecs_cluster_name            = module.ecs.cluster_name
   ecs_service_arn             = module.ecs.service_arn
   ecs_migrate_task_family     = module.ecs.migrate_task_family
+  enable_infra_role           = var.enable_github_actions_infra_role
 }
 
 module "bastion" {

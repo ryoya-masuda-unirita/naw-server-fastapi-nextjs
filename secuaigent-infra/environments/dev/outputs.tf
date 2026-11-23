@@ -18,7 +18,8 @@ output "github_actions_role_arn" {
   value = module.github_actions.role_arn
 }
 
-// インフラ用ロールのARN（terraform applyが使う。GitHub ActionsのAWS_INFRA_ROLE_ARNシークレットに使う）
+// インフラ用ロールのARN（terraform applyが使う。GitHub ActionsのAWS_INFRA_ROLE_ARNシークレットに使う）。
+// enable_github_actions_infra_role が false(既定)のときは null(terraform output -raw は失敗する)
 output "github_actions_infra_role_arn" {
   value = module.github_actions.infra_role_arn
 }

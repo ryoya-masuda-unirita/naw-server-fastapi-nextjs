@@ -4,6 +4,7 @@ output "role_arn" {
 }
 
 // インフラ用ロールのARN。terraform apply(手動実行)だけが、Environment infra を使うジョブからAssumeRoleする(GitHubのSecret AWS_INFRA_ROLE_ARN)
+// enable_infra_role が false のときは、ロールがないので null
 output "infra_role_arn" {
-  value = aws_iam_role.github_actions_infra.arn
+  value = one(aws_iam_role.github_actions_infra[*].arn)
 }

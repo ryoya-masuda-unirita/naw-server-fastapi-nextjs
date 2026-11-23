@@ -74,8 +74,9 @@ cd secuaigent-infra/environments/dev
 # terraform outputから取得できるもの
 # デプロイ用ロール(backend・frontendのデプロイ。developへのpushで動く)
 gh secret set AWS_ROLE_ARN --body "$(terraform output -raw github_actions_role_arn)"
-# インフラ用ロール(terraform apply。手動実行のときだけ、Environment infra を使うジョブが使う)。未登録だとインフラのデプロイは失敗する
-gh secret set AWS_INFRA_ROLE_ARN --body "$(terraform output -raw github_actions_infra_role_arn)"
+# インフラ用ロール(terraform apply用)は、既定では作られない。使うときだけ、「GitHub ActionsのAWSロール」の手順(Environment infra の保護 →
+# enable_github_actions_infra_role=true でローカルapply)のあとに登録する。未登録だと、インフラのデプロイ(手動実行)は失敗する
+# gh secret set AWS_INFRA_ROLE_ARN --body "$(terraform output -raw github_actions_infra_role_arn)"
 gh variable set FRONTEND_BUCKET_NAME --body "$(terraform output -raw frontend_bucket_name)"
 gh variable set CLOUDFRONT_DISTRIBUTION_ID --body "$(terraform output -raw cloudfront_distribution_id)"
 
@@ -111,7 +112,7 @@ GitHub ActionsがAWSを操作するロールは、**用途で2つに分けてい
 | ロール | 使うワークフロー | GitHub Secret | 信頼条件（誰が引き受けられるか） | 権限 |
 |---|---|---|---|---|
 | **デプロイ用**（`<プロジェクト名>-github-actions-role`） | backend・frontendのデプロイ（`develop`へのpushで自動） | `AWS_ROLE_ARN` | `develop`ブランチのワークフロー | **絞っている**（下記） |
-| **インフラ用**（`<プロジェクト名>-github-actions-infra-role`） | `terraform apply`（`Deploy`を手動実行し`run_infra=true`のとき） | `AWS_INFRA_ROLE_ARN` | Environment `infra`を使うジョブだけ（`sub`が`repo:<リポジトリ>:environment:infra`） | **広いまま**（`PowerUserAccess`+`IAMFullAccess`+tfstate） |
+| **インフラ用**（`<プロジェクト名>-github-actions-infra-role`）。**既定では作られない** | `terraform apply`（`Deploy`を手動実行し`run_infra=true`のとき） | `AWS_INFRA_ROLE_ARN` | Environment `infra`を使うジョブ（`sub`が`repo:<リポジトリ>:environment:infra`） | **広いまま**（`PowerUserAccess`+`IAMFullAccess`+tfstate） |
 
 **デプロイ用ロールが許可される操作**（移植元`github-actions-dev`と同じ考え方。可能な限りリソースを限定）:
 - ECR: ログイン、backendのリポジトリへのイメージのプッシュ
@@ -120,9 +121,18 @@ GitHub ActionsがAWSを操作するロールは、**用途で2つに分けてい
 - S3: フロントエンド用のバケットの同期、CloudFront: その配信のキャッシュ無効化
 - 付けていないもの: tfstateへのアクセス、IAM・EC2・RDS・Secrets Managerなどの操作（`terraform apply`はできない）
 
-**インフラ用ロールの広い権限は、絞っていない**。`terraform apply`に必要な権限は、実際に`apply`を試さないと確定できず、推測で絞ると、実際の`apply`で予期しない失敗が起きるため。代わりに、(1) `develop`へのpushで動くデプロイから切り離し、(2) Environment経由の手動実行のときだけ使えるようにした。**実際に`apply`する機会に、必要な権限を洗い出して絞ること**（別の変更）。
+**残るリスク（デプロイ用ロール）**: タスク定義の登録（`ecs:RegisterTaskDefinition`、リソースを限定できない）と、タスク実行ロール・タスクロールの引き渡し（`iam:PassRole`）を許可しているため、`develop`で実行されるコードは、任意のコンテナイメージ・コマンドで、これらのロールの権限（タスク実行ロールはSecrets Managerのシークレットを読める）のコンテナを動かせる。CIがタスク定義を登録してデプロイする仕組み上、避けられない（移植元も同じ）。`develop`に入るコードのレビューが、この境界を守っている。
 
-**Environment `infra`の作り方**（リポジトリの設定。初回のインフラのデプロイで自動作成もされるが、承認者・対象ブランチの制限は付かない）。承認者を付けると、人の承認なしには、広い権限を使えない。以下は、GitHubのドキュメントに基づく例で、**実行して確認していない**。`<...>`を置き換えること。
+### インフラ用ロールを使えるようにする（必要になったとき）
+
+**インフラ用ロールは、既定では作らない**（`enable_github_actions_infra_role = false`）。このロールを引き受けられるのは「Environment `infra`を使うジョブ」だが、その`sub`にはブランチが含まれず、AWS側の信頼条件では、ブランチを固定できない。Environmentに承認者・対象ブランチの制限が付いていないと、**どのブランチのワークフローも、広い権限のロールを引き受けられてしまう**（旧ロールは`develop`に固定されていた）。ロールが存在しなければ、引き受けられないので、次の順序を守ること。
+
+1. **Environment `infra`を、先に作って保護する**。承認者を付け、対象ブランチを`develop`だけにする（下の例）。初回のインフラのデプロイで自動作成もされるが、その場合は保護が付かない
+2. **ローカルで、管理者権限で**、`terraform.tfvars`に`enable_github_actions_infra_role = true`を足して`terraform apply`する（ロールをCIで作ることはできない。ロールを使うのが、ロールを作るワークフローだから）。`AWS_PROFILE=oic`
+3. 出力`github_actions_infra_role_arn`を、GitHubのSecret `AWS_INFRA_ROLE_ARN`に登録する
+4. `Deploy`を手動実行し、`run_infra=true`にする（Environmentの承認が求められる）
+
+以下は、GitHubのドキュメントに基づく例で、**実行して確認していない**。`<...>`を置き換えること。
 
 ```bash
 # 承認者(あなた)のユーザーID
@@ -137,9 +147,14 @@ JSON
 gh api -X POST repos/<オーナー>/<リポジトリ>/environments/infra/deployment-branch-policies -f name=develop -f type=branch
 ```
 
-**確認したこと・していないこと**:
-- 確認した: IAMのポリシーシミュレーター（読み取りのみ）で、デプロイ用ロールが、CIの実際の操作を許可し、不要な操作を拒否すること（結果は`docs/issue-388/08_動作確認.md`）
-- **確認していない**: 実際のデプロイでの成否（ECSのタスク定義へのタグ付けなど、実行して初めて分かる操作が漏れていると、デプロイが失敗する）。信頼条件（ブランチ・Environment）がAWSで期待どおりに働くこと。実際の`terraform apply`。費用がかかるため、`apply`と実デプロイはしていない
+**インフラ用ロールの広い権限は、絞っていない**。`terraform apply`に必要な権限は、実際に`apply`を試さないと確定できず、推測で絞ると、実際の`apply`で予期しない失敗が起きるため。**実際に`apply`する機会に、必要な権限を洗い出して絞ること**（別の変更）。
+
+### 確認したこと・していないこと
+
+- 確認した: IAMのポリシーシミュレーター（読み取りのみ）で、デプロイ用ロールが、CIの実際の操作を許可し、不要な操作を拒否すること（44件、結果は`docs/issue-388/08_動作確認.md`）
+- **確認していない**:
+  - 実際のデプロイでの成否。シミュレーターは権限の判定だけで、ECSのタスク定義へのタグ付けなど、実行して初めて分かる操作が漏れていると、デプロイが失敗する。**最初の実デプロイでAccessDeniedが出たら、CloudTrailで拒否された操作を確認して、デプロイ用ロールに足す**こと。ECRのプッシュに必要な操作は、AWSのドキュメントの最小の組（認証、レイヤーの確認・アップロード、`PutImage`）にしてあるが、`docker buildx`での実プッシュは未確認
+  - 信頼条件（ブランチ・Environment）がAWSで期待どおりに働くこと。実際の`terraform apply`。費用がかかるため、`apply`と実デプロイはしていない
 
 ## デプロイ手順（apply後に必要な作業）
 

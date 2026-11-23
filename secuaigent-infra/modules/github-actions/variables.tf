@@ -57,3 +57,9 @@ variable "ecs_migrate_task_family" {
   type        = string
   description = "マイグレーション用タスク定義のファミリ名(一時タスクの起動を限定する)"
 }
+
+variable "enable_infra_role" {
+  type        = bool
+  default     = false
+  description = "terraform apply用のインフラ用ロール(広い権限)を作るか。Environment infra に承認者・対象ブランチの制限を付けてから、trueにすること"
+}

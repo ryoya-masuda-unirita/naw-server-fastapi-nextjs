@@ -138,7 +138,9 @@ resource "aws_iam_role_policy" "github_actions" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:DeleteObject"
+          "s3:DeleteObject",
+          // 大きいファイルのマルチパートアップロードが失敗したとき、残った断片を片づけるために、aws s3 sync が呼ぶ
+          "s3:AbortMultipartUpload"
         ]
         Resource = "${var.frontend_bucket_arn}/*"
       },
@@ -158,6 +160,11 @@ resource "aws_iam_role_policy" "github_actions" {
 // ---------------------------------------------------------------------------------------------
 // インフラ用ロール(terraform apply)。手動実行(run_infra)で、GitHubのEnvironment infra を使うジョブだけが使う。
 //
+// **既定では作らない**(var.enable_infra_role = false)。このロールを引き受けられるのは「Environment infra を使うジョブ」で、
+// そのsubにはブランチが含まれない。Environmentに承認者・対象ブランチ(develop)の制限が付いていないと、どのブランチのワークフローも
+// このロール(広い権限)を引き受けられてしまう(旧ロールはdevelopに固定されていた)。AWS側の信頼条件では、ブランチを固定できない。
+// そのため、先にEnvironmentを保護してから、このロールを作ること(README参照)。ロールがなければ、引き受けられない。
+//
 // 権限は、現行と同じ広いまま(PowerUserAccess + IAMFullAccess)。**絞っていない**。
 // terraform applyが必要とする権限(VPC/RDS/ECS/IAM/CloudFront等の各リソースのCRUD)は、実際にapplyを試さないと確定できず、
 // 推測で絞ると、実際のapplyで予期しない失敗が起きるため。applyを実際に行う機会に、必要な権限を洗い出して絞ること(別の変更)。
@@ -166,6 +173,8 @@ resource "aws_iam_role_policy" "github_actions" {
 // ---------------------------------------------------------------------------------------------
 
 resource "aws_iam_role" "github_actions_infra" {
+  count = var.enable_infra_role ? 1 : 0
+
   name = "${var.project_name}-github-actions-infra-role"
 
   assume_role_policy = jsonencode({
@@ -189,21 +198,27 @@ resource "aws_iam_role" "github_actions_infra" {
 }
 
 resource "aws_iam_role_policy_attachment" "github_actions_infra_power_user" {
-  role       = aws_iam_role.github_actions_infra.name
+  count = var.enable_infra_role ? 1 : 0
+
+  role       = aws_iam_role.github_actions_infra[0].name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
 
 // PowerUserAccessはIAM操作を意図的に除外しているため、IAMロール(ecs_task_execution/backend_task/
 // このモジュールのロール自身等)も管理するsecuaigent-infra/には不足する。IAMFullAccessで補う(これも絞るべき対象)。
 resource "aws_iam_role_policy_attachment" "github_actions_infra_iam_full_access" {
-  role       = aws_iam_role.github_actions_infra.name
+  count = var.enable_infra_role ? 1 : 0
+
+  role       = aws_iam_role.github_actions_infra[0].name
   policy_arn = "arn:aws:iam::aws:policy/IAMFullAccess"
 }
 
 // tfstateへのアクセス。S3のネイティブロック(use_lockfile)は、ロックファイルの作成・削除を行うため、DeleteObjectも要る
 resource "aws_iam_role_policy" "github_actions_infra" {
+  count = var.enable_infra_role ? 1 : 0
+
   name = "${var.project_name}-github-actions-infra-policy"
-  role = aws_iam_role.github_actions_infra.id
+  role = aws_iam_role.github_actions_infra[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"

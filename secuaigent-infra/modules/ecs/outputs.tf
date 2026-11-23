@@ -23,11 +23,6 @@ output "service_arn" {
   value = aws_ecs_service.backend.id
 }
 
-// backendのタスク定義のファミリ名
-output "backend_task_family" {
-  value = aws_ecs_task_definition.backend.family
-}
-
 // マイグレーション用のタスク定義のファミリ名。デプロイ用ロールが、一時タスクの起動を、このタスク定義に限るために使う
 output "migrate_task_family" {
   value = aws_ecs_task_definition.backend_migrate.family

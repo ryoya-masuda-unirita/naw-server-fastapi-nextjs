@@ -35,6 +35,12 @@ variable "vpc_cidr" {
   }
 }
 
+variable "enable_github_actions_infra_role" {
+  type        = bool
+  default     = false
+  description = "terraform apply用のインフラ用ロール(広い権限)を作るか。GitHubのEnvironment infra に承認者と対象ブランチ(develop)の制限を付けてから、trueにすること(README参照)"
+}
+
 variable "github_repository" {
   type        = string
   default     = "ryoya-masuda-unirita/naw-server-fastapi-nextjs"

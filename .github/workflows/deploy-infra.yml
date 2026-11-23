@@ -38,7 +38,7 @@ jobs:
           AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
         run: |
           if [ -z "$AWS_INFRA_ROLE_ARN" ]; then
-            echo "::error::GitHubのSecret AWS_INFRA_ROLE_ARN が未登録です。terraform output の github_actions_infra_role_arn を登録してください。"
+            echo "::error::GitHubのSecret AWS_INFRA_ROLE_ARN が未登録です。インフラ用ロールは、既定では作られません。README「GitHub ActionsのAWSロール」の手順(Environment infra の保護 → enable_github_actions_infra_role=true でローカルapply → Secret登録)で用意してください。"
             exit 1
           fi
 
