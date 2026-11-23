@@ -6,30 +6,57 @@ Issue #160 でTerraform化したAWSインフラ（dev/staging用、本番なし�
 
 ```
 infra/
+├── bootstrap/ # tfstate用S3バケットのみ。メインとは別state（初回に一度だけ作る）
 ├── route53/   # Route53ホストゾーンのみ。メインとは別state（理由は後述）
-└── （このディレクトリ） # ホストゾーン以外の全リソース（VPC/ECS/RDS/ALB/CloudFront/S3など）
+└── （このディレクトリ） # 上記以外の全リソース（VPC/ECS/RDS/ALB/CloudFront/S3など）
 ```
 
-## 初回セットアップ手順（`terraform destroy`で全リソースを消した後の再構築時も同様）
+## 初回セットアップ手順（新しいAWSアカウントへの構築時、`terraform destroy`後の再構築時も同様）
 
-tfstate用S3バケット（`tfstate_backend.tf`の`aws_s3_bucket.tfstate`）自身がこの`infra/`構成で管理されているため、「stateを保存する場所」を「stateで管理する」という鶏卵問題がある。過去に一度`terraform destroy`でインフラを丸ごと壊すと、このtfstateバケットも一緒に消え、`main.tf`の`backend "s3"`が参照するバケットが存在しない状態に戻る。その場合、以下の手順で最初からやり直す。
+tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`infra/bootstrap/`）で管理する。メインがバケットを管理すると、`terraform destroy`で「stateの置き場所」ごと消え、バケットが無い状態から作り直す必要があったため。メインを`destroy`してもstateは残る（`prevent_destroy`付き）。
 
-1. **`main.tf`の`backend "s3" { ... }`ブロックを一時的にコメントアウトする**（バケットがまだ存在しないため、S3バックエンドでは`terraform init`できない）
-2. `terraform init` を実行する（ローカルバックエンドで初期化される）
-3. `terraform apply` を実行する（`terraform.tfvars`に必要な変数が揃っていること。tfstateバケットを含む全リソースがローカルstateで作成される）
-4. **コメントアウトした`backend "s3"`ブロックを元に戻す**
-5. `terraform init -migrate-state` を実行する（「Yes」と答えると、ローカルのstateがS3バケットへ移行される）
-6. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
+ローカルでは`AWS_PROFILE=oic`を環境変数で指定して実行する（`.tf`にはprofileを固定しない。CIはOIDCの一時クレデンシャルを使うため）。
 
-移行前後で`main.tf`にはこの手順の要約コメントが常に残っているので、迷ったらそちらも参照する。
+1. **state用バケットを作る（初回のみ）**
+
+   ```bash
+   cd infra/bootstrap
+   AWS_PROFILE=oic terraform init
+   AWS_PROFILE=oic terraform apply
+   AWS_PROFILE=oic terraform output -raw backend_config > ../backend.hcl
+   ```
+
+   バケット名は`<project_name>-tfstate-<AWSアカウントID>`になる。`bootstrap/`の`terraform.tfstate`（ローカル）は消さないこと。消えた場合（別のPCで実行する場合も）は、`apply`の前に次の`import`で復元する（バケットが既にあるのに`apply`すると`BucketAlreadyOwnedByYou`で失敗する）。`../backend.hcl`は`.gitignore`済みで、git管理しない（雛形は`backend.hcl.example`）。
+
+   ```bash
+   cd infra/bootstrap
+   B=<project_name>-tfstate-<AWSアカウントID>
+   AWS_PROFILE=oic terraform import aws_s3_bucket.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_versioning.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_server_side_encryption_configuration.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_public_access_block.tfstate "$B"
+   ```
+
+2. **メイン構成を初期化する**
+
+   ```bash
+   cd infra
+   AWS_PROFILE=oic terraform init -backend-config=backend.hcl
+   ```
+
+3. `terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）
+4. `AWS_PROFILE=oic terraform apply`を実行する
+5. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
+
+> `infra/`の変更を含むpushでも、インフラは自動適用されない（`deploy.yml`が警告を出す）。backend/frontendより先に、`gh workflow run deploy.yml -f run_infra=true`で反映すること。
 
 ### Route53（もう不要）
 
 以前は上記に加えて`infra/route53/`でのホストゾーン作成・ムームードメイン側のネームサーバー登録も初回セットアップに含まれていたが、Issue #195でカスタムドメイン運用自体を廃止したため、現在は不要（詳細は次のセクション参照）。CloudFrontはデフォルトドメイン（`*.cloudfront.net`）でそのまま使える。
 
-### GitHub Actionsからの自動デプロイ（CI/CD）の初回セットアップ
+### GitHub Actionsからのデプロイ（CI/CD）の初回セットアップ
 
-`.github/workflows/deploy.yml`は、誤って未セットアップの環境に自動applyしないよう、デフォルトでは`workflow_dispatch`（手動実行）のみに制限されている（ファイル冒頭のコメント参照）。以下の手順で有効化すると、`develop`へのpushで自動デプロイされるようになる。
+`.github/workflows/deploy.yml`は、`develop`へのpushでは**backend/frontendだけ**を自動デプロイする。**インフラ（`terraform apply`）は自動では実行されない**（構成の作り直し中に意図せず適用されるのを防ぐため。#381）。インフラを反映するときは、Actionsタブの`Deploy`を手動実行し、`run_infra`をtrueにする（`gh workflow run deploy.yml -f run_infra=true`）。
 
 #### 1. 前提: 上記の初回セットアップ手順で`terraform apply`済みであること
 
@@ -54,6 +81,8 @@ gh secret set SECRET_KEY --body "<terraform.tfvarsのsecret_key>"
 gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh variable set KEY_PAIR_NAME --body "<terraform.tfvarsのkey_pair_name>"
+# bootstrapで作ったstate用バケット名（deploy-infra.ymlのterraform initとplan/applyで使う。未登録だとインフラのジョブは失敗する）
+gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=bootstrap output -raw state_bucket_name)"
 
 # GitHub Projects連携用(project-status-sync.ymlが使用。デプロイとは別用途。未登録なら要発行)
 gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access Token>"
@@ -63,13 +92,9 @@ gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access 
 
 > `DOMAIN_NAME`変数はIssue #195のカスタムドメイン廃止に伴い不要になり、`deploy-infra.yml`からも参照を削除済み。登録不要。
 
-#### 3. `deploy.yml`の自動トリガーを有効化する
+#### 3. 動作確認
 
-`.github/workflows/deploy.yml`の`on:`をコメントアウトされた`push: branches: [develop]`に戻す（`workflow_dispatch: {}`のみの現状から変更する）。
-
-#### 4. 動作確認
-
-`develop`に適当な変更をpushし、Actionsタブで`Deploy`ワークフローが自動起動して各ジョブ（`changes`→`infra`/`backend`/`frontend`）が成功することを確認する。もしくは`gh workflow run deploy.yml`で手動起動して確認してもよい。
+`develop`に適当な変更をpushし、Actionsタブで`Deploy`ワークフローが起動し、変更のあった`backend`/`frontend`のジョブが成功すること（`infra`ジョブはスキップされること）を確認する。インフラは`gh workflow run deploy.yml -f run_infra=true`で手動起動して確認する。
 
 ## なぜRoute53だけ別ディレクトリ（別state）にしているか
 
@@ -116,7 +141,7 @@ Issue #195でカスタムドメイン運用自体を廃止し、メイン側は`
 ECSはARM64（Graviton, t4g.nano）のため、**`--platform linux/arm64`が必須**（付け忘れるとECSで`exec format error`になる）。
 
 ```bash
-aws ecr get-login-password --region ap-northeast-1 --profile naw-fastapi-issue158 \
+aws ecr get-login-password --region ap-northeast-1 --profile oic \
   | docker login --username AWS --password-stdin <ECRリポジトリURL の アカウントID部分>
 
 cd backend
@@ -158,8 +183,8 @@ npm run build
 # /backend を外してbackendへ渡す(#240)。それ以外のパスはS3から配信し、画面パス(拡張子なし)は
 # CloudFront Functionでindex.htmlに書き換える(APIの403/404等はindex.htmlに置き換えない)
 
-aws s3 sync dist/ s3://<frontend_bucket名>/ --delete --profile naw-fastapi-issue158
-aws cloudfront create-invalidation --distribution-id <cloudfront配信ID> --paths "/*" --profile naw-fastapi-issue158
+aws s3 sync dist/ s3://<frontend_bucket名>/ --delete --profile oic
+aws cloudfront create-invalidation --distribution-id <cloudfront配信ID> --paths "/*" --profile oic
 ```
 
 ### 3. bastion経由でシード投入

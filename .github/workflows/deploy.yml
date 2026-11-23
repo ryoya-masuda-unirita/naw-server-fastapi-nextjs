@@ -1,11 +1,17 @@
 name: Deploy
 
-# 初回セットアップ(インフラ全体apply・GitHub Secrets/Variables登録)完了に伴い、
-# developへのpushで自動デプロイされるトリガーを有効化した。
+# developへのpushでは、backend/frontendだけを自動デプロイする。
+# インフラ(terraform apply)は、構成を作り直す間に意図せず適用されないよう、手動実行で
+# run_infraをtrueにしたときだけ実行する(#381)。
 on:
   push:
     branches: [develop]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      run_infra:
+        description: "インフラ(terraform apply)も実行する"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -16,7 +22,6 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      infra: ${{ steps.filter.outputs.infra }}
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
@@ -33,17 +38,24 @@ jobs:
             frontend:
               - "frontend/**"
 
-  # infra/**が変更されていれば deploy-infra.yml を呼び出す(secrets: inherit で
-  # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)
+      # インフラは自動適用しない(#381)ため、infra/**の変更を含むpushでは、backend/frontendの新しいコードが
+      # 古いインフラの上にデプロイされうる。気づけるよう警告を出す(インフラを先に手動で反映すること)。
+      - name: Warn about unapplied infra changes
+        if: github.event_name == 'push' && steps.filter.outputs.infra == 'true'
+        run: |
+          echo "::warning::infra/** の変更が含まれていますが、インフラは自動適用されません。backend/frontendより先に、Deployを手動実行(run_infra=true)して反映してください。"
+
+  # 手動実行でrun_infraがtrueのときだけ deploy-infra.yml を呼び出す(secrets: inherit で
+  # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)。pushではスキップされる。
+  # 手動実行はpush以外でパスの変更判定の比較元が定まらないため、判定には頼らない。
   infra:
-    needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_infra
     uses: ./.github/workflows/deploy-infra.yml
     secrets: inherit
 
   # backend/**が変更されていれば実行。infraジョブの完了を待つ(needs)。
-  # infraジョブがスキップされた(infra/**が変更されていない)場合はresultが"skipped"になるので、
-  # successかskippedのどちらかであればOKとする。infraが失敗した場合(failure)は実行しない。
+  # infraジョブはpushでは常にスキップ(手動実行でrun_infra=trueのときだけ実行)されてresultが"skipped"に
+  # なるので、successかskippedのどちらかであればOKとする。infraが失敗した場合(failure)は実行しない。
   backend:
     needs: [changes, infra]
     if: |
@@ -53,8 +65,8 @@ jobs:
     uses: ./.github/workflows/deploy-backend.yml
     secrets: inherit
 
-  # frontend/**(React)が変更されていれば実行。frontendが使うS3バケット/CloudFrontが
-  # 同じPRのinfra変更で作り直される可能性があるため、backendと同様にinfraジョブの完了を待つ
+  # frontend/**(React)が変更されていれば実行。手動実行でinfraも同時に動かす場合、frontendが使う
+  # S3バケット/CloudFrontが作り直される可能性があるため、backendと同様にinfraジョブの完了を待つ
   frontend:
     needs: [changes, infra]
     if: |

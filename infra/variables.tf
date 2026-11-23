@@ -35,3 +35,8 @@ variable "secret_key" {
   sensitive   = true
   description = "backendのSECRET_KEY"
 }
+
+variable "tfstate_bucket_name" {
+  type        = string
+  description = "tfstateを置くS3バケット名(infra/bootstrapの出力state_bucket_name)。CIロールにstateへのアクセス権を付けるために使う"
+}
