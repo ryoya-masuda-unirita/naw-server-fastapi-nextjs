@@ -137,6 +137,7 @@ class MessageRepository:
         -------
         list[tuple[Message, MessageFeedback | None]]
             (メッセージ, フィードバック) のタプル一覧。フィードバック未登録時はNone。
+            メッセージ内容の作成日時の昇順で、内容のないメッセージは末尾。同順位は`id`の昇順。
         """
         stmt = (
             select(Message, MessageFeedback)
@@ -145,7 +146,16 @@ class MessageRepository:
                 (MessageFeedback.message_id == Message.id)
                 & (MessageFeedback.tenant_id == tenant_id),
             )
+            .outerjoin(
+                MessageContent,
+                (MessageContent.message_id == Message.id)
+                & (MessageContent.tenant_id == tenant_id),
+            )
             .where(Message.tenant_id == tenant_id, Message.room_id == room_id)
+            # messagesテーブルには作成日時がないため、メッセージ内容の作成日時で並べる。
+            # 編集・再生成で分岐した版のうち「最新」を、一覧の末尾から一貫して選べるようにするため。
+            # 内容がまだないメッセージは末尾に置き、同順位はidで確定させる（移植元と同じ）。
+            .order_by(MessageContent.created_at.asc().nulls_last(), Message.id.asc())
         )
         result = await session.execute(stmt)
         return [(row[0], row[1]) for row in result.all()]
