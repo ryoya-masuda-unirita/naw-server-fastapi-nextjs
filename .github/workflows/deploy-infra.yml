@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra
+        working-directory: infra/environments/dev
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
           node-version: 24
 
       - name: CloudFront Functions Test
-        run: node --test cloudfront_functions/functions.test.mjs
+        run: node --test ../../modules/frontend/functions/functions.test.mjs
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のterraformコマンドはこの認証情報を使う
       - name: Configure AWS credentials
@@ -63,7 +63,8 @@ jobs:
         run: terraform init -backend-config="bucket=${TF_STATE_BUCKET}"
       
       - name: Terraform Format Check
-        run: terraform fmt -check -diff
+        # modules/ 配下にほとんどのHCLがあるため、-recursiveで ../.. (infra/) 全体を検査する
+        run: terraform fmt -check -diff -recursive ../..
       
       - name: Terraform Validate
         run: terraform validate
