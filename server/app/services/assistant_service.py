@@ -1,4 +1,5 @@
 import random
+from uuid import UUID
 from collections.abc import Sequence
 
 from fastapi import HTTPException, status
@@ -310,16 +311,71 @@ class AssistantService:
         list[AssistantGetResponse]
             アシスタント一覧（重複排除済み）。
         """
-        group_ids = await GroupUserRepository.find_belonging_group_ids(
+        assistant_ids = await AssistantService._find_available_assistant_ids(
             tenant_id, current_user.id, session
-        )
-        assistant_ids = await GroupAssistantRepository.find_assistant_ids_by_group_ids(
-            group_ids, tenant_id, session
         )
         assistants = await AssistantRepository.find_by_ids_and_tenant_id(
             assistant_ids, tenant_id, session
         )
         return await AssistantService._build_responses(assistants, tenant_id, session)
+
+    @staticmethod
+    async def _find_available_assistant_ids(
+        tenant_id: str, user_id: UUID, session: AsyncSession
+    ) -> list[str]:
+        """ユーザーが所属するGroupに割り当てられたアシスタントIDを取得する。
+
+        アシスタント一覧と、メッセージ作成・回答生成の利用可否の判定で、同じ条件を使うための共通処理。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            ユーザーID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[str]
+            所属Groupに割り当てられたアシスタントID（重複排除済み）。所属Groupがなければ空。
+        """
+        group_ids = await GroupUserRepository.find_belonging_group_ids(
+            tenant_id, user_id, session
+        )
+        return await GroupAssistantRepository.find_assistant_ids_by_group_ids(
+            group_ids, tenant_id, session
+        )
+
+    @staticmethod
+    async def is_available_to(
+        tenant_id: str, user_id: UUID, assistant_id: str, session: AsyncSession
+    ) -> bool:
+        """アシスタントがユーザーの所属Groupで使えるかを返す。
+
+        アシスタント一覧に出るアシスタントか、つまり所属Groupに割り当てられているかで判定する。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        user_id : UUID
+            ユーザーID。
+        assistant_id : str
+            判定するアシスタントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        bool
+            使えるときTrue。
+        """
+        assistant_ids = await AssistantService._find_available_assistant_ids(
+            tenant_id, user_id, session
+        )
+        return assistant_id in assistant_ids
 
     @staticmethod
     async def create_assistant(

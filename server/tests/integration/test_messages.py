@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
@@ -19,7 +19,12 @@ from app.core.llm_client import AzureLlmChatClient, ChatMessage, ChatStreamChunk
 from app.core.security import create_access_token
 from app.main import app
 from app.models.ai_model import AIModel, AIModelEndpointType
-from app.models.assistant import Assistant, AssistantEndpoint, AssistantType
+from app.models.assistant import (
+    Assistant,
+    AssistantEndpoint,
+    AssistantType,
+    GroupAssistant,
+)
 from app.models.group import Group, GroupUser
 from app.models.message import (
     Message,
@@ -122,20 +127,117 @@ async def other_user_same_tenant(
     return user
 
 
-@pytest.fixture
-async def message_assistant(
-    session: AsyncSession, messages_tenant: Tenant
-) -> Assistant:
-    """メッセージ送信先のアシスタント"""
-    assistant = Assistant(
-        tenant_id=messages_tenant.id,
+async def _add_group(
+    session: AsyncSession,
+    tenant: Tenant,
+    name: str,
+    users: list[User],
+    assistants: list[Assistant],
+) -> Group:
+    """グループを作り、ユーザーの所属とアシスタントの割り当てを足す"""
+    group = Group(tenant_id=tenant.id, name=name)
+    session.add(group)
+    await session.commit()
+    await session.refresh(group)
+    for user in users:
+        session.add(
+            GroupUser(
+                group_id=group.id,
+                tenant_id=tenant.id,
+                user_id=user.id,
+                is_admin=False,
+            )
+        )
+    for assistant in assistants:
+        session.add(
+            GroupAssistant(
+                group_id=group.id, tenant_id=tenant.id, assistant_id=assistant.id
+            )
+        )
+    await session.commit()
+    return group
+
+
+def _assistant(tenant: Tenant, name: str) -> Assistant:
+    """メッセージ送信先にするアシスタントを作る（まだ保存しない）"""
+    return Assistant(
+        tenant_id=tenant.id,
         type=AssistantType.SAAS_CHAT,
-        name="Message Assistant",
+        name=name,
         include_history=False,
     )
+
+
+@pytest.fixture
+async def message_assistant(
+    session: AsyncSession,
+    messages_tenant: Tenant,
+    message_owner_user: User,
+    other_user_same_tenant: User,
+) -> Assistant:
+    """メッセージ送信先のアシスタント（所有者・別ユーザーの所属チームに割り当て済み）"""
+    assistant = _assistant(messages_tenant, "Message Assistant")
     session.add(assistant)
     await session.commit()
     await session.refresh(assistant)
+    await _add_group(
+        session,
+        messages_tenant,
+        "Message Assistant Group",
+        [message_owner_user, other_user_same_tenant],
+        [assistant],
+    )
+    return assistant
+
+
+@pytest.fixture
+async def unassigned_assistant(
+    session: AsyncSession, messages_tenant: Tenant
+) -> Assistant:
+    """どのチームにも割り当てられていないアシスタント"""
+    assistant = _assistant(messages_tenant, "Unassigned Assistant")
+    session.add(assistant)
+    await session.commit()
+    await session.refresh(assistant)
+    return assistant
+
+
+@pytest.fixture
+async def other_group_assistant(
+    session: AsyncSession,
+    messages_tenant: Tenant,
+    other_user_same_tenant: User,
+) -> Assistant:
+    """所有者が所属しない別のチームにだけ割り当てられたアシスタント"""
+    assistant = _assistant(messages_tenant, "Other Group Assistant")
+    session.add(assistant)
+    await session.commit()
+    await session.refresh(assistant)
+    await _add_group(
+        session,
+        messages_tenant,
+        "Other Group",
+        [other_user_same_tenant],
+        [assistant],
+    )
+    return assistant
+
+
+@pytest.fixture
+async def multi_group_assistant(
+    session: AsyncSession, messages_tenant: Tenant, message_owner_user: User
+) -> Assistant:
+    """所有者が所属する 2 つのチームのうち、片方にだけ割り当てられたアシスタント"""
+    assistant = _assistant(messages_tenant, "Multi Group Assistant")
+    session.add(assistant)
+    await session.commit()
+    await session.refresh(assistant)
+    await _add_group(
+        session, messages_tenant, "Owner Group A", [message_owner_user], []
+    )
+    await _add_group(
+        session, messages_tenant, "Owner Group B", [message_owner_user], [assistant]
+    )
     return assistant
 
 
@@ -586,6 +688,69 @@ class TestMessageRouter:
 
             assert response.status_code == 400
 
+        async def test_create_message_with_unassigned_assistant_returns_403(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            unassigned_assistant: Assistant,
+        ) -> None:
+            """どのチームにも割り当てられていないアシスタントでは403になり、メッセージが作られないこと"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages",
+                    json={
+                        "assistantId": unassigned_assistant.id,
+                        "messageText": "こんにちは",
+                    },
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 403
+            count = await session.scalar(select(func.count()).select_from(Message))
+            assert count == 0
+
+        async def test_create_message_with_other_group_assistant_returns_403(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            other_group_assistant: Assistant,
+        ) -> None:
+            """他のチームにだけ割り当てられたアシスタントでは403になり、メッセージが作られないこと"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages",
+                    json={
+                        "assistantId": other_group_assistant.id,
+                        "messageText": "こんにちは",
+                    },
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 403
+            count = await session.scalar(select(func.count()).select_from(Message))
+            assert count == 0
+
+        async def test_create_message_with_multi_group_assistant_returns_200(
+            self,
+            client: AsyncClient,
+            owner_headers: dict[str, str],
+            multi_group_assistant: Assistant,
+        ) -> None:
+            """複数のチームに所属し、そのうち1つに割り当てられていれば作成できること"""
+            async with client as c:
+                response = await c.post(
+                    "/api/messages",
+                    json={
+                        "assistantId": multi_group_assistant.id,
+                        "messageText": "こんにちは",
+                    },
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 200
+
         async def test_create_message_with_other_users_room_returns_403(
             self,
             client: AsyncClient,
@@ -952,6 +1117,78 @@ class TestMessageRouter:
 
     class TestCreateMessageContent:
         """メッセージコンテンツ作成のテスト"""
+
+        async def test_stream_with_unassigned_assistant_returns_403_without_llm_call(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            owned_room: Room,
+            messages_tenant: Tenant,
+            unassigned_assistant: Assistant,
+        ) -> None:
+            """使えないアシスタントのメッセージでは403になり、LLMが呼ばれないこと"""
+            message = Message(
+                tenant_id=messages_tenant.id,
+                room_id=owned_room.id,
+                assistant_id=unassigned_assistant.id,
+            )
+            session.add(message)
+            await session.commit()
+            await session.refresh(message)
+
+            with patch(
+                "app.services.message_service.AzureLlmChatClient.stream_chat"
+            ) as mock_stream_chat:
+                async with client as c:
+                    response = await c.post(
+                        "/api/messages/content",
+                        files=_content_form(
+                            {"messageId": message.id, "userInput": "こんにちは"}
+                        ),
+                        headers=owner_headers,
+                    )
+
+            assert response.status_code == 403
+            mock_stream_chat.assert_not_called()
+
+        async def test_stream_with_unassigned_secure_assistant_returns_403(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            owned_room: Room,
+            messages_tenant: Tenant,
+        ) -> None:
+            """使えないSECUREアシスタントも、種類の確認より先に403になること"""
+            assistant = Assistant(
+                tenant_id=messages_tenant.id,
+                type=AssistantType.SECURE,
+                name="Secure Assistant",
+                include_history=False,
+            )
+            session.add(assistant)
+            await session.commit()
+            await session.refresh(assistant)
+            message = Message(
+                tenant_id=messages_tenant.id,
+                room_id=owned_room.id,
+                assistant_id=assistant.id,
+            )
+            session.add(message)
+            await session.commit()
+            await session.refresh(message)
+
+            async with client as c:
+                response = await c.post(
+                    "/api/messages/content",
+                    files=_content_form(
+                        {"messageId": message.id, "userInput": "こんにちは"}
+                    ),
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 403
 
         async def test_streams_sse_and_persists_message_content(
             self,

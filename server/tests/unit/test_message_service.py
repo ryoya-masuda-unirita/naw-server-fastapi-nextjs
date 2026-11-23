@@ -198,8 +198,53 @@ def _mock_new_session() -> MagicMock:
     return mock_new_session
 
 
+@pytest.fixture(autouse=True)
+def _assistant_available() -> Iterator[AsyncMock]:
+    """アシスタントは所属チームで使える前提にする（利用可否の判定は別のテストで確かめる）"""
+    with patch(
+        "app.services.message_service.AssistantService.is_available_to",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_is_available:
+        yield mock_is_available
+
+
 class TestStreamMessageContent:
     """MessageService.stream_message_content のテスト"""
+
+    @patch(
+        "app.services.message_service.AssistantRepository.find_by_id_and_tenant_id",
+        new_callable=AsyncMock,
+    )
+    @patch("app.services.message_service.require_owned_room", new_callable=AsyncMock)
+    @patch(
+        "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",
+        new_callable=AsyncMock,
+    )
+    async def test_raises_403_when_assistant_not_available(
+        self,
+        mock_find_message: MagicMock,
+        mock_require_owned_room: MagicMock,
+        mock_find_assistant: MagicMock,
+        _assistant_available: AsyncMock,
+        test_user: User,
+    ) -> None:
+        """所属チームで使えないアシスタントの場合403になり、種類の確認以降に進まないこと"""
+        mock_find_message.return_value = _message()
+        mock_find_assistant.return_value = _assistant(AssistantType.SECURE)
+        _assistant_available.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            await MessageService.stream_message_content(
+                "tenant-1",
+                test_user,
+                _request(),
+                session=None,  # type: ignore[arg-type]
+            )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Access Denied"
+        _assistant_available.assert_awaited_once()
 
     @patch(
         "app.services.message_service.MessageRepository.find_by_tenant_id_and_id",

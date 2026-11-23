@@ -82,6 +82,7 @@ from app.schemas.message import (
     ToolConfig,
 )
 from app.schemas.response_format import ResponseFormatRequest
+from app.services.assistant_service import AssistantService
 
 logger = logging.getLogger(__name__)
 
@@ -429,6 +430,41 @@ class MessageService:
         return await require_owned_room(tenant_id, current_user, req.roomId, session)
 
     @staticmethod
+    async def _require_assistant_available(
+        tenant_id: str,
+        current_user: User,
+        assistant_id: str,
+        session: AsyncSession,
+    ) -> None:
+        """アシスタントがログインユーザーの所属Groupで使えなければ403にする。
+
+        アシスタント一覧は所属Groupで絞り込むため、一覧に出ないアシスタントでの
+        メッセージ作成・回答生成を拒否して、一覧と食い違わないようにする。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        assistant_id : str
+            確認するアシスタントID（テナントに存在することは確認済み）。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Raises
+        ------
+        HTTPException
+            使えないアシスタントの場合は403。
+        """
+        if not await AssistantService.is_available_to(
+            tenant_id, current_user.id, assistant_id, session
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"
+            )
+
+    @staticmethod
     async def create_message(
         tenant_id: str,
         current_user: User,
@@ -456,8 +492,8 @@ class MessageService:
         Raises
         ------
         HTTPException
-            アシスタントIDが不正な場合は400、roomId指定時にルームが
-            存在しない場合は404、所有者でない場合は403。
+            アシスタントIDが不正な場合は400、所属Groupで使えないアシスタントの場合は403、
+            roomId指定時にルームが存在しない場合は404、所有者でない場合は403。
         """
         assistant = await AssistantRepository.find_by_id_and_tenant_id(
             req.assistantId, tenant_id, session
@@ -466,6 +502,9 @@ class MessageService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid assistant id"
             )
+        await MessageService._require_assistant_available(
+            tenant_id, current_user, assistant.id, session
+        )
 
         room = await MessageService._resolve_room(tenant_id, current_user, req, session)
 
@@ -920,6 +959,9 @@ class MessageService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid assistant"
             )
+        await MessageService._require_assistant_available(
+            tenant_id, current_user, assistant.id, session
+        )
         if assistant.type == AssistantType.SECURE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
