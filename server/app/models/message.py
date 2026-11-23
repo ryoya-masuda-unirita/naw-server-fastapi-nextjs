@@ -77,6 +77,8 @@ class MessageContent(SQLModel, table=True):
     """メッセージの回答本文（質問再生成・回答再生成のたびに更新される）。"""
 
     __tablename__ = "message_contents"
+    # 外部キー（CASCADE）・結合・IN の絞り込みで使う。マイグレーション issue433 と同じ名前・列
+    __table_args__ = (sa.Index("message_contents_message_id_idx", "message_id"),)
 
     id: str = Field(
         max_length=32, primary_key=True, default_factory=lambda: uuid.uuid4().hex
