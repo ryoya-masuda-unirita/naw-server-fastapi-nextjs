@@ -3,6 +3,7 @@ import inspect
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
@@ -342,6 +343,57 @@ async def other_users_message_content(
     await session.commit()
     await session.refresh(content)
     return content
+
+
+BASE_CREATED_AT = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+async def _add_message_with_contents(
+    session: AsyncSession,
+    tenant: Tenant,
+    room: Room,
+    assistant: Assistant,
+    message_id: str,
+    content_offsets: list[int],
+) -> None:
+    """並び順のテスト用に、指定IDのメッセージと、作成日時を指定した内容を追加する。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        テスト用のDBセッション。
+    tenant : Tenant
+        所属テナント。
+    room : Room
+        メッセージを置くルーム。
+    assistant : Assistant
+        メッセージに紐づけるアシスタント。
+    message_id : str
+        メッセージID（並び順の同順位の判定を確かめるため、呼び出し側が決める）。
+    content_offsets : list[int]
+        内容の作成日時の基準時刻からの秒数。空なら、内容のないメッセージになる。
+    """
+    session.add(
+        Message(
+            id=message_id,
+            tenant_id=tenant.id,
+            room_id=room.id,
+            assistant_id=assistant.id,
+        )
+    )
+    await session.flush()
+    for offset in content_offsets:
+        session.add(
+            MessageContent(
+                tenant_id=tenant.id,
+                message_id=message_id,
+                status=MessageContentStatus.OK,
+                question="質問",
+                answer="回答",
+                created_at=BASE_CREATED_AT + timedelta(seconds=offset),
+            )
+        )
+    await session.commit()
 
 
 def _headers(login_id: str, tenant_id: str) -> dict[str, str]:
@@ -809,6 +861,159 @@ class TestMessageRouter:
                 )
 
             assert response.status_code == 404
+
+        async def test_messages_are_ordered_by_content_created_at_ascending(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            messages_tenant: Tenant,
+            owned_room: Room,
+            message_assistant: Assistant,
+        ) -> None:
+            """メッセージ一覧が、内容の作成日時の古い順で返ること（挿入順・ID順ではない）"""
+            # 挿入順は a, b, c。内容の作成日時の古い順は b(10秒), c(20秒), a(30秒)
+            for message_id, offset in (("msg-a", 30), ("msg-b", 10), ("msg-c", 20)):
+                await _add_message_with_contents(
+                    session,
+                    messages_tenant,
+                    owned_room,
+                    message_assistant,
+                    message_id,
+                    [offset],
+                )
+
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 200
+            assert [m["id"] for m in response.json()["messages"]] == [
+                "msg-b",
+                "msg-c",
+                "msg-a",
+            ]
+
+        async def test_message_without_content_is_returned_last(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            messages_tenant: Tenant,
+            owned_room: Room,
+            message_assistant: Assistant,
+        ) -> None:
+            """内容のないメッセージが、IDが小さくても末尾に返ること"""
+            await _add_message_with_contents(
+                session, messages_tenant, owned_room, message_assistant, "msg-0", []
+            )
+            await _add_message_with_contents(
+                session, messages_tenant, owned_room, message_assistant, "msg-1", [20]
+            )
+            await _add_message_with_contents(
+                session, messages_tenant, owned_room, message_assistant, "msg-2", [10]
+            )
+
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert [m["id"] for m in response.json()["messages"]] == [
+                "msg-2",
+                "msg-1",
+                "msg-0",
+            ]
+
+        async def test_messages_with_same_content_created_at_are_ordered_by_id(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            messages_tenant: Tenant,
+            owned_room: Room,
+            message_assistant: Assistant,
+        ) -> None:
+            """内容の作成日時が同じメッセージが、IDの昇順で返ること（毎回同じ順序）"""
+            # 挿入順は逆（z, m, a）。作成日時は全て同じ。内容のないメッセージ(n1, n0)も同順位
+            for message_id in ("msg-z", "msg-m", "msg-a"):
+                await _add_message_with_contents(
+                    session,
+                    messages_tenant,
+                    owned_room,
+                    message_assistant,
+                    message_id,
+                    [10],
+                )
+            for message_id in ("msg-n1", "msg-n0"):
+                await _add_message_with_contents(
+                    session,
+                    messages_tenant,
+                    owned_room,
+                    message_assistant,
+                    message_id,
+                    [],
+                )
+
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert [m["id"] for m in response.json()["messages"]] == [
+                "msg-a",
+                "msg-m",
+                "msg-z",
+                "msg-n0",
+                "msg-n1",
+            ]
+
+        async def test_message_with_multiple_contents_appears_once(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            owner_headers: dict[str, str],
+            messages_tenant: Tenant,
+            owned_room: Room,
+            message_assistant: Assistant,
+        ) -> None:
+            """内容が複数あるメッセージが、1回だけ返り、最も古い内容の作成日時で並ぶこと"""
+            # 挿入順は single → multi。msg-multi は内容が 2 つ（5秒と50秒）で、最も古い 5 秒で並ぶので、msg-single(20秒) より先
+            await _add_message_with_contents(
+                session,
+                messages_tenant,
+                owned_room,
+                message_assistant,
+                "msg-single",
+                [20],
+            )
+
+            await _add_message_with_contents(
+                session,
+                messages_tenant,
+                owned_room,
+                message_assistant,
+                "msg-multi",
+                [50, 5],
+            )
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert [m["id"] for m in response.json()["messages"]] == [
+                "msg-multi",
+                "msg-single",
+            ]
 
     class TestGetMessageContents:
         """メッセージコンテンツ取得のテスト"""
