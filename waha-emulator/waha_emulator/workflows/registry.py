@@ -15,6 +15,9 @@ SYNC_PARAMS = frozenset({"start", "end"})
 # ひな形の接尾辞は保存先のテーブル名（SQL）になるため、安全な文字だけにする。
 # 大文字は、引用符なしのテーブル名が小文字になり、`HR` と `hr` が同じ保存先になるため認めない
 TEMPLATE_NAME_PATTERN = re.compile(r"^[a-z0-9_]{1,40}$")
+# ひな形から作ったワークフローを覚えておく数の上限。接尾辞を変えながら呼ばれても、
+# 作ったワークフローが増え続けないようにする（超えたら古いものから捨てる）
+MAX_TEMPLATE_WORKFLOWS = 256
 
 
 class WorkflowRegistry:
@@ -39,6 +42,7 @@ class WorkflowRegistry:
         self._default = default
         self._by_service_id: dict[str, Workflow] = dict(by_service_id or {})
         self._templates: dict[str, Callable[[str], Workflow]] = {}
+        self._template_workflows: dict[str, Workflow] = {}
 
     def register(self, service_id: str, workflow: Workflow) -> None:
         """サービス ID にワークフローを登録する。
@@ -70,7 +74,7 @@ class WorkflowRegistry:
         """ひな形に当てはまるサービス ID なら、接尾辞を入れたワークフローを返す。
 
         前の部分が重なるひな形は、長いほうを使う。作ったワークフローは、
-        サービス ID に結びつけて使い回す。
+        サービス ID に結びつけて使い回す（覚えておく数には上限がある）。
 
         Parameters
         ----------
@@ -87,6 +91,9 @@ class WorkflowRegistry:
         EmulatorError
             接尾辞が不正なとき（400）。保存先は作らない。
         """
+        cached = self._template_workflows.get(service_id)
+        if cached is not None:
+            return cached
         matched = [
             prefix
             for prefix in self._templates
@@ -102,7 +109,9 @@ class WorkflowRegistry:
                 "サービス ID の接尾辞が不正です（英小文字・数字・_ の 1〜40 文字）",
             )
         workflow = self._templates[prefix](name)
-        self._by_service_id[service_id] = workflow
+        if len(self._template_workflows) >= MAX_TEMPLATE_WORKFLOWS:
+            self._template_workflows.pop(next(iter(self._template_workflows)))
+        self._template_workflows[service_id] = workflow
         return workflow
 
     def resolve(self, service_id: str, params: Mapping[str, str]) -> Workflow:

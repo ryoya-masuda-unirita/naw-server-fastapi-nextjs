@@ -618,6 +618,22 @@ def _definition(raw: Any, environ: Mapping[str, str], where: str) -> WorkflowDef
     return WorkflowDefinition(output_type, properties, rag_context_json, retrieval)
 
 
+def _is_template_key(key: str) -> bool:
+    """`services` のキーが、`*` を末尾に 1 つだけ持つひな形のキーかを返す。
+
+    Parameters
+    ----------
+    key : str
+        `services` のキー。
+
+    Returns
+    -------
+    bool
+        `*` が末尾に 1 つだけあるとき True。
+    """
+    return key.endswith(TEMPLATE_WILDCARD) and key.count(TEMPLATE_WILDCARD) == 1
+
+
 def _contains_placeholder(value: Any) -> bool:
     """値（辞書・配列の中を含む）の文字列に `{name}` が 1 つでもあるかを返す。
 
@@ -690,8 +706,6 @@ def _template(raw: Any, environ: Mapping[str, str], key: str) -> WorkflowTemplat
     prefix = key[: -len(TEMPLATE_WILDCARD)]
     if not prefix:
         raise WorkflowConfigError(f"{where}: * の前の部分を書いてください")
-    if TEMPLATE_WILDCARD in prefix:
-        raise WorkflowConfigError(f"{where}: * はキーの末尾に 1 つだけ書けます")
     if not _contains_placeholder(raw):
         raise WorkflowConfigError(
             f"{where}: {NAME_PLACEHOLDER} がありません。接尾辞を入れる場所"
@@ -746,23 +760,21 @@ def parse_workflow_config(
             "default は adapter が generative-ai の定義にしてください"
         )
     for service_id in services:
-        # * が末尾以外にあるキーを普通のサービス ID として通すと、ひな形のつもりで
+        # * が末尾の 1 つ以外にあるキーを普通のサービス ID として通すと、ひな形のつもりで
         # 書いた設定が、気づかれないまま効かなくなる
-        if TEMPLATE_WILDCARD in service_id.rstrip(TEMPLATE_WILDCARD) or (
-            service_id.endswith(TEMPLATE_WILDCARD * 2)
-        ):
+        if TEMPLATE_WILDCARD in service_id and not _is_template_key(service_id):
             raise WorkflowConfigError(
                 f"services.{service_id}: * はキーの末尾に 1 つだけ書けます"
             )
     explicit = {
         service_id: raw
         for service_id, raw in services.items()
-        if not service_id.endswith(TEMPLATE_WILDCARD)
+        if not _is_template_key(service_id)
     }
     templates = tuple(
         _template(raw, env, service_id)
         for service_id, raw in services.items()
-        if service_id.endswith(TEMPLATE_WILDCARD)
+        if _is_template_key(service_id)
     )
     return WorkflowConfig(
         default,

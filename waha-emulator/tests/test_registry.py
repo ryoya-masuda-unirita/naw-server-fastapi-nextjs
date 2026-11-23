@@ -6,7 +6,7 @@ import pytest
 from waha_emulator.errors import EmulatorError
 from waha_emulator.workflows import unsupported
 from waha_emulator.workflows.base import WorkflowRequest
-from waha_emulator.workflows.registry import WorkflowRegistry
+from waha_emulator.workflows.registry import MAX_TEMPLATE_WORKFLOWS, WorkflowRegistry
 
 
 class _NamedWorkflow:
@@ -211,3 +211,15 @@ def test_valid_suffix_boundary_is_accepted() -> None:
     long = "a_1" * 13 + "z"
     assert len(long) == 40
     assert registry.resolve(f"kb-learn-{long}", {}).name == f"learn:{long}"  # type: ignore[attr-defined]
+
+
+def test_template_workflow_cache_is_bounded() -> None:
+    """接尾辞を変えながら呼ばれても、覚えておくワークフローが上限を超えて増えないこと"""
+    registry = WorkflowRegistry(default=DEFAULT)
+    registry.register_template("kb-learn-", _factory("learn"))
+
+    for index in range(MAX_TEMPLATE_WORKFLOWS + 50):
+        registry.resolve(f"kb-learn-n{index}", {})
+
+    assert len(registry._template_workflows) == MAX_TEMPLATE_WORKFLOWS
+    assert registry.resolve("kb-learn-n0", {}).name == "learn:n0"  # type: ignore[attr-defined]
