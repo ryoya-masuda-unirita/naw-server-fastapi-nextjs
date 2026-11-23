@@ -12,7 +12,6 @@ export const INITIAL_TRAINING_DATA_FILTER: TrainingDataFilter = {
 /** 移植元 `DEFAULT_TRAINING_DATA_FILE_FILTER`（1ページ10件・更新日時の降順） */
 export const INITIAL_TRAINING_DATA_FILE_FILTER: TrainingDataFileFilter = {
   query: '',
-  userId: '',
   selectedPeriod: null,
   filterPeriodRange: null,
   pageSize: 10,

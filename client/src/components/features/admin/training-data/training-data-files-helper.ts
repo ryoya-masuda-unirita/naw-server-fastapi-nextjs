@@ -1,10 +1,10 @@
 import { resolvePeriodRange, toDateTimeRange } from '@/components/shared/period-filter-utils';
-import type { SelectOption } from '@/components/shared/types';
-import type { UserApiItem } from '@/types/admin/user.types';
 import type {
   TrainingDataFile,
   TrainingDataFileFilter,
+  TrainingDataFileRow,
   TrainingDataFileSortField,
+  TrainingDataFileUpdater,
 } from '@/types/training-data.types';
 
 // 移植元 training-data/utils/training-data-files.helper.ts
@@ -16,7 +16,6 @@ const DEFAULT_SORT_ORDER = 'desc';
 export interface TrainingDataFileListApiParams {
   page: number;
   size: number;
-  userId?: string;
   updatedAtFrom?: string;
   updatedAtTo?: string;
   displayName?: string;
@@ -35,18 +34,11 @@ export function mapFileSortFieldToApi(field: TrainingDataFileSortField): string 
 /** 画面の絞り込み条件を、ファイル一覧 API のクエリにする */
 export function toFileListApiParams(
   filter: TrainingDataFileFilter,
-  currentUserId?: string,
 ): TrainingDataFileListApiParams {
   const dateRange = toDateTimeRange(
     resolvePeriodRange(filter.selectedPeriod ?? '', filter.filterPeriodRange ?? null),
   );
   const query = filter.query?.trim();
-  let userId: string | undefined;
-
-  if (filter.userId && filter.userId !== '') {
-    userId = filter.userId === 'me' ? currentUserId : filter.userId;
-  }
-
   const sort = filter.sortField
     ? `${mapFileSortFieldToApi(filter.sortField)},${filter.sortOrder || DEFAULT_SORT_ORDER}`
     : undefined;
@@ -54,7 +46,6 @@ export function toFileListApiParams(
   return {
     page: Math.max(0, filter.pageIndex - 1),
     size: filter.pageSize,
-    userId,
     updatedAtFrom: dateRange.from,
     updatedAtTo: dateRange.to,
     displayName: query || undefined,
@@ -63,44 +54,18 @@ export function toFileListApiParams(
   };
 }
 
-/** 更新者の絞り込みの選択肢（全員・自分だけ・各ユーザー） */
-export function buildFileUserFilterOptions(
-  users: UserApiItem[],
-  translate: (key: string) => string,
-): SelectOption[] {
-  return [
-    { value: '', label: translate('LEARNING_DATA.ALL_USERS') },
-    { value: 'me', label: translate('CHAT_HISTORY.ONLY_ME') },
-    ...users.map((user) => ({ value: user.id, label: user.displayName })),
-  ];
-}
-
-/** 更新者の欄を、ユーザー ID からユーザーの表示名に置き換える。見つからなければそのまま */
-export function resolveFileUpdatedByNames(
-  files: TrainingDataFile[],
-  users: UserApiItem[],
-): TrainingDataFile[] {
-  const nameById = new Map(users.map((user) => [user.id, user.displayName]));
-
-  return files.map((file) => {
-    const lookupKey = file.userId ?? file.updatedBy;
-    const displayName = lookupKey ? nameById.get(lookupKey) : undefined;
-    return displayName ? { ...file, updatedBy: displayName } : file;
-  });
+function resolveFileUpdater(file: TrainingDataFile): TrainingDataFileUpdater {
+  if (!file.userId) return { kind: 'UNKNOWN' };
+  return file.updatedBy ? { kind: 'USER', name: file.updatedBy } : { kind: 'DELETED' };
 }
 
 /**
- * ローカルの学習先フォルダの更新者の欄を、ログイン ID からユーザーの表示名に置き換える。見つからなければそのまま。
- * ローカル用サーバーは更新者名を持たず、ファイルの `userId` にはログイン ID が入っている。
+ * 一覧の更新者の欄を決める（移植元 `resolveFileUpdaters`）。
+ * 名前があれば名前、更新者の ID はあるが名前が無ければ「削除されたユーザー」、ID が無ければ「Unknown」。
+ * 名前（`updatedBy`）は、クラウドは API が返し、ローカルは一覧を取るときにログイン ID から引く。
  */
-export function resolveLocalFileUpdatedByNames(
-  files: TrainingDataFile[],
-  nameByLoginId: ReadonlyMap<string, string>,
-): TrainingDataFile[] {
-  return files.map((file) => {
-    const displayName = file.userId ? nameByLoginId.get(file.userId) : undefined;
-    return displayName ? { ...file, updatedBy: displayName } : file;
-  });
+export function resolveFileUpdaters(files: TrainingDataFile[]): TrainingDataFileRow[] {
+  return files.map((file) => ({ ...file, updater: resolveFileUpdater(file) }));
 }
 
 /** ダウンロードの開始を待ってから URL を失効させるまでの時間 */

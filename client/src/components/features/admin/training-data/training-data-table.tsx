@@ -4,14 +4,18 @@ import { IconButton } from '@/components/shared/icon-button';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import { Pagination } from '@/components/shared/pagination';
 import { TableList, TableListItem } from '@/components/shared/table-list';
-import type { TrainingDataFile } from '@/types/training-data.types';
+import type {
+  TrainingDataFile,
+  TrainingDataFileRow,
+  TrainingDataFileUpdater,
+} from '@/types/training-data.types';
 import { formatDateTimeMinutes } from './training-data-files-helper';
 
 /** 名前変更の入力中の値（ファイル ID ごと） */
 export type EditingNames = Record<string, { displayName: string; reference: string }>;
 
 interface TrainingDataTableProps {
-  files: TrainingDataFile[];
+  files: TrainingDataFileRow[];
   selectedFiles: TrainingDataFile[];
   isRenamingMode: boolean;
   editingNames: EditingNames;
@@ -45,6 +49,16 @@ export function TrainingDataTable({
   onPageChange,
 }: TrainingDataTableProps) {
   const { t } = useTranslation();
+
+  // 名前を引けないときは、ユーザーの ID を出さずに理由で出し分ける
+  const updaterLabel = (updater: TrainingDataFileUpdater): string => {
+    if (updater.kind === 'USER') return updater.name;
+    return t(
+      updater.kind === 'DELETED'
+        ? 'LEARNING_DATA.UPDATED_BY_DELETED'
+        : 'LEARNING_DATA.UPDATED_BY_UNKNOWN',
+    );
+  };
 
   const allSelected = files.length > 0 && selectedFiles.length === files.length;
   const someSelected = selectedFiles.length > 0 && !allSelected;
@@ -237,8 +251,11 @@ export function TrainingDataTable({
                 <span className="table-list-label md:hidden w-30 md:w-auto">
                   {t('LEARNING_DATA.COLUMN_UPDATED_BY')}
                 </span>
-                <span className="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
-                  {row.updatedBy}
+                <span
+                  className="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium"
+                  data-testid="training-data-file-updated-by"
+                >
+                  {updaterLabel(row.updater)}
                 </span>
               </div>
             </TableListItem>

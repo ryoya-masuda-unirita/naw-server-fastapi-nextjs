@@ -67,7 +67,7 @@ const FIXTURE_FILES = [
     roomId: null,
     createdAt: '2026-11-01T09:00:00',
     updatedAt: '2026-11-01T09:05:00',
-    updatedBy: 'u1',
+    updatedBy: '山田太郎',
   },
   {
     id: 'f2',
@@ -83,7 +83,7 @@ const FIXTURE_FILES = [
     roomId: null,
     createdAt: '2026-11-02T09:00:00',
     updatedAt: '2026-11-02T09:05:00',
-    updatedBy: 'u2',
+    updatedBy: '鈴木花子',
   },
 ];
 
@@ -113,7 +113,8 @@ interface RequestLog {
 
 interface MockOptions {
   index?: IndexFixture;
-  files?: typeof FIXTURE_FILES;
+  /** backend は更新者名を持たないファイルでは `updatedBy` を返さない（null） */
+  files?: (Omit<(typeof FIXTURE_FILES)[number], 'updatedBy'> & { updatedBy: string | null })[];
   detailFails?: boolean;
 }
 
@@ -259,7 +260,7 @@ describe('TrainingDataDetailPage', () => {
       expect(screen.getByTestId('training-data-detail-title')).toHaveTextContent('製品マニュアル');
       const rows = screen.getAllByTestId('training-data-file-row');
       expect(rows).toHaveLength(2);
-      // 表示名の無いファイルはファイル名を表示名にし、更新者はユーザーの表示名にする
+      // 表示名の無いファイルはファイル名を表示名にし、更新者は API が返す名前にする
       expect(within(rows[0]).getByText('manual-link')).toBeInTheDocument();
       expect(within(rows[0]).getByText('山田太郎')).toBeInTheDocument();
       // 学習設定（ON / OFF）の列は出さない（NAW-1405）
@@ -611,6 +612,50 @@ describe('TrainingDataDetailPage', () => {
     });
   });
 
+  describe('更新者の欄', () => {
+    test('クラウドは API の更新者名を出し、テナントの全ユーザーを取らないこと', async () => {
+      let userListRequests = 0;
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), () => {
+          userListRequests += 1;
+          return HttpResponse.json({ content: [], totalElements: 0, totalPages: 1, page: 0, size: 10 });
+        }),
+      );
+      mockApis();
+      await renderPage();
+
+      const rows = screen.getAllByTestId('training-data-file-row');
+      expect(within(rows[1]).getByTestId('training-data-file-updated-by')).toHaveTextContent('鈴木花子');
+      expect(userListRequests).toBe(0);
+    });
+
+    test('名前が無いときは ID を出さず、削除されたユーザーと Unknown を出し分けること', async () => {
+      const files = [
+        { ...FIXTURE_FILES[0], updatedBy: null },
+        { ...FIXTURE_FILES[1], updatedBy: null },
+      ];
+      mockApis({ files });
+      await renderPage();
+
+      const updaters = screen
+        .getAllByTestId('training-data-file-updated-by')
+        .map((cell) => cell.textContent);
+      expect(updaters).toEqual([
+        'LEARNING_DATA.UPDATED_BY_DELETED',
+        'LEARNING_DATA.UPDATED_BY_DELETED',
+      ]);
+      expect(screen.queryByText('u1')).not.toBeInTheDocument();
+      expect(screen.queryByText('u2')).not.toBeInTheDocument();
+    });
+
+    test('更新者を絞り込む選択肢が出ないこと', async () => {
+      mockApis();
+      await renderPage();
+
+      expect(document.querySelector('[data-testid^="training-data-file-user"]')).toBeNull();
+    });
+  });
+
   describe('ローカルのフォルダ', () => {
     test('一覧はクラウドではなくローカル用サーバーから、API キーを付けて取ること', async () => {
       const log = mockApis({ index: FIXTURE_LOCAL_INDEX });
@@ -669,6 +714,81 @@ describe('TrainingDataDetailPage', () => {
 
       await waitFor(() => expect(screen.getAllByText('山田太郎').length).toBeGreaterThan(0));
       expect(loginIdQueries).toContainEqual(['yamada']);
+    });
+
+    test('ログイン ID でユーザーを引けないときは、ID を出さず削除されたユーザーと出すこと', async () => {
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), () =>
+          HttpResponse.json({ content: [], totalElements: 0, totalPages: 1, page: 0, size: 10 }),
+        ),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'retired', updatedBy: 'retired' })),
+      });
+      await renderPage();
+
+      await waitFor(() =>
+        expect(screen.getAllByTestId('training-data-file-updated-by')[0]).toHaveTextContent(
+          'LEARNING_DATA.UPDATED_BY_DELETED',
+        ),
+      );
+      expect(screen.queryByText('retired')).not.toBeInTheDocument();
+    });
+
+    test('名前を引く前の行を出さず、実在のユーザーが削除されたユーザーと出る瞬間が無いこと', async () => {
+      let releaseUsers: () => void = () => undefined;
+      const usersGate = new Promise<void>((resolve) => {
+        releaseUsers = resolve;
+      });
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), async () => {
+          await usersGate;
+          return HttpResponse.json({
+            content: [
+              { id: 'uuid-1', loginId: 'yamada', name: '山田太郎', role: 'USER', loginKey: null, isRequiredPasswordReset: false, totalCredits: 0 },
+            ],
+            totalElements: 1,
+            totalPages: 1,
+            page: 0,
+            size: 10,
+          });
+        }),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'yamada', updatedBy: 'yamada' })),
+      });
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp(`/admin/training-data/${INDEX_ID}`);
+
+      // ユーザーの応答が返るまで、一覧の行も「削除されたユーザー」も出さない
+      await waitFor(() => expect(document.querySelector('[data-testid="training-data-detail-title"]')).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(screen.queryAllByTestId('training-data-file-updated-by')).toHaveLength(0);
+      expect(screen.queryByText('LEARNING_DATA.UPDATED_BY_DELETED')).not.toBeInTheDocument();
+
+      releaseUsers();
+      await waitFor(() => expect(screen.getAllByText('山田太郎').length).toBeGreaterThan(0));
+    });
+
+    test('名前を引けなかったときは、全行を削除されたユーザーと出さず、一覧の取得の失敗として扱うこと', async () => {
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), () =>
+          HttpResponse.json({ message: 'ng' }, { status: 500 }),
+        ),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'yamada', updatedBy: 'yamada' })),
+      });
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp(`/admin/training-data/${INDEX_ID}`);
+
+      await waitFor(() => expect(screen.queryByTestId('training-data-detail-title')).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(screen.queryAllByTestId('training-data-file-updated-by')).toHaveLength(0);
+      expect(screen.queryByText('LEARNING_DATA.UPDATED_BY_DELETED')).not.toBeInTheDocument();
     });
 
     test('接続先が登録されていないときは、どこにも送らずエラーを表示すること', async () => {

@@ -50,10 +50,9 @@ export interface TrainingDataFilePeriodRange {
   to: string;
 }
 
-/** File list filter state (store single source). `userId`: `''` | `'me'` | UUID. */
+/** File list filter state (store single source). */
 export interface TrainingDataFileFilter {
   query?: string;
-  userId?: string;
   selectedPeriod?: string | null;
   filterPeriodRange?: TrainingDataFilePeriodRange | null;
   pageSize: number;
@@ -82,6 +81,20 @@ export interface TrainingDataFile {
   status: 'ENABLE' | 'DISABLE' | 'DELETED';
   chunkSize?: string;
   image?: string;
+}
+
+/**
+ * 一覧の「更新者」の欄に出すもの。名前を引けないときは、ユーザーの ID を出さずに理由で出し分ける
+ * （移植元 `TrainingDataFileUpdater`。SYSTEM ユーザーは更新者にならないため、種類に含めない）。
+ */
+export type TrainingDataFileUpdater =
+  | { kind: 'USER'; name: string }
+  | { kind: 'DELETED' }
+  | { kind: 'UNKNOWN' };
+
+/** 一覧に出す学習データ。更新者の欄は、フォルダの種類に応じて決める */
+export interface TrainingDataFileRow extends TrainingDataFile {
+  updater: TrainingDataFileUpdater;
 }
 
 export interface TrainingDataFileApiResponse {

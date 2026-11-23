@@ -1,19 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import type { UserApiItem } from '@/types/admin/user.types';
 import type { TrainingDataFile, TrainingDataFileFilter } from '@/types/training-data.types';
 import { fileRowToTrainingDataFile } from './training-data-api-normalize';
 import { fromSplitLength, toSplitLength } from './training-data-chunk-size';
 import {
-  buildFileUserFilterOptions,
   formatDateTimeMinutes,
-  resolveFileUpdatedByNames,
-  resolveLocalFileUpdatedByNames,
+  resolveFileUpdaters,
   toFileListApiParams,
 } from './training-data-files-helper';
 
 const FIXTURE_FILTER: TrainingDataFileFilter = {
   query: '',
-  userId: '',
   selectedPeriod: null,
   filterPeriodRange: null,
   pageSize: 10,
@@ -22,13 +18,11 @@ const FIXTURE_FILTER: TrainingDataFileFilter = {
   sortOrder: 'desc',
 };
 
-const FIXTURE_USER = { id: 'u1', displayName: '山田太郎' } as UserApiItem;
-
 const FIXTURE_FILE: TrainingDataFile = {
   id: 'f1',
   displayName: '資料',
   updatedAt: '2026-11-01T09:00:00',
-  updatedBy: 'u1',
+  updatedBy: '山田太郎',
   userId: 'u1',
   status: 'ENABLE',
 };
@@ -65,39 +59,23 @@ describe('toFileListApiParams', () => {
     expect(params.fileName).toBe('規程');
   });
 
-  test('自分だけの絞り込みが現在のユーザー ID になること', () => {
-    expect(toFileListApiParams({ ...FIXTURE_FILTER, userId: 'me' }, 'self').userId).toBe('self');
-    expect(toFileListApiParams({ ...FIXTURE_FILTER, userId: 'u9' }, 'self').userId).toBe('u9');
-    expect(toFileListApiParams(FIXTURE_FILTER, 'self').userId).toBeUndefined();
+  test('does not send a user condition', () => {
+    /** 更新者の絞り込みは画面から外した（NAW-1424）。API にも更新者の条件を送らない */
+    expect(toFileListApiParams(FIXTURE_FILTER)).not.toHaveProperty('userId');
   });
 
   test('更新者名順は userId で並べ、方向が空なら降順になること', () => {
-    const params = toFileListApiParams({ ...FIXTURE_FILTER, sortField: 'updatedBy', sortOrder: '' });
+    const params = toFileListApiParams({
+      ...FIXTURE_FILTER,
+      sortField: 'updatedBy',
+      sortOrder: '',
+    });
 
     expect(params.sort).toBe('userId,desc');
   });
 
   test('ページは 0 始まりで送ること', () => {
     expect(toFileListApiParams({ ...FIXTURE_FILTER, pageIndex: 3 }).page).toBe(2);
-  });
-});
-
-describe('resolveFileUpdatedByNames', () => {
-  test('ユーザー ID を表示名に置き換え、見つからなければそのままにすること', () => {
-    const files = [FIXTURE_FILE, { ...FIXTURE_FILE, id: 'f2', userId: 'zzz', updatedBy: 'zzz' }];
-
-    const resolved = resolveFileUpdatedByNames(files, [FIXTURE_USER]);
-
-    expect(resolved[0].updatedBy).toBe('山田太郎');
-    expect(resolved[1].updatedBy).toBe('zzz');
-  });
-});
-
-describe('buildFileUserFilterOptions', () => {
-  test('全員・自分だけ・各ユーザーの順に並ぶこと', () => {
-    const options = buildFileUserFilterOptions([FIXTURE_USER], (key) => key);
-
-    expect(options.map((option) => option.value)).toEqual(['', 'me', 'u1']);
   });
 });
 
@@ -124,8 +102,9 @@ describe('fileRowToTrainingDataFile', () => {
     expect(fileRowToTrainingDataFile(ROW).displayName).toBe('manual.pdf');
   });
 
-  test('更新者が無いときはユーザー ID を更新者にすること', () => {
-    expect(fileRowToTrainingDataFile(ROW).updatedBy).toBe('u1');
+  test('keeps the updater name empty when the api has none', () => {
+    /** 名前が無いときにユーザーの ID を更新者名にしない（一覧は「削除されたユーザー」と出す） */
+    expect(fileRowToTrainingDataFile(ROW).updatedBy).toBe('');
   });
 
   test('未知の状態は DISABLE として扱うこと', () => {
@@ -133,27 +112,26 @@ describe('fileRowToTrainingDataFile', () => {
   });
 });
 
-describe('resolveLocalFileUpdatedByNames', () => {
-  const FILE = { id: 'f1', displayName: 'a', updatedBy: 'yamada', userId: 'yamada' } as TrainingDataFile;
-
-  test('replaces the login id with the display name of the user', () => {
-    /** ローカルのファイルの更新者はログイン ID。ユーザーが見つかれば表示名にする */
-    const resolved = resolveLocalFileUpdatedByNames([FILE], new Map([['yamada', '山田太郎']]));
-
-    expect(resolved[0].updatedBy).toBe('山田太郎');
+describe('resolveFileUpdaters', () => {
+  test('uses the updater name of the file', () => {
+    /** 更新者の名前（クラウドは API が返す名前、ローカルは一覧を取るときに引いた名前）をそのまま出す */
+    expect(resolveFileUpdaters([FIXTURE_FILE])[0].updater).toEqual({
+      kind: 'USER',
+      name: '山田太郎',
+    });
   });
 
-  test('keeps the login id when the user is not found', () => {
-    /** 削除されたユーザーなど見つからないときは、ログイン ID のまま出す */
-    const resolved = resolveLocalFileUpdatedByNames([FILE], new Map());
+  test('shows a deleted user when the id is there but the name is not', () => {
+    /** 更新者の ID はあるが名前が無い（削除されたユーザーなど）ときは、ID を出さず「削除されたユーザー」にする */
+    const file = { ...FIXTURE_FILE, updatedBy: '' };
 
-    expect(resolved[0].updatedBy).toBe('yamada');
+    expect(resolveFileUpdaters([file])[0].updater).toEqual({ kind: 'DELETED' });
   });
 
-  test('keeps the row as it is when it has no user id', () => {
-    /** 更新者の ID が無い行は、そのまま返す */
-    const row = { ...FILE, userId: undefined } as TrainingDataFile;
+  test('shows unknown for a file without an updater id', () => {
+    /** 更新者の ID が無いときは「Unknown」にする。名前があっても ID が無ければ Unknown */
+    const file = { ...FIXTURE_FILE, userId: undefined };
 
-    expect(resolveLocalFileUpdatedByNames([row], new Map([['yamada', '山田太郎']]))[0]).toBe(row);
+    expect(resolveFileUpdaters([file])[0].updater).toEqual({ kind: 'UNKNOWN' });
   });
 });
