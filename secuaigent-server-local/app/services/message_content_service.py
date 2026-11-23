@@ -145,7 +145,7 @@ async def post_message_content(
         await waha.execute(session_id, command.assistant_id or "")
         await waha.get_results(session_id)
         response = await waha.download_file(session_id, SLOT_OUTPUT)
-        answer = RetrievalAnswer.model_validate_json(response)
+        answer = RetrievalAnswer.from_output_file(response)
         answer_text = answer.answer
         if answer.references:
             context = answer.context_text()

@@ -522,7 +522,8 @@ class MessageContentStreamService:
         """Waha! のセッションに、生成に使う入力ファイルをアップロードする。
 
         ストリームファイルのパスなどを入れた textData.json と、質問・会話履歴・
-        添付ファイルを送る。ログに出す textData.json はアクセストークンを伏せる。
+        添付ファイルを送る。ログには、これらの本文・アクセストークンの値を出さない
+        （件数・ID・ツール名・トークンの有無だけを出す）。
 
         Parameters
         ----------
@@ -547,11 +548,11 @@ class MessageContentStreamService:
             "hasAccessToken=%s",
             runtime.session.message_content_id,
             runtime.waha_session_id,
-            text_data["streamfilepath"],
-            text_data["createLibrary"],
-            [t["name"] for t in text_data.get("tools", [])],
-            text_data.get("messageId"),
-            bool(text_data.get("accessToken")),
+            stream_file_path,
+            runtime.command.create_library,
+            [t.name for t in runtime.command.tools],
+            runtime.session.message_id,
+            bool(runtime.command.access_token),
         )
         await self._waha.upload_file(
             filename=TEXT_DATA_FILENAME,
@@ -847,7 +848,7 @@ class MessageContentStreamService:
                 runtime.session.message_content_id,
                 None if response is None else len(response),
             )
-            answer = RetrievalAnswer.model_validate_json(response)
+            answer = RetrievalAnswer.from_output_file(response)
             response_dto = await self._update_message_content_success(
                 runtime.session.message_content_id, answer
             )

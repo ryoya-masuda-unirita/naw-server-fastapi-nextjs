@@ -11,11 +11,15 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models import MessageContent
 from tests.conftest import FakeWahaClient
 from tests.helpers import multipart_files
 
 CONTENT_URL = "/api/messages/content"
+SYNC_URL = "/api/messages/content/sync"
 
 SECRET_QUESTION = "社外秘の質問テキスト"
 SECRET_ADDITIONAL_PROMPT = "社外秘の追加プロンプト"
@@ -124,3 +128,41 @@ async def test_content_is_still_sent_to_waha(
 async def test_non_content_details_are_logged(logged_text: str, expected: str) -> None:
     """障害の調査に使う、本文を含まない情報（件数・ID・ツール名・トークンの有無）が、ログに残ること"""
     assert expected in logged_text
+
+
+MALFORMED_OUTPUTS = {
+    "answer が文字列でない（リスト）": json.dumps(
+        {"answer": [SECRET_ANSWER]}, ensure_ascii=False
+    ),
+    "answer が文字列でない（オブジェクト）": json.dumps(
+        {"answer": {"x": SECRET_ANSWER}}, ensure_ascii=False
+    ),
+    "JSON として壊れている": f"{SECRET_ANSWER}です。これは JSON ではありません",
+}
+
+
+@pytest.mark.parametrize("url", [CONTENT_URL, SYNC_URL], ids=["stream", "sync"])
+@pytest.mark.parametrize(
+    "output", list(MALFORMED_OUTPUTS.values()), ids=list(MALFORMED_OUTPUTS)
+)
+async def test_malformed_output_does_not_leak_answer(
+    client: httpx.AsyncClient,
+    fake_waha: FakeWahaClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+    url: str,
+    output: str,
+) -> None:
+    """Waha! の出力ファイルが壊れていても、回答の本文が、ログ・クライアントへの応答・DB に出ないこと"""
+    fake_waha.download_content = output
+    with caplog.at_level(logging.DEBUG):
+        res = await client.post(url, files=multipart_files(PRIVATE_TEXT_DATA))
+
+    # 解析の失敗は、pydantic のエラー文（入力の値を含む）ではなく、中身を含まない文言で伝える
+    assert "想定した形式ではありません" in res.text
+    assert SECRET_ANSWER not in caplog.text
+    assert SECRET_ANSWER not in res.text
+    async with session_factory() as session:
+        saved = (await session.execute(select(MessageContent))).scalars().all()
+    assert saved  # 保存の確認が、空のまま通らないようにする
+    assert all(SECRET_ANSWER not in (c.answer or "") for c in saved)
