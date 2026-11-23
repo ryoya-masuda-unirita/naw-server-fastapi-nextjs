@@ -783,6 +783,7 @@
     "EDIT_DATA_CHUNK_SIZE_SUPPORT": "ドキュメントの種類に応じて分割サイズを選択してください。通常は初期設定のままで問題ありません。",
     "EDIT_DATA_CHUNK_SIZE_PLACEHOLDER": "チャンク分割の細かさを選択",
     "EDIT_DATA_LEARNING_SETTING_SUPPORT": "ONにすると、このデータをチャットの回答に利用できるようになります。",
+    "EDIT_DATA_PREVIEW_LOAD_ERROR": "画像のプレビューを表示できませんでした。ファイルは選択されたままです。",
     "UPLOAD_FILE_BUTTON": "ファイルをアップロード",
     "MENU_EDIT_FOLDER": "学習フォルダの設定を編集",
     "MENU_DELETE_FOLDER": "学習フォルダを削除",

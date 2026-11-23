@@ -760,6 +760,7 @@
     "EDIT_DATA_CHUNK_SIZE_SUPPORT": "Choose a chunk size based on the type of document. The default setting works well in most cases.",
     "EDIT_DATA_CHUNK_SIZE_PLACEHOLDER": "Select chunk size",
     "EDIT_DATA_LEARNING_SETTING_SUPPORT": "Turning this on makes the data available for use in chat responses.",
+    "EDIT_DATA_PREVIEW_LOAD_ERROR": "The image preview could not be displayed. The file is still selected.",
     "UPLOAD_FILE_BUTTON": "Upload File",
     "MENU_EDIT_FOLDER": "Edit learning folder settings",
     "MENU_DELETE_FOLDER": "Delete learning folder",
