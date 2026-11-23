@@ -54,7 +54,7 @@ SSE（`POST /api/messages/content`）では、Waha! がストリームファイ�
 | `STREAM_EMITTER_TIMEOUT_MS` | 600000 | `stream.emitter-timeout-ms` | |
 | `STREAM_ORPHAN_CLEANUP_MAX_AGE_HOURS` | 24 | `stream.orphan-cleanup-max-age-hours` | 1 時間ごとに古いストリームファイルを削除する |
 | `WAHA_RESULT_RETRY_INTERVAL_MS` / `WAHA_RESULT_MAX_RETRIES` | 2000 / 10 | 定数 | Waha! のジョブ完了待ちの間隔と回数 |
-| `LOG_LEVEL` | `INFO` | `logging.level.root` | 移植元と同じレベル名（`TRACE`・`DEBUG`・`INFO`・`WARN`・`ERROR`・`FATAL`・`OFF`）で書ける。Python・uvicorn にない名前は近いレベルに読み替える（`TRACE` はアプリでは `DEBUG`、`FATAL`・`OFF` は `CRITICAL`）。**会話の本文（質問・回答・履歴・追加のプロンプト）とアクセストークンの値は、どのレベルでもログに出さない**（件数・長さ・ID・ツール名・トークンの有無だけを出す）。SQL の値を出す外部ライブラリ（`aiosqlite`・`sqlalchemy.engine`）は、`DEBUG` にしても `WARNING` に固定している（NAW-1438） |
+| `LOG_LEVEL` | `INFO` | `logging.level.root` | 移植元と同じレベル名（`TRACE`・`DEBUG`・`INFO`・`WARN`・`ERROR`・`FATAL`・`OFF`）で書ける。Python・uvicorn にない名前は近いレベルに読み替える（`TRACE` はアプリでは `DEBUG`、`FATAL`・`OFF` は `CRITICAL`）。**会話の本文（質問・回答・履歴・追加のプロンプト）とアクセストークンの値は、どのレベルでもログに出さない**（件数・長さ・ID・ツール名・トークンの有無と、**添付ファイルの名前・サイズ**だけを出す。添付ファイルの名前は、障害の調査でどのファイルかを特定するために出す（移植元と同じ）ため、ファイル名に機密（案件名・顧客名など）を入れないこと）。Waha! の出力ファイルが想定した形式でないときのエラーの文言にも、入力の値を含めない。SQL の値を出す外部ライブラリ（`aiosqlite`・`sqlalchemy.engine`）は、`DEBUG` にしても `WARNING` に固定している（NAW-1438） |
 | `TZ` | `Asia/Tokyo`（compose） | JVM のタイムゾーン | 学習ファイル一覧の更新日（`yyyy-MM-dd`）をこのタイムゾーンの 0 時として解釈する |
 
 ## ローカルで開発する
