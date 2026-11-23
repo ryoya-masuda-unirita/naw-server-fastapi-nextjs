@@ -1,6 +1,7 @@
 // フロントエンド配信・APIリバースプロキシを兼ねるCloudFrontディストリビューション
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
+  is_ipv6_enabled     = true
   default_root_object = "index.html"
   // PriceClass_100は北米・欧州のエッジのみ使用（最も安価。日本のエッジは使わないがコスト優先）
   price_class = "PriceClass_100"
@@ -31,6 +32,7 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
+    compress               = true
 
     forwarded_values {
       query_string = false
@@ -54,10 +56,15 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods         = ["GET", "HEAD"]
+    compress               = true
 
     forwarded_values {
       query_string = true
-      headers      = ["*"]
+      // 移植元(secuaigent-infra)は Host を転送する。移植元はテナントをサブドメイン(Host)で識別するため。
+      // この移植先はサブドメインを廃止し、テナントを X-Tenant-ID ヘッダで識別する(backend は必須。
+      // 抜けると /api/* が全て 400 になる)。Host は backend も ALB も使わないので転送しない。
+      // Cookie(セッション)とクエリ文字列は、ヘッダとは別の設定で転送する。
+      headers = ["Authorization", "Origin", "Accept", "Content-Type", "X-Tenant-ID"]
       cookies {
         forward = "all"
       }
@@ -91,6 +98,20 @@ resource "aws_cloudfront_distribution" "main" {
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.strip_backend_prefix.arn
+    }
+  }
+
+  // CloudFrontは既定で5xxを短時間キャッシュするため、S3の一時的な503がその間すべての閲覧者に返り、
+  // 画面のチャンク読み込み失敗時の自動リロード(client の chunk-reload.initializer.ts)でも回復できない(NAW-1338)。
+  // 5xxはキャッシュせず毎回オリジンへ取りに行かせる。response_code・response_page_path は指定しないので、
+  // エラー応答の中身は置き換えない(上の #240 の理由で使えない「応答の置き換え」とは別物)。
+  // この設定はディストリビューション全体に効くため、ALBの5xx(/api/*・/backend/auth/*)も毎回オリジンへ取りに行く。
+  // 移植元(secuaigent-infra)も同じ設定で、障害から回復した直後に古い5xxが返り続けるのを避けられる
+  dynamic "custom_error_response" {
+    for_each = [500, 502, 503, 504]
+    content {
+      error_code            = custom_error_response.value
+      error_caching_min_ttl = 0
     }
   }
 
@@ -142,6 +163,26 @@ resource "aws_s3_bucket" "frontend" {
 
   tags = {
     Name = "${var.project_name}-frontend"
+  }
+}
+
+// デプロイで上書き・削除したファイルの旧版を残す(誤って消したときに戻せるようにする)
+resource "aws_s3_bucket_versioning" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+// 保存時の暗号化(S3マネージドキー)
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
