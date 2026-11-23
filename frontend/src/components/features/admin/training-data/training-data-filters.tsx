@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { FormSortInput, type SortOption } from '@/components/shared/form-sort-input';
 import { Pagination } from '@/components/shared/pagination';
 import { PeriodFilter } from '@/components/shared/period-filter';
 import type {
@@ -21,9 +20,6 @@ interface TrainingDataFiltersProps {
   filterPeriodRange: PeriodRange | null;
   statusOptions: SelectOption[];
   selectedStatus: string | null;
-  sortOptions: SortOption[];
-  sortField: string | null;
-  sortOrder: string | null;
   countDisplay: string;
   totalPages: number;
   currentPage: number;
@@ -31,12 +27,10 @@ interface TrainingDataFiltersProps {
   onUserChange: (value: string | null) => void;
   onPeriodChange: (change: PeriodChange) => void;
   onStatusChange: (value: string | null) => void;
-  onSortFieldChange: (value: string | null) => void;
-  onSortOrderChange: (value: string | null) => void;
   onPageChange: (page: number) => void;
 }
 
-/** 移植元 `<app-training-data-filters>`。ファイル一覧の検索・絞り込み・並べ替え・件数とページ送り */
+/** 移植元 `<app-training-data-filters>`。ファイル一覧の検索・絞り込み・件数とページ送り（並べ替えは NAW-1427 で移植元に合わせて外した） */
 export function TrainingDataFilters({
   query,
   userOptions,
@@ -46,9 +40,6 @@ export function TrainingDataFilters({
   filterPeriodRange,
   statusOptions,
   selectedStatus,
-  sortOptions,
-  sortField,
-  sortOrder,
   countDisplay,
   totalPages,
   currentPage,
@@ -56,8 +47,6 @@ export function TrainingDataFilters({
   onUserChange,
   onPeriodChange,
   onStatusChange,
-  onSortFieldChange,
-  onSortOrderChange,
   onPageChange,
 }: TrainingDataFiltersProps) {
   const { t } = useTranslation();
@@ -112,23 +101,6 @@ export function TrainingDataFilters({
             onValueChange={onStatusChange}
           />
         </div>
-      </div>
-
-      <div className="flex flex-col gap-1 items-start w-full md:w-auto">
-        <span className="text-label font-medium text-text-muted">
-          {t('LEARNING_DATA.SORT_LABEL')}
-        </span>
-        <FormSortInput
-          className="md:w-40 w-full"
-          size="sm"
-          fields={sortOptions}
-          selectedField={sortField}
-          selectedOrder={sortOrder}
-          placeholder={t('LEARNING_DATA.SORT_UPDATED_AT')}
-          testidPrefix="training-data-file-sort"
-          onFieldChange={onSortFieldChange}
-          onOrderChange={onSortOrderChange}
-        />
       </div>
 
       <div className="flex items-center gap-3 w-full md:ml-auto md:w-auto justify-center md:justify-end">
