@@ -12,6 +12,10 @@ PostgreSQL は外部キーの列に索引を自動では作らない。索引が
 列は `message_id` だけにする。`tenant_id` を先頭にすると、CASCADE の探索
 （`WHERE message_id = ?`）に効かない。`message_id` はほぼ一意なので、`tenant_id` を足しても
 絞り込みは変わらない。
+
+注意: 既存のマイグレーションに合わせ、`CONCURRENTLY` は使わない普通の `CREATE INDEX`。
+作成の間（件数が多いほど長い）、`message_contents` への書き込みが待たされるため、
+データが多い環境へ適用するときは、利用が少ない時間帯に行う。
 """
 
 from collections.abc import Sequence
