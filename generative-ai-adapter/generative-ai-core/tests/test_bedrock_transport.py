@@ -218,13 +218,13 @@ class TestRequestTarget:
 
         assert url == MESSAGES_URL
 
-    def test_headers_carry_key_bearer_and_version(self) -> None:
-        """キー用ヘッダー・Bearer・バージョンのヘッダーが付くこと"""
+    def test_headers_carry_bearer_and_version_without_api_key_header(self) -> None:
+        """Bearer・バージョンのヘッダーが付き、キー用ヘッダーは付かないこと"""
         _, headers = request_target(_configuration())
 
-        assert headers["x-api-key"] == API_KEY
         assert headers["Authorization"] == f"Bearer {API_KEY}"
         assert headers["anthropic-version"] == ANTHROPIC_VERSION
+        assert "x-api-key" not in {name.lower() for name in headers}
 
 
 class TestMessagesFormat:
@@ -365,7 +365,9 @@ class TestChat:
         )
 
         assert result.answer == "bedrock answer"
-        assert provider.requests[0].headers["x-api-key"] == API_KEY
+        sent_headers = provider.requests[0].headers
+        assert sent_headers["authorization"] == f"Bearer {API_KEY}"
+        assert "x-api-key" not in sent_headers
         assert provider.requests[0].headers["anthropic-version"] == ANTHROPIC_VERSION
         body = provider.body(0)
         assert body["model"] == MODEL
