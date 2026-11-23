@@ -15,6 +15,9 @@ env:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    # インフラ用ロール(広い権限)は、この Environment を使うジョブだけが引き受けられる(OIDCの信頼条件が
+    # repo:<リポジトリ>:environment:infra に限られる)。承認者・対象ブランチ(develop)は、Environment の設定で付ける(README参照)。
+    environment: infra
     defaults:
       run:
         working-directory: secuaigent-infra/environments/dev
@@ -29,11 +32,22 @@ jobs:
       - name: CloudFront Functions Test
         run: node --test ../../modules/frontend/functions/functions.test.mjs
 
-      # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のterraformコマンドはこの認証情報を使う
+      # 未登録のままだと、AWS認証のステップが分かりにくいエラーで失敗するため、先に検査する
+      - name: Check infra role secret
+        env:
+          AWS_INFRA_ROLE_ARN: ${{ secrets.AWS_INFRA_ROLE_ARN }}
+        run: |
+          if [ -z "$AWS_INFRA_ROLE_ARN" ]; then
+            echo "::error::GitHubのSecret AWS_INFRA_ROLE_ARN が未登録です。terraform output の github_actions_infra_role_arn を登録してください。"
+            exit 1
+          fi
+
+      # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のterraformコマンドはこの認証情報を使う。
+      # インフラ用ロール(AWS_INFRA_ROLE_ARN)を使う。backend・frontendのデプロイが使うデプロイ用ロール(AWS_ROLE_ARN)とは別
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
         
       - uses: hashicorp/setup-terraform@v3
