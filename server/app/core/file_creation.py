@@ -12,6 +12,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.file_storage import FileStorage
+from app.core.file_vectorization import FileVectorizer
 from app.models.file import File, FileStatus
 from app.models.index import Index, IndexType
 from app.models.user import User
@@ -50,11 +51,13 @@ async def create_file_record(
     session: AsyncSession,
     feedback_id: str | None = None,
     room_id: str | None = None,
+    vectorizer: FileVectorizer | None = None,
 ) -> File:
     """ファイル実体をストレージへ保存し、メタデータをDBに作成する。
 
-    移植元`FileService.createFileWithAzureStorage`相当。本Issue（#87・#92）のスコープでは
-    コンテンツ抽出（Tika）・分割・ベクトルDB登録（Issue #88スコープ）は行わない。
+    移植元`FileService.createFileWithAzureStorage`相当。`vectorizer`を渡すと、ストレージへの
+    保存のあと、DBへ記録する前に、分割・埋め込み・ベクトルの保存を行う（Issue #462）。
+    渡さない場合（追加学習など）は、コンテンツ抽出・分割・ベクトルDB登録は行わない。
 
     Parameters
     ----------
@@ -80,6 +83,8 @@ async def create_file_record(
         追加学習のデータソースがフィードバックの場合の紐付け先ID（Issue #92）。
     room_id : str | None
         追加学習のデータソースがルームの場合の紐付け先ID（Issue #92）。
+    vectorizer : FileVectorizer | None
+        ベクトル化を行う部品。Noneならベクトル化しない。
 
     Returns
     -------
@@ -97,6 +102,8 @@ async def create_file_record(
     filename = upload.filename or name
     storage_url = await storage.upload(tenant_id, file_id, filename, content)
     try:
+        if vectorizer is not None:
+            await vectorizer.add(file_id, filename, upload.content_type, content)
         file = File(
             id=file_id,
             tenant_id=tenant_id,
@@ -113,4 +120,6 @@ async def create_file_record(
         return await FileRepository.create(file, session)
     except Exception:
         await storage.delete(storage_url)
+        if vectorizer is not None:
+            await vectorizer.remove(file_id)
         raise
