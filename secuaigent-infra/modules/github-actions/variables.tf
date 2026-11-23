@@ -32,3 +32,34 @@ variable "github_repository" {
   type        = string
   description = "OIDCの信頼条件に使うGitHubリポジトリ(<オーナー>/<リポジトリ>)"
 }
+
+variable "ecr_repository_arn" {
+  type        = string
+  description = "backendのECRリポジトリのARN(デプロイ用ロールが、イメージのプッシュ先を限定する)"
+}
+
+variable "ecs_cluster_arn" {
+  type        = string
+  description = "ECSクラスタのARN(マイグレーションの一時タスクの起動先を限定する)"
+}
+
+variable "ecs_cluster_name" {
+  type        = string
+  description = "ECSクラスタの名前(クラスタ内のタスクのARNを組み立てる)"
+}
+
+variable "ecs_service_arn" {
+  type        = string
+  description = "backendサービスのARN(サービスの更新を限定する)"
+}
+
+variable "ecs_migrate_task_family" {
+  type        = string
+  description = "マイグレーション用タスク定義のファミリ名(一時タスクの起動を限定する)"
+}
+
+variable "enable_infra_role" {
+  type        = bool
+  default     = false
+  description = "terraform apply用のインフラ用ロール(広い権限)を作るか。Environment infra に承認者・対象ブランチの制限を付けてから、trueにすること"
+}
