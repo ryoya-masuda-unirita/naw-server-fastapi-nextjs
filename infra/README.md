@@ -109,7 +109,7 @@ gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access 
 
 ### 1. backendイメージをECRへpush
 
-ECSはARM64（Graviton, t4g.nano）のため、**`--platform linux/arm64`が必須**（付け忘れるとECSで`exec format error`になる）。
+ECSのタスクはFargate上でARM64（`runtime_platform`で明示）として動かしているため、**`--platform linux/arm64`が必須**（付け忘れるとECSで`exec format error`になる）。
 
 ```bash
 aws ecr get-login-password --region ap-northeast-1 --profile oic \
@@ -182,6 +182,15 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
 ### 4. 動作確認
 
 `terraform output cloudfront_domain_name`で確認したCloudFrontのデフォルトドメイン（`https://<distribution-id>.cloudfront.net/`）にアクセスする。テナントIDはURL（サブドメイン）からではなく、ログイン画面で入力する（Issue #193）。
+
+## コスト
+
+ECSは**Fargate（0.5 vCPU / 1 GB、1タスク常時稼働）+ NAT Gateway（1台）**で、EC2（t4g.nano 1台）だった頃より固定費が増える（#384。移植元と同じ構成に揃えたため）。
+
+- **NAT Gateway**: 稼働している時間に応じた固定費と、通過したデータ量に応じた費用がかかる。1台あたり月4,000円超という概算が出ている（リージョンと為替で変わる。実際の請求で確認すること）。タスクを動かしていなくても、NATが存在する限りかかる
+- **Fargate**: タスクが動いている間、CPU・メモリの時間に応じてかかる
+- 使わないときの減らし方: ECSサービスの`desired_count`を0にする（Fargateの費用が止まる。NATは残る）。完全に止めるなら`terraform destroy`（NATもなくなる）。RDSの停止運用は上の「RDSの運用方針」（CLAUDE.md）のとおり
+- `terraform apply`は、CIでは手動実行（`run_infra`）のときだけ動く。**マージしただけでは、費用のかかるリソースは作られない**
 
 ## destroy時の注意
 
