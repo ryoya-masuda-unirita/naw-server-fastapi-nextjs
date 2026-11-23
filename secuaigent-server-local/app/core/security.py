@@ -77,7 +77,7 @@ class ServerAuthKeyMiddleware:
         """認証キーの確認を省くリクエストかを判定する。
 
         移植元 ServerAuthKeyFilter.shouldNotFilter と同じく、CORS のプリフライト
-        （ヘッダーを付けられない）とヘルスチェック（``/api/hello``）は対象外にする。
+        （ヘッダーを付けられない）とヘルスチェック（``/api/hello`` と、その配下）は対象外にする。
 
         Parameters
         ----------
@@ -90,5 +90,29 @@ class ServerAuthKeyMiddleware:
             確認を省くなら True。
         """
         is_preflight = scope["method"].upper() == "OPTIONS"
-        is_health_check = scope["path"].startswith(self.health_check_prefix)
+        is_health_check = self._is_same_or_under(
+            scope["path"], self.health_check_prefix
+        )
         return is_preflight or is_health_check
+
+    @staticmethod
+    def _is_same_or_under(path: str, base: str) -> bool:
+        """パスが base と同じか、base の配下かを判定する。
+
+        ``/api/helloX`` のように、名前の頭だけが一致するパスは配下に含めない
+        （前方一致にすると、将来そのようなルートを足したときに、認証キーなしで通ってしまう）。
+        移植元 ServerAuthKeyFilter の isSameOrUnder と同じ。
+
+        Parameters
+        ----------
+        path : str
+            リクエストのパス。
+        base : str
+            基準のパス（末尾のスラッシュなし）。
+
+        Returns
+        -------
+        bool
+            base と同じ、または base ``/`` で始まるなら True。
+        """
+        return path == base or path.startswith(f"{base}/")
