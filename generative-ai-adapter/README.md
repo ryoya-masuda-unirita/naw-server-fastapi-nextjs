@@ -96,7 +96,26 @@ docker run -d --name naw-vdb -e POSTGRES_DB=onprem_vector -e POSTGRES_USER=onpre
 | `1` AzureOpenAI | `{URL}/openai/deployments/{モデル名}/chat/completions?api-version=2025-01-01-preview`（`api-key`） |
 | `5` SecuAiGent | クラウドの `POST {URL}/api/llm/chat`（multipart + SSE）。`API_KEY` は loginKey（`/auth/login-key` で JWT を取る）、`Tenant ID` は `X-Tenant-ID`。推論・ライブラリ生成の途中経過を受け取る。tools・textData に対応 |
 | `2` Anthropic・`3` VertexAI・`4` GoogleAIStudio | 移植元と同じく「未対応」の理由付き失敗（`UNSUPPORTED_PROVIDER_CAPABILITY`） |
+| `97` Bedrock（Python 版だけ） | Bedrock Mantle の Anthropic 形式の入口 `{URL}/v1/messages` を非ストリーミングで呼ぶ（`x-api-key`・`Authorization: Bearer`・`anthropic-version`）。`URL` は `https://bedrock-mantle.<リージョン>.api.aws/anthropic`、`API_KEY` は Bedrock API key、`MODEL_NAME` は `anthropic.claude-haiku-4-5` など。**移植元にない拡張**（下記） <!-- bedrock-ext --> |
 | `99` Echo（Python 版だけ） | キーなし。質問をそのまま回答にし、8 文字ずつ `reasoning_delta` も流す。確認用 |
+
+### 移植元にない拡張（Bedrock、#436）
+
+移植元の Anthropic は「未対応」のスタブで、Bedrock のコードもない。Azure OpenAI の代わりに社内側から Bedrock を直接呼べるよう、Echo と同じ「Python 版だけのプロバイダ」として `Bedrock`（ID 97）を足した。
+
+- 本体は `generative-ai-core/src/generative_ai_core/provider/clients/bedrock.py` の 1 ファイル。接続先ごとの違い（URL・認証のヘッダー）は、その中の `request_target` に集めてある
+- OpenAI 系と同じ作りで、RAG のプロンプト・回答の解析・検証は `openai_compatible.py` の共通の関数を使う
+- 既存のファイルに足したのは、`model.py`・`factory.py`・`vendor.py` の数行だけ。足した行には `bedrock-ext` の目印がある
+- **未対応（スコープ外）**: 埋め込み（Claude に埋め込みモデルがない）、通常 chat の tools、ストリーミング
+
+**消す手順**（移植元が Bedrock に対応したときも、まずこれで外す）
+
+1. `clients/bedrock.py` と `generative-ai-core/tests/test_bedrock_transport.py` を削除する
+2. `grep -rn "bedrock-ext" generative-ai-adapter/ waha-emulator/ onprem/ .gitignore` で見つかった行を削除する。テストの関数（`bedrock-ext` のコメントを含むもの）は、関数ごと削除する
+3. この節と、上の表の `97` Bedrock の行、`onprem/` の Bedrock の設定（`config/`・README の節）を削除する
+4. 移植元の実装に置き換えるなら、それを移植し、`factory.py` の分岐をそちらに向ける。ワークフロー定義は `VENDOR` の値を変えるだけで済む
+
+手順 1〜3 で元の状態に戻ることは、実際に取り除いて既存のテストが全件通ることで確かめた（`docs/issue-436/08_動作確認.md`）。
 
 ## チャット 1 回でどの部品がどの順に動いたかを見る
 

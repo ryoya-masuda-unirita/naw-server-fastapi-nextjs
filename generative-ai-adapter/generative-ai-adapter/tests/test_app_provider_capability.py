@@ -61,3 +61,11 @@ def test_unknown_provider_id_reports_supported_provider_set() -> None:
     assert exc_info.value.property_name == "provider"
     assert exc_info.value.reason == "unsupported-provider"
     assert SUPPORTED_PROVIDERS_FRAGMENT in str(exc_info.value)
+
+
+def test_bedrock_vendor_passes_provider_capability_guard() -> None:
+    """Bedrock（ID 97）は、名前でも ID でも実行できるプロバイダとして通ること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    assert vendor.get_vendor_name("97") == "Bedrock"
+    vendor.validate_runnable_provider("Bedrock")
+    assert "Bedrock" in vendor.supported_provider_names()

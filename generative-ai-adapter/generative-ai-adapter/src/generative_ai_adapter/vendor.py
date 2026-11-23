@@ -11,10 +11,17 @@ VENDOR_MAP: dict[str, str] = {
     "3": "VertexAI",
     "4": "GoogleAIStudio",
     "5": "SecuAiGent",
+    "97": "Bedrock",  # bedrock-ext
     "99": "Echo",
 }
 # 実際に呼べるプロバイダ（それ以外は core で「未対応」の失敗になる前に止める）
-RUNNABLE_PROVIDERS: tuple[str, ...] = ("OpenAI", "AzureOpenAI", "SecuAiGent", "Echo")
+RUNNABLE_PROVIDERS: tuple[str, ...] = (
+    "OpenAI",
+    "AzureOpenAI",
+    "SecuAiGent",
+    "Echo",
+    "Bedrock",  # bedrock-ext
+)
 PROPERTY_NAME = "provider"
 
 
