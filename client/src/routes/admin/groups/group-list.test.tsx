@@ -46,7 +46,53 @@ const FIXTURE_GROUPS = [
   },
 ];
 
+/** 一覧に名前がなく、ID だけが返るグループ（名前の対応表で引く必要がある） */
+const FIXTURE_GROUP_IDS_ONLY = {
+  id: 'g3',
+  tenantId: 'tenant',
+  name: '人事チーム',
+  users: ['u9'],
+  adminUserIds: ['u9'],
+  adminUserNames: [],
+  userNames: [],
+  assistants: [],
+  assistantIds: ['a9'],
+  promptTemplates: [],
+  promptTemplateIds: ['t9'],
+  updatedAt: '2026-11-02T09:00:00',
+};
+
 const LIST_PATH = mockPath(API_PATHS.ADMIN.GROUPS.LIST);
+
+/**
+ * 名前の対応表（テナントのユーザー・アシスタント・テンプレートの一覧）の API を差し替える。
+ * `gate` を渡すと、ユーザー一覧の応答を、その Promise が解決するまで待たせる。呼ばれた回数を返す
+ */
+function mockLookups(gate?: Promise<void>): { calls: number } {
+  const log = { calls: 0 };
+  const page = (item: Record<string, unknown>) => ({
+    content: [item],
+    totalElements: 1,
+    number: 0,
+    size: 1000,
+  });
+  server.use(
+    http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), async () => {
+      log.calls += 1;
+      await gate;
+      return HttpResponse.json(page({ id: 'u9', loginId: 'sato', name: '佐藤', role: 'USER' }));
+    }),
+    http.get(mockPath(API_PATHS.ADMIN.ASSISTANTS.LIST), () => {
+      log.calls += 1;
+      return HttpResponse.json(page({ id: 'a9', name: '人事アシスタント', description: '' }));
+    }),
+    http.get(mockPath(API_PATHS.ADMIN.PROMPT_TEMPLATES.LIST), () => {
+      log.calls += 1;
+      return HttpResponse.json(page({ id: 't9', name: '人事テンプレート', description: '' }));
+    }),
+  );
+  return log;
+}
 
 interface RequestLog {
   listParams: URLSearchParams[];
@@ -54,13 +100,15 @@ interface RequestLog {
 }
 
 /** 一覧・名前の対応表・グループ内の一覧・作成の API を差し替え、受けたリクエストを記録する */
-function mockApis(options: { createFails?: boolean; total?: number } = {}): RequestLog {
+function mockApis(
+  options: { createFails?: boolean; total?: number; groups?: typeof FIXTURE_GROUPS } = {},
+): RequestLog {
   const log: RequestLog = { listParams: [], created: [] };
   server.use(
     http.get(LIST_PATH, ({ request }) => {
       log.listParams.push(new URL(request.url).searchParams);
       return HttpResponse.json({
-        data: FIXTURE_GROUPS,
+        data: options.groups ?? FIXTURE_GROUPS,
         total: options.total ?? 7,
         page: 0,
         size: 5,
@@ -139,6 +187,36 @@ describe('GroupListPage', () => {
 
       expect(await screen.findByText('開発太郎')).toBeInTheDocument();
       expect(screen.getByText('開発太郎、dev-member')).toBeInTheDocument();
+    });
+
+    test('名前が揃った一覧では、名前の対応表を取得しないこと', async () => {
+      mockApis();
+      const lookups = mockLookups();
+      await renderPage();
+      await screen.findByText('開発太郎');
+
+      expect(lookups.calls).toBe(0);
+    });
+
+    test('名前がなく ID だけの項目があるときは、対応表の取得を待たずに一覧を出し、取れたら名前にすること', async () => {
+      mockApis({ groups: [FIXTURE_GROUP_IDS_ONLY], total: 1 });
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockLookups(gate);
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp('/admin/groups');
+
+      // 対応表の応答（ユーザー一覧）を止めたままでも、グループ名の一覧が出る。名前は ID のまま
+      expect(await screen.findByText('人事チーム')).toBeInTheDocument();
+      expect(screen.getAllByText('u9').length).toBeGreaterThan(0);
+
+      release();
+
+      expect((await screen.findAllByText('佐藤')).length).toBeGreaterThan(0);
+      expect(screen.getByText('人事アシスタント')).toBeInTheDocument();
+      expect(screen.getByText('人事テンプレート')).toBeInTheDocument();
     });
 
     test('名前のない項目は「—」を表示すること', async () => {
