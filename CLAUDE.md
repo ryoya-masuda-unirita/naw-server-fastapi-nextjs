@@ -10,14 +10,15 @@
 
 | 移植元（`~/Documents/unirita-develop-pj/secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
-| `server/`（Spring Boot 3.5 / Java 21） | `backend/`（FastAPI） |
-| `client/`（Angular 21） | `frontend/`（React、Vite + React Router） |
+| `server/`（Spring Boot 3.5 / Java 21） | `server/`（FastAPI。名前は移植元と同じ） |
+| `client/`（Angular 21） | `client/`（React、Vite + React Router） |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト） | `generative-ai-adapter/`（Python。移植元と同じ 4 つの分け方で uv ワークスペースにする。#298 で `generative-ai-core/`・`generative-ai-adapter/`（チャット・RAG 回答）、#300 で `embedding-adapter/`（文書の分割・ベクトル保存・更新・削除・Graph Candidate と、core の embedding・vector・ファイル前処理）を移植。#299 で `retrieval-adapter/`（検索）を移植。手順は `generative-ai-adapter/README.md`） |
-| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `server-local/README.md`） |
+| `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `secuaigent-server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `secuaigent-server-local/README.md`） |
 | （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
-| `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `infra/` の関係も着手時に確認する） |
+| `secuaigent-infra/` | `secuaigent-infra/`（Terraform。名前は移植元と同じ。#399 で `infra/` から変更） |
+| `e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める |
 
-`frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`frontend/`）の移植済み画面で行う。
+`frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`client/`）の移植済み画面で行う。
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
 
@@ -63,12 +64,12 @@
 
 ## 現在の開発方針
 
-**バックエンド（`backend/`）とフロントエンド（`frontend/`、React）を並行して進める。**（2026-11-12 改定。それまでは「バックエンド優先・`frontend/` は当面不問」だった）
+**バックエンド（`server/`）とフロントエンド（`client/`、React）を並行して進める。**（2026-11-12 改定。それまでは「バックエンド優先・`client/` は当面不問」だった）
 
-- `backend/` と `frontend/` の Issue は、どちらも通常どおり起票・対応してよい。`frontend/` の不具合を見つけた場合も起票・修正の対象にする
-- 新しく移植対象に加わった `generative-ai-adapter/`・`server-local/`・その他のモジュールは、着手（Issue 起票を含む）前に優先順位をユーザーに確認する
-- 新しいチケットに着手する際は、Issue の内容から対象モジュール（`backend/` / `frontend/` / その他）を判断する。判断に迷う場合だけユーザーに確認する
-- バックエンドの動作確認は、自動テスト（`uv run pytest`）、または React（`frontend/`、`http://localhost:5173`）の移植済み画面で行う。未移植の画面が必要な確認は自動テストで代替する
+- `server/` と `client/` の Issue は、どちらも通常どおり起票・対応してよい。`client/` の不具合を見つけた場合も起票・修正の対象にする
+- 新しく移植対象に加わった `generative-ai-adapter/`・`secuaigent-server-local/`・その他のモジュールは、着手（Issue 起票を含む）前に優先順位をユーザーに確認する
+- 新しいチケットに着手する際は、Issue の内容から対象モジュール（`server/` / `client/` / その他）を判断する。判断に迷う場合だけユーザーに確認する
+- バックエンドの動作確認は、自動テスト（`uv run pytest`）、または React（`client/`、`http://localhost:5173`）の移植済み画面で行う。未移植の画面が必要な確認は自動テストで代替する
 
 ---
 
@@ -79,10 +80,10 @@
 | レイヤー | 選定 |
 |---|---|
 | フロントエンド | CloudFront + S3（SPA 静的デプロイ） |
-| バックエンド | AWS ECS（EC2 起動タイプ、t4g.nano）※ メモリ不足時は t4g.micro に変更 |
+| バックエンド | AWS ECS（Fargate、ARM64、0.5 vCPU / 1 GB）。private サブネットに置き、NAT Gateway で外向きに通信する（#384）。NAT Gateway は固定費がかかる |
 | DB | Amazon RDS PostgreSQL（db.t4g.micro） |
 | コンテナレジストリ | Amazon ECR |
-| IaC | Terraform（`infra/` ディレクトリ） |
+| IaC | Terraform（`secuaigent-infra/` ディレクトリ） |
 | CI/CD | GitHub Actions + OIDC（IAM ロール） |
 | リージョン | ap-northeast-1 |
 
@@ -112,20 +113,20 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 
 ```
 naw-server-fastapi-nextjs/
-├── frontend/          # React（Vite + React Router、client/ の移植先）
-├── backend/           # FastAPI（server/ の移植先）
-├── server-local/      # FastAPI（secuaigent-server-local/ の移植先。backend/ とは独立した uv プロジェクト）
+├── client/                 # React（Vite + React Router。移植元 secuaigent/client/（Angular）の移植先）
+├── server/                 # FastAPI（移植元 secuaigent/server/（Spring Boot）の移植先）
+├── secuaigent-server-local/  # FastAPI（移植元 secuaigent-server-local/ の移植先。server/ とは独立した uv プロジェクト）
 ├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト。generative-ai-adapter/ をパス依存で使う）
 ├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/・embedding-adapter/）
 ├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
-└── infra/             # Terraform（AWS インフラ定義）
+└── secuaigent-infra/       # Terraform（AWS インフラ定義。移植元 secuaigent-infra/ に合わせた名前）
 ```
 
 `e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
 `generative-ai-adapter/` には core・生成AIアダプタ・検索アダプタ（`retrieval-adapter/`、#299）・埋め込みアダプタ（`embedding-adapter/`、#300）を移植済み。
 
-フロントエンド固有の規約は `frontend/.claude/CLAUDE.md`、バックエンド固有は `backend/.claude/CLAUDE.md` を参照すること。
+フロントエンド固有の規約は `client/.claude/CLAUDE.md`、バックエンド固有は `server/.claude/CLAUDE.md` を参照すること。
 
 ---
 
@@ -140,7 +141,7 @@ naw-server-fastapi-nextjs/
 - PR 作成後は `.github/workflows/project-status-sync.yml` により、対応 Issue を GitHub Projects の `Review` に自動反映する前提で運用する
 - PR が `develop` にマージされたら、`Closes #XX` と `.github/workflows/project-status-sync.yml` により GitHub Projects の `Done` まで自動反映される前提で運用する
 - Issue 起票の具体的な `gh` コマンド手順・NAW チケット対応の書き方は [.claude/skills/naw-issue-workflow/SKILL.md](.claude/skills/naw-issue-workflow/SKILL.md) を参照すること
-- **フロントエンド移植（Angular `secuaigent/client` → React `frontend/`）用のIssue対応harness** は [.claude/skills/naw-frontend-issue-workflow/SKILL.md](.claude/skills/naw-frontend-issue-workflow/SKILL.md)（個別対応）・[naw-frontend-issue-batch](.claude/skills/naw-frontend-issue-batch/SKILL.md)（一括起票）・[naw-frontend-issue-loop](.claude/skills/naw-frontend-issue-loop/SKILL.md)（起票済みIssueの一括処理）として整備済み。バックエンド版（`naw-issue-workflow`/`naw-issue-batch`/`naw-issue-loop`）と対になる構成。フロントエンド移植Issueには必ず `frontend-port` ラベルを付与し、同じプロジェクトボード上でバックエンドIssueと区別する。現在の開発方針（バックエンド優先）に従い、着手前には必ずユーザーに優先順位を確認すること
+- **フロントエンド移植（Angular `secuaigent/client` → React `client/`）用のIssue対応harness** は [.claude/skills/naw-frontend-issue-workflow/SKILL.md](.claude/skills/naw-frontend-issue-workflow/SKILL.md)（個別対応）・[naw-frontend-issue-batch](.claude/skills/naw-frontend-issue-batch/SKILL.md)（一括起票）・[naw-frontend-issue-loop](.claude/skills/naw-frontend-issue-loop/SKILL.md)（起票済みIssueの一括処理）として整備済み。バックエンド版（`naw-issue-workflow`/`naw-issue-batch`/`naw-issue-loop`）と対になる構成。フロントエンド移植Issueには必ず `frontend-port` ラベルを付与し、同じプロジェクトボード上でバックエンドIssueと区別する。現在の開発方針（バックエンド優先）に従い、着手前には必ずユーザーに優先順位を確認すること
 
 ---
 

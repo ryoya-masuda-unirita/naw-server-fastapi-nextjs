@@ -17,7 +17,7 @@ description: Use ONLY when the user explicitly invokes /naw-issue-batch or expli
 - **粒度はAIの判断**: 1エンドポイント単位にするか、関連する複数エンドポイントをまとめて1コントローラー単位にするかは、依存関係の強さ・レスポンス/リクエストの共有度合いを見てそのつど判断する。判断基準に迷う場合は1エンドポイント単位をデフォルトにする
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。`naw-explore`に以下を必ず突き合わせさせる
   1. 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop`
-  2. `backend/app/routers/` の既存実装
+  2. `server/app/routers/` の既存実装
   3. `gh issue list --state all`
   4. `gh pr list --state open`
 - **このスキルはIssue起票のみを行う**。ブランチ作成・`docs/issue-X/`生成・実装・PR作成は行わない（着手は別途 `naw-issue-workflow` または `naw-issue-workflow` ベースの他スキルに委ねる）
@@ -60,7 +60,7 @@ git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/de
 
 - `Agent(subagent_type: naw-explore)` を呼び、以下を自己完結のプロンプトで依頼する（会話の前提を知らない前提で、必要な情報をすべてプロンプトに含めること）
   - `~/Documents/unirita-develop-pj/secuaigent-ref/server` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、Controller群のエンドポイント一覧を洗い出すこと
-  - `backend/app/routers/` の既存実装、`gh issue list --state all` の一覧、`gh pr list --state open` の一覧と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていないエンドポイントを検出すること
+  - `server/app/routers/` の既存実装、`gh issue list --state all` の一覧、`gh pr list --state open` の一覧と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていないエンドポイントを検出すること
   - 見つかった未対応エンドポイントについて、関連するエンドポイント同士（同一Controller内で密結合、同じDTO/レスポンスを共有する等）であれば1つの単位としてまとめてよいこと、そうでなければエンドポイント単位で個別に扱うことを伝え、まとめる場合・分ける場合それぞれの判断理由も返すよう指示する
   - 複数の独立した候補単位がある場合は、依存関係が少なく粒度が小さいものを1件だけ選ぶこと
   - 結果は「候補の有無」「単位（エンドポイント一覧）」「対応する移植元ファイルパス」「粒度をこうした理由」「選定理由」を簡潔に返すよう指示すること

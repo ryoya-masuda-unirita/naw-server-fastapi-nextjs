@@ -15,7 +15,7 @@ docker compose down            # 停止（データも消すなら down -v）
 
 | サービス | ホストのポート | 内容 |
 |---|---|---|
-| server-local | 18090 | 社内の SECURE の窓口（`server-local/`）。認証キーは `onprem-local-key` |
+| server-local | 18090 | 社内の SECURE の窓口（`secuaigent-server-local/`）。認証キーは `onprem-local-key` |
 | waha-emulator | 18091 | Waha!（とアダプタ）の代わり（`waha-emulator/`）。LLM は既定で echo |
 | vector-db | 15432 | アダプタが使うベクトルDB（pgvector + PGroonga + Apache AGE）。DB・ユーザー `onprem_vector`、パスワード `onprem_vector_password` |
 | `file-server/` | - | 顧客のファイルサーバーの代わり（サンプル文書）。エミュレーターの `/mnt/file-server` に読み取り専用で見える（ベクトルDB とともに、アダプタの取り込み後に使う） |
@@ -35,7 +35,7 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
    ```bash
    docker compose up -d                      # リポジトリのルートで
    docker exec naw-fastapi-backend uv run alembic upgrade head
-   docker exec -i naw-fastapi-postgres psql -U root -d postgres < backend/seed.sql
+   docker exec -i naw-fastapi-postgres psql -U root -d postgres < server/seed.sql
    docker exec -i naw-fastapi-postgres psql -U root -d postgres < onprem/cloud-seed.sql
    ```
 

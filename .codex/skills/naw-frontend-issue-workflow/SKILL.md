@@ -1,13 +1,13 @@
 ---
 name: naw-frontend-issue-workflow
-description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
+description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React client/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
 ---
 
 # NAW Frontend Issue Workflow
 
-この skill は、このリポジトリで frontend 移植（Angular `secuaigent/client` → React `frontend/`）の Issue 対応を進めるときに使う。
+この skill は、このリポジトリで frontend 移植（Angular `secuaigent/client` → React `client/`）の Issue 対応を進めるときに使う。
 
-backend（Spring Boot `secuaigent/server` → FastAPI `backend/`）の Issue 対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名、ドキュメント構成、承認フロー、コミット規約は共通であり、本 skill では frontend 固有の差分だけを上書きする。
+backend（Spring Boot `secuaigent/server` → FastAPI `server/`）の Issue 対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名、ドキュメント構成、承認フロー、コミット規約は共通であり、本 skill では frontend 固有の差分だけを上書きする。
 
 ## 使う場面
 
@@ -21,11 +21,11 @@ backend（Spring Boot `secuaigent/server` → FastAPI `backend/`）の Issue 対
 | 項目 | naw-issue-workflow（backend） | naw-frontend-issue-workflow（本 skill） |
 |---|---|---|
 | 移植元 | `~/Documents/unirita-develop-pj/secuaigent-ref/server` | `~/Documents/unirita-develop-pj/secuaigent-ref/client` |
-| 移植先 | `backend/` | `frontend/` |
+| 移植先 | `server/` | `client/` |
 | Issue ラベル | なし | 必ず `frontend-port` を付与する |
 | 自動テスト | `pytest` | `npm run test`, `npm run lint`, `npm run type-check` |
-| 動作確認 | 自動テスト、または `frontend/` の移植済み画面での backend 確認 | `frontend/` の画面確認 |
-| 実装ガイド | backend/AGENTS 中心 | `frontend/AGENTS.md` を必ず参照 |
+| 動作確認 | 自動テスト、または `client/` の移植済み画面での backend 確認 | `client/` の画面確認 |
+| 実装ガイド | server/AGENTS 中心 | `client/AGENTS.md` を必ず参照 |
 
 それ以外（ブランチ命名規則、ドキュメント構成、承認フロー、コミット規約、PR フォーマット）は `naw-issue-workflow` と共通。
 
@@ -47,7 +47,7 @@ backend（Spring Boot `secuaigent/server` → FastAPI `backend/`）の Issue 対
 
 - 調査は読み取り専用で行い、`gh issue create` 等の書き込み操作は候補・仕様を整理した後に行う
 - 対象画面・コンポーネントの仕様、参照元ファイルパス、React 側の対応実装有無、依存する backend API の状況を整理する
-- `frontend/AGENTS.md` の Angular → React 対応表とデザイン移行方針を前提に設計する
+- `client/AGENTS.md` の Angular → React 対応表とデザイン移行方針を前提に設計する
 - 対象が広すぎる場合だけ、作業前にユーザーへ確認する
 
 ## Issue 起票手順
@@ -89,7 +89,7 @@ bash .codex/skills/naw-issue-workflow/scripts/scaffold_issue_docs.sh issue-{番�
 
 ## 参照
 - 移植元（frontend）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/app/...`
-- 移植先: `frontend/src/...`
+- 移植先: `client/src/...`
 - 依存する backend API: `GET /api/...`（実装状況も明記）
 ```
 
@@ -120,7 +120,7 @@ feature/issue-X-NAW-XXXX
 
 テンプレートと記載ルールは [naw-issue-workflow/references/doc-templates.md](../naw-issue-workflow/references/doc-templates.md) を読むこと。frontend 固有の追記として、以下を含める。
 
-- `02_基本設計.md` の移植方針には `frontend/AGENTS.md` の Angular → React 対応表に沿った変換方針を書く
+- `02_基本設計.md` の移植方針には `client/AGENTS.md` の Angular → React 対応表に沿った変換方針を書く
 - `03_詳細設計.md` には参照する Angular テンプレート、移行先の React コンポーネント、必要な CSS / i18n 資産を具体化する
 - `04_テスト設計.md` は Vitest + React Testing Library を前提にする
 

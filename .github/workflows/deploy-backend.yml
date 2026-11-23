@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: server
     steps:
-      # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとbackend/配下のファイルにアクセスできない)
+      # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとserver/配下のファイルにアクセスできない)
       - uses: actions/checkout@v4
 
-      # インフラ側(infra/modules)が作るリソース名と同じ規則で、プロジェクト名から組み立てる。
+      # インフラ側(secuaigent-infra/modules)が作るリソース名と同じ規則で、プロジェクト名から組み立てる。
       # envの値は他のenvを参照できないため、ステップで組み立てて$GITHUB_ENVに書き出す。
       # 未登録・不正のまま進むと、存在しないリソースを指して分かりにくい失敗になるので、先に検査する。
       - name: Resolve resource names
@@ -42,7 +42,6 @@ jobs:
             echo "ECS_CLUSTER=${PROJECT_NAME}-cluster"
             echo "ECS_SERVICE=${PROJECT_NAME}-backend"
             echo "ECS_MIGRATE_TASK_FAMILY=${PROJECT_NAME}-backend-migrate"
-            echo "ECS_CAPACITY_PROVIDER=${PROJECT_NAME}-cp"
           } >> "$GITHUB_ENV"
 
       # OIDCトークンをAWSに提示し、一時クレデンシャルを受け取る。以降のawsコマンド/dockerのECR操作はこの認証情報を使う
@@ -57,7 +56,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # GitHub Actionsのランナーはx86_64だが、ECS(t4g)はARM64で動くため、
+      # GitHub Actionsのランナーはx86_64だが、ECSのFargateタスクはARM64(runtime_platformで指定)で動くため、
       # 異なるCPUアーキテクチャ向けのイメージをビルドできるようQEMU(エミュレータ)とBuildxを準備する
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -104,16 +103,31 @@ jobs:
           echo "task_def_arn=${NEW_MIGRATE_TASK_DEF_ARN}" >> $GITHUB_OUTPUT
 
       # 新しいアプリコードが依存するスキーマ変更を先に反映するため、backendサービスの更新より前に実行する。
-      # backend_migrateタスク定義にはportMappingsが無いため、backendサービスと同じ単一EC2上でもポート競合しない
+      # Fargateの一時タスクには、サブネットとセキュリティグループの指定が要る。CIに固定値を持たせず、
+      # 稼働中のbackendサービスのネットワーク設定(privateサブネット・ECSのSG・パブリックIPなし)をそのまま使う。
       - name: Run DB migration task
         id: run-migration
         run: |
-          MIGRATION_TASK_ARN=$(aws ecs run-task \
+          SERVICE_INFO=$(aws ecs describe-services --cluster ${ECS_CLUSTER} --services ${ECS_SERVICE} --output json)
+          NETWORK_CONFIG=$(echo "${SERVICE_INFO}" | jq -c '.services[0].networkConfiguration // empty')
+          # クラスタ名・サービス名が違うと、servicesが空でfailuresに理由(MISSINGなど)が入る
+          if [ -z "${NETWORK_CONFIG}" ]; then
+            echo "::error::サービス ${ECS_SERVICE}(クラスタ ${ECS_CLUSTER})のネットワーク設定を取得できません。failures: $(echo "${SERVICE_INFO}" | jq -c '.failures')"
+            exit 1
+          fi
+          RUN_RESULT=$(aws ecs run-task \
             --cluster ${ECS_CLUSTER} \
             --task-definition ${{ steps.register-migrate-task-def.outputs.task_def_arn }} \
-            --capacity-provider-strategy capacityProvider=${ECS_CAPACITY_PROVIDER},weight=1 \
+            --launch-type FARGATE \
+            --network-configuration "${NETWORK_CONFIG}" \
             --count 1 \
-            --query 'tasks[0].taskArn' --output text)
+            --output json)
+          MIGRATION_TASK_ARN=$(echo "${RUN_RESULT}" | jq -r '.tasks[0].taskArn // empty')
+          # 起動に失敗するとtasksが空になり、taskArnが得られない(後続が分かりにくく失敗する)ため、ここで理由を出して止める
+          if [ -z "${MIGRATION_TASK_ARN}" ]; then
+            echo "::error::マイグレーションのタスクを起動できません: $(echo "${RUN_RESULT}" | jq -c '.failures')"
+            exit 1
+          fi
           echo "task_arn=${MIGRATION_TASK_ARN}" >> $GITHUB_OUTPUT
 
       - name: Wait for migration task to stop

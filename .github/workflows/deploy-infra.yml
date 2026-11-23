@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra/environments/dev
+        working-directory: secuaigent-infra/environments/dev
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +48,7 @@ jobs:
           PROJECT_NAME: ${{ vars.PROJECT_NAME }}
         run: |
           if [ -z "$TF_STATE_BUCKET" ]; then
-            echo "::error::GitHubのVariable TF_STATE_BUCKET が未登録です。infra/bootstrap の出力 state_bucket_name を登録してください。"
+            echo "::error::GitHubのVariable TF_STATE_BUCKET が未登録です。secuaigent-infra/bootstrap の出力 state_bucket_name を登録してください。"
             exit 1
           fi
           # 改行や空白が混ざる(terraform outputを-rawなしで登録した等)と、initが分かりにくいS3エラーで失敗するため
@@ -73,7 +73,7 @@ jobs:
         run: terraform init -backend-config="bucket=${TF_STATE_BUCKET}"
       
       - name: Terraform Format Check
-        # modules/ 配下にほとんどのHCLがあるため、-recursiveで ../.. (infra/) 全体を検査する
+        # modules/ 配下にほとんどのHCLがあるため、-recursiveで ../.. (secuaigent-infra/) 全体を検査する
         run: terraform fmt -check -diff -recursive ../..
       
       - name: Terraform Validate

@@ -15,7 +15,7 @@ docker compose -f docker-compose.demo.yml up -d --build   # 起動（初回は�
 docker compose -f docker-compose.demo.yml down            # 停止（データは残る）。データも消すなら down -v
 ```
 
-起動すると、管理者でログインして次の画面を見られる（デモデータは [backend/seed-demo.sql](backend/seed-demo.sql)、ログイン用のテナント・ユーザーは [backend/seed.sql](backend/seed.sql)）。
+起動すると、管理者でログインして次の画面を見られる（デモデータは [server/seed-demo.sql](server/seed-demo.sql)、ログイン用のテナント・ユーザーは [server/seed.sql](server/seed.sql)）。
 
 | 画面 | パス | 見られるもの |
 |---|---|---|
@@ -61,7 +61,7 @@ cd onprem && docker compose up -d --build                                       
 
 - ②: クラウドの server は、テナントに登録された `LOCAL_SERVER` エンドポイントの URL と API キーを返す（移植元 `server` の `GetMessagesViewModel.java`）。SECURE アシスタントの質問を server に送ると 400 になる（`MessageService.java`）
 - ③: ブラウザは受け取った URL に `api/messages/content` を付けて、server-local に直接送る（移植元 `client` の `message-content-endpoint.resolver.ts`・`messages.service.ts` の `prepareSecureStreamContext`）
-- ④: server-local は、Waha! の HTTP API（`WahaServer/servicerun/api`）で入力を渡し、ワークフローを実行して結果を受け取る（`server-local/app/clients/waha_client.py`）
+- ④: server-local は、Waha! の HTTP API（`WahaServer/servicerun/api`）で入力を渡し、ワークフローを実行して結果を受け取る（`secuaigent-server-local/app/clients/waha_client.py`）
 - ⑥: アダプタは LLM を直接呼ぶ。設定によっては、LLM の代わりにクラウドの server（`/auth/login-key` でログインし `/api/llm/chat`）を呼ぶ（移植元 `generative-ai-adapter` の `SecuAiGentAuthClient.java`・`SecuAiGentTransport.java`）
 - このほか、ライブラリを作るときだけ server-local からクラウドの server を呼ぶ（`NawApiClient`）。クラウドから server-local へ向かう通信はない
 
@@ -73,8 +73,8 @@ cd onprem && docker compose up -d --build                                       
 
 | 部品 | 置き場所 | 担当 | このリポジトリ |
 |---|---|---|---|
-| server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `backend/` |
-| server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `server-local/` |
+| server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `server/` |
+| server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `secuaigent-server-local/` |
 | Waha! | 顧客の社内 | ユニリタの ETL 製品。LLM に渡すまでのワークフロー（エージェント）を Waha! の中で組み立てて実行する。ワークフローは Waha! 側の設定で、どちらのリポジトリにもない | 製品は対象外。代わりに同じ API を持つ `waha-emulator/` を置く（下記） |
 | アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | `generative-ai-adapter/` の生成AIアダプタ（チャット・RAG 回答）を移植済み（#298。[generative-ai-adapter/README.md](./generative-ai-adapter/README.md)）。埋め込み・検索は未移植 |
 
@@ -88,12 +88,12 @@ Waha! 本体はどちらのリポジトリにもないため、server-local が�
 |---|---|
 | 接続先 | server-local の `WAHA_URL` をエミュレーターに向ける（Docker 同士なら `http://host.docker.internal:8091/`、ホスト同士なら `http://localhost:8091/`。末尾 `/` 付き） |
 | 認証キー | server-local とエミュレーターの `WAHA_AUTHKEY` を同じ値にする |
-| ストリームファイル | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする。Docker では、エミュレーターの compose が既定で `server-local/data/stream-output` を server-local と同じ `/app/data/stream-output` にマウントする |
+| ストリームファイル | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする。Docker では、エミュレーターの compose が既定で `secuaigent-server-local/data/stream-output` を server-local と同じ `/app/data/stream-output` にマウントする |
 
 ```bash
-mkdir -p server-local/data/stream-output   # 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
+mkdir -p secuaigent-server-local/data/stream-output   # 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
 cd waha-emulator && cp .env.example .env && docker compose up -d --build     # WAHA_AUTHKEY を設定
-cd ../server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
+cd ../secuaigent-server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
 docker compose up -d --build
 ```
 
@@ -105,13 +105,13 @@ server-local・Waha! エミュレーター・ベクトルDB・ファイルサー
 
 | ディレクトリ | 内容 |
 |---|---|
-| `backend/` | FastAPI（移植元 `server/` の移植先） |
-| `frontend/` | React（Vite + React Router。移植元 `client/` の移植先） |
-| `server-local/` | FastAPI + SQLite（移植元 `secuaigent-server-local/` の移植先） |
+| `server/` | FastAPI（移植元 `server/` の移植先） |
+| `client/` | React（Vite + React Router。移植元 `client/` の移植先） |
+| `secuaigent-server-local/` | FastAPI + SQLite（移植元 `secuaigent-server-local/` の移植先） |
 | `waha-emulator/` | FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト） |
 | `onprem/` | 社内（オンプレ）側をまとめて起動する compose（server-local・Waha! エミュレーター・ベクトルDB など） |
 | `e2e-explorer/` | Playwright（TypeScript）の E2E 探索ハーネス。画面操作を再帰的にたどり、500・画面の例外・真っ白・表示崩れなどの「バグの疑い」を再現手順付きで一覧にする（移植元にはない独自のもの） |
-| `infra/` | Terraform（AWS インフラ定義） |
+| `secuaigent-infra/` | Terraform（AWS インフラ定義） |
 
 ## E2E 探索ハーネス（e2e-explorer）
 
@@ -127,8 +127,8 @@ npm run explore:all   # 起動 → 巡回 → レポート → 破棄
 
 ## ローカル疎通確認（frontend + backend）
 
-React（`frontend/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
-backend の動作確認は、自動テスト（`cd backend && uv run pytest`）、または React の移植済み画面で行う。
+React（`client/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
+backend の動作確認は、自動テスト（`cd server && uv run pytest`）、または React の移植済み画面で行う。
 
 > `secuaigent/client` のコピーだった `frontend-angular/` は Issue #213 で削除した。
 
@@ -139,8 +139,8 @@ backend の動作確認は、自動テスト（`cd backend && uv run pytest`）�
 | ------- | ------------------------------------------------------------------ |
 | フロントエンド | `http://localhost:5173/`（Vite 開発サーバー）                                  |
 | バックエンド  | `http://localhost:8001`（フロントは `VITE_API_URL` の URL を直接呼ぶ）                 |
-| テナント ID | `test-tenant`（`backend/seed.sql` のシードテナント）                              |
-| ログイン    | `admin` / `admin@1234`（`backend/seed.sql` のシードユーザー）                     |
+| テナント ID | `test-tenant`（`server/seed.sql` のシードテナント）                              |
+| ログイン    | `admin` / `admin@1234`（`server/seed.sql` のシードユーザー）                     |
 
 
 
@@ -153,7 +153,7 @@ backend の動作確認は、自動テスト（`cd backend && uv run pytest`）�
 docker compose up -d
 
 # 2. バックエンドの依存関係・DB マイグレーション
-cd backend
+cd server
 uv sync
 cp .env.example .env   # 未作成の場合
 alembic upgrade head
@@ -162,7 +162,7 @@ alembic upgrade head
 docker exec -i naw-fastapi-postgres psql -U root -d postgres < seed.sql
 
 # 4. frontend の依存関係
-cd ../frontend
+cd ../client
 npm install
 ```
 
@@ -174,14 +174,14 @@ npm install
 
 ```bash
 # ターミナル1: バックエンド（ポート 8001）
-cd backend
+cd server
 uv run uvicorn app.main:app --reload --port 8001
 ```
 
 ```bash
 # ターミナル2: フロントエンド（ポート 5173）
-# git 管理の frontend/.env は VITE_API_URL=http://localhost:8000 のため、環境変数で 8001 に上書きする
-cd frontend
+# git 管理の client/.env は VITE_API_URL=http://localhost:8000 のため、環境変数で 8001 に上書きする
+cd client
 VITE_API_URL=http://localhost:8001 npm run dev
 ```
 
@@ -214,5 +214,5 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 | 症状       | 確認すること                                                                     |
 | -------- | -------------------------------------------------------------------------- |
 | 接続拒否     | バックエンドが **8001** で起動しているか、`VITE_API_URL=http://localhost:8001` を付けて起動したか   |
-| CORS エラー | `backend/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
+| CORS エラー | `server/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
 | DB エラー   | `docker compose up -d` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |

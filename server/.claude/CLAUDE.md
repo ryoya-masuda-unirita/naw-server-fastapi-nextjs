@@ -1,0 +1,437 @@
+# backend — Claude 向けプロジェクト設定
+
+## 移植元リポジトリ
+
+Spring Boot 実装: `~/Documents/unirita-develop-pj/secuaigent-ref/server`
+
+**このリポジトリは日々更新される**。実装前に必ず最新の Spring Boot 実装を確認してからポートすること。
+
+移植元の `git log` 確認や、対象 Controller/Service/Request/Response の読み込みなど、読み取り専用のリサーチがまとまった分量になりそうな場合は、`Agent(subagent_type: naw-explore)`（このリポジトリの移植前提を組み込んだ専用エージェント）への委譲を検討すること。対象がすでに明確ですぐ読める場合など、委譲するまでもないと判断できるときは直接読んでよい。
+
+---
+
+## 技術スタック
+
+| 種別 | 技術 |
+|---|---|
+| フレームワーク | FastAPI |
+| 言語 | Python 3.12+ |
+| ORM | SQLModel（SQLAlchemy async ベース） |
+| DB | PostgreSQL（RLS によるテナント分離） |
+| バリデーション | Pydantic v2（SQLModel に統合） |
+| テスト | pytest + pytest-asyncio |
+
+---
+
+## Spring Boot → FastAPI 対応表
+
+| Spring Boot | FastAPI |
+|---|---|
+| `@RestController` | `APIRouter`（`routers/xxx.py`） |
+| `@Service` | `services/xxx_service.py` |
+| `@Repository` / JPA Repository | `repositories/xxx_repository.py` |
+| `@Entity` | SQLModel（`models/xxx.py`） |
+| `@RequestBody` / `@RequestParam` | Pydantic モデル / Query params |
+| `@Transactional` | SQLAlchemy `AsyncSession`（`async with session.begin()`） |
+| `Page<T>` | `PagedResponse[T]`（共通スキーマ） |
+| Spring Security / JWT | FastAPI Security / `Depends` |
+| `TenantContext`（RLS） | FastAPI `Depends` でセッション開始時に注入 |
+| `Specification` パターン | SQLAlchemy `where()` の動的組み立て |
+| `application.yml` | `.env` + `pydantic-settings` |
+
+---
+
+## Spring Bootからの移植における書き方の方針
+
+このリポジトリはSpring Boot実装の移植だが、**コードの書き方（イディオム）はFastAPI/Pythonのベストプラクティスに従う**。JavaのパターンをそのままPythonに直訳しない。
+
+一方で、**Spring由来の設計上の規律で優れている部分はPythonでもそのまま維持する**。具体的には次節「アーキテクチャ規約」にある、Controller(`routers/`)/Service(`services/`)/Repository(`repositories/`)の責務分離、`service`が別の`service`を呼ばない、DB操作を`repositories/`に集約する、といったルール群がこれにあたる。これらは移植元がJavaだからではなく、それ自体が優れた設計だから維持する。
+
+### 良い例・悪い例
+
+**バリデーション**: リクエストのバリデーションは`schemas/`のPydanticモデルに書く（ルーターには書かない）。
+
+- 単純な制約（文字数上限・必須・数値の範囲など）は、`Field(min_length=..., max_length=..., ge=..., le=...)`のように宣言的に書く
+- 移植元のRequestクラスの注釈に`message`がある場合（`@Size(message=...)`・`@NotBlank(message=...)`等）は、項目の型注釈に`ValidationMessages`（`app/core/validation_messages.py`）を添えて同じ文言を返す。引数名は移植元の注釈に対応する（`not_blank`・`not_null`・`not_empty`・`size`・`min_value`・`max_value`・`iso8601_instant`）。文言を添えたモデルは`RequestModel`を継承する（項目の欠落はモデル単位でしか置き換えられないため）。移植元に`message`の指定が無い制約は、既定文言の定数（`NOT_BLANK_DEFAULT_MESSAGE`等）を使う（Issue #239）
+- 単純な制約で表現できないロジック（空白のみ拒否、複数フィールドにまたがる相関チェック等）は、Pydantic v2の`@field_validator` + `@classmethod`のデコレータ構文をモデルクラスの中に直接書き、例外に移植元と同じ文言を入れる
+
+```python
+# Good（制約は宣言的に書き、文言は移植元の注釈の message を添える）
+class FooRequest(RequestModel):
+    name: Annotated[
+        str,
+        Field(max_length=32),
+        ValidationMessages(
+            not_blank="名前は必須です", size="名前は32文字以内で入力してください"
+        ),
+    ]
+```
+
+```python
+# Good（空白のみを拒否する独自チェック。Pydantic v2のデコレータ構文をそのまま使う。
+# 欠落・nullの文言はValidationMessagesで添える）
+class FooRequest(RequestModel):
+    name: Annotated[str, ValidationMessages(not_blank="名前は必須です")]
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("名前は必須です")
+        return value
+
+# Bad（Javaの「バリデーションメソッドを切り出して後から紐付ける」発想を引きずった書き方）
+def _validate_name(value: str) -> str:
+    ...
+
+class FooRequest(BaseModel):
+    name: str
+    _validate_name = field_validator("name")(_validate_name)
+```
+
+- 複数のリクエストクラス（Create/Update等）で同じバリデーションを共有したい場合は、共通の基底クラスを継承させる（関数をモジュールレベルに切り出して個別に登録し直す必要はない）
+
+判断に迷った場合（「Pythonらしい書き方」と「Spring由来の責務分離」のどちらを優先すべきか等）は、実装前に一言確認すること。
+
+---
+
+## アーキテクチャ規約
+
+### レイヤー責務
+
+```
+routers/      → HTTP ルーティング・リクエスト受け取り・レスポンス返却
+services/     → ビジネスロジック。状態を持たない
+repositories/ → DB アクセスのみ。SQLModel / SQLAlchemy クエリを書く
+models/       → SQLModel テーブル定義（DB モデル ＝ Pydantic スキーマ）
+schemas/      → リクエスト・レスポンス専用スキーマ（モデルと分ける場合）
+core/         → 設定・DI・共通ユーティリティ
+```
+
+### routers と services の対応規則
+
+**router と service は 1 対 1 で対応させること。**
+
+```
+routers/users.py   ↔  services/user_service.py
+routers/auth.py    ↔  services/auth_service.py
+```
+
+- 複数の router から共通で使う DB 操作は `repositories/` に切り出す
+- 複数の router から共通で使う純粋な計算ロジック（ハッシュ・トークン生成等）は `core/` に置く
+- `xxx_service.py` が別の `yyy_service.py` を呼ぶ構造は禁止
+
+### ディレクトリ構造
+
+```
+app/
+├── routers/
+│   ├── assistant.py
+│   ├── room.py
+│   ├── user.py
+│   └── ...
+├── services/
+│   ├── assistant_service.py
+│   └── ...
+├── repositories/
+│   ├── assistant_repository.py
+│   └── ...
+├── models/
+│   ├── assistant.py
+│   └── ...
+├── schemas/          # リクエスト・レスポンス専用スキーマ
+│   └── ...
+└── core/
+    ├── config.py     # pydantic-settings による設定
+    ├── database.py   # SQLAlchemy async エンジン・セッション
+    ├── security.py   # JWT 検証
+    └── tenant.py     # RLS テナント注入
+```
+
+### SQLModel のパターン
+
+```python
+# models/assistant.py
+from sqlmodel import SQLModel, Field
+import uuid
+
+class Assistant(SQLModel, table=True):
+    __tablename__ = "assistants"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str
+    tenant_id: uuid.UUID
+```
+
+### 中間テーブル・Entity化されていないテーブルも必ずDBモデル化する
+
+移植元（Spring Boot）では、中間テーブル（`@JoinTable`のみで定義されるM2M関連）や、Liquibaseのchangelogにしか定義がなくJPA Entityクラスが存在しないテーブルが存在する。
+
+FastAPI側では、こうしたテーブルも省略せず、すべて `SQLModel(table=True)` のモデルクラスとして `models/` 配下に定義すること。
+
+- 追加カラムを持つ中間テーブル（例: グループ所属ユーザーの管理者フラグ等）はもちろん、追加カラムのない単純なM2M中間テーブルも、SQLModelには「Entityなしで暗黙的にJoinTableを扱う」というSpring同等の省略記法がないため、明示的なモデルクラスとして定義する
+- 移植対象のテーブルにSpring側のEntityクラスが存在しない場合でも、対応するLiquibaseのchangelog（`~/Documents/unirita-develop-pj/secuaigent-ref/server/src/main/resources/liquibase/changelog/`）を確認し、カラム構成を正しく再現したモデルを作成すること
+
+### N+1問題を発生させない
+
+一覧を取得したあと、その各行に関連するデータを取得するために行数分だけ追加クエリを発行する実装（N+1問題）を書かないこと。関連データは常に `IN` 句または `JOIN` で1回のクエリにまとめて取得すること。
+
+```python
+# Bad: テンプレートごとに個別クエリを発行してしまう
+for template in templates:
+    groups = await session.execute(
+        select(Group).join(GroupPromptTemplate).where(
+            GroupPromptTemplate.prompt_template_id == template.id
+        )
+    )
+
+# Good: IN句で対象ID一覧をまとめて渡し、1クエリで取得してからPython側で集約する
+template_ids = [t.id for t in templates]
+stmt = (
+    select(GroupPromptTemplate.prompt_template_id, Group.id, Group.name)
+    .join(Group, Group.id == GroupPromptTemplate.group_id)
+    .where(GroupPromptTemplate.prompt_template_id.in_(template_ids))
+)
+```
+
+同様に、複数行のUPDATE/DELETEをPythonのループで1件ずつ発行しない（バルク処理すべきところを1件ずつ処理する非効率も避けること）。
+
+```python
+# Bad: 取得した行をループでdeleteすると行数分のDELETEになりがち
+existing = (await session.execute(select(Model).where(...))).scalars().all()
+for row in existing:
+    await session.delete(row)
+
+# Good: delete()文で条件に合う行を1回のSQLでまとめて削除する
+await session.execute(delete(Model).where(...))
+```
+
+一方、`session.add()` をループで呼ぶのは問題ない。SQLAlchemyの `insertmanyvalues` により、同じマッパークラスの複数オブジェクトはcommit/flush時に1回のINSERT（またはバッチ化されたexecutemany）にまとめられるため、N回のラウンドトリップにはならない。
+
+参考実装: `app/repositories/group_prompt_template_repository.py` の `find_groups_grouped_by_template_ids`（IN句での一括取得）・`replace_groups_for_template`（一括DELETE）。
+
+### RLS（テナント分離）のパターン
+
+PostgreSQL の RLS をそのまま使用する。FastAPI の `Depends` でセッション開始時にテナント ID を設定する。
+
+```python
+# core/tenant.py
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+async def get_session_with_tenant(
+    tenant_id: str,  # JWT から取得
+    session: AsyncSession = Depends(get_session),
+):
+    await session.execute(
+        text("SET app.tenant_id = :tid"), {"tid": tenant_id}
+    )
+    return session
+```
+
+### ページネーションレスポンスの形式
+
+Spring Boot の `Page<T>` と同形式で返すこと（フロントエンドとの互換性のため）。
+
+```python
+# schemas/pagination.py
+from typing import Generic, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar("T")
+
+class PagedResponse(BaseModel, Generic[T]):
+    content: list[T]
+    totalElements: int
+    number: int   # 0-indexed
+    size: int
+```
+
+### エラー応答の形式
+
+移植元 `APIControllerAdvice` に合わせ、エラー応答の本文は `{"timestamp": UNIX秒, "message": "..."}`、入力チェックのエラーは 422 ではなく **400**（最初の 1 件のメッセージだけ）で返す（`app/core/errors.py`、Issue #228）。業務エラーは `HTTPException(status_code=..., detail="文字列")` で投げれば共通ハンドラが `message` に変換するので、`detail` には文字列を渡し、本文を自前で組み立てないこと。
+
+---
+
+## Human in the Loop（HITL）モード
+
+HITL 方式で進める場合、タスクを完了するたびに **その場で** `06_タスクリスト.md` の該当項目を `- [x]` にチェックすること。まとめてチェックするのは禁止。
+
+---
+
+## 新規 Issue 対応開始時の手順
+
+新しいチケット・Issue に着手する前に、必ず以下の手順で `develop` を最新化してからブランチを切ること。
+
+```bash
+git fetch
+git checkout develop
+git pull          # または git merge origin/develop
+git checkout -b feature/issue-X
+```
+
+- `develop` を最新化せずにブランチを切ると、マージ済みの実装が取り込まれず、依存する機能が欠けた状態で開発することになる
+- ブランチを切った後、`git log origin/develop ^HEAD --oneline` で develop との差分がないことを確認すること
+
+---
+
+## 開発コマンド
+
+```bash
+# 開発サーバー起動
+uvicorn app.main:app --reload --port 8001
+
+# テスト
+pytest
+
+# 型チェック
+mypy app/
+
+# Lint
+ruff check app/
+```
+
+### Gitフックの初期設定（初回のみ）
+
+`git commit`時にRuffのフォーマッター・リンターを自動適用するため、`pre-commit`フレームワークを使用する。クローン後に1回だけ実行する。
+
+```bash
+cd server && uv sync
+uv run pre-commit install
+```
+
+設定すると、`git commit`のたびに`.pre-commit-config.yaml`で定義したRuffのフォーマット・自動修正（`server/`配下のみ対象）が実行される。修正が入った場合はそのコミットが失敗するので、変更内容を確認して`git add`し直し、再度`git commit`する（`pre-commit`フレームワークの標準動作）。開発中（保存のたび等）には走らないため、実装途中の未使用importがあっても妨げられない。
+
+なお、以前使用していた`.githooks/pre-push`（`git config core.hooksPath .githooks`）は、amend後の内容が実際にはpushされないという致命的な欠陥が判明したため廃止した。過去にこの設定を行った環境では、以下で設定を解除すること。
+
+```bash
+git config --unset core.hooksPath
+```
+
+---
+
+## ローカル開発環境のDB
+
+プロジェクトルート（`naw-server-fastapi-nextjs/`）の `docker-compose.yml` で PostgreSQL を起動する。
+
+```bash
+docker compose up -d
+```
+
+```
+コンテナ名: naw-fastapi-postgres
+ホスト:     localhost
+ポート:     5433
+DB名:       postgres
+ユーザー:   root
+パスワード: root
+```
+
+起動後、Alembic でマイグレーションを実行する。
+
+```bash
+cd server
+alembic upgrade head
+```
+
+### シードデータ
+
+動作確認（ブラウザ操作・API直叩き）に必要なデータは `server/seed.sql` に定義してDBに格納する。既存データを使い回すのではなく、そのチケット・Issue対応で新たに必要になったデータ（新しいロールのユーザー、複数人操作の検証用ユーザー等）は該当Issue対応の中で `seed.sql` に追記すること。
+
+```bash
+docker exec -i naw-fastapi-postgres psql -U root -d postgres < server/seed.sql
+```
+
+- 既存データを壊さないよう `ON CONFLICT DO NOTHING` 等で冪等に書く
+- 追加したシードデータは `03_詳細設計.md`（または `06_タスクリスト.md`）に変更内容を明記する
+
+---
+
+## コーディング規約
+
+- PEP 8 準拠
+- 型ヒントを**すべての関数・メソッドの引数と戻り値に必ず付ける**（Python 3.12+ 構文: `list[str]`、`dict[str, int]` 等）
+- `async/await` を使う（sync な DB アクセスは禁止）
+- `Optional` は使わず `X | None` で書く
+- コメントは「なぜそうしているか」を書く。コードをそのまま言葉にするコメントは書かない
+
+### docstring
+
+**NumPy 形式**で、日本語で書く（2026-11-13 のユーザー指示。Google 形式は使わない）。追加・変更する**すべての関数・メソッド・クラス**（`_` 付きの private も含む）に書き、引数・戻り値・例外があるものは `Parameters`・`Returns`・`Raises` の節を必ず書く（節名の下に `----------` の下線）。触ったファイルに Google 形式（`Args:` など）の docstring があれば、そのファイルの中は NumPy 形式に書き換える。
+
+```python
+def example(name: str, count: int) -> list[str]:
+    """概要を1行で書く。
+
+    Parameters
+    ----------
+    name : str
+        名前の説明。
+    count : int
+        件数の説明。
+
+    Returns
+    -------
+    list[str]
+        文字列のリスト。
+
+    Raises
+    ------
+    ValueError
+        count が負の場合。
+    """
+```
+
+- PR 前に `uv run ruff check --select D101,D102,D103,D105,D106,D107,D417 --config 'lint.pydocstyle.convention="numpy"' <変更したファイル>` で確かめる
+- 概要行は動詞で始める（「〜を取得する」「〜を検証する」など）
+- 引数・戻り値がない場合は該当セクションを省略してよい
+- テストメソッドには引数・戻り値セクション不要（日本語 docstring 1行のみ）
+
+---
+
+## テスト
+
+### テストフレームワーク
+
+```python
+import pytest
+from httpx import AsyncClient
+```
+
+### ディレクトリ構成
+
+```
+tests/
+├── unit/          # DB 不要。1 つの関数・メソッドを単独で検証するテスト
+└── integration/   # DB 接続が必要なテスト
+    └── conftest.py  # alembic upgrade head + TRUNCATE + engine/session fixture
+```
+
+- **unit**: 外部依存なし。Router テスト（`ASGITransport` 経由）、Service テスト（Repository をモック）など
+- **integration**: 実際の DB に接続して制約・CASCADE・データ整合性を確認するテスト
+
+### テストの種類
+
+| 種別 | ディレクトリ | 方針 |
+|---|---|---|
+| Router テスト | `unit/` | `AsyncClient` + `ASGITransport` でエンドポイントを叩く（DB 不要） |
+| Service テスト | `unit/` | Repository をモックして純粋なロジックをテスト |
+| Model/Repository テスト | `integration/` | テスト用 DB に実際に接続してテスト |
+
+### 命名規則
+
+- クラス名: 英語（`TestAssistantRouter`, `TestCreate` など）
+- テストメソッド名: **英語**（`test_insert_tenant`, `test_default_values` など）
+- テストの意図は**日本語 docstring** に書く
+
+```python
+class TestAssistantRouter:
+    class TestCreate:
+        async def test_insert_assistant(self, session):
+            """アシスタントを作成できること"""
+            ...
+
+        async def test_name_empty_raises_error(self, session):
+            """名前が空だと作成できないこと"""
+            ...
+```

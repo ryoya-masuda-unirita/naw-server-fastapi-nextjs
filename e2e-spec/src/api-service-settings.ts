@@ -4,7 +4,7 @@ import { ApiError } from './api.ts';
 /**
  * 管理コンソールの「サービス設定」系（15_アシスタント・16_チャット履歴・17_学習データ）のテストデータを API で作る・消すヘルパー。
  * 準備と後片付けだけに使い、テスト対象の操作そのものは画面から行う。
- * ID は backend/seed.sql・seed-demo.sql の値（専用環境に入っている）。
+ * ID は server/seed.sql・seed-demo.sql の値（専用環境に入っている）。
  */
 
 /** seed.sql の動作確認用エンドポイント。Azure OpenAI（チャット）。クラウド(一般)のアシスタントの接続先。 */

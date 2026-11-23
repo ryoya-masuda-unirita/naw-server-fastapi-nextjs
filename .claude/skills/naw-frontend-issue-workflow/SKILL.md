@@ -1,13 +1,13 @@
 ---
 name: naw-frontend-issue-workflow
-description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React frontend/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
+description: Use when working on a frontend porting GitHub Issue (Angular secuaigent/client → React client/) in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
 ---
 
 # NAW Frontend Issue Workflow
 
-この skill は、このリポジトリで**フロントエンド移植**（Angular `secuaigent/client` → React `frontend/`）のIssue対応を進めるときに使う。
+この skill は、このリポジトリで**フロントエンド移植**（Angular `secuaigent/client` → React `client/`）のIssue対応を進めるときに使う。
 
-バックエンド（Spring Boot `secuaigent/server` → FastAPI `backend/`）のIssue対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名・ドキュメント構成・承認フロー・コミット規約は共通のためそちらを踏襲し、本skillでは**移植元・移植先・調査エージェント・動作確認方法が異なる点のみ**を上書きする。
+バックエンド（Spring Boot `secuaigent/server` → FastAPI `server/`）のIssue対応は [naw-issue-workflow](../naw-issue-workflow/SKILL.md) を使う。ブランチ命名・ドキュメント構成・承認フロー・コミット規約は共通のためそちらを踏襲し、本skillでは**移植元・移植先・調査エージェント・動作確認方法が異なる点のみ**を上書きする。
 
 ## 使う場面
 
@@ -21,12 +21,12 @@ description: Use when working on a frontend porting GitHub Issue (Angular secuai
 | 項目 | naw-issue-workflow（バックエンド） | naw-frontend-issue-workflow（本skill） |
 |---|---|---|
 | 移植元 | `~/Documents/unirita-develop-pj/secuaigent-ref/server`（Spring Boot） | `~/Documents/unirita-develop-pj/secuaigent-ref/client`（Angular） |
-| 移植先 | `backend/`（FastAPI） | `frontend/`（React） |
+| 移植先 | `server/`（FastAPI） | `client/`（React） |
 | 調査エージェント | `naw-explore` | `naw-frontend-explore` |
 | Issueラベル | なし | 必ず `frontend-port` を付与する |
 | 自動テスト | `pytest` | `npm run test`（Vitest）、`npm run lint`、`npm run type-check` |
 | 動作確認 | サーバー起動 + API/ブラウザ操作 | `npm run dev`（`http://localhost:5173`）を起動し、実際に画面を操作して確認する |
-| デザイン規約 | なし | `frontend/.claude/CLAUDE.md` の Angular→React 対応表・デザイン移行方針に必ず従う |
+| デザイン規約 | なし | `client/.claude/CLAUDE.md` の Angular→React 対応表・デザイン移行方針に必ず従う |
 
 それ以外（ブランチ命名規則、ドキュメント構成、承認フロー、コミット規約、PRフォーマット）は `naw-issue-workflow` と完全に共通。
 
@@ -94,7 +94,7 @@ git push -u origin feature/issue-{番号}
 
 ## 参照
 - 移植元（フロントエンド）: `~/Documents/unirita-develop-pj/secuaigent-ref/client/src/app/...`
-- 移植先: `frontend/src/...`
+- 移植先: `client/src/...`
 - 依存するバックエンドAPI: `GET /api/...`（backend側の実装状況を明記）
 ```
 
@@ -125,7 +125,7 @@ feature/issue-X
 
 テンプレートと記載ルールは [naw-issue-workflow/references/doc-templates.md](../naw-issue-workflow/references/doc-templates.md) を読むこと（フロントエンド固有の追記は以下）。
 
-- `02_基本設計.md` の「移植方針」には、`frontend/.claude/CLAUDE.md` の Angular→React 対応表（NgRx signalStore → TanStack Query/Zustand 等）に沿った変換方針を明記する
+- `02_基本設計.md` の「移植方針」には、`client/.claude/CLAUDE.md` の Angular→React 対応表（NgRx signalStore → TanStack Query/Zustand 等）に沿った変換方針を明記する
 - `03_詳細設計.md` には、参照する Angular テンプレート（`*.component.html`）・移行先の React コンポーネント・使用する Tailwind クラス（`styles.css` のカスタムカラーの移行有無）を具体化する
 - `04_テスト設計.md` は Vitest + React Testing Library を前提にする
 
