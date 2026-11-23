@@ -617,6 +617,127 @@ class TestGetTokenUsages:
 
 
 @pytest.mark.asyncio
+class TestTokenUsageUserType:
+    """トークン使用量一覧の `userName`・`userType` のテスト。"""
+
+    async def _get_contents(
+        self, client: AsyncClient, headers: dict[str, str]
+    ) -> list[dict[str, Any]]:
+        """期間内の一覧を取得して `contents` を返す。"""
+        async with client as c:
+            response = await c.get(
+                f"/api/admin/token-usages?{_period_query()}", headers=headers
+            )
+        assert response.status_code == 200
+        return response.json()["contents"]
+
+    async def test_active_user_has_name_and_active_type(
+        self,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        token_usage_dataset: dict[str, Any],
+    ) -> None:
+        """テナントにいるユーザーの行はACTIVEでユーザー名が入ること"""
+        contents = await self._get_contents(client, admin_headers)
+
+        general_id = str(token_usage_dataset["general_user"].id)
+        rows = [row for row in contents if row["userId"] == general_id]
+        assert len(rows) == 1
+        assert rows[0]["userType"] == "ACTIVE"
+        assert rows[0]["userName"] == "Token Usage General"
+
+    async def test_system_role_user_has_system_type(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        token_usage_tenant: Tenant,
+    ) -> None:
+        """SYSTEMロールのユーザーの行はSYSTEMでユーザー名が入ること"""
+        system_user = User(
+            id=uuid4(),
+            tenant_id=token_usage_tenant.id,
+            login_id="token-usage-system",
+            name="Token Usage System",
+            role=UserRole.SYSTEM,
+            is_required_password_reset=False,
+        )
+        session.add(system_user)
+        session.add(_record(token_usage_tenant.id, system_user.id, 1, 1))
+        await session.commit()
+
+        contents = await self._get_contents(client, admin_headers)
+
+        assert len(contents) == 1
+        assert contents[0]["userType"] == "SYSTEM"
+        assert contents[0]["userName"] == "Token Usage System"
+
+    async def test_missing_user_is_deleted_type(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        token_usage_tenant: Tenant,
+    ) -> None:
+        """テナントにいないユーザーの行はDELETEDでユーザー名がnullになること"""
+        session.add(_record(token_usage_tenant.id, uuid4(), 1, 1))
+        await session.commit()
+
+        contents = await self._get_contents(client, admin_headers)
+
+        assert len(contents) == 1
+        assert contents[0]["userType"] == "DELETED"
+        assert contents[0]["userName"] is None
+
+    async def test_null_user_id_is_deleted_type(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        token_usage_tenant: Tenant,
+    ) -> None:
+        """user_idがNULLの行はDELETEDでユーザー名がnullになること"""
+        session.add(
+            _record(token_usage_tenant.id, None, 1, 1)  # type: ignore[arg-type]
+        )
+        await session.commit()
+
+        contents = await self._get_contents(client, admin_headers)
+
+        assert len(contents) == 1
+        assert contents[0]["userId"] is None
+        assert contents[0]["userType"] == "DELETED"
+        assert contents[0]["userName"] is None
+
+    async def test_other_tenant_user_is_deleted_type(
+        self,
+        session: AsyncSession,
+        client: AsyncClient,
+        admin_headers: dict[str, str],
+        token_usage_tenant: Tenant,
+        other_tenant: Tenant,
+    ) -> None:
+        """他テナントのユーザーIDの行はDELETEDで他テナントのユーザー名を返さないこと"""
+        other_user = User(
+            id=uuid4(),
+            tenant_id=other_tenant.id,
+            login_id="token-usage-other-tenant-user",
+            name="Other Tenant User",
+            role=UserRole.USER,
+            is_required_password_reset=False,
+        )
+        session.add(other_user)
+        session.add(_record(token_usage_tenant.id, other_user.id, 1, 1))
+        await session.commit()
+
+        contents = await self._get_contents(client, admin_headers)
+
+        assert len(contents) == 1
+        assert contents[0]["userType"] == "DELETED"
+        assert contents[0]["userName"] is None
+
+
+@pytest.mark.asyncio
 class TestGetTokenUsageSummary:
     """トークン使用量サマリー取得のテスト。"""
 
