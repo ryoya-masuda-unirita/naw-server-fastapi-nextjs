@@ -70,6 +70,7 @@ class UserService:
         exclude_group_id: str | None,
         session: AsyncSession,
         *,
+        login_ids: list[str] | None = None,
         include_usage: bool = False,
     ) -> PagedUserResponse:
         """ユーザー一覧をページネーションで取得する。
@@ -97,6 +98,9 @@ class UserService:
             除外グループID。指定したグループに所属するユーザーを除外する。
         session : AsyncSession
             非同期DBセッション。
+        login_ids : list[str] | None
+            指定すると loginId が完全一致するユーザーだけを返す。
+            空・None の場合は絞り込まない。
         include_usage : bool
             Trueの場合、請求期間内のtotalCreditsをレスポンスに含める。
 
@@ -132,6 +136,11 @@ class UserService:
 
         if role_filter is not None:
             stmt = stmt.where(User.role == role_filter)
+
+        # 空リストは指定なしとして扱う（移植元の`loginIds != null && !isEmpty()`と同じ）。
+        # SYSTEM ロールの除外・テナント条件は上で付けてあるため、完全一致でも外れない。
+        if login_ids:
+            stmt = stmt.where(cast(Any, User.login_id).in_(login_ids))
 
         # 移植元の`isBlank`と同じく、空白だけの値は指定なしとして扱う。
         if exclude_group_id and exclude_group_id.strip():

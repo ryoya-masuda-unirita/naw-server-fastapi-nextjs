@@ -112,6 +112,63 @@ class TestGetUsers:
 
         assert result.totalElements == 1
 
+    async def test_filters_by_login_ids(
+        self, test_tenant: Tenant, test_user: User
+    ) -> None:
+        """login_ids を指定すると loginId の IN 条件が検索クエリに付くこと"""
+        session = AsyncMock()
+
+        mock_count = MagicMock()
+        mock_count.scalar.return_value = 1
+        mock_users = MagicMock()
+        mock_users.scalars.return_value.all.return_value = [test_user]
+        session.execute = AsyncMock(side_effect=[mock_count, mock_users])
+
+        await UserService.get_users(
+            test_tenant.id,
+            0,
+            20,
+            parse_sort("created_at,desc"),
+            None,
+            None,
+            None,
+            session,
+            login_ids=["a", "b"],
+        )
+
+        users_stmt = session.execute.call_args_list[1].args[0]
+        compiled = str(users_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "users.login_id IN ('a', 'b')" in compiled
+
+    @pytest.mark.parametrize("login_ids", [None, []])
+    async def test_empty_login_ids_adds_no_condition(
+        self, test_tenant: Tenant, test_user: User, login_ids: list[str] | None
+    ) -> None:
+        """login_ids が None・空リストの場合は絞り込み条件が付かないこと"""
+        session = AsyncMock()
+
+        mock_count = MagicMock()
+        mock_count.scalar.return_value = 1
+        mock_users = MagicMock()
+        mock_users.scalars.return_value.all.return_value = [test_user]
+        session.execute = AsyncMock(side_effect=[mock_count, mock_users])
+
+        await UserService.get_users(
+            test_tenant.id,
+            0,
+            20,
+            parse_sort("created_at,desc"),
+            None,
+            None,
+            None,
+            session,
+            login_ids=login_ids,
+        )
+
+        users_stmt = session.execute.call_args_list[1].args[0]
+        compiled = str(users_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "login_id IN" not in compiled
+
 
 class TestCreateUser:
     """UserService.create_user のテスト"""

@@ -37,6 +37,7 @@ async def get_users(
     searchText: str | None = Query(None),
     role: str | None = Query(None),
     excludeGroupId: str | None = Query(None),
+    loginIds: list[str] | None = Query(None),
     includeUsage: bool = Query(False),
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
@@ -59,6 +60,9 @@ async def get_users(
         ロールの絞り込み。
     excludeGroupId : str | None
         指定したグループの所属ユーザーを除く。
+    loginIds : list[str] | None
+        指定すると loginId が完全一致するユーザーだけを返す（複数指定可）。
+        空・未指定なら絞り込まない。
     includeUsage : bool
         True のとき請求期間内の totalCredits を付ける。
     current_user : User
@@ -80,6 +84,7 @@ async def get_users(
         role,
         excludeGroupId,
         session,
+        login_ids=loginIds,
         include_usage=includeUsage,
     )
 
