@@ -3,8 +3,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 from app.core.config import Settings
+from app.core.security import ServerAuthKeyMiddleware
 from tests.conftest import AUTH_HEADERS, make_settings
 
 
@@ -81,10 +83,34 @@ async def test_hello_lookalike_paths_require_auth(client: httpx.AsyncClient) -> 
 
 
 async def test_hello_subpath_is_excluded_from_auth(client: httpx.AsyncClient) -> None:
-    """/api/hello 配下（/api/hello/ ...）は、これまでどおり認証キーなしで通ること（401 にならない）"""
+    """/api/hello 配下は認証キーなしで認証を通り（ルートが無ければ 404）、名前の頭だけ一致する別のパスは 401 になること"""
     del client.headers["X-SERVER-AUTH-KEY"]
-    res = await client.get("/api/hello/")
-    assert res.status_code != 401
+    # どちらもルートは無い。違いは、認証を通るか（404）、通らないか（401）だけ
+    under = await client.get("/api/hello/x")
+    lookalike = await client.get("/api/helloX")
+    assert under.status_code == 404
+    assert lookalike.status_code == 401
+    # 末尾のスラッシュは、稼働確認のパスへのリダイレクト（認証は通る）
+    slash = await client.get("/api/hello/")
+    assert slash.status_code == 307
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/api/hello", True),
+        ("/api/hello/", True),
+        ("/api/hello/x", True),
+        ("/api/helloX", False),
+        ("/api/hello-world", False),
+        ("/api/hello.json", False),
+        ("/api/hell", False),
+        ("/x/api/hello", False),
+    ],
+)
+def test_is_same_or_under(path: str, expected: bool) -> None:
+    """パスが、基準と同じか、基準の配下のときだけ True になること（名前の頭だけの一致は False）"""
+    assert ServerAuthKeyMiddleware._is_same_or_under(path, "/api/hello") is expected
 
 
 async def test_hello_lookalike_path_requires_auth_with_context_path(
