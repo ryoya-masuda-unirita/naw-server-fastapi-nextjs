@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from generative_ai_adapter.constants import PropertyIds
+from retrieval_adapter.constants import RetrievalPropertyIds
 
 from tests.conftest import make_settings
 from waha_emulator.workflow_config import (
@@ -353,3 +354,67 @@ def test_load_bedrock_vendor_with_env_key(
         PropertyIds.API_KEY: "bedrock-key",
         PropertyIds.MODEL_NAME: "anthropic.claude-haiku-4-5",
     }
+
+
+def test_load_bedrock_embedding_and_retrieval_vendor() -> None:
+    """学習用・検索用の定義に `VENDOR: Bedrock` が書け、名前で読めること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    bedrock = {
+        "VENDOR": "Bedrock",
+        "URL": "https://bedrock-runtime.example.invalid",
+        "API_KEY": "bedrock-key",
+        "MODEL_NAME": "amazon.titan-embed-text-v1",
+    }
+    vdb = {
+        "VDB_VENDOR": "PostgreSQL(PGVector)",
+        "VDB_URL": "db.invalid:5432",
+        "VDB_USER_NAME": "user",
+        "VDB_PASSWORD": "password",
+        "VDB_DATABASE_NAME": "appdb",
+        "VDB_TABLE_NAME": "docs",
+    }
+
+    config = parse_workflow_config(
+        {
+            "default": {"properties": ECHO_PROPERTIES},
+            "services": {
+                "learn": {
+                    "adapter": "embedding",
+                    "operation": "learn",
+                    "properties": {**bedrock, **vdb, "TENANT_ID": "tenant"},
+                },
+                "rag": {
+                    "outputType": RAG_OUTPUT_TYPE,
+                    "properties": ECHO_PROPERTIES,
+                    "retrieval": {"properties": {**bedrock, **vdb}},
+                },
+            },
+        },
+        {},
+    )
+
+    assert "vendor=Bedrock" in config.services["learn"].describe()
+    retrieval = config.services["rag"].retrieval
+    assert retrieval is not None
+    assert retrieval.properties[RetrievalPropertyIds.VENDOR] == "97"
+
+
+def test_onprem_bedrock_example_file_is_valid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """onprem の Bedrock の例のファイルが読め、回答・検索・学習がすべて Bedrock であること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    monkeypatch.setenv("BEDROCK_API_KEY", "bedrock-key")
+    example = (
+        Path(__file__).resolve().parents[2]
+        / "onprem"
+        / "config"
+        / "workflows.bedrock.example.json"
+    )
+
+    config = load_workflow_config(make_settings(WAHA_WORKFLOWS_FILE=str(example)))
+
+    assert config.default.properties[PropertyIds.VENDOR] == "97"
+    assert config.services["bedrock-rag"].retrieval is not None
+    for name in ("kb-learn", "kb-sync", "kb-delete"):
+        assert "vendor=Bedrock" in config.services[name].describe()
