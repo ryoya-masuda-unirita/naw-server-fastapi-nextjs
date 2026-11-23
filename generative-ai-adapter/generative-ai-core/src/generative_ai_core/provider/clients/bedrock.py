@@ -31,6 +31,7 @@ from generative_ai_core.chat.models import (
     CoreGenerationOptions,
     CoreRagRequest,
 )
+from generative_ai_core.jsonutil import loads_with_raw_numbers
 from generative_ai_core.network.transport import client_options
 from generative_ai_core.provider.clients.base import (
     ChatTransportBase,
@@ -63,6 +64,8 @@ EVIDENCE_BEDROCK = (
 )
 _DATA_URL = re.compile(r"^data:(?P<mime>[^;,]+);base64,(?P<data>.*)$", re.DOTALL)
 _PART_SEPARATOR = "\n\n"
+# JSON を包むコードフェンス（``` または ```json）。言語名と改行の有無は問わない
+_CODE_FENCE = re.compile(r"^```[A-Za-z0-9_-]*[ \t]*\n?(?P<body>.*?)\s*```$", re.DOTALL)
 
 
 def request_target(
@@ -192,6 +195,58 @@ def generation_body(options: CoreGenerationOptions) -> dict[str, Any]:
     return body
 
 
+def _is_json(text: str) -> bool:
+    """文字列が JSON として読めるかを返す（RAG の回答の読み取りと同じ関数で判定する）。
+
+    Parameters
+    ----------
+    text : str
+        判定する文字列。
+
+    Returns
+    -------
+    bool
+        読めるとき True。
+    """
+    try:
+        loads_with_raw_numbers(text)
+    except ValueError:
+        return False
+    return True
+
+
+def json_payload(text: str | None) -> str | None:
+    """RAG の返答の本文から、JSON の部分を取り出す。
+
+    Messages API には、OpenAI 系のような JSON 形式の出力の指定がなく、Claude は JSON を
+    コードフェンスで包んだり、前後に説明文を付けたりして返す。読み取りの前に、前後の空白と
+    コードフェンスを取り除き、それでも読めなければ、最初の ``{`` から最後の ``}`` までを
+    取り出す。読めないものは、そのまま返す（読み取りで従来どおり却下される）。
+
+    Parameters
+    ----------
+    text : str | None
+        返答の本文。
+
+    Returns
+    -------
+    str | None
+        JSON として読める部分。読めなければ前後の空白を除いた元の文字列。None は None。
+    """
+    if text is None:
+        return None
+    stripped = text.strip()
+    fenced = _CODE_FENCE.match(stripped)
+    if fenced is not None:
+        stripped = fenced.group("body").strip()
+    if _is_json(stripped):
+        return stripped
+    start, end = stripped.find("{"), stripped.rfind("}")
+    if 0 <= start < end and _is_json(stripped[start : end + 1]):
+        return stripped[start : end + 1]
+    return stripped
+
+
 def extract_text(response_body: Mapping[str, Any] | None) -> str | None:
     """応答の text ブロックを順につないだ回答本文。なければ None。
 
@@ -299,7 +354,7 @@ class BedrockMessagesTransport(ChatTransportBase):
         chat_request = request.chat_request
         options = generation_body(chat_request.generation_options())
         answer_body = self._call(to_rag_messages(request), options, "rag-answer")
-        answer = parse_rag_answer(extract_text(answer_body))
+        answer = parse_rag_answer(json_payload(extract_text(answer_body)))
         validation_text: str | None = None
         if answer is not None and answer.reference_ids:
             # 検証は温度だけを引き継ぐ（OpenAI 系と同じ）
@@ -313,7 +368,7 @@ class BedrockMessagesTransport(ChatTransportBase):
                 validation_options,
                 "rag-validation",
             )
-            validation_text = extract_text(validation_body)
+            validation_text = json_payload(extract_text(validation_body))
         if (
             answer is None
             or not answer.reference_ids
