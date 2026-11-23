@@ -73,7 +73,7 @@ npm run env:down                     # 破棄（データごと）
 | `E2E_SPEC_FRONTEND_PORT` | 55273 | 画面のポート |
 | `E2E_SPEC_BACKEND_PORT` | 58100 | backend のポート |
 | `E2E_SPEC_BASE_URL` / `E2E_SPEC_API_URL` | `http://localhost:<上のポート>` | 画面 / API の URL（ローカル以外は拒否） |
-| `E2E_SPEC_WORKERS` | 4 | テストの並列数 |
+| `E2E_SPEC_WORKERS` | 2 | テストの並列数 |
 | `E2E_SPEC_REPORT_DIR` | `reports/latest` | 集計・スクリーンショット・trace の出力先 |
 | `E2E_SPEC_PROJECT` | `naw-e2e-spec` | compose のプロジェクト名（ネットワーク・ボリューム・backend のイメージ名が分かれる） |
 
