@@ -15,7 +15,6 @@ export const INITIAL_TRAINING_DATA_FILE_FILTER: TrainingDataFileFilter = {
   userId: '',
   selectedPeriod: null,
   filterPeriodRange: null,
-  selectedStatus: null,
   pageSize: 10,
   pageIndex: 1,
   sortField: 'updatedAt',

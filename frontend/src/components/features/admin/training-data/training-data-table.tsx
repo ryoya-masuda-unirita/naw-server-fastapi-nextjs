@@ -23,7 +23,6 @@ interface TrainingDataTableProps {
   onUpdateEditingValue: (id: string, field: 'displayName' | 'reference', value: string) => void;
   onDownload?: (row: TrainingDataFile) => void;
   onEditLearningData: (row: TrainingDataFile) => void;
-  onToggleLearning: (row: TrainingDataFile) => void;
   onDeleteFile: (row: TrainingDataFile) => void;
   onPageChange: (page: number) => void;
 }
@@ -42,7 +41,6 @@ export function TrainingDataTable({
   onUpdateEditingValue,
   onDownload,
   onEditLearningData,
-  onToggleLearning,
   onDeleteFile,
   onPageChange,
 }: TrainingDataTableProps) {
@@ -81,9 +79,6 @@ export function TrainingDataTable({
           </span>
           <span className="table-list-col-date table-list-label md:w-30">
             {t('LEARNING_DATA.COLUMN_UPDATED_BY')}
-          </span>
-          <span className="table-list-col-date table-list-label md:w-16">
-            {t('LEARNING_DATA.COLUMN_LEARNING')}
           </span>
         </TableListItem>
 
@@ -164,27 +159,6 @@ export function TrainingDataTable({
                             {t('LEARNING_DATA.DOWNLOAD')}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="dropdown-item"
-                          role="menuitem"
-                          data-testid="training-data-file-toggle-learning"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onToggleLearning(row);
-                          }}
-                        >
-                          <span className="dropdown-item-icon">
-                            <SvgIcon
-                              name={row.status === 'ENABLE' ? 'newRemove' : 'checkCircle'}
-                              className="w-5 h-5"
-                            />
-                          </span>
-                          {row.status === 'ENABLE'
-                            ? t('LEARNING_DATA.SET_LEARNING_OFF')
-                            : t('LEARNING_DATA.SET_LEARNING_ON')}
-                        </button>
-
                         <hr className="dropdown-divider" />
 
                         <button
@@ -265,20 +239,6 @@ export function TrainingDataTable({
                 </span>
                 <span className="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium">
                   {row.updatedBy}
-                </span>
-              </div>
-
-              <div className="table-list-row-date md:w-16">
-                <span className="table-list-label md:hidden w-30 md:w-auto">
-                  {t('LEARNING_DATA.COLUMN_LEARNING')}
-                </span>
-                <span
-                  className="table-list-date flex-1 w-30 md:w-auto text-label text-text-medium font-medium"
-                  data-learning-status
-                >
-                  {row.status === 'ENABLE'
-                    ? t('LEARNING_DATA.STATUS_ON')
-                    : t('LEARNING_DATA.STATUS_OFF')}
                 </span>
               </div>
             </TableListItem>

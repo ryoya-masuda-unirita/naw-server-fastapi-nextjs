@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { LEARNING_FOLDERS_QUERY_KEY } from '@/hooks/use-training-data';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
@@ -251,7 +252,8 @@ describe('TrainingDataPage', () => {
 
     test('ローカルを選ぶと接続先が先頭で選ばれ、作成すると本文が送られて一覧の先頭に足されること', async () => {
       const log = mockApis();
-      await renderPage();
+      const { queryClient } = await renderPage();
+      queryClient.setQueryData(LEARNING_FOLDERS_QUERY_KEY, []);
       const user = await openDialog();
 
       await user.type(screen.getByTestId('admin-training-data-name-input'), '新フォルダ');
@@ -276,6 +278,8 @@ describe('TrainingDataPage', () => {
       expect(cards).toHaveLength(3);
       expect(within(cards[0]).getByText('新フォルダ')).toBeInTheDocument();
       expect(screen.getByText('1-5件 / 8件')).toBeInTheDocument();
+      // フィードバック一覧の学習先フォルダの一覧を取り直す印が付く
+      expect(queryClient.getQueryState(LEARNING_FOLDERS_QUERY_KEY)?.isInvalidated).toBe(true);
     });
 
     test('クラウドを選ぶとサービス ID の入力欄が消え、ベクトル DB と埋め込みモデルの 2 つを送ること', async () => {

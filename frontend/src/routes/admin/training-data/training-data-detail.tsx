@@ -53,11 +53,16 @@ function TrainingDataDetail({ id }: { id: string }) {
     updateFolder.isPending ||
     deleteFolder.isPending;
 
-  const handleDeleteClose = (result?: unknown) => {
+  const handleDeleteClose = async (result?: unknown) => {
     setIsDeleteOpen(false);
     if (!result) return;
-    // 失敗の通知は api-client の共通エラートーストが出す。移植元と同じく待たずに前の画面へ戻る
-    deleteFolder.mutate(id);
+    // 削除の完了を待ってから戻る。待たずに戻ると、削除前の一覧が表示されることがある（NAW-1397）。
+    // 失敗の通知は api-client の共通エラートーストが出すので、失敗したときは戻らず詳細にとどまる
+    try {
+      await deleteFolder.mutateAsync(id);
+    } catch {
+      return;
+    }
     navigate(-1);
   };
 
@@ -183,7 +188,7 @@ function TrainingDataDetail({ id }: { id: string }) {
         confirmTestid="training-data-detail-delete-confirm"
         cancelTestid="training-data-detail-delete-cancel"
         dialogWidth={DELETE_DIALOG_WIDTH}
-        onClose={handleDeleteClose}
+        onClose={(result) => void handleDeleteClose(result)}
       />
     </div>
   );

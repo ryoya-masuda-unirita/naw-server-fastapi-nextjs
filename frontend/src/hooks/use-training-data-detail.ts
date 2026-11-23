@@ -28,7 +28,7 @@ import type {
   TrainingDataFileFilter,
   TrainingFileUploadEntry,
 } from '@/types/training-data.types';
-import { TRAINING_DATA_QUERY_KEY } from './use-training-data';
+import { TRAINING_DATA_QUERY_KEY, invalidateLearningFolders } from './use-training-data';
 import { useAdminUsers } from './use-admin-users';
 
 // 移植元 training-data の TrainingApiService（詳細・ファイル）と TrainingDataStore の詳細まわり。
@@ -45,7 +45,6 @@ interface FileDto {
   reference?: string;
   /** 画面の値（プリセットのキーか数値）。送るときに `splitLength` の数値にする */
   splitLength?: string;
-  status?: TrainingDataFile['status'];
 }
 
 function detailKey(id: string) {
@@ -160,7 +159,7 @@ async function patchFile(
 type FilesSnapshot = [readonly unknown[], TrainingDataFileApiResponse | undefined][];
 
 /**
- * 一覧の行を先に書き換え、失敗したら元に戻す（移植元 `updateFileNames`・`toggleFileLearning`）。
+ * 一覧の行を先に書き換え、失敗したら元に戻す（移植元 `updateFileNames`）。
  * 書き換えた後に一覧は取り直さない。
  */
 function useOptimisticFilePatch(indexId: string) {
@@ -205,6 +204,7 @@ export function useUpdateTrainingFolder(id: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: detailKey(id) });
       await queryClient.invalidateQueries({ queryKey: [TRAINING_DATA_QUERY_KEY, 'list'] });
+      invalidateLearningFolders(queryClient);
     },
   });
 }
@@ -214,8 +214,10 @@ export function useDeleteTrainingFolder() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(API_PATHS.INDEXES.DETAIL(id)),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: [TRAINING_DATA_QUERY_KEY, 'list'] }),
+    onSuccess: () => {
+      invalidateLearningFolders(queryClient);
+      return queryClient.invalidateQueries({ queryKey: [TRAINING_DATA_QUERY_KEY, 'list'] });
+    },
   });
 }
 
@@ -288,7 +290,6 @@ export function useUpdateTrainingFile(id: string) {
           displayName: data.displayName,
           reference: data.reference,
           ...(chunkSizeChanged ? { splitLength: data.chunkSize } : {}),
-          status: data.status,
         },
         uploadFile,
       );
@@ -311,26 +312,6 @@ export function useRenameTrainingFile(id: string) {
       patchFile(id, fileId, { displayName, ...(reference !== undefined ? { reference } : {}) }),
     onMutate: ({ fileId, displayName, reference }) =>
       apply(fileId, { displayName, ...(reference !== undefined ? { reference } : {}) }),
-    onError: (_error, _variables, snapshot) => {
-      if (snapshot) rollback(snapshot);
-    },
-  });
-}
-
-interface ToggleTrainingFileVariables {
-  fileId: string;
-  currentStatus: TrainingDataFile['status'];
-}
-
-/** 移植元 `TrainingDataStore.toggleFileLearning`。先に画面を書き換え、失敗したら戻す */
-export function useToggleTrainingFileLearning(id: string) {
-  const { apply, rollback } = useOptimisticFilePatch(id);
-  const nextStatus = (current: TrainingDataFile['status']) =>
-    current === 'ENABLE' ? 'DISABLE' : 'ENABLE';
-  return useMutation({
-    mutationFn: ({ fileId, currentStatus }: ToggleTrainingFileVariables) =>
-      patchFile(id, fileId, { status: nextStatus(currentStatus) }),
-    onMutate: ({ fileId, currentStatus }) => apply(fileId, { status: nextStatus(currentStatus) }),
     onError: (_error, _variables, snapshot) => {
       if (snapshot) rollback(snapshot);
     },

@@ -34,7 +34,7 @@ export interface TrainingDataApiItem {
   files?: TrainingDataFile[];
 }
 
-export type TrainingDataFileSortField = 'updatedAt' | 'displayName' | 'updatedBy' | 'status';
+export type TrainingDataFileSortField = 'updatedAt' | 'displayName' | 'updatedBy';
 export type TrainingDataFileSortOrder = '' | 'asc' | 'desc';
 
 export interface TrainingDataFilePeriodRange {
@@ -48,7 +48,6 @@ export interface TrainingDataFileFilter {
   userId?: string;
   selectedPeriod?: string | null;
   filterPeriodRange?: TrainingDataFilePeriodRange | null;
-  selectedStatus?: string | null;
   pageSize: number;
   pageIndex: number;
   sortField?: TrainingDataFileSortField;
@@ -61,7 +60,6 @@ export interface TrainingFileUploadEntry {
   /** チャット時に参照資料のリンクとして使われる名前 */
   reference?: string;
   chunkSize?: string;
-  status?: 'ENABLE' | 'DISABLE' | 'DELETED' | string;
 }
 
 export interface TrainingDataFile {
