@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
@@ -5,7 +6,7 @@ from datetime import datetime
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import credit_quota, file_creation
+from app.core import credit_quota, file_creation, file_vectorization
 from app.core.file_storage import FileStorage
 from app.core.sort import SortOrder
 from app.models.file import File, FileStatus
@@ -26,6 +27,8 @@ _VALID_STATUS_NAMES = {s.name for s in FileStatus}
 # 移植元`FileService.DELETED_FILE_UPDATE_MESSAGE`（NAW-1375）と同じ文言。
 DELETED_FILE_UPDATE_MESSAGE = "削除済みのファイルは更新できません。"
 DELETED_FILE_DOWNLOAD_MESSAGE = "削除済みのファイルはダウンロードできません。"
+
+logger = logging.getLogger(__name__)
 
 
 class FileService:
@@ -359,9 +362,13 @@ class FileService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="ファイルをアップロードする場合、nameは必須です。",
             )
+        split_length = file_vectorization.validate_split_length(form.split_length)
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
         file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
+        vectorizer = await file_vectorization.build_vectorizer(
+            index_id, tenant_id, current_user.id, split_length, session
+        )
 
         file = await file_creation.create_file_record(
             index,
@@ -373,6 +380,7 @@ class FileService:
             tenant_id,
             storage,
             session,
+            vectorizer=vectorizer,
         )
         return await FileService._to_single_response(file, tenant_id, session)
 
@@ -529,13 +537,16 @@ class FileService:
                 detail="ファイルを添付して更新する場合、nameは必須です。",
             )
 
+        split_length = file_vectorization.validate_split_length(form.split_length)
         index = await FileService._get_index_or_404(index_id, tenant_id, session)
         file_creation.ensure_not_local(index)
         await credit_quota.enforce_within_quota(tenant_id, session)
-
-        await FileService.delete_file(
-            index_id, file_id, tenant_id, True, storage, session
+        vectorizer = await file_vectorization.build_vectorizer(
+            index_id, tenant_id, current_user.id, split_length, session
         )
+
+        # 新しいファイルを先に登録する。登録（抽出・埋め込み・保存）が失敗しても、古いファイルと
+        # 検索のデータが残るようにするため（移植元は、削除してから作成する）
         file = await file_creation.create_file_record(
             index,
             form.name,
@@ -546,6 +557,10 @@ class FileService:
             tenant_id,
             storage,
             session,
+            vectorizer=vectorizer,
+        )
+        await FileService.delete_file(
+            index_id, file_id, tenant_id, True, storage, session
         )
         return await FileService._to_single_response(file, tenant_id, session)
 
@@ -601,3 +616,15 @@ class FileService:
         else:
             file.status = FileStatus.DELETED
             await FileRepository.save(file, session)
+        # ベクトルは最後に消す。失敗しても、ファイルは消えている。ファイルのないベクトルは、
+        # RAG の検索で読み飛ばされる（削除済みのファイルを引かない）ため、記録して続ける
+        vdb = await file_vectorization.resolve_vdb(tenant_id, session)
+        if vdb is not None:
+            try:
+                await file_vectorization.delete_vectors(vdb, file.id)
+            except Exception as error:
+                logger.error(
+                    "ベクトルの削除に失敗しました（ファイルは削除済み）: file_id=%s, %s",
+                    file.id,
+                    type(error).__name__,
+                )
