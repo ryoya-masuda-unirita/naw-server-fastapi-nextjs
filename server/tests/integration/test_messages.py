@@ -3,6 +3,7 @@ import inspect
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
@@ -715,6 +716,71 @@ class TestMessageRouter:
             body = response.json()
             assert [m["id"] for m in body["messages"]] == [owned_message.id]
             assert [a["id"] for a in body["assistants"]] == [message_assistant.id]
+
+        async def test_messages_are_ordered_by_content_created_at_ascending(
+            self,
+            session: AsyncSession,
+            client: AsyncClient,
+            owner_headers: dict[str, str],
+            messages_tenant: Tenant,
+            owned_room: Room,
+            message_assistant: Assistant,
+        ) -> None:
+            """内容の作成日時の昇順で返り、内容のないメッセージは末尾、同順位はidの昇順になること"""
+            newer_id, older_id, same_a_id, same_b_id, empty_id = (
+                "m-order-newer",
+                "m-order-older",
+                "m-order-same-a",
+                "m-order-same-b",
+                "m-order-empty",
+            )
+            base = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
+            # 入れる順（新しい版を先）と、返す順（古い版が先）が逆になるようにする。
+            # 同順位の2件は、idの昇順と入れる順が逆になるようにb→aの順で入れる。
+            created_at_by_message = [
+                (newer_id, base + timedelta(minutes=10)),
+                (older_id, base),
+                (same_b_id, base + timedelta(minutes=5)),
+                (same_a_id, base + timedelta(minutes=5)),
+            ]
+            for message_id in [newer_id, older_id, same_b_id, same_a_id, empty_id]:
+                session.add(
+                    Message(
+                        id=message_id,
+                        tenant_id=messages_tenant.id,
+                        room_id=owned_room.id,
+                        assistant_id=message_assistant.id,
+                    )
+                )
+            await session.commit()
+            for message_id, created_at in created_at_by_message:
+                session.add(
+                    MessageContent(
+                        tenant_id=messages_tenant.id,
+                        message_id=message_id,
+                        status=MessageContentStatus.OK,
+                        question="質問",
+                        answer="回答",
+                        created_at=created_at,
+                    )
+                )
+            await session.commit()
+
+            async with client as c:
+                response = await c.get(
+                    "/api/messages",
+                    params={"roomId": owned_room.id},
+                    headers=owner_headers,
+                )
+
+            assert response.status_code == 200
+            assert [m["id"] for m in response.json()["messages"]] == [
+                older_id,
+                same_a_id,
+                same_b_id,
+                newer_id,
+                empty_id,
+            ]
 
         async def test_assistants_include_history_and_model(
             self,
