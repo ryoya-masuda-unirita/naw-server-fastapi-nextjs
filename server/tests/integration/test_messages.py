@@ -939,8 +939,8 @@ class TestMessageRouter:
             owned_room: Room,
             message_assistant: Assistant,
         ) -> None:
-            """内容の作成日時が同じメッセージが、IDの昇順で返ること（毎回同じ順序）"""
-            # 挿入順は逆（z, m, a）。作成日時は全て同じ。内容のないメッセージ(n1, n0)も同順位
+            """内容の作成日時が同じメッセージも、毎回同じ順序（IDの昇順）で返ること。順序が決定的であることの確認"""
+            # 挿入順は逆（z, m, a）。作成日時は全て同じ。内容なし(n1, n0)も同順位
             for message_id in ("msg-z", "msg-m", "msg-a"):
                 await _add_message_with_contents(
                     session,
