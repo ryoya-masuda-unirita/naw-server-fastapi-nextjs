@@ -12,7 +12,6 @@ from starlette.exceptions import HTTPException
 from app.core.config import MAX_FILE_SIZE_BYTES, MAX_REQUEST_SIZE_BYTES
 from app.core.deps import SessionDep, StreamServiceDep, WahaDep
 from app.core.errors import PayloadTooLargeError
-from app.core.jsonutil import to_compact_json
 from app.schemas.message import (
     CreateMessageContentCommand,
     CreateMessageContentRequest,
@@ -136,7 +135,7 @@ def _summarize_files(form: FormData, name: str) -> list[FileSummary]:
 
 async def _parse_message_request(
     request: Request,
-) -> tuple[CreateMessageContentCommand, CreateMessageContentRequest]:
+) -> CreateMessageContentCommand:
     """移植元の @RequestPart（textData は JSON パート）を読み取る。
 
     ブラウザは textData を `application/json` の Blob として送るが、テストツール等で
@@ -149,8 +148,8 @@ async def _parse_message_request(
 
     Returns
     -------
-    tuple[CreateMessageContentCommand, CreateMessageContentRequest]
-        サービスに渡すコマンドと、ログに出すための textData の内容。
+    CreateMessageContentCommand
+        サービスに渡すコマンド（textData の内容と添付ファイルを含む）。
 
     Raises
     ------
@@ -192,26 +191,25 @@ async def _parse_message_request(
     command = CreateMessageContentCommand.from_request(
         dto, attachment_files, history_files
     )
-    return command, dto
+    return command
 
 
 def _log_received_request(
     endpoint: str,
-    dto: CreateMessageContentRequest,
     command: CreateMessageContentCommand,
 ) -> None:
-    """受け取った回答作成のリクエストの内容をログに出す。
+    """受け取った回答作成のリクエストの概要をログに出す。
 
-    アクセストークンはログに残さないよう除き、ファイルは名前とサイズだけを出す。
+    質問・追加のプロンプト・会話履歴の本文、ツールの設定の詳細、アクセストークンの値は、
+    ログを見られる人に漏れるため出さない（DEBUG でも同じ）。長さ・件数・ID・ツール名・
+    トークンの有無と、ファイルの名前とサイズだけを出す。
 
     Parameters
     ----------
     endpoint : str
         ログに出すエンドポイント名（メソッドとパス）。
-    dto : CreateMessageContentRequest
-        textData の内容。
     command : CreateMessageContentCommand
-        添付ファイルを含むサービス用のコマンド。
+        textData の内容と添付ファイルを含むサービス用のコマンド。
     """
 
     def describe(files: list[UploadedFile] | list[FileSummary]) -> str:
@@ -235,10 +233,22 @@ def _log_received_request(
         return "[" + ", ".join(items) + "]"
 
     logger.info(
-        "Received message content request: endpoint=%s, textData=%s, "
-        "attachmentFiles=%s, historyAttachmentFiles=%s",
+        "Received message content request: endpoint=%s, assistantId=%s, "
+        "messageId=%s, messageContentId=%s, userInputLength=%s, "
+        "additionalPromptLength=%s, historyCount=%s, tools=%s, createLibrary=%s, "
+        "tenantId=%s, hasAccessToken=%s, attachmentFiles=%s, "
+        "historyAttachmentFiles=%s",
         endpoint,
-        to_compact_json(dto.model_dump(mode="json", exclude={"accessToken"})),
+        command.assistant_id,
+        command.message_id,
+        command.message_content_id,
+        len(command.user_input or ""),
+        len(command.additional_prompt or ""),
+        len(command.history_messages),
+        [t.name for t in command.tools],
+        command.create_library,
+        command.tenant_id,
+        bool(command.access_token),
         describe(command.attachment_files),
         describe(command.history_attachment_files),
     )
@@ -275,8 +285,8 @@ async def create_message_content(
     PayloadTooLargeError
         添付ファイルのサイズが上限を超えている場合（413）。
     """
-    command, dto = await _parse_message_request(request)
-    _log_received_request("POST /api/messages/content", dto, command)
+    command = await _parse_message_request(request)
+    _log_received_request("POST /api/messages/content", command)
     stream_session = await stream_service.prepare_stream(session, command)
     runtime = stream_service.start_streaming(
         command, stream_session, StreamMode.NAW_COMPATIBLE
@@ -315,8 +325,8 @@ async def create_message_content_sync(
     PayloadTooLargeError
         添付ファイルのサイズが上限を超えている場合（413）。
     """
-    command, dto = await _parse_message_request(request)
-    _log_received_request("POST /api/messages/content/sync", dto, command)
+    command = await _parse_message_request(request)
+    _log_received_request("POST /api/messages/content/sync", command)
     return await message_content_service.post_message_content(session, waha, command)
 
 
@@ -352,8 +362,8 @@ async def create_message_content_stream_legacy(
     PayloadTooLargeError
         添付ファイルのサイズが上限を超えている場合（413）。
     """
-    command, dto = await _parse_message_request(request)
-    _log_received_request("POST /api/messages/content/stream", dto, command)
+    command = await _parse_message_request(request)
+    _log_received_request("POST /api/messages/content/stream", command)
     stream_session = await stream_service.prepare_stream(session, command)
     runtime = stream_service.start_streaming(
         command, stream_session, StreamMode.LEGACY_PASSTHROUGH

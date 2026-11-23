@@ -29,6 +29,10 @@ from app.services.stream.cleanup import run_cleanup_loop
 # 応答しないことがあるため、同じく無制限にする。
 EXTERNAL_HTTP_TIMEOUT = httpx.Timeout(None)
 HTTPX_LOG_LEVEL = logging.WARNING
+# SQL の値（質問・回答などの会話の本文）を DEBUG・INFO で出す外部ライブラリのロガー。
+# LOG_LEVEL=DEBUG にしても、会話の本文がログに漏れないよう、WARNING に固定する
+CONTENT_LEAKING_LOGGERS = ("aiosqlite", "sqlalchemy.engine")
+CONTENT_LEAKING_LOG_LEVEL = logging.WARNING
 
 
 def create_app(
@@ -70,6 +74,8 @@ def create_app(
     # httpx は INFO でリクエストの URL をログに出し、Waha! の authkey（クエリ）が
     # 毎回ログに残る。移植元（RestTemplate）はリクエストをログに出さないため止める
     logging.getLogger("httpx").setLevel(HTTPX_LOG_LEVEL)
+    for name in CONTENT_LEAKING_LOGGERS:
+        logging.getLogger(name).setLevel(CONTENT_LEAKING_LOG_LEVEL)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

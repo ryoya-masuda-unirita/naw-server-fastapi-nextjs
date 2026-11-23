@@ -57,8 +57,6 @@ logger = logging.getLogger(__name__)
 
 TEXT_DATA_FILENAME = "textData.json"
 STREAM_FILE_SUFFIX = ".txt"
-LOG_PREVIEW_MAX_LENGTH = 500
-MASKED_VALUE = "***"
 
 # NAW 互換モードでクライアントへ中継するストリームファイルのイベント
 FORWARD_EVENT_TYPES = frozenset(
@@ -174,49 +172,6 @@ class StreamRuntime:
     library_title: list[str] = field(default_factory=list)
     library_content: list[str] = field(default_factory=list)
     poll_tasks: list[asyncio.Task[None]] = field(default_factory=list)
-
-
-def _mask_access_token(text_data: dict[str, Any]) -> dict[str, Any]:
-    """ログに NAW のアクセストークンを残さないよう伏せ字にする。
-
-    移植元は textData.json を本文ごとログに出していたが、トークンが漏れると
-    NAW API を利用者として呼べてしまうため、ログでは値を出さない。
-
-    Parameters
-    ----------
-    text_data : dict[str, Any]
-        Waha! に送る textData.json の内容。
-
-    Returns
-    -------
-    dict[str, Any]
-        `accessToken` を `***` にした複製。キーがなければ元の辞書をそのまま返す。
-    """
-    if "accessToken" not in text_data:
-        return text_data
-    return {**text_data, "accessToken": MASKED_VALUE}
-
-
-def _preview(value: str | None) -> str | None:
-    """ログに出す文字列を先頭 500 文字までに切り詰める。
-
-    Waha! の出力ファイルは長くなることがあり、全文をログに出すとログが
-    肥大化するため。
-
-    Parameters
-    ----------
-    value : str | None
-        ログに出す文字列。
-
-    Returns
-    -------
-    str | None
-        500 文字以内ならそのまま、超える場合は切り詰めて `...(truncated)` を
-        付けた文字列。None なら None。
-    """
-    if value is None or len(value) <= LOG_PREVIEW_MAX_LENGTH:
-        return value
-    return value[:LOG_PREVIEW_MAX_LENGTH] + "...(truncated)"
 
 
 class MessageContentStreamService:
@@ -584,12 +539,19 @@ class MessageContentStreamService:
         if runtime.waha_session_id is None:
             raise RuntimeError("Waha session is not started")
         text_data = self._build_text_data(runtime, stream_file_path)
+        # 本文・アクセストークンの値は出さない（ログを見られる人に漏れるため。DEBUG でも同じ）。
+        # ストリームファイルのパス・ツール名・メッセージ ID・トークンの有無だけを出す
         logger.info(
             "Preparing textData.json: messageContentId=%s, wahaSessionId=%s, "
-            "content=%s",
+            "streamfilepath=%s, createLibrary=%s, tools=%s, messageId=%s, "
+            "hasAccessToken=%s",
             runtime.session.message_content_id,
             runtime.waha_session_id,
-            to_compact_json(_mask_access_token(text_data)),
+            text_data["streamfilepath"],
+            text_data["createLibrary"],
+            [t["name"] for t in text_data.get("tools", [])],
+            text_data.get("messageId"),
+            bool(text_data.get("accessToken")),
         )
         await self._waha.upload_file(
             filename=TEXT_DATA_FILENAME,
@@ -879,10 +841,11 @@ class MessageContentStreamService:
             response = await self._waha.download_file(
                 runtime.waha_session_id or "", SLOT_OUTPUT
             )
+            # 出力ファイルは回答の本文なので、中身は出さず、長さだけを出す
             logger.info(
-                "Waha outputfile downloaded: messageContentId=%s, rawResponse=%s",
+                "Waha outputfile downloaded: messageContentId=%s, length=%s",
                 runtime.session.message_content_id,
-                _preview(response),
+                None if response is None else len(response),
             )
             answer = RetrievalAnswer.model_validate_json(response)
             response_dto = await self._update_message_content_success(
