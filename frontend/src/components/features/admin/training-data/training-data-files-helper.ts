@@ -24,7 +24,10 @@ export interface TrainingDataFileListApiParams {
   sort?: string;
 }
 
-/** 更新者名順は、API では `userId` で並べる */
+/**
+ * 更新者名順は、API では `userId` で並べる。
+ * 画面からは並べ替えを外した（NAW-1427）が、並べ替えを作り直すときのために、移植元と同じく残している
+ */
 export function mapFileSortFieldToApi(field: TrainingDataFileSortField): string {
   return field === 'updatedBy' ? 'userId' : field;
 }

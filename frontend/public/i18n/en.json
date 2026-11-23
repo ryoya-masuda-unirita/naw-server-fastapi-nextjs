@@ -721,7 +721,6 @@
     "LEARN_ID_LABEL": "Service ID for Learning Files",
     "LEARN_ID_SUPPORT": "Enter the service ID shown in the Waha! Transformer job settings. Once set, files in this folder can be registered as training data.",
     "LEARN_ID_PLACEHOLDER": "Enter Learn ID",
-    "SORT_UPDATED_BY": "Sort by Updater",
     "EDIT_LEARNING_DATA_SETTINGS": "Edit Learning Data Settings",
     "DOWNLOAD": "Download",
     "BULK_DOWNLOAD": "Bulk Download",

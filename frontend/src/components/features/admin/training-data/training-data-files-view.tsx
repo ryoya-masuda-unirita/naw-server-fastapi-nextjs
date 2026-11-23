@@ -4,7 +4,6 @@ import { Button } from '@/components/shared/button';
 import { CircularLoading } from '@/components/shared/circular-loading';
 import { cx } from '@/components/shared/class-names';
 import { Dialog } from '@/components/shared/dialog';
-import type { SortOption } from '@/components/shared/form-sort-input';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import type { PeriodChange, PeriodOption } from '@/components/shared/period-filter-utils';
 import {
@@ -21,7 +20,6 @@ import { useTrainingDataStore } from '@/store/training-data-store';
 import type {
   TrainingDataApiItem,
   TrainingDataFile,
-  TrainingDataFileSortField,
 } from '@/types/training-data.types';
 import { TrainingDataActionBar } from './training-data-action-bar';
 import { TrainingDataAddModal } from './training-data-add-modal';
@@ -52,13 +50,6 @@ const PERIOD_OPTIONS: PeriodOption[] = [
   { value: '7days', label: 'COMMON.PERIOD_FILTER.PAST_7_DAYS' },
   { value: '30days', label: 'COMMON.PERIOD_FILTER.PAST_30_DAYS' },
   { value: 'custom', label: 'COMMON.PERIOD_FILTER.SPECIFY_PERIOD' },
-];
-
-/** 並べ替えの項目。「学習データの表示名順」は移植元でも辞書にない固定の文字列 */
-const SORT_OPTIONS: SortOption[] = [
-  { value: 'updatedAt', label: 'LEARNING_DATA.SORT_UPDATED_AT' },
-  { value: 'displayName', label: '学習データの表示名順' },
-  { value: 'updatedBy', label: 'LEARNING_DATA.SORT_UPDATED_BY' },
 ];
 
 /** 移植元のダイアログの幅。ローカル接続とクラウド接続で指定の書き方が違う */
@@ -516,21 +507,12 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
         periodOptions={PERIOD_OPTIONS}
         selectedPeriod={filter.selectedPeriod ?? null}
         filterPeriodRange={filter.filterPeriodRange ?? null}
-        sortOptions={SORT_OPTIONS}
-        sortField={filter.sortField ?? null}
-        sortOrder={filter.sortOrder ?? null}
         countDisplay={countDisplay}
         totalPages={totalPages}
         currentPage={filter.pageIndex}
         onSearchQuery={(query) => updateFilesFilter({ query })}
         onUserChange={(value) => updateFilesFilter({ userId: value ?? '' })}
         onPeriodChange={handlePeriodChange}
-        onSortFieldChange={(value) =>
-          updateFilesFilter({ sortField: (value as TrainingDataFileSortField) || undefined })
-        }
-        onSortOrderChange={(order) =>
-          updateFilesFilter({ sortOrder: (order as 'asc' | 'desc' | '' | null) ?? 'desc' })
-        }
         onPageChange={(pageIndex) => updateFilesFilter({ pageIndex })}
       />
 

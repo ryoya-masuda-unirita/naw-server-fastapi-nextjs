@@ -749,7 +749,6 @@
     "EDIT_LEARN_ID_LABEL": "ファイル学習用サービスID",
     "EDIT_LEARN_ID_SUPPORT": "Waha! Transformerのジョブ設定で表示されるサービスIDを入力してください。設定すると、このファイル以外のものを学習データとして登録できるようになります。",
     "EDIT_LEARN_ID_PLACEHOLDER": "ファイル学習用サービスID",
-    "SORT_UPDATED_BY": "更新者名順",
     "EDIT_LEARNING_DATA_SETTINGS": "学習データの設定を編集",
     "DELETE_FROM_FOLDER": "この学習先フォルダから削除",
     "DOWNLOAD": "デバイスに保存",
