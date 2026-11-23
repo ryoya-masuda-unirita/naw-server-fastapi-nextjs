@@ -1,8 +1,13 @@
 import '@testing-library/jest-dom';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { handlers } from '@/mocks/handlers';
+
+// 全体実行（ファイルを並列に走らせる）では負荷で描画が遅れ、既定の 1 秒では findBy・waitFor が
+// タイムアウトして不安定になる（#397）。期待値は変えず、待つ上限だけを伸ばす。
+const ASYNC_UTIL_TIMEOUT_MS = 5000;
+configure({ asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS });
 
 export const server = setupServer(...handlers);
 
