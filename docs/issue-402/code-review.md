@@ -1,14 +1,14 @@
 # code-review 結果
 
-PR #406 の差分（`backend/app/core/shielded.py`、`llm_chat_service.py`、`message_service.py`、テスト）を読んだ結果。🔴 致命的はなし。
+PR #406 の差分（`server/app/core/shielded.py`、`llm_chat_service.py`、`message_service.py`、テスト）を読んだ結果。🔴 致命的はなし。
 
 ## 指摘一覧
 
 | # | 重大度 | ファイル | 指摘内容 | 対応 |
 |---|---|---|---|---|
-| 1 | 🔵 提案 | `backend/app/services/message_service.py` | `run_shielded` の import が、既存の `app.core` の import の並び（アルファベット順）から外れている | 対応済み |
-| 2 | 🟡 注意 | `backend/app/core/shielded.py` | アプリ終了時に、実行中の保存タスクの完了を待つ仕組みがない | 対応しない |
-| 3 | 🟡 注意 | `backend/app/services/message_service.py` | 切断でキャンセルされた場合、`message_content`・`error` イベントは送られない | 対応しない |
+| 1 | 🔵 提案 | `server/app/services/message_service.py` | `run_shielded` の import が、既存の `app.core` の import の並び（アルファベット順）から外れている | 対応済み |
+| 2 | 🟡 注意 | `server/app/core/shielded.py` | アプリ終了時に、実行中の保存タスクの完了を待つ仕組みがない | 対応しない |
+| 3 | 🟡 注意 | `server/app/services/message_service.py` | 切断でキャンセルされた場合、`message_content`・`error` イベントは送られない | 対応しない |
 
 ## 詳細
 
