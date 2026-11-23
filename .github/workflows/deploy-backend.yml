@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: server
     steps:
-      # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとbackend/配下のファイルにアクセスできない)
+      # リポジトリのコードをこのジョブの実行環境にダウンロードする(これが無いとserver/配下のファイルにアクセスできない)
       - uses: actions/checkout@v4
 
-      # インフラ側(infra/modules)が作るリソース名と同じ規則で、プロジェクト名から組み立てる。
+      # インフラ側(secuaigent-infra/modules)が作るリソース名と同じ規則で、プロジェクト名から組み立てる。
       # envの値は他のenvを参照できないため、ステップで組み立てて$GITHUB_ENVに書き出す。
       # 未登録・不正のまま進むと、存在しないリソースを指して分かりにくい失敗になるので、先に検査する。
       - name: Resolve resource names

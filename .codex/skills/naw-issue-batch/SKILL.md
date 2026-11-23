@@ -17,7 +17,7 @@ description: Use ONLY when the user explicitly invokes /naw-issue-batch or expli
 - **粒度はAIの判断**: 1エンドポイント単位にするか、関連する複数エンドポイントをまとめて1コントローラー単位にするかは、依存関係の強さ・レスポンス/リクエストの共有度合いを見てそのつど判断する。判断基準に迷う場合は1エンドポイント単位をデフォルトにする
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。候補検出では Codex が以下を必ず突き合わせる
   1. 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/server` の `develop`
-  2. `backend/app/routers/` の既存実装
+  2. `server/app/routers/` の既存実装
   3. `gh issue list --state all`
   4. `gh pr list --state open`
 - **このスキルはIssue起票のみを行う**。ブランチ作成・`docs/issue-X/`生成・実装・PR作成は行わない（着手は別途 `naw-issue-workflow` または `naw-issue-loop` で行う）
@@ -49,7 +49,7 @@ git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/de
 この調査ステップは読み取り専用のリサーチである。Codex が外部AIの agent に委譲せず、以下を直接確認して、未移植候補を1件だけ選ぶ。
 
 - 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/server` の状態を読み取り、Controller群のエンドポイント一覧を洗い出す
-- `backend/app/routers/` の既存実装、`gh issue list --state all`、`gh pr list --state open` と突き合わせる
+- `server/app/routers/` の既存実装、`gh issue list --state all`、`gh pr list --state open` と突き合わせる
 - まだ移植されておらず、起票済みIssueやオープンPRでも対応されていないエンドポイントを検出する
 - **サブドメイン（hostname）ベースのテナント識別に関するエンドポイント・ロジックは候補から除外する**。Issue #193/#195でこのリポジトリ側が意図的に廃止済みのため、参照リポジトリ側に存在しても「未移植の欠落」ではない
 - 関連するエンドポイント同士（同一Controller内で密結合、同じDTO/レスポンスを共有する等）であれば1つの単位としてまとめてよい。そうでなければエンドポイント単位で個別に扱う

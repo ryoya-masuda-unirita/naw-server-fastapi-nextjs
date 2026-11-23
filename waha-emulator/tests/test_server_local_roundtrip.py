@@ -1,6 +1,6 @@
 """server-local からエミュレーターを呼ぶ結合テスト。
 
-server-local のコードは変更せず、リポジトリの `server-local/` を読み込んで使う
+server-local のコードは変更せず、リポジトリの `secuaigent-server-local/` を読み込んで使う
 （`tests/conftest.py` で sys.path に足している）。server-local のパッケージ名は
 `app` のため、エミュレーター（`waha_emulator`）と同じプロセスに読み込める。
 server-local の Waha! クライアント・ストリーム処理が変わって食い違いが出たら、

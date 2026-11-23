@@ -139,7 +139,7 @@ server-local のコンテナがエミュレーターを呼び、エミュレー�
 
 ```bash
 # 0. 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
-mkdir -p server-local/data/stream-output
+mkdir -p secuaigent-server-local/data/stream-output
 
 # 1. エミュレーター（アダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
 cd waha-emulator
@@ -147,7 +147,7 @@ cp .env.example .env     # WAHA_AUTHKEY=local-key にする（LLM_PROVIDER=echo 
 docker compose up -d --build
 
 # 2. server-local
-cd ../server-local
+cd ../secuaigent-server-local
 cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=server-key、WAHA_URL=http://host.docker.internal:8091/、WAHA_AUTHKEY=local-key
 docker compose up -d --build
 
@@ -159,7 +159,7 @@ curl -N -H "X-SERVER-AUTH-KEY: server-key" \
 
 # 4. アダプタの動きを見る
 docker logs naw-waha-emulator           # 上のログ
-ls server-local/data/stream-output/     # 途中経過ファイル
+ls secuaigent-server-local/data/stream-output/     # 途中経過ファイル
 ```
 
 サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`waha-emulator/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して再起動し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。

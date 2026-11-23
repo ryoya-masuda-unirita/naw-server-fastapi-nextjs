@@ -54,7 +54,7 @@ services:
   # FastAPI の backend
   backend:
     build:
-      context: ./backend
+      context: ./server
       dockerfile: Dockerfile.dev
     container_name: naw-fastapi-backend
     environment:
@@ -69,7 +69,7 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - ./backend:/app
+      - ./server:/app
       - naw_fastapi_backend_venv:/app/.venv
     depends_on:
       postgres:

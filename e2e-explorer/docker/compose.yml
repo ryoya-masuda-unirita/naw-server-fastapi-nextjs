@@ -45,7 +45,7 @@ services:
 
   migrate:
     build:
-      context: ../../backend
+      context: ../../server
       dockerfile: Dockerfile
     image: naw-e2e-explorer-backend
     environment: *backend-env
@@ -59,7 +59,7 @@ services:
     environment:
       PGPASSWORD: root
     volumes:
-      - ../../backend/seed.sql:/seed/seed.sql:ro
+      - ../../server/seed.sql:/seed/seed.sql:ro
     command: ["psql", "-h", "postgres", "-U", "root", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/seed/seed.sql"]
     depends_on:
       migrate:
@@ -83,7 +83,7 @@ services:
 
   frontend:
     build:
-      context: ../../frontend
+      context: ../../client
       dockerfile: ../e2e-explorer/docker/frontend.Dockerfile
     environment:
       # ブラウザ（ホスト）から見た backend の URL

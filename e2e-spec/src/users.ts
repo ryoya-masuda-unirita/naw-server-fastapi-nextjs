@@ -1,5 +1,5 @@
 /**
- * テストで使うログイン用ユーザー。backend/seed.sql・backend/seed-demo.sql と e2e-spec/docker/spec-seed.sql の値。
+ * テストで使うログイン用ユーザー。server/seed.sql・server/seed-demo.sql と e2e-spec/docker/spec-seed.sql の値。
  * 権限別に 1 人ずつ。パスワードを変える・ロックされる・削除されるテストには使わず、テスト用に作ったユーザーを使う（fixtures の createUser）。
  */
 

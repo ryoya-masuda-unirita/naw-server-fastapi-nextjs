@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 export const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_CONFIG_PATH = path.join(MODULE_ROOT, 'explorer.config.json');
 
-/** tenants.id の列の長さ（backend/app/models/tenant.py の max_length=32）。 */
+/** tenants.id の列の長さ（server/app/models/tenant.py の max_length=32）。 */
 const TENANT_ID_MAX_LENGTH = 32;
 const TENANT_HASH_LENGTH = 8;
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);

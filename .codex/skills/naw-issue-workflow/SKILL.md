@@ -37,8 +37,8 @@ description: Use when working on a GitHub Issue in this repository, including is
 
 - 調査は読み取り専用で行い、`gh issue create` 等の書き込み操作は候補・仕様を整理した後にメイン手順として実行する
 - 対象の移植元ファイルパス（分かっていれば）、確認したい範囲（例: `RoomController` の未移植エンドポイント）、対象エンドポイントの仕様、参照元ファイルパス、既存実装との差分を整理する
-- バックエンド調査では `~/Documents/unirita-develop-pj/secuaigent-ref/server` と `backend/app/routers/`・`backend/app/services/`・`backend/app/schemas/` を突き合わせる
-- フロントエンド調査を依頼された場合のみ `~/Documents/unirita-develop-pj/secuaigent-ref/client` と `frontend/` を突き合わせる
+- バックエンド調査では `~/Documents/unirita-develop-pj/secuaigent-ref/server` と `server/app/routers/`・`server/app/services/`・`server/app/schemas/` を突き合わせる
+- フロントエンド調査を依頼された場合のみ `~/Documents/unirita-develop-pj/secuaigent-ref/client` と `client/` を突き合わせる
 - 対象が広すぎて判断が分かれる場合だけ、作業前にユーザーへ確認する
 
 ## Issue 起票手順

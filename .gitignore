@@ -17,8 +17,8 @@ eggs/
 /lib/
 /lib64/
 
-# frontend/src は除外（フロント実装ファイル）
-!frontend/src/
+# client/src は除外（フロント実装ファイル）
+!client/src/
 parts/
 sdist/
 var/
@@ -225,12 +225,12 @@ node_modules/
 
 # Terraform
 **/.terraform/
-infra/**/*.tfstate
-infra/**/*.tfstate.*
-infra/**/*.tfvars
-!infra/**/*.tfvars.example
-infra/**/backend.hcl
+secuaigent-infra/**/*.tfstate
+secuaigent-infra/**/*.tfstate.*
+secuaigent-infra/**/*.tfvars
+!secuaigent-infra/**/*.tfvars.example
+secuaigent-infra/**/backend.hcl
 *.DS_Store
 
 # backend: LocalFileStorageのローカル実体ファイル置き場（動作確認・E2Eテストで生成される）
-backend/data/
+server/data/

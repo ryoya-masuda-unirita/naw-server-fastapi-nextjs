@@ -34,7 +34,7 @@ services:
       # ディレクトリがないと Docker が root 所有で作り、uid 1000 の server-local が
       # 書けなくなるため、作らずに起動エラーにする（先に mkdir しておく）
       - type: bind
-        source: ${WAHA_EMULATOR_STREAM_DIR:-../server-local/data/stream-output}
+        source: ${WAHA_EMULATOR_STREAM_DIR:-../secuaigent-server-local/data/stream-output}
         target: /app/data/stream-output
         bind:
           create_host_path: false

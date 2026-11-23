@@ -60,7 +60,7 @@ services:
   # DB のテーブルを作る（alembic のマイグレーション）
   migrate:
     build:
-      context: ./backend
+      context: ./server
       dockerfile: Dockerfile
     image: naw-demo-backend
     environment: *backend-env
@@ -75,8 +75,8 @@ services:
     environment:
       PGPASSWORD: root
     volumes:
-      - ./backend/seed.sql:/seed/seed.sql:ro
-      - ./backend/seed-demo.sql:/seed/seed-demo.sql:ro
+      - ./server/seed.sql:/seed/seed.sql:ro
+      - ./server/seed-demo.sql:/seed/seed-demo.sql:ro
     command: ["sh", "-c", "psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed.sql && psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed-demo.sql"]
     depends_on:
       migrate:
@@ -104,7 +104,7 @@ services:
   # React の画面（Vite の開発サーバー）
   frontend:
     build:
-      context: ./frontend
+      context: ./client
       dockerfile: Dockerfile.dev
     environment:
       # ブラウザ（ホスト）から見た backend の URL

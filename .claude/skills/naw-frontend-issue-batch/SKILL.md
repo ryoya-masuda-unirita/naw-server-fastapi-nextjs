@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client to React frontend/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client to React client/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
 ---
 
 # NAW Frontend Issue Batch
@@ -13,13 +13,13 @@ description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch
 
 - **毎サイクル、必ず `~/Documents/unirita-develop-pj/secuaigent-ref/client` の `develop` を最新化してから候補検出を行う**（`naw-frontend-explore`任せにせず、メインループ側でも明示的に最新化する。詳細は「1. 移植元の最新化」参照）
 - **候補検出・粒度判断は常に、最新化した `~/Documents/unirita-develop-pj/secuaigent-ref/client` の `develop` を基準にする**。ローカルにキャッシュされた古い情報や記憶を使って判断しない
-- 対象: フロントエンド（React `frontend/`）
+- 対象: フロントエンド（React `client/`）
 - **粒度はAIの判断**: 1画面（1ルート）単位にするか、1コンポーネント単位にするかは、依存関係の強さ・共有度合いを見てそのつど判断する。判断基準に迷う場合は1画面単位をデフォルトにする
-- **依存するバックエンドAPIが `backend/` に未実装の候補は除外する**。フロントエンドだけ先行実装してもAPIが無ければ動作確認できないため、バックエンドが実装済みの画面・機能を優先する（`naw-frontend-explore`に依存APIの実装状況も確認させる）
+- **依存するバックエンドAPIが `server/` に未実装の候補は除外する**。フロントエンドだけ先行実装してもAPIが無ければ動作確認できないため、バックエンドが実装済みの画面・機能を優先する（`naw-frontend-explore`に依存APIの実装状況も確認させる）
 - 重複防止は都度のライブチェックのみで行う（永続的な状態ファイルは持たない）。`naw-frontend-explore`に以下を必ず突き合わせさせる
   1. 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/client` の `develop`
-  2. `frontend/src/` の既存実装
-  3. `backend/app/routers/` の対応API実装状況
+  2. `client/src/` の既存実装
+  3. `server/app/routers/` の対応API実装状況
   4. `gh issue list --state all`（特に `frontend-port` ラベル付きIssue）
   5. `gh pr list --state open`
 - **このスキルはIssue起票のみを行う**。ブランチ作成・`docs/issue-X/`生成・実装・PR作成は行わない（着手は別途 `naw-frontend-issue-workflow` または `naw-frontend-issue-workflow` ベースの他スキルに委ねる）
@@ -63,7 +63,7 @@ git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/de
 
 - `Agent(subagent_type: naw-frontend-explore)` を呼び、以下を自己完結のプロンプトで依頼する（会話の前提を知らない前提で、必要な情報をすべてプロンプトに含めること）
   - `~/Documents/unirita-develop-pj/secuaigent-ref/client` は**呼び出し元（メインループ）側で既に `develop` を最新化済み**であることを伝え、`naw-frontend-explore` 側で改めて `git pull` 等の更新は行わせない（二重更新・競合を避けるため）。最新化済みのローカルの状態をそのまま読み取り、画面・コンポーネント一覧を洗い出すこと
-  - `frontend/src/` の既存実装、`backend/app/routers/` の対応API実装状況、`gh issue list --state all`（`frontend-port` ラベル付きIssue）、`gh pr list --state open` と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていない画面・コンポーネントを検出すること
+  - `client/src/` の既存実装、`server/app/routers/` の対応API実装状況、`gh issue list --state all`（`frontend-port` ラベル付きIssue）、`gh pr list --state open` と突き合わせ、まだ移植されておらず・かつ起票済みIssueやオープンPRでも対応されていない画面・コンポーネントを検出すること
   - **依存するバックエンドAPIが未実装の候補は除外すること**を明示する
   - 見つかった未対応の画面・コンポーネントについて、関連するもの同士（同一ルート内で密結合、同じAPIレスポンスを共有する等）であれば1つの単位としてまとめてよいこと、そうでなければ画面単位で個別に扱うことを伝え、まとめる場合・分ける場合それぞれの判断理由も返すよう指示する
   - 複数の独立した候補単位がある場合は、依存するバックエンドAPIが実装済みで・かつ粒度が小さいものを1件だけ選ぶこと

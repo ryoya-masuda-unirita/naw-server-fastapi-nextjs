@@ -1,5 +1,5 @@
-# frontend/（React）の PR 用 CI。
-# backend-tests.yml の frontend 版で、frontend/ に変更がある PR と develop への push で
+# client/（React）の PR 用 CI。
+# backend-tests.yml の frontend 版で、client/ に変更がある PR と develop への push で
 # lint・型チェック・単体テスト（vitest）・ビルドを実行する。
 # deploy-frontend.yml も配信前に lint・テスト・ビルドを行うが、そちらは develop へのマージ後にしか走らないため、
 # マージ前（PR の段階）で壊れた変更に気づけるようにこのワークフローを用意している。
@@ -14,7 +14,7 @@ on:
       - develop
       - main
     paths:
-      - "frontend/**"
+      - "client/**"
       - ".github/workflows/frontend-tests.yml"
   push:
     # PR のマージは develop への push として扱われるため、マージ後の develop の状態も検証する。
@@ -22,7 +22,7 @@ on:
     branches:
       - develop
     paths:
-      - "frontend/**" # frontend/配下のファイルが変更された場合
+      - "client/**" # client/配下のファイルが変更された場合
       - ".github/workflows/frontend-tests.yml" # このワークフロー自身を直した場合（設定ミスにすぐ気づけるように）
 
 # コードの取得だけできればよいので、GITHUB_TOKEN の権限を読み取りに絞る。
@@ -43,10 +43,10 @@ jobs:
     name: lint・型チェック・テスト・ビルド
     runs-on: ubuntu-latest
 
-    # frontend/ 配下に npm プロジェクトがあるモノレポ構成なので、`run:` ステップのカレントディレクトリを一括指定する。
+    # client/ 配下に npm プロジェクトがあるモノレポ構成なので、`run:` ステップのカレントディレクトリを一括指定する。
     defaults:
       run:
-        working-directory: frontend
+        working-directory: client
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
         with:
           node-version: 24
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       # npm ci: package-lock.json どおりに依存をインストールする。
       # package.json と package-lock.json がズレている（依存を変えたのに lock を更新し忘れた等）場合はエラーになる
@@ -78,6 +78,6 @@ jobs:
       - name: 単体テストを実行
         run: npm test -- --run
 
-      # vite build は mode=production で動き、frontend/.env.production の値を使う（シークレットは不要）。
+      # vite build は mode=production で動き、client/.env.production の値を使う（シークレットは不要）。
       - name: ビルドを実行
         run: npm run build
