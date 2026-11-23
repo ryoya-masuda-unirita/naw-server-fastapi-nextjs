@@ -1,6 +1,7 @@
 """クライアント切断を ASGI レベルで再現するテスト用ヘルパー。"""
 
 import asyncio
+from collections.abc import MutableMapping
 from typing import Any
 
 from starlette.responses import StreamingResponse
@@ -77,12 +78,12 @@ async def run_until_client_disconnects(
         await disconnected.wait()
         return {"type": "http.disconnect"}
 
-    async def send(message: dict[str, Any]) -> None:
+    async def send(message: MutableMapping[str, Any]) -> None:
         """ボディを記録し、指定のイベントを送ったら切断を知らせる。
 
         Parameters
         ----------
-        message : dict[str, Any]
+        message : MutableMapping[str, Any]
             ASGI の送信メッセージ。
         """
         body = message.get("body", b"")
