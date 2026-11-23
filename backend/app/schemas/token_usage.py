@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.core.validation_messages import RequestModel, ValidationMessages
 from app.models.token_usage import TokenUsage
+from app.models.user import User, UserRole
 
 MAX_PERIOD_DAYS = 31
 
@@ -118,11 +120,21 @@ class TokenUsageListQuery(TokenUsagePeriodQuery):
         return self
 
 
+class UsageUserType(str, Enum):
+    """利用の行の利用者の種類。画面はこの種類で、名前を出すか決めた文言を出すかを切り替える。"""
+
+    ACTIVE = "ACTIVE"
+    SYSTEM = "SYSTEM"
+    DELETED = "DELETED"
+
+
 class TokenUsageItemResponse(BaseModel):
     """トークン使用量1件分のレスポンス。"""
 
     id: str
     userId: str | None
+    userName: str | None
+    userType: UsageUserType
     messageId: str | None
     model: str
     inputTokens: int
@@ -136,7 +148,9 @@ class TokenUsageItemResponse(BaseModel):
     createdAt: datetime
 
     @classmethod
-    def from_token_usage(cls, token_usage: TokenUsage) -> "TokenUsageItemResponse":
+    def from_token_usage(
+        cls, token_usage: TokenUsage, users_by_id: dict[UUID, User]
+    ) -> "TokenUsageItemResponse":
         """`TokenUsage`エンティティからレスポンスを組み立てる。
 
         `totalCredits`はDBに永続化されない導出値のため、ここで
@@ -146,15 +160,31 @@ class TokenUsageItemResponse(BaseModel):
         ----------
         token_usage : TokenUsage
             変換対象のエンティティ。
+        users_by_id : dict[UUID, User]
+            同じテナントで引いたユーザー（ユーザーID -> ユーザー）。
+            `user_id`がNone、またはここにない行は削除済みユーザーとして扱う。
 
         Returns
         -------
         'TokenUsageItemResponse'
             レスポンス用DTO。
         """
+        user = users_by_id.get(token_usage.user_id) if token_usage.user_id else None
+        if user is None:
+            user_type = UsageUserType.DELETED
+            user_name = None
+        else:
+            user_type = (
+                UsageUserType.SYSTEM
+                if user.role == UserRole.SYSTEM
+                else UsageUserType.ACTIVE
+            )
+            user_name = user.name
         return cls(
             id=token_usage.id,
             userId=str(token_usage.user_id) if token_usage.user_id else None,
+            userName=user_name,
+            userType=user_type,
             messageId=token_usage.message_id,
             model=token_usage.model,
             inputTokens=token_usage.input_tokens,
