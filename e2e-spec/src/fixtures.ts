@@ -1,4 +1,4 @@
-import { test as base, type APIRequestContext, type Page } from '@playwright/test';
+import { expect as baseExpect, test as base, type APIRequestContext, type Page } from '@playwright/test';
 import {
   createUser as createUserViaApi,
   deleteUser,
@@ -6,7 +6,7 @@ import {
   type CreatedUser,
   type CreateUserOptions,
 } from './api.ts';
-import { LoginPage } from './pages/login.page.ts';
+import { DASHBOARD_PATH, LoginPage } from './pages/login.page.ts';
 import { TENANT_ID, USERS, type RoleName, type SeedUser } from './users.ts';
 
 /**
@@ -45,6 +45,9 @@ export const test = base.extend<Fixtures>({
     await use(async (role) => {
       const user = USERS[role];
       await loginPage.login(user);
+      // ログイン画面を出た直後は別の URL を経由してダッシュボードへ移る。着地を待たないと、
+      // 続く page.goto がこの移動に割り込まれて失敗する（静的配信で応答が速いと 09-35・19-17 で出た）
+      await baseExpect(loginPage.page).toHaveURL(new RegExp(DASHBOARD_PATH));
       return user;
     });
   },
