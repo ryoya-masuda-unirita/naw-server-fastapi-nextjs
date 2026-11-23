@@ -6,6 +6,7 @@ import {
 } from '@/components/features/admin/groups/group-api-mappers';
 import { apiClient, type QueryParams } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import { fetchAllPages } from '@/lib/utils/fetch-all-pages';
 import type {
   GroupMemberUserFilter,
   GroupUserRole,
@@ -19,9 +20,6 @@ import { invalidateGroupLists } from './use-group-detail';
 
 /** 所属ユーザー一覧の key の先頭 */
 export const GROUP_USERS_QUERY_KEY = 'admin-group-users';
-
-/** 追加ダイアログの候補の件数（移植元 `loadAddUserOptions` の pageSize） */
-const ADD_USER_OPTIONS_PAGE_SIZE = 50;
 
 /** 追加・削除・権限変更の失敗は画面でトーストを出すので、共通のエラートーストは出さない */
 const OWN_ERROR_TOAST = { skipGlobalErrorToast: true } as const;
@@ -79,24 +77,29 @@ export function useGroupUsers(groupId: string, filter: GroupMemberUserFilter) {
  * @param groupId グループ ID
  */
 export async function fetchAddUserOptions(groupId: string): Promise<SelectOption[]> {
-  const filter: UserFilter = {
-    pageSize: ADD_USER_OPTIONS_PAGE_SIZE,
-    pageIndex: 1,
-    query: '',
-    excludeGroupId: groupId,
-  };
   try {
-    // backend は searchText・role を必須にしているため、絞り込みなしでも空文字を送る
-    const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
-      params: {
-        page: 0,
-        size: filter.pageSize,
-        searchText: '',
-        role: '',
+    // 全ページを順に取る（移植元 `fetchAllPages`。50 件だけでは、51 件目以降のユーザーを追加できない）
+    const users = await fetchAllPages(async (page, size) => {
+      const filter: UserFilter = {
+        pageSize: size,
+        pageIndex: page + 1,
+        query: '',
         excludeGroupId: groupId,
-      },
+      };
+      // backend は searchText・role を必須にしているため、絞り込みなしでも空文字を送る
+      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
+        params: {
+          page,
+          size,
+          searchText: '',
+          role: '',
+          excludeGroupId: groupId,
+        },
+      });
+      const result = normalizeAdminUsersListBody(raw, filter);
+      return { items: result.data, total: result.total };
     });
-    return normalizeAdminUsersListBody(raw, filter).data.map((user) => ({
+    return users.map((user) => ({
       value: user.id,
       label: user.displayName || user.name || user.userId,
     }));

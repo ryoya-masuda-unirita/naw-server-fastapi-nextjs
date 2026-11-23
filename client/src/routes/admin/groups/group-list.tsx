@@ -13,6 +13,8 @@ import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import { PageHeader } from '@/components/shared/page-header';
 import { Pagination } from '@/components/shared/pagination';
 import {
+  EMPTY_LOOKUP,
+  needsNameLookup,
   toViewModel,
   useGroupList,
   useHydratedGroupItems,
@@ -29,14 +31,15 @@ export function GroupListPage() {
   const canCreateTeam = !useAuthStore((state) => state.isGroupAdminOnly);
 
   const listQuery = useGroupList(filter);
-  const lookupQuery = useNameLookup();
+  // 名前が欠けて ID だけの項目があるときだけ、名前の対応表を取る。一覧の表示は、対応表の取得を待たない
+  const needsLookup = (listQuery.data?.data ?? []).some(needsNameLookup);
+  const lookupQuery = useNameLookup(needsLookup);
   const [isAddOpen, setIsAddOpen] = useState(false);
 
-  // 名前の対応表を取ってから描画する（移植元は対応表を読み終えてから一覧を読み込む）
-  const isLookupReady = lookupQuery.data !== undefined;
+  // 対応表が取れるまでは、名前のない項目は ID のまま出す。取れたら名前に置き換える（移植元と同じ）
   const baseItems = useMemo(() => {
-    if (!lookupQuery.data) return [];
-    return (listQuery.data?.data ?? []).map((item) => toViewModel(item, lookupQuery.data));
+    const lookup = lookupQuery.data ?? EMPTY_LOOKUP;
+    return (listQuery.data?.data ?? []).map((item) => toViewModel(item, lookup));
   }, [listQuery.data, lookupQuery.data]);
   const items = useHydratedGroupItems(baseItems, !listQuery.isFetching);
   const totalItems = listQuery.data?.total ?? 0;
@@ -89,7 +92,7 @@ export function GroupListPage() {
         />
       </div>
 
-      {listQuery.isFetching || !isLookupReady ? (
+      {listQuery.isFetching ? (
         <div className="flex justify-center p-8">
           <CircularLoading />
         </div>

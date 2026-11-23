@@ -1,19 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import { userDisplayName } from '@/components/features/admin/tenant/user-display-name';
 import { toDateTimeRange } from '@/components/shared/period-filter-utils';
 import type {
   ChatHistoryApiResponse,
   ChatHistoryFilter,
   ChatHistorySortField,
 } from '@/types/chat-history.types';
+import { fetchAllUsers } from './fetch-all-users';
 
 // 移植元 ChatHistoryApiService（list・listUsers）
 
 const CHAT_HISTORY_QUERY_KEY = 'admin-chat-history';
-
-/** 移植元 `listUsers` が取る履歴の件数。ユーザー専用の API がないため、新しい順の 1 ページ分から推定する */
-const USER_OPTIONS_SIZE = 20;
 
 /** ユーザーの選択肢（移植元 `ChatHistoryUserOption`） */
 export interface ChatHistoryUserOption {
@@ -55,22 +54,17 @@ export function useChatHistoryList(filter: ChatHistoryFilter) {
   });
 }
 
-/** 絞り込みに使うユーザーの選択肢（移植元 `listUsers`。履歴の一覧から推定する近似） */
+/**
+ * 絞り込みに使うユーザーの選択肢（移植元 `listUsers`）。テナントの全ユーザーを名前順で返す。
+ * 以前は、直近 20 件の履歴から推定していたため、そこに出てこない利用者を選べなかった
+ */
 export function useChatHistoryUserOptions() {
   return useQuery({
     queryKey: [CHAT_HISTORY_QUERY_KEY, 'users'],
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<ChatHistoryUserOption[]> => {
-      const res = await apiClient.get<ChatHistoryApiResponse>(API_PATHS.ADMIN.HISTORIES.LIST, {
-        params: { page: 0, size: USER_OPTIONS_SIZE, orderBy: 'updatedAt', reverse: true },
-      });
-      const users = new Map<string, ChatHistoryUserOption>();
-      for (const item of res.content) {
-        if (item.userId && item.userName) {
-          users.set(item.userId, { userId: item.userId, userName: item.userName });
-        }
-      }
-      return [...users.values()];
+      const users = await fetchAllUsers();
+      return users.map((user) => ({ userId: user.id, userName: userDisplayName(user) }));
     },
   });
 }
