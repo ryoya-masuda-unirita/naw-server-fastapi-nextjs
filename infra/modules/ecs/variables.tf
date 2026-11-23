@@ -24,9 +24,9 @@ variable "project_name" {
   description = "リソース名・タグに使うプロジェクト名"
 }
 
-variable "public_subnet_ids" {
+variable "private_subnet_ids" {
   type        = list(string)
-  description = "publicサブネットのIDのリスト"
+  description = "backendのタスクを置くprivateサブネットのIDのリスト(外向きの通信はNAT経由)"
 }
 
 variable "rds_address" {
@@ -83,4 +83,22 @@ variable "user_import_queue_arn" {
 variable "user_import_queue_url" {
   type        = string
   description = "ユーザーインポート用SQSキューのURL"
+}
+
+variable "cpu" {
+  type        = number
+  default     = 512
+  description = "Fargateタスクに割り当てるCPU(CPUユニット。512=0.5vCPU)"
+}
+
+variable "memory" {
+  type        = number
+  default     = 1024
+  description = "Fargateタスクに割り当てるメモリ(MiB)"
+}
+
+variable "health_check_grace_period_seconds" {
+  type        = number
+  default     = 240
+  description = "サービス起動直後にALBのヘルスチェック失敗を無視する秒数"
 }

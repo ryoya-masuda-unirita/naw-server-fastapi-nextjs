@@ -6,95 +6,6 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-resource "aws_launch_template" "ecs" {
-  name_prefix = "${var.project_name}-ecs-"
-  // SSMパラメータストアからECS最適化AMIの最新IDを取得する
-  image_id      = data.aws_ssm_parameter.ecs_ami.value
-  instance_type = "t4g.nano"
-
-  // このテンプレートで起動するEC2に、iam.tfで作ったインスタンスプロファイル(ecs_instanceロール入り)をアタッチする。
-  // これがないとEC2上のECSエージェントがクラスタと通信する権限を持てず、クラスタに参加できない。
-  iam_instance_profile {
-    name = aws_iam_instance_profile.ecs.name
-  }
-
-  // publicサブネットに配置してもpublic IPが付かないとECR/ECS APIに出られないため付与する。
-  // SG指定もこちらに移す（vpc_security_group_idsとは併用不可）。
-  network_interfaces {
-    associate_public_ip_address = true
-    security_groups             = [var.ecs_sg_id]
-  }
-
-  // EC2起動時に実行するスクリプト。このEC2がどのECSクラスタに参加するかをecs.configに書き込む
-  user_data = base64encode(<<-EOF
-    #!/bin/bash
-    echo ECS_CLUSTER=${aws_ecs_cluster.main.name} >> /etc/ecs/ecs.config
-  EOF
-  )
-
-  // 起動テンプレートのtag_specificationsには、provider の default_tags が効かないため手書きで残す
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      Name    = "${var.project_name}-ecs-instance"
-      Project = var.project_name
-    }
-  }
-}
-
-data "aws_ssm_parameter" "ecs_ami" {
-  name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id"
-}
-
-resource "aws_autoscaling_group" "ecs" {
-  name                = "${var.project_name}-ecs-asg"
-  vpc_zone_identifier = var.public_subnet_ids
-  min_size            = 1
-  max_size            = 1
-  // 常に1台だけ維持する（学習・コスト重視のため、min/max/desired全て1で固定）
-  desired_capacity = 1
-
-  // 起動時に使うテンプレートを指定。$Latestで常に最新バージョンのLaunch Templateを使う
-  launch_template {
-    id      = aws_launch_template.ecs.id
-    version = "$Latest"
-  }
-
-  tag {
-    key   = "Name"
-    value = "${var.project_name}-ecs-instance"
-    // trueにすると、このタグがASGが起動する各EC2インスタンスにも自動で付与される
-    propagate_at_launch = true
-  }
-
-  tag {
-    key                 = "Project"
-    value               = var.project_name
-    propagate_at_launch = true
-  }
-}
-
-// ASGをECSクラスタが使える計算資源として登録する
-resource "aws_ecs_capacity_provider" "main" {
-  name = "${var.project_name}-cp"
-
-  auto_scaling_group_provider {
-    auto_scaling_group_arn = aws_autoscaling_group.ecs.arn
-
-    // ASGの利用率が100%に達するまでスケールアウトしない設定（今回はmin=max=1固定なので実質影響なし）
-    managed_scaling {
-      status          = "ENABLED"
-      target_capacity = 100
-    }
-  }
-}
-
-// クラスタに上記のCapacity Providerを紐付ける
-resource "aws_ecs_cluster_capacity_providers" "main" {
-  cluster_name       = aws_ecs_cluster.main.name
-  capacity_providers = [aws_ecs_capacity_provider.main.name]
-}
-
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${var.project_name}-backend"
   retention_in_days = 7
@@ -107,9 +18,19 @@ resource "aws_cloudwatch_log_group" "backend" {
 // backendコンテナの｢タスク定義｣。DB・Redis接続情報や各種設定を環境変数として渡す
 resource "aws_ecs_task_definition" "backend" {
   family = "${var.project_name}-backend"
-  // EC2モードで実行するため、bridgeモードを指定
-  network_mode             = "bridge"
-  requires_compatibilities = ["EC2"]
+  // Fargateはawsvpc(タスクごとにENIとIPを持つ)のみ
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+
+  // Fargateのタスク全体のCPU・メモリ。コンテナ単位のmemoryは指定しない
+  cpu    = var.cpu
+  memory = var.memory
+
+  // backendのイメージはARM64向けにビルドしている(deploy-backend.yml)。Fargateは既定でx86_64なので明示する
+  runtime_platform {
+    cpu_architecture        = "ARM64"
+    operating_system_family = "LINUX"
+  }
 
   // execution_role_arn: ECSエージェント(コンテナ起動の仕組み自体)が使うロール。ECR pull・CloudWatch Logs書き込みに使う。
   // task_role_arn: コンテナ内で動くアプリコード(backend)が使うロール。AWS SDK経由でのSQS/S3操作等に使う。
@@ -122,16 +43,13 @@ resource "aws_ecs_task_definition" "backend" {
     {
       name      = "backend"
       image     = "${var.ecr_repository_url}:latest"
-      memory    = 128
       essential = true
 
       portMappings = [
         {
-          // コンテナ内のポート8000をホストの8000番ポートにマッピングする
+          // awsvpcではホストポートを持たないため、コンテナのポート8000のみ指定する
           containerPort = 8000
-          // ホストの8000番ポートにマッピングする
-          hostPort = 8000
-          protocol = "tcp"
+          protocol      = "tcp"
         }
       ]
 
@@ -184,15 +102,17 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = 1
+  launch_type     = "FARGATE"
 
-  // Issue #158で1台構成+ホストポート固定によるデプロイのデッドロックを経験したため0にする
-  deployment_minimum_healthy_percent = 0
-  deployment_maximum_percent         = 100
+  // 起動直後のヘルスチェック失敗でタスクが落とされないよう、猶予を持たせる。
+  // デプロイは既定のローリング更新(EC2+ホストポート固定のデッドロック対策は、Fargateでは不要)。
+  health_check_grace_period_seconds = var.health_check_grace_period_seconds
 
-  capacity_provider_strategy {
-    capacity_provider = aws_ecs_capacity_provider.main.name
-    // 1台構成なのでweight=1で固定
-    weight = 1
+  // タスクはprivateサブネットに置く。外向きの通信(ECR・ログ)はNAT経由なので、パブリックIPは付けない
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_sg_id]
+    assign_public_ip = false
   }
 
   load_balancer {
@@ -223,22 +143,29 @@ resource "aws_cloudwatch_log_group" "backend_migrate" {
 
 // DBマイグレーション(alembic upgrade head)専用のタスク定義。deploy-backend.ymlがECSの一時タスク
 // (aws ecs run-task)として都度実行する。backendサービスと同じイメージ・DB接続情報を使うが、
-// portMappingsを持たない点が異なる。backendはhostPort=8000固定のため、同一タスク定義のまま
-// one-off実行すると、単一EC2インスタンス上でポート競合しスケジューリングに失敗するため分離している。
+// portMappingsを持たず、コマンドをマイグレーションに上書きして終了させる点が異なる(サービスのタスク定義とは別物)。
 resource "aws_ecs_task_definition" "backend_migrate" {
   family                   = "${var.project_name}-backend-migrate"
-  network_mode             = "bridge"
-  requires_compatibilities = ["EC2"]
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+
+  // Fargateのタスク全体のCPU・メモリ。コンテナ単位のmemoryは指定しない
+  cpu    = var.cpu
+  memory = var.memory
+
+  // backendのイメージはARM64向けにビルドしている(deploy-backend.yml)。Fargateは既定でx86_64なので明示する
+  runtime_platform {
+    cpu_architecture        = "ARM64"
+    operating_system_family = "LINUX"
+  }
 
   execution_role_arn = aws_iam_role.ecs_task_execution.arn
   task_role_arn      = aws_iam_role.backend_task.arn
 
   container_definitions = jsonencode([
     {
-      name  = "backend-migrate"
-      image = "${var.ecr_repository_url}:latest"
-      // backendサービス(memory=128)と単一EC2インスタンス上に同居しても圧迫しないよう小さく抑える
-      memory    = 96
+      name      = "backend-migrate"
+      image     = "${var.ecr_repository_url}:latest"
       essential = true
 
       // backendイメージの既定CMD(uvicorn起動)を上書きし、マイグレーションだけ実行して終了させる
@@ -300,38 +227,6 @@ resource "aws_iam_role" "ecs_task_execution" {
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-// ECSクラスタに参加するEC2インスタンス自体が引き受けるロール。
-// assume_role_policyでec2.amazonaws.comだけがこのロールを引き受けられるようにしている。
-// EC2上で常駐するECSエージェントが、クラスタとの通信（タスク登録状況の報告等）に使う。
-resource "aws_iam_role" "ecs_instance" {
-  name = "${var.project_name}-ecs-instance-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
-}
-
-// AWSが用意している既製の権限ポリシー(AmazonEC2ContainerServiceforEC2Role)を
-// 上のecs_instanceロールにアタッチする。ECSエージェントがクラスタと通信するための権限が含まれる。
-resource "aws_iam_role_policy_attachment" "ecs_instance" {
-  role       = aws_iam_role.ecs_instance.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
-}
-
-// EC2はIAMロールを直接アタッチできず、必ずインスタンスプロファイルという箱を経由する必要がある。
-// ここでecs_instanceロールを箱に詰め、aws_launch_template側からこのインスタンスプロファイルを参照する。
-resource "aws_iam_instance_profile" "ecs" {
-  name = "${var.project_name}-ecs-instance-profile"
-  role = aws_iam_role.ecs_instance.name
 }
 
 // ECSタスク(コンテナ)内で動くbackendアプリコード(boto3等)が引き受けるロール。

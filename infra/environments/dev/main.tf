@@ -44,6 +44,7 @@ module "network" {
   source = "../../modules/network"
 
   project_name        = var.project_name
+  vpc_cidr            = var.vpc_cidr
   allowed_ssh_cidrs   = var.allowed_ssh_cidrs
   allowed_admin_cidrs = var.allowed_admin_cidrs
 }
@@ -96,9 +97,14 @@ module "frontend" {
 module "ecs" {
   source = "../../modules/ecs"
 
+  // タスクはprivateサブネットに置かれ、イメージの取得・ログ送信にNATを使う。
+  // NATのルートが整う前にサービスを作ると起動に失敗するため、ネットワーク全体を待つ。
+  // (ecsモジュールにはデータソースが無いので、planの評価がapply後に遅れることはない)
+  depends_on = [module.network]
+
   project_name            = var.project_name
   region                  = var.region
-  public_subnet_ids       = module.network.public_subnet_ids
+  private_subnet_ids      = module.network.private_subnet_ids
   ecs_sg_id               = module.network.ecs_sg_id
   ecr_repository_url      = module.ecr.repository_url
   rds_address             = module.rds.address
