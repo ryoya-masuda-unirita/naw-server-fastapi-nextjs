@@ -6,7 +6,7 @@
 |---|---|---|
 | 1 | 設計書（00〜02） | `docs/issue-446-NAW-1443/00`〜`02` |
 | 2 | 設計書（03〜07） | `docs/issue-446-NAW-1443/03`〜`07` |
-| 3 | 利用可否の判定と、メッセージ作成・回答生成の拒否を実装し、テストを追加する | `assistant_service.py`・`message_service.py`・`tests/` |
+| 3 | 利用可否の判定と、メッセージ作成・回答生成の拒否を実装し、テストを追加する | `group_assistant_repository.py`・`message_service.py`・`tests/` |
 | 4 | 動作確認と code-review の記録 | `docs/issue-446-NAW-1443/06`・`08`・`code-review.md` |
 
 ## 各コミットメッセージ案
