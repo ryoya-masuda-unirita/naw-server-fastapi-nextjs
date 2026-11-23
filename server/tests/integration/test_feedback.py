@@ -759,13 +759,18 @@ class TestFeedbackRouter:
                 )
 
             assert response.status_code == 200
-            item = response.json()["feedbacks"]["content"][0]
+            # 同じ更新日時の行の順番は未定義なので、先頭ではなく、内容で対象の行を探す
+            items = response.json()["feedbacks"]["content"]
+            item = next(
+                i
+                for i in items
+                if i["message"]["content"]["question"] == "Responded question"
+            )
             assert (
                 item["message"]["assistantId"]
                 == feedback_dataset["feedback_assistant"].id
             )
             assert item["message"]["assistantName"] == "Feedback Assistant"
-            assert item["message"]["content"]["question"] == "Responded question"
             assert item["message"]["content"]["answer"] == "Responded answer"
             assert item["rating"] == "GOOD"
 
