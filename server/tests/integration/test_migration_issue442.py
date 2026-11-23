@@ -130,7 +130,7 @@ def test_downgrade_drops_both_indexes(connection: sa.Connection) -> None:
 def test_model_declares_the_same_indexes() -> None:
     """モデルが、マイグレーションと同じ名前・列・一意性の索引を宣言していること（ずれると差分が出る）"""
     table: sa.Table = Message.__table__  # type: ignore[attr-defined]
-    declared = {index.name: index for index in table.indexes}
+    declared = {str(index.name): index for index in table.indexes}
 
     for name, columns in _EXPECTED_INDEXES.items():
         index = declared[name]
