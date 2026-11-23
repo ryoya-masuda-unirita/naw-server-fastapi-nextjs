@@ -163,8 +163,10 @@ export class TrainingDataPage {
     // 幅 0 に潰れた見出しは visible と判定されないため、存在だけを待ち、幅は下で測る
     await expect(labels.first()).toBeAttached();
     const boxes = await this.dialog.evaluate((dialog) => {
-      // 外枠（dialog）ではなく、中身を収める内側のカードを基準にする。外枠は広くても、カードが狭いと表がはみ出す
-      const right = (dialog.querySelector('.modal-content') ?? dialog).getBoundingClientRect().right;
+      // 外枠（dialog）ではなく、中身を収める内側のカードを基準にする。外枠は広くても、カードが狭いと表がはみ出す。
+      // 狭い画面では、カードの中を横スクロールして全列に届くのが正しい状態なので、スクロールできる範囲の右端を使う
+      const card = dialog.querySelector('.modal-content') ?? dialog;
+      const right = card.getBoundingClientRect().left + card.scrollWidth;
       return [...dialog.querySelectorAll('.table-list-row--header .table-list-label')].map((label) => {
         const rect = label.getBoundingClientRect();
         return { text: label.textContent?.trim() ?? '', width: rect.width, overflow: rect.right - right };
