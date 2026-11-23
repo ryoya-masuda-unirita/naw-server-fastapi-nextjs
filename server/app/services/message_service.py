@@ -55,6 +55,7 @@ from app.models.user import User
 from app.repositories.ai_model_repository import AIModelRepository
 from app.repositories.assistant_endpoint_repository import AssistantEndpointRepository
 from app.repositories.assistant_repository import AssistantRepository
+from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.file_repository import FileRepository
 from app.repositories.index_repository import IndexRepository
 from app.repositories.library_repository import LibraryRepository
@@ -82,7 +83,6 @@ from app.schemas.message import (
     ToolConfig,
 )
 from app.schemas.response_format import ResponseFormatRequest
-from app.services.assistant_service import AssistantService
 
 logger = logging.getLogger(__name__)
 
@@ -457,8 +457,8 @@ class MessageService:
         HTTPException
             使えないアシスタントの場合は403。
         """
-        if not await AssistantService.is_available_to(
-            tenant_id, current_user.id, assistant_id, session
+        if not await GroupAssistantRepository.exists_available_to_user(
+            assistant_id, current_user.id, tenant_id, session
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access Denied"

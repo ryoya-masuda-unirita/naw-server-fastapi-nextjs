@@ -202,7 +202,7 @@ def _mock_new_session() -> MagicMock:
 def _assistant_available() -> Iterator[AsyncMock]:
     """アシスタントは所属チームで使える前提にする（利用可否の判定は別のテストで確かめる）"""
     with patch(
-        "app.services.message_service.AssistantService.is_available_to",
+        "app.services.message_service.GroupAssistantRepository.exists_available_to_user",
         new_callable=AsyncMock,
         return_value=True,
     ) as mock_is_available:

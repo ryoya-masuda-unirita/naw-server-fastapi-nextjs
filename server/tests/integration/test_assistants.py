@@ -22,6 +22,7 @@ from app.models.group import Group, GroupUser
 from app.models.tenant import Tenant
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
 from app.models.user import User, UserRole
+from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.services.assistant_service import AssistantService
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any
@@ -1691,10 +1692,10 @@ async def _create_assistant(
     return created
 
 
-class TestIsAvailableTo:
-    """AssistantService.is_available_to のテスト"""
+class TestExistsAvailableToUser:
+    """GroupAssistantRepository.exists_available_to_user のテスト"""
 
-    async def test_is_available_to_returns_true_for_assistant_in_belonging_group(
+    async def test_exists_available_to_user_returns_true_for_assistant_in_belonging_group(
         self,
         session: AsyncSession,
         tenant: Tenant,
@@ -1703,25 +1704,25 @@ class TestIsAvailableTo:
         group_with_assistant: Group,
     ) -> None:
         """所属グループに割り当てられたアシスタントは使えること"""
-        result = await AssistantService.is_available_to(
-            tenant.id, member_user.id, assistant.id, session
+        result = await GroupAssistantRepository.exists_available_to_user(
+            assistant.id, member_user.id, tenant.id, session
         )
 
         assert result is True
 
-    async def test_is_available_to_returns_false_for_unassigned_assistant(
+    async def test_exists_available_to_user_returns_false_for_unassigned_assistant(
         self, session: AsyncSession, tenant: Tenant, member_user: User
     ) -> None:
         """どのグループにも割り当てられていないアシスタントは使えないこと"""
         unassigned = await _create_assistant(session, tenant, "Unassigned")
 
-        result = await AssistantService.is_available_to(
-            tenant.id, member_user.id, unassigned.id, session
+        result = await GroupAssistantRepository.exists_available_to_user(
+            unassigned.id, member_user.id, tenant.id, session
         )
 
         assert result is False
 
-    async def test_is_available_to_returns_false_for_other_group_assistant(
+    async def test_exists_available_to_user_returns_false_for_other_group_assistant(
         self,
         session: AsyncSession,
         tenant: Tenant,
@@ -1733,13 +1734,13 @@ class TestIsAvailableTo:
         other = await _create_assistant(session, tenant, "Other Group Only")
         await _create_group(session, tenant, "Other", [unaffiliated_user], [other])
 
-        result = await AssistantService.is_available_to(
-            tenant.id, member_user.id, other.id, session
+        result = await GroupAssistantRepository.exists_available_to_user(
+            other.id, member_user.id, tenant.id, session
         )
 
         assert result is False
 
-    async def test_is_available_to_returns_true_when_one_of_many_groups_has_it(
+    async def test_exists_available_to_user_returns_true_when_one_of_many_groups_has_it(
         self, session: AsyncSession, tenant: Tenant, member_user: User
     ) -> None:
         """複数のグループに所属し、そのうち1つに割り当てられていれば使えること"""
@@ -1747,13 +1748,13 @@ class TestIsAvailableTo:
         await _create_group(session, tenant, "A", [member_user], [])
         await _create_group(session, tenant, "B", [member_user], [target])
 
-        result = await AssistantService.is_available_to(
-            tenant.id, member_user.id, target.id, session
+        result = await GroupAssistantRepository.exists_available_to_user(
+            target.id, member_user.id, tenant.id, session
         )
 
         assert result is True
 
-    async def test_is_available_to_returns_false_when_user_has_no_group(
+    async def test_exists_available_to_user_returns_false_when_user_has_no_group(
         self,
         session: AsyncSession,
         tenant: Tenant,
@@ -1762,13 +1763,13 @@ class TestIsAvailableTo:
         group_with_assistant: Group,
     ) -> None:
         """どのグループにも所属しないユーザーは、割り当て済みのアシスタントも使えないこと"""
-        result = await AssistantService.is_available_to(
-            tenant.id, unaffiliated_user.id, assistant.id, session
+        result = await GroupAssistantRepository.exists_available_to_user(
+            assistant.id, unaffiliated_user.id, tenant.id, session
         )
 
         assert result is False
 
-    async def test_is_available_to_matches_assistant_list(
+    async def test_exists_available_to_user_matches_assistant_list(
         self,
         session: AsyncSession,
         tenant: Tenant,
@@ -1792,8 +1793,8 @@ class TestIsAvailableTo:
         available = {
             candidate.id
             for candidate in candidates
-            if await AssistantService.is_available_to(
-                tenant.id, member_user.id, candidate.id, session
+            if await GroupAssistantRepository.exists_available_to_user(
+                candidate.id, member_user.id, tenant.id, session
             )
         }
 
