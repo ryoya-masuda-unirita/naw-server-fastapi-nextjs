@@ -4,6 +4,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    // DBのパスワード・アプリの秘密鍵を、人が決めずに生成するために使う(#386)
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
   // tfstateをS3でリモート管理する。use_lockfileでS3ネイティブロックを使う(dynamodb_tableは
   // Terraform 1.11で非推奨化されたため使わない)。
@@ -55,7 +60,17 @@ module "rds" {
   project_name       = var.project_name
   private_subnet_ids = module.network.private_subnet_ids
   rds_sg_id          = module.network.rds_sg_id
-  db_password        = var.db_password
+}
+
+// backendの機密情報(DB接続文字列・秘密鍵)をSecrets Managerに保存する。ECSは、起動時にここから注入する
+module "secrets" {
+  source = "../../modules/secrets"
+
+  project_name = var.project_name
+  db_address   = module.rds.address
+  db_username  = module.rds.username
+  db_name      = module.rds.db_name
+  db_password  = module.rds.master_password
 }
 
 module "elasticache" {
@@ -109,11 +124,7 @@ module "ecs" {
   private_subnet_ids      = module.network.private_subnet_ids
   ecs_sg_id               = module.network.ecs_sg_id
   ecr_repository_url      = module.ecr.repository_url
-  rds_address             = module.rds.address
-  rds_username            = module.rds.username
-  rds_db_name             = module.rds.db_name
-  db_password             = var.db_password
-  secret_key              = var.secret_key
+  secret_arn              = module.secrets.secret_arn
   redis_endpoint          = module.elasticache.primary_endpoint_address
   cloudfront_domain_name  = module.frontend.domain_name
   user_import_bucket_name = module.user_import.bucket_name

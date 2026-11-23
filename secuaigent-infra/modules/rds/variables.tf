@@ -1,9 +1,3 @@
-variable "db_password" {
-  type        = string
-  description = "RDSのマスターパスワード"
-  sensitive   = true
-}
-
 variable "private_subnet_ids" {
   type        = list(string)
   description = "privateサブネットのIDのリスト"

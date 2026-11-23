@@ -3,12 +3,6 @@ variable "cloudfront_domain_name" {
   description = "CORSで許可するCloudFrontのドメイン名"
 }
 
-variable "db_password" {
-  type        = string
-  description = "RDSのマスターパスワード"
-  sensitive   = true
-}
-
 variable "ecr_repository_url" {
   type        = string
   description = "backendイメージのECRリポジトリURL"
@@ -29,21 +23,6 @@ variable "private_subnet_ids" {
   description = "backendのタスクを置くprivateサブネットのIDのリスト(外向きの通信はNAT経由)"
 }
 
-variable "rds_address" {
-  type        = string
-  description = "RDSのホスト名"
-}
-
-variable "rds_db_name" {
-  type        = string
-  description = "RDSのデータベース名"
-}
-
-variable "rds_username" {
-  type        = string
-  description = "RDSのマスターユーザー名"
-}
-
 variable "redis_endpoint" {
   type        = string
   description = "ElastiCacheのプライマリエンドポイント"
@@ -52,12 +31,6 @@ variable "redis_endpoint" {
 variable "region" {
   type        = string
   description = "AWSリージョン"
-}
-
-variable "secret_key" {
-  type        = string
-  description = "backendのSECRET_KEY"
-  sensitive   = true
 }
 
 variable "target_group_arn" {
@@ -101,4 +74,9 @@ variable "health_check_grace_period_seconds" {
   type        = number
   default     = 240
   description = "サービス起動直後にALBのヘルスチェック失敗を無視する秒数"
+}
+
+variable "secret_arn" {
+  type        = string
+  description = "DB接続文字列・秘密鍵を持つSecrets ManagerのシークレットのARN(タスク定義のsecretsと、実行ロールの権限に使う)"
 }

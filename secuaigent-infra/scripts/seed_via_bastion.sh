@@ -2,12 +2,15 @@
 # bastion経由でRDSへのSSHトンネルを張り、マイグレーション適用・seed.sql投入までを1コマンドで行う。
 #
 # 使い方:
-#   PEM_KEY_PATH=~/.ssh/<キーペア名>.pem DB_PASSWORD=<db_password> \
+#   PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
 #     bash secuaigent-infra/scripts/seed_via_bastion.sh [--skip-migrate]
 #
 # 必須の環境変数:
 #   PEM_KEY_PATH  bastion接続用のSSH秘密鍵のパス
-#   DB_PASSWORD   RDSのマスターパスワード（terraform outputには含まれない秘匿情報のため、呼び出し側から渡す）
+#
+# 任意の環境変数:
+#   DB_PASSWORD   RDSのマスターパスワード。未指定（空文字列を含む）なら、Secrets Manager（terraform output の backend_secret_name）から取得する
+#                 （パスワードはTerraformが自動生成するため、通常は指定不要。AWS CLIとjqが必要）
 #
 # オプション:
 #   --skip-migrate  seed投入前の `alembic upgrade head` をスキップする
@@ -55,16 +58,29 @@ if [ -z "${PEM_KEY_PATH:-}" ]; then
   exit 1
 fi
 
-if [ -z "${DB_PASSWORD:-}" ]; then
-  echo "DB_PASSWORD is required (RDSのマスターパスワード)" >&2
-  exit 1
-fi
-
 echo "==> terraform outputから接続先を取得しています..."
 RDS_ENDPOINT="$(cd "${ENV_DIR}" && terraform output -raw rds_endpoint)"
 BASTION_IP="$(cd "${ENV_DIR}" && terraform output -raw bastion_public_ip)"
 echo "RDS_ENDPOINT=${RDS_ENDPOINT}"
 echo "BASTION_IP=${BASTION_IP}"
+
+# DB_PASSWORDが環境変数で渡されていなければ、Secrets Managerから取得する(値は表示しない)
+if [ -z "${DB_PASSWORD:-}" ]; then
+  echo "==> DB_PASSWORD が未指定のため、Secrets Managerから取得します..."
+  SECRET_NAME="$(cd "${ENV_DIR}" && terraform output -raw backend_secret_name)" || SECRET_NAME=""
+  if [ -z "${SECRET_NAME}" ]; then
+    echo "terraform output の backend_secret_name を取得できません。DB_PASSWORD を環境変数で渡してください" >&2
+    exit 1
+  fi
+  # シークレットのリージョンは、Terraformのリージョン(既定 ap-northeast-1)。手元のAWS設定の既定リージョンに依存しないよう、明示する
+  SECRET_REGION="${AWS_REGION:-ap-northeast-1}"
+  DB_PASSWORD="$(aws secretsmanager get-secret-value --region "${SECRET_REGION}" --secret-id "${SECRET_NAME}" \
+    --query SecretString --output text | jq -r '.DB_PASSWORD // empty')" || DB_PASSWORD=""
+  if [ -z "${DB_PASSWORD}" ]; then
+    echo "シークレット ${SECRET_NAME}(リージョン ${SECRET_REGION})から DB_PASSWORD を取得できません(権限・名前・キー・リージョンを確認してください。リージョンは AWS_REGION で変えられます)" >&2
+    exit 1
+  fi
+fi
 
 echo "==> SSHトンネルを確立しています (localhost:${LOCAL_PORT} -> ${RDS_ENDPOINT}:5432)..."
 ssh -N \
