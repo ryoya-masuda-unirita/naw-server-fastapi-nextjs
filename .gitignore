@@ -229,6 +229,7 @@ infra/**/*.tfstate
 infra/**/*.tfstate.*
 infra/**/*.tfvars
 !infra/**/*.tfvars.example
+infra/**/backend.hcl
 *.DS_Store
 
 # backend: LocalFileStorageのローカル実体ファイル置き場（動作確認・E2Eテストで生成される）
