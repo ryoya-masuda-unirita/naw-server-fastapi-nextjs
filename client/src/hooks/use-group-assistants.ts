@@ -6,6 +6,7 @@ import {
 import type { ComboboxOption } from '@/components/shared/form-combobox';
 import { apiClient, type QueryParams } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import { fetchAllPages } from '@/lib/utils/fetch-all-pages';
 import type { AssistantApiItem } from '@/types/admin/assistant.types';
 import type {
   GroupAssistantItem,
@@ -18,9 +19,6 @@ import { invalidateGroupLists } from './use-group-detail';
 
 /** 所属アシスタント一覧の key の先頭 */
 export const GROUP_ASSISTANTS_QUERY_KEY = 'admin-group-assistants';
-
-/** 追加ダイアログの候補の件数（移植元 `loadAddAssistantOptions` の pageSize） */
-const ADD_OPTIONS_PAGE_SIZE = 50;
 
 /** 追加・削除の失敗は画面でトーストを出すので、共通のエラートーストは出さない */
 const OWN_ERROR_TOAST = { skipGlobalErrorToast: true } as const;
@@ -107,22 +105,25 @@ export function useGroupAssistants(groupId: string, filter: GroupAssistantListFi
  */
 export async function fetchAddAssistantOptions(groupId: string): Promise<ComboboxOption[]> {
   try {
-    const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.ASSISTANTS.LIST, {
-      params: toTenantListParams({
-        pageSize: ADD_OPTIONS_PAGE_SIZE,
-        pageIndex: 1,
-        search: '',
-        excludeGroupId: groupId,
-      }),
+    // 全ページを順に取る（移植元 `fetchAllPages`。50 件だけでは、51 件目以降のアシスタントを追加できない）
+    const assistants = await fetchAllPages(async (page, size) => {
+      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.ASSISTANTS.LIST, {
+        params: toTenantListParams({
+          pageSize: size,
+          pageIndex: page + 1,
+          search: '',
+          excludeGroupId: groupId,
+        }),
+      });
+      const result = parseSpringPage(raw, mapGroupAssistantItem);
+      return { items: result.content, total: result.totalElements };
     });
-    return parseSpringPage(raw, mapGroupAssistantItem).content.map(
-      ({ id, name, description, category }) => ({
-        value: id,
-        label: name,
-        description,
-        tag: category?.name,
-      }),
-    );
+    return assistants.map(({ id, name, description, category }) => ({
+      value: id,
+      label: name,
+      description,
+      tag: category?.name,
+    }));
   } catch {
     return [];
   }

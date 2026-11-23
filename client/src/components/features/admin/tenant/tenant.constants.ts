@@ -14,6 +14,3 @@ export const SHOW_USAGE_LIMIT_PANELS = false;
 
 /** 利用履歴の 1 ページの件数（移植元 TenantApiService.USAGE_HISTORY_PAGE_SIZE） */
 export const USAGE_HISTORY_PAGE_SIZE = 5;
-
-/** 利用者の絞り込みの選択肢のために、ユーザーを取るときの 1 ページの件数（移植元 `fetchAllUsers` の `PAGE_SIZE`。backend の上限） */
-export const USAGE_FILTER_USER_PAGE_SIZE = 1000;

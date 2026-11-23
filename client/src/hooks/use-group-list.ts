@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import { fetchAllPages } from '@/lib/utils/fetch-all-pages';
 import type { PagedResponse } from '@/types/api-response.type';
 import type {
   GroupApiItem,
@@ -14,8 +15,6 @@ import type {
 // 移植元 group-list の GroupApiService・GroupUsersApiService・GroupAssistantsApiService・
 // GroupTemplatesApiService（一覧に必要な分）と、GroupListStore の名前解決をまとめたもの。
 
-/** 移植元がテナント全体の選択肢を取るときの size */
-const LOOKUP_PAGE_SIZE = 1000;
 /**
  * グループ内の一覧を取るときの size。移植元は 1000 だが、backend は
  * `/api/admin/groups/{id}/users|assistants|prompt-templates` の size を 100 までしか受けない。
@@ -37,7 +36,7 @@ export interface NameLookup {
   templates: ReadonlyMap<string, string>;
 }
 
-const EMPTY_LOOKUP: NameLookup = {
+export const EMPTY_LOOKUP: NameLookup = {
   users: new Map(),
   assistants: new Map(),
   templates: new Map(),
@@ -51,21 +50,30 @@ interface NamedRow {
 /** 取得に失敗したら ID のまま表示するので、共通のエラートーストは出さない（移植元の `catch` と同じ） */
 const SILENT = { skipGlobalErrorToast: true } as const;
 
+/** テナントの全件を、1,000 件ずつ最後のページまで順に取り、ID から名前を引く対応表にする */
 async function fetchTenantNames(path: string, sort: string): Promise<ReadonlyMap<string, string>> {
-  const res = await apiClient.get<PagedResponse<NamedRow>>(path, {
-    params: { page: 0, size: LOOKUP_PAGE_SIZE, sort },
-    ...SILENT,
+  const rows = await fetchAllPages(async (page, size) => {
+    const res = await apiClient.get<PagedResponse<NamedRow>>(path, {
+      params: { page, size, sort },
+      ...SILENT,
+    });
+    return { items: res.content, total: res.totalElements };
   });
-  return new Map(res.content.map(({ id, name }) => [id, name]));
+  return new Map(rows.map(({ id, name }) => [id, name]));
 }
 
 /**
  * 一覧のカードに出す名前を、ID から引くための対応表（移植元 `loadNameResolverMaps`）。
+ * ユーザー・アシスタント・テンプレートを、全ページ（1,000 件を超えても）順に取る。
  * 3 つのうち 1 つでも失敗したら、移植元と同じく全部空にして ID のまま表示する。
+ *
+ * @param enabled 一覧に、名前がなく ID だけの項目があるときだけ取る（`needsNameLookup`）。
+ *   一覧が名前を返していれば、取らない（移植元は、必要なときだけ画面ごとに 1 回読み込む）
  */
-export function useNameLookup() {
+export function useNameLookup(enabled: boolean) {
   return useQuery({
     queryKey: [GROUP_LIST_QUERY_KEY, 'lookup'],
+    enabled,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<NameLookup> => {
       try {
@@ -102,6 +110,24 @@ export function useGroupList(filter: GroupListFilter) {
 
 function preferNonEmpty(values: string[] | undefined): string[] | undefined {
   return values !== undefined && values.length > 0 ? values : undefined;
+}
+
+/**
+ * 名前の対応表で引く必要がある項目か（名前が欠けていて、ID はある。移植元 `needsNameResolution`）。
+ * `toViewModel` が、一覧の名前（`userNames` など）をそのまま使えるなら、要らない。
+ * アシスタント・テンプレートは、名前の配列が ID の配列と同じ件数のときだけ、並びで対応させて使える。
+ */
+export function needsNameLookup(item: GroupApiItem): boolean {
+  const needsUsers = (ids: string[] | undefined, names: string[] | undefined) =>
+    preferNonEmpty(names) === undefined && (ids?.length ?? 0) > 0;
+  const needsPaired = (ids: string[] | undefined, names: string[] | undefined) =>
+    (ids?.length ?? 0) > 0 && (names?.length ?? 0) !== ids?.length;
+  return (
+    needsUsers(item.adminUserIds, item.adminUserNames) ||
+    needsUsers(item.users, item.userNames) ||
+    needsPaired(item.assistantIds ?? item.assistants, item.assistants) ||
+    needsPaired(item.promptTemplateIds ?? item.promptTemplates, item.promptTemplates)
+  );
 }
 
 /**

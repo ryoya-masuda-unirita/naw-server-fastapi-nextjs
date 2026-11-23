@@ -6,6 +6,7 @@ import {
 } from '@/components/features/admin/assistants/assistant-list.constants';
 import type { SelectOption } from '@/components/shared/types';
 import { apiClient } from '@/lib/api-client';
+import { fetchAllPages } from '@/lib/utils/fetch-all-pages';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import type {
   AssistantApiItem,
@@ -159,16 +160,20 @@ function toModelOptions(
 }
 
 /**
- * 全グループの選択肢。移植元は size を渡さず既定の 20 件になるが、21 件目以降のチームが選べない・
- * 一覧の「所属チーム」が空になるため、backend の上限（100）まで取る。
+ * 全グループの選択肢を取るときの 1 ページの件数。移植元は 1,000 件ずつだが、`/admin/all-groups` は
+ * backend が 100 件までしか受けない（超えると 422）ため、上限の 100 件ずつ全ページを取る。
  */
 const GROUP_OPTIONS_SIZE = 100;
 
-async function fetchGroupOptions(): Promise<SelectOption[]> {
-  const response = await apiClient.get<GroupApiResponse>(API_PATHS.ADMIN.ALL_GROUPS.LIST, {
-    params: { size: GROUP_OPTIONS_SIZE },
-  });
-  return response.data.map((group) => ({ value: group.id, label: group.name }));
+/** 全グループの選択肢（移植元 `getGroupOptions`）。21 件目以降のチームも選べるよう、全ページを順に取る */
+export async function fetchGroupOptions(): Promise<SelectOption[]> {
+  const groups = await fetchAllPages(async (page, size) => {
+    const response = await apiClient.get<GroupApiResponse>(API_PATHS.ADMIN.ALL_GROUPS.LIST, {
+      params: { page, size },
+    });
+    return { items: response.data, total: response.total };
+  }, GROUP_OPTIONS_SIZE);
+  return groups.map((group) => ({ value: group.id, label: group.name }));
 }
 
 async function fetchFolderOptions(): Promise<SelectOption[]> {
