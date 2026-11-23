@@ -16,5 +16,5 @@ variable "project_name" {
 variable "engine_version" {
   type        = string
   default     = "7.1"
-  description = "Redisのバージョン"
+  description = "Redisのバージョン。保存時の暗号化・通信の暗号化と同様、変えるとレプリケーショングループの再作成になることがある(キャッシュの中身は消え、エンドポイントも変わる)。セッションを保持しているため、変更は計画して行うこと"
 }
