@@ -69,6 +69,10 @@ waha-emulator の LLM を、AWS Bedrock（Claude）にする。社内側（waha-
 
 - `config/workflows.json` の `default` は、`workflows.json` に書いていないすべてのサービス ID（`onprem-chat` を含む）に使われる。`.gitignore` 済み（キーは `${BEDROCK_API_KEY}` で環境変数から渡す）
 - モデル名は、Bedrock で使えるモデル ID（例: `anthropic.claude-haiku-4-5`）。違うと HTTP 400 の失敗になる
-- **埋め込み（学習・検索のベクトル化）は、まだ Bedrock では動かない。** Claude に埋め込みモデルがないため、この設定は回答の生成（チャット）だけ
+- 回答の生成と埋め込みで、`URL` の**ホストが違う**。回答の生成は Bedrock Mantle（`https://bedrock-mantle.<リージョン>.api.aws/anthropic`）、埋め込みは Bedrock Runtime（`https://bedrock-runtime.<リージョン>.amazonaws.com`）。API キーは同じものを使える
+- 例（`config/workflows.bedrock.example.json`）には、回答の生成（`default`）に加えて、RAG（`bedrock-rag`。検索 → 回答）と、学習・同期・削除（`kb-learn`・`kb-sync`・`kb-delete`）が入っている。埋め込みのモデルは `amazon.titan-embed-text-v1`（1536 次元）。**Titan V2 は次元数が合わず使えない**。Titan G1 は英語向けで、日本語の検索の質は低い可能性がある
+- **この例は、本物の Bedrock では、まだ確認していない**（`docs/issue-439/08_動作確認.md` に確認の手順がある）
+- 埋め込みは、チャンクごとに 1 回ずつ呼ぶ。Bedrock は 1 分あたりの回数で制限するため、大きな文書の学習で 429 が出ることがある（自動のリトライはしない。時間をおいて学習し直す）
+- IAM に `bedrock:InvokeModel` が要り、Bedrock のコンソールでモデル（Titan）の利用を有効にしておく。Bedrock API キーで呼ぶ場合は、`bedrock:CallWithBearerToken` も要る（後者は AWS の第三者の案内で、公式での確認は未了）
 - Bedrock の部品は Python 版だけの独自の拡張で、後から消せる。手順は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md) の「移植元にない拡張」
 - 実機（本物の Bedrock）での確認は、`docs/issue-436/08_動作確認.md` に記録する

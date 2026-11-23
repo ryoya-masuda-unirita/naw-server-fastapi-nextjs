@@ -615,3 +615,11 @@ def test_proxy_properties_reach_core_network_setting(tmp_path: Path) -> None:
         3128,
     )
     assert network.proxy_setting.username == "pid"
+
+
+def test_vendor_maps_bedrock() -> None:
+    """ベンダー ID 97 は Bedrock になること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    app = App()
+    app.set_property(P.VENDOR, "97")
+    assert app.access_credential.vendor_name == "Bedrock"

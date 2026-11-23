@@ -4,6 +4,9 @@
 埋め込みの登録だけをここに持つ。
 """
 
+from generative_ai_core.embedding.bedrock import (  # bedrock-ext
+    register_bedrock_embedding,  # bedrock-ext
+)  # bedrock-ext
 from generative_ai_core.embedding.providers import (
     AzureOpenAiCoreEmbeddingProvider,
     EchoCoreEmbeddingProvider,
@@ -73,6 +76,8 @@ def register_embedding(
                 CoreEmbeddingRequest,
                 lambda request, context: echo.embed(request),
             )
+        case CoreProviderId.Bedrock:  # bedrock-ext
+            register_bedrock_embedding(builder, configuration, name)  # bedrock-ext
         case _:
             return
 

@@ -73,6 +73,7 @@ VENDOR_NAMES = {
     "2": "VertexAI Gemini",
     "3": "Anthropic",
     "5": "SecuAiGent",
+    "97": "Bedrock",  # bedrock-ext
     "99": "Echo",
 }
 

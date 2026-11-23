@@ -292,3 +292,17 @@ def test_mapper_maps_every_proxy_mode_and_timeout_boundary() -> None:
     assert (
         mapper.network(properties, EmbeddingNetworkProperties()).timeout_seconds == 180
     )
+
+
+def test_selector_accepts_bedrock_vendor() -> None:
+    """Bedrock は対応するベンダーとして、core の埋め込みのモデルに委譲されること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    credential = EmbeddingProviderProperties(
+        url="https://bedrock-runtime.example.invalid",
+        api_key="your-api-key",
+        vendor_name="Bedrock",
+    )
+    model = EmbeddingSelectorService.create_embedding_model(
+        EmbeddingNetworkProperties(), credential
+    )
+    assert isinstance(model, CoreDelegatingEmbeddingModel)

@@ -106,7 +106,18 @@ docker run -d --name naw-vdb -e POSTGRES_DB=onprem_vector -e POSTGRES_USER=onpre
 - 本体は `generative-ai-core/src/generative_ai_core/provider/clients/bedrock.py` の 1 ファイル。接続先ごとの違い（URL・認証のヘッダー）は、その中の `request_target` に集めてある
 - OpenAI 系と同じ作りで、RAG のプロンプト・回答の解析・検証は `openai_compatible.py` の共通の関数を使う
 - 既存のファイルに足したのは、`model.py`・`factory.py`・`vendor.py` の数行だけ。足した行には `bedrock-ext` の目印がある
-- **未対応（スコープ外）**: 埋め込み（Claude に埋め込みモデルがない）、通常 chat の tools、ストリーミング
+- **未対応（スコープ外）**: 通常 chat の tools、ストリーミング
+
+#### 埋め込み（学習・検索のベクトル化）の Bedrock（#439）
+
+Claude には埋め込みモデルがないため、回答の生成とは別に、Bedrock の Titan の埋め込みを呼ぶ実行器を足した。これも Python 版だけの拡張（ID は同じ `97`）。
+
+- 本体は `generative-ai-core/src/generative_ai_core/embedding/bedrock.py` の 1 ファイル。学習用（埋め込みアダプタ）と質問用（検索アダプタ）の両方がこれを使う。接続先ごとの違い（URL・認証）は `request_target` に集めてある
+- **接続先が回答の生成と別。** 回答の生成は Bedrock Mantle（`https://bedrock-mantle.<リージョン>.api.aws/anthropic`）だが、Mantle には埋め込みの入口がない。埋め込みは Bedrock Runtime の InvokeModel（`URL` は `https://bedrock-runtime.<リージョン>.amazonaws.com`、`MODEL_NAME` は `amazon.titan-embed-text-v1`）を呼ぶ。Bedrock API キーは同じものを使える
+- **次元数は 1536 で固定**（ベクトル DB のテーブルの `vector(1536)`）。Titan G1（V1）は 1536 次元で合う。**Titan V2（`amazon.titan-embed-text-v2:0`）は 1024・512・256 次元で合わず、使えない**（返ったベクトルが 1536 次元でなければ、保存・検索の前に `DIMENSION_MISMATCH` で失敗にする）。V2 を使うには、テーブルの次元数を設定にする別の変更が要る
+- Titan G1 は英語に最適化されており、日本語の社内文書の検索の質は低い可能性がある
+- 既存のファイルに足したのは、`embedding/factory.py`・`retrieval/query_embedding.py`・埋め込みアダプタの `constants.py` と `service/embedding.py`・検索アダプタの `constants.py` の数行だけ（`bedrock-ext` の目印つき）
+- 消す手順は、上の手順に加えて `embedding/bedrock.py` と `tests/test_bedrock_embedding.py` を削除し、`bedrock-ext` の行を削除する（`grep -rn "bedrock-ext" generative-ai-adapter/` で全部見つかる）
 
 **消す手順**（移植元が Bedrock に対応したときも、まずこれで外す）
 

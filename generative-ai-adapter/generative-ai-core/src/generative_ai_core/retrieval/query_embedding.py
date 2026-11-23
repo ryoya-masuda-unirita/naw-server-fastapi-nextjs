@@ -24,6 +24,9 @@ from collections.abc import Callable
 from typing import Protocol
 from urllib.parse import quote
 
+from generative_ai_core.embedding.bedrock import (  # bedrock-ext
+    embed_vector as _embed_bedrock,  # bedrock-ext
+)  # bedrock-ext
 from generative_ai_core.failure import CoreFailure
 from generative_ai_core.network.transport import create_transport
 from generative_ai_core.provider.clients.secuaigent import failure as secuaigent_failure
@@ -374,6 +377,7 @@ _EMBEDDERS: dict[CoreProviderId, EmbedFunction] = {
     CoreProviderId.AzureOpenAI: _embed_azure,
     CoreProviderId.SecuAiGent: _embed_secuaigent,
     CoreProviderId.Echo: _embed_echo,
+    CoreProviderId.Bedrock: _embed_bedrock,  # bedrock-ext
 }
 
 
