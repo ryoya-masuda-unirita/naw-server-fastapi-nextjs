@@ -1,6 +1,6 @@
 name: Deploy
 
-# developへのpushでは、backend/frontendだけを自動デプロイする。
+# developへのpushでは、server/frontendだけを自動デプロイする。
 # インフラ(terraform apply)は、構成を作り直す間に意図せず適用されないよう、手動実行で
 # run_infraをtrueにしたときだけ実行する(#381)。
 on:
@@ -31,19 +31,18 @@ jobs:
         with:
           filters: |
             infra:
-              - "infra/**"
-              - "!infra/route53/**"
+              - "secuaigent-infra/**"
             backend:
-              - "backend/**"
+              - "server/**"
             frontend:
-              - "frontend/**"
+              - "client/**"
 
-      # インフラは自動適用しない(#381)ため、infra/**の変更を含むpushでは、backend/frontendの新しいコードが
+      # インフラは自動適用しない(#381)ため、secuaigent-infra/**の変更を含むpushでは、server/frontendの新しいコードが
       # 古いインフラの上にデプロイされうる。気づけるよう警告を出す(インフラを先に手動で反映すること)。
       - name: Warn about unapplied infra changes
         if: github.event_name == 'push' && steps.filter.outputs.infra == 'true'
         run: |
-          echo "::warning::infra/** の変更が含まれていますが、インフラは自動適用されません。backend/frontendより先に、Deployを手動実行(run_infra=true)して反映してください。"
+          echo "::warning::secuaigent-infra/** の変更が含まれていますが、インフラは自動適用されません。server/clientより先に、Deployを手動実行(run_infra=true)して反映してください。"
 
   # 手動実行でrun_infraがtrueのときだけ deploy-infra.yml を呼び出す(secrets: inherit で
   # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)。pushではスキップされる。
@@ -53,7 +52,7 @@ jobs:
     uses: ./.github/workflows/deploy-infra.yml
     secrets: inherit
 
-  # backend/**が変更されていれば実行。infraジョブの完了を待つ(needs)。
+  # server/**が変更されていれば実行。infraジョブの完了を待つ(needs)。
   # infraジョブはpushでは常にスキップ(手動実行でrun_infra=trueのときだけ実行)されてresultが"skipped"に
   # なるので、successかskippedのどちらかであればOKとする。infraが失敗した場合(failure)は実行しない。
   backend:
@@ -65,7 +64,7 @@ jobs:
     uses: ./.github/workflows/deploy-backend.yml
     secrets: inherit
 
-  # frontend/**(React)が変更されていれば実行。手動実行でinfraも同時に動かす場合、frontendが使う
+  # client/**(React)が変更されていれば実行。手動実行でinfraも同時に動かす場合、frontendが使う
   # S3バケット/CloudFrontが作り直される可能性があるため、backendと同様にinfraジョブの完了を待つ
   frontend:
     needs: [changes, infra]

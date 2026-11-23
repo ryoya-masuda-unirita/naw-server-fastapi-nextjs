@@ -14,10 +14,10 @@ model: sonnet
 
 - バックエンド移植元: `~/Documents/unirita-develop-pj/secuaigent-ref/server`（移植元モノレポ `secuaigent` の `server/`。`origin/develop` に detached した参照専用 worktree。最初から git 管理で全履歴を追える）
 - フロントエンド移植元: `~/Documents/unirita-develop-pj/secuaigent-ref/client`（同モノレポの `client/`。2026-07-13 にモノレポへ取り込まれ、それ以前の履歴は追えない場合あり。最新コードを読んで実装を把握する）
-- 移植先バックエンド: `backend/`（FastAPI）
-- 移植先フロントエンド: `frontend/`（React）。`secuaigent/client` のコピーだった `frontend-angular/` は #213 で削除済み
+- 移植先バックエンド: `server/`（FastAPI）
+- 移植先フロントエンド: `client/`（React）。`secuaigent/client` のコピーだった `frontend-angular/` は #213 で削除済み
 
-このエージェントはバックエンド（`server/` ⇄ `backend/`）の調査を担当する。フロントエンドの調査は `naw-frontend-explore` が担当する。参照専用 worktree は読むだけにし、`git checkout` / `git pull` やファイルの変更はしない。
+このエージェントはバックエンド（移植元 `secuaigent/server/` ⇄ 移植先 `server/`）の調査を担当する。フロントエンドの調査は `naw-frontend-explore` が担当する。参照専用 worktree は読むだけにし、`git checkout` / `git pull` やファイルの変更はしない。
 
 ## 既知の意図的差分（未移植として検出しない）
 
@@ -27,7 +27,7 @@ model: sonnet
 
 1. 依頼された対象領域について、参照専用 worktree の状態を確認する（`git log`, `git diff`, 対象ファイルの読み込み等）。最新化が必要な場合は `CLAUDE.md` の手順で worktree を `origin/develop` に合わせる（`git pull` はしない）
 2. 対象領域（Controller/Service/Request/Response など）のエンドポイント・仕様を洗い出す
-3. 移植先の対応実装の有無を `backend/app/routers/`・`backend/app/services/`・`backend/app/schemas/` 等で確認する
+3. 移植先の対応実装の有無を `server/app/routers/`・`server/app/services/`・`server/app/schemas/` 等で確認する
 4. 必要なら `gh issue list --state all` で重複する起票済みIssueがないか確認する
 5. 結果を以下の形式で構造化して返す
    - 対象エンドポイント（メソッド・パス）

@@ -8,12 +8,12 @@ on:
   pull_request:
     # PR 作成・更新時に走らせ、PR 画面のチェックに出す
     paths:
-      - "server-local/**"
+      - "secuaigent-server-local/**"
       - ".github/workflows/server-local-tests.yml"
   push:
     # server-local を変更した push（PR のマージによる develop への push を含む）だけで走らせる
     paths:
-      - "server-local/**"
+      - "secuaigent-server-local/**"
       - ".github/workflows/server-local-tests.yml"
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: server-local
+        working-directory: secuaigent-server-local
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +34,7 @@ jobs:
         with:
           enable-cache: true
 
-      # server-local/pyproject.toml の requires-python（3.12以上）に合わせている
+      # secuaigent-server-local/pyproject.toml の requires-python（3.12以上）に合わせている
       - name: Pythonをセットアップ
         uses: actions/setup-python@v5
         with:
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: server-local
+        working-directory: secuaigent-server-local
     steps:
       - uses: actions/checkout@v4
 

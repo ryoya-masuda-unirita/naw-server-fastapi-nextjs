@@ -36,7 +36,7 @@ DEFAULT_RESULT_TIMEOUT_SECONDS = 5.0
 # server-local との結合テスト（test_server_local_roundtrip.py）で server-local の
 # パッケージ（`app`）を読み込めるようにする。テストのモジュールより先に読み込まれる
 # conftest で足す。末尾に足し、エミュレーターの `tests` を server-local のもので隠さない
-SERVER_LOCAL_DIR = Path(__file__).resolve().parents[2] / "server-local"
+SERVER_LOCAL_DIR = Path(__file__).resolve().parents[2] / "secuaigent-server-local"
 if str(SERVER_LOCAL_DIR) not in sys.path:
     sys.path.append(str(SERVER_LOCAL_DIR))
 

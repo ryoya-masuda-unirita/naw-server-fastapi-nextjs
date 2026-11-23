@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-issue-loop
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-loop or explicitly asks to work through open frontend porting Issues (Angular secuaigent/client to React frontend/) one by one end-to-end (branch → docs → implementation → tests → PR) for naw-server-fastapi-nextjs. Repeatedly picks the lowest-numbered GitHub Projects "Todo" issue labeled frontend-port, runs naw-frontend-issue-workflow in full-auto mode (no HITL approval gates, automated tests + dev server verification substitute for manual browser walkthroughs where possible), then naw-pr-workflow to open a PR with code-review.md. Skips an issue (leaving it commented/in-progress) and moves to the next if blocked. Stops when no Todo frontend-port issues remain. Do not use for interactively working a single issue (use naw-frontend-issue-workflow) or for just filing issues (use naw-frontend-issue-batch). Do not use for backend issues (use naw-issue-loop instead).
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-loop or explicitly asks to work through open frontend porting Issues (Angular secuaigent/client to React client/) one by one end-to-end (branch → docs → implementation → tests → PR) for naw-server-fastapi-nextjs. Repeatedly picks the lowest-numbered GitHub Projects "Todo" issue labeled frontend-port, runs naw-frontend-issue-workflow in full-auto mode (no HITL approval gates, automated tests + dev server verification substitute for manual browser walkthroughs where possible), then naw-pr-workflow to open a PR with code-review.md. Skips an issue (leaving it commented/in-progress) and moves to the next if blocked. Stops when no Todo frontend-port issues remain. Do not use for interactively working a single issue (use naw-frontend-issue-workflow) or for just filing issues (use naw-frontend-issue-batch). Do not use for backend issues (use naw-issue-loop instead).
 ---
 
 # NAW Frontend Issue Loop
@@ -53,12 +53,12 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
 
 - 対象Issue番号
 - `~/Documents/personal/naw-server-fastapi-nextjs` の `.claude/skills/naw-frontend-issue-workflow/SKILL.md`（および参照先の `.claude/skills/naw-issue-workflow/references/doc-templates.md`）を読んで、そこに書かれた手順（起票済みIssueへの着手〜ドキュメント作成〜実装〜テスト〜PR作成）に従うこと
-- `frontend/.claude/CLAUDE.md`（技術スタック・Angular→React対応表・デザイン移行方針）を必ず読んで実装に反映すること
+- `client/.claude/CLAUDE.md`（技術スタック・Angular→React対応表・デザイン移行方針）を必ず読んで実装に反映すること
 - 以下の**本スキル独自の上書きルール**を明示すること（`naw-frontend-issue-workflow` のデフォルトと異なる部分なので、エージェントが読み違えないよう強調する）:
   1. **着手前に必ず `gh issue view {番号} --json title,body,labels` でIssue本文とラベルを確認し、`frontend-port` ラベルが付いていることを確認すること。** その上で `bash .claude/skills/naw-issue-workflow/scripts/start_issue.sh issue-{番号}` を実行する（このスクリプトが `develop` の最新化・`feature/issue-{番号}` ブランチの作成・checkout・linked branch反映・`In Progress`移動をすべて行う。これを飛ばして直接 `git checkout -b` 等をしないこと）
   2. 第1承認・第2承認は省略し、常に「全自動」で進めてよい。ユーザーに立ち止まって確認を取らない
   3. 動作確認は `npm run test`・`npm run lint`・`npm run type-check` を実行し、可能であれば `npm run dev`（`http://localhost:5173`）を起動してPlaywright等でスクリーンショットを取得する。スクリーンショット取得が困難な場合は自動テストのみで代替し、その旨を `08_動作確認.md` に明記する
-  4. 依存するバックエンドAPIが `backend/` に未実装であることが判明した場合、無理にモックで実装を完成させようとせず、「BLOCKED」として作業を終了する（実装対象がフロントエンドのみのIssueに限定されているはずだが、調査不足で見落としがあった場合の保険）
+  4. 依存するバックエンドAPIが `server/` に未実装であることが判明した場合、無理にモックで実装を完成させようとせず、「BLOCKED」として作業を終了する（実装対象がフロントエンドのみのIssueに限定されているはずだが、調査不足で見落としがあった場合の保険）
   5. 実装中に解消できないテスト失敗・仕様不明に遭遇し、これ以上進められないと判断した場合は、無理に実装を完成させようとせず、作業ブランチとドキュメントはそのまま残し、対象Issueに詰まった理由をコメントで残した上で「BLOCKED」として作業を終了する（PRは作らない、Project Statusは変更しない）
   6. 正常に完了できた場合は、`naw-pr-workflow` の [SKILL.md](../naw-pr-workflow/SKILL.md) に従いPRを作成し、`/code-review` を実行して `code-review.md` を作成し、🔴致命的指摘があれば修正すること。PR本文には必ず `Closes #{Issue番号}` を入れること
   7. コミットメッセージ規約・ブランチ命名規約はプロジェクトの `CLAUDE.md` に従うこと
@@ -70,7 +70,7 @@ bash .claude/skills/naw-frontend-issue-loop/scripts/next_todo_frontend_issue.sh
 
 エージェントの完了報告を受け取り、以下のいずれかを確認する。
 
-- **PR作成に成功**: PR URLをユーザーに報告する
+- **PR作成に成功**: `naw-pr-workflow` の「マージ判定と自動マージ」に従い、条件を満たせばマージする（CI 待ちを含む）。満たさなければマージせず理由を報告する。結果と PR URL をユーザーに報告する
 - **BLOCKEDで終了**: 理由を簡潔にユーザーに報告する（詳細はIssueコメントを参照するよう案内してよい）
 
 いずれの場合も、対象Issueの処理は「1周」として扱い、次のサイクルに進む。

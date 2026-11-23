@@ -3,7 +3,7 @@ name: naw-onprem
 services:
   # 社内の SECURE の窓口（ブラウザから質問を受け、Waha! で回答を作る）
   server-local:
-    build: ../server-local
+    build: ../secuaigent-server-local
     ports:
       - "127.0.0.1:18090:8080"
     environment:

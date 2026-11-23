@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client → React frontend/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue labeled frontend-port. Stops after 10 issues per invocation or when candidates run out.
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client → React client/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue labeled frontend-port. Stops after 10 issues per invocation or when candidates run out.
 ---
 
 # NAW Frontend Issue Batch
@@ -14,11 +14,11 @@ description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch
 - 毎サイクル、必ず `~/Documents/unirita-develop-pj/secuaigent-ref/client` の `develop` を最新化してから候補検出を行う
 - 候補検出・粒度判断は、最新化した `develop` の状態を基準にする
 - 粒度は AI の判断とし、迷う場合は1画面単位をデフォルトにする
-- 依存する backend API が `backend/` に未実装の候補は除外する
+- 依存する backend API が `server/` に未実装の候補は除外する
 - 重複防止は都度のライブチェックのみで行い、以下を突き合わせる
   1. 最新化済みの `~/Documents/unirita-develop-pj/secuaigent-ref/client`
-  2. `frontend/src/` の既存実装
-  3. `backend/app/routers/` の対応 API 実装状況
+  2. `client/src/` の既存実装
+  3. `server/app/routers/` の対応 API 実装状況
   4. `gh issue list --state all`（特に `frontend-port` ラベル付き Issue）
   5. `gh pr list --state open`
 - この skill は Issue 起票のみを行う
@@ -50,7 +50,7 @@ git -C ~/Documents/unirita-develop-pj/secuaigent-ref checkout --detach origin/de
 この調査ステップは読み取り専用であり、Codex が直接確認して1件だけ選ぶ。
 
 - 最新化済みの `secuaigent/client` を読み取り、画面・コンポーネント一覧を洗い出す
-- `frontend/src/` の既存実装、`backend/app/routers/` の API 実装状況、`gh issue list --state all`、`gh pr list --state open` と突き合わせる
+- `client/src/` の既存実装、`server/app/routers/` の API 実装状況、`gh issue list --state all`、`gh pr list --state open` と突き合わせる
 - まだ移植されておらず、起票済み Issue やオープン PR でも対応されていない単位を検出する
 - **サブドメイン（hostname）ベースのテナント識別に関する画面・コンポーネントは候補から除外する**。Issue #193でこのリポジトリ側が意図的に廃止済みのため、参照リポジトリ側に存在しても「未移植の欠落」ではない
 - 関連する画面・コンポーネント同士で密結合なら1つにまとめてよい

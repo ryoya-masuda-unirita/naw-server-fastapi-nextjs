@@ -7,7 +7,7 @@
 | 1 | 00〜07 のドキュメント | `docs/issue-390-NAW-1340/` |
 | 2 | ローカル用サーバー向けの変換と通信（テスト付き） | `local-training-api-helper.ts`・`local-training-api.ts`・各テスト・型・API パス・フォルダ情報の変換 |
 | 3 | 学習データ詳細の LOCAL の振り分けと更新者名 | `use-training-data-detail.ts`・`training-data-files-view.tsx`・モック・画面テスト |
-| 4 | デモの接続先と手順 | `backend/seed-demo.sql`・`README.md` |
+| 4 | デモの接続先と手順 | `server/seed-demo.sql`・`README.md` |
 | 5 | 動作確認の記録と code-review.md | `08_動作確認.md`・`code-review.md` |
 
 ## 各コミットメッセージ案

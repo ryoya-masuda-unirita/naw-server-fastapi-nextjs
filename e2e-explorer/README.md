@@ -5,7 +5,7 @@
 このリポジトリ（`naw-server-fastapi-nextjs`）は、ユニリタの企業向け AI チャット管理 SaaS **「SecuAiGent」**（旧称 NAW）を、**Spring Boot（Java）+ Angular から FastAPI（Python）+ React へ移植する**プロジェクトです。
 
 - SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS です。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使います
-- 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `backend/`（FastAPI）・`frontend/`（React）・`server-local/` などに移植しています
+- 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `server/`（FastAPI）・`client/`（React）・`secuaigent-server-local/` などに移植しています
 - 移植は画面・API の単位で少しずつ進んでおり、**移植済みの画面が日々増えていきます**
 
 ## このハーネスは何のためにあるか
@@ -55,7 +55,7 @@
 ```
 npm run explore:all
   ├─ 専用環境の起動（docker compose: プロジェクト名 naw-e2e-explorer）
-  │    PostgreSQL → alembic でマイグレーション → backend/seed.sql を投入 → backend → frontend
+  │    PostgreSQL → alembic でマイグレーション → server/seed.sql を投入 → backend → frontend
   │    担当範囲ごとのテナント（e2e-<担当範囲>）とユーザーを作る
   ├─ 担当範囲（画面のまとまり × 権限）を並列数ぶんのワーカーで巡回
   │    巡回役（crawler）が状態をたどり、判定役（oracle）が操作ごとに疑いを記録する
@@ -92,7 +92,7 @@ npm run explore:all
 
 #### 今の担当範囲の分け方
 
-`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。`frontend/` の全画面のルート（`routes/index.tsx`。多くは「未移植」の仮画面）に合わせて、次の 9 つのまとまりに分け、権限と組み合わせた 15 の担当範囲があります。
+`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。`client/` の全画面のルート（`routes/index.tsx`。多くは「未移植」の仮画面）に合わせて、次の 9 つのまとまりに分け、権限と組み合わせた 15 の担当範囲があります。
 
 | まとまり | 起点 | 範囲（URL のパス） | 権限 |
 |---|---|---|---|
@@ -201,9 +201,9 @@ npm run env:down                                                    # 破棄（�
 | `postgres` | PostgreSQL 18。データは tmpfs（破棄で消える） | `127.0.0.1:55432` |
 | `redis` | Redis 7 | `127.0.0.1:56379` |
 | `migrate` | backend のイメージで `alembic upgrade head` | — |
-| `seed` | `backend/seed.sql` を投入 | — |
-| `backend` | `backend/Dockerfile`（本番用）で作ったイメージ | `127.0.0.1:58000` |
-| `frontend` | 今の `frontend/` を Vite の開発サーバーで動かす（React の開発時の警告もコンソールのエラーとして拾うため） | `127.0.0.1:55173` |
+| `seed` | `server/seed.sql` を投入 | — |
+| `backend` | `server/Dockerfile`（本番用）で作ったイメージ | `127.0.0.1:58000` |
+| `frontend` | 今の `client/` を Vite の開発サーバーで動かす（React の開発時の警告もコンソールのエラーとして拾うため） | `127.0.0.1:55173` |
 
 - compose のプロジェクト名は `naw-e2e-explorer`。ルートの `docker-compose.yml`（`naw-fastapi-postgres` など）とは名前・ポート・データが別で、**既存のローカル環境には触れません**
 - ポートを変えるときは、環境変数 `E2E_POSTGRES_PORT`・`E2E_REDIS_PORT`・`E2E_BACKEND_PORT`・`E2E_FRONTEND_PORT` と、`explorer.config.json` の `target`（または環境変数 `E2E_EXPLORER_BASE_URL`・`E2E_EXPLORER_API_URL`）を合わせてください
