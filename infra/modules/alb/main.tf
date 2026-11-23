@@ -5,8 +5,8 @@ resource "aws_lb" "main" {
   internal = false
   // application=L7(HTTP/HTTPS)ロードバランサー。他にnetwork(L4)・gatewayが選べる
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = [for s in aws_subnet.public : s.id]
+  security_groups    = [var.alb_sg_id]
+  subnets            = var.public_subnet_ids
 
   tags = {
     Name    = "${var.project_name}-alb"
@@ -19,7 +19,7 @@ resource "aws_lb_target_group" "backend" {
   name     = "${var.project_name}-tg"
   port     = 8000
   protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  vpc_id   = var.vpc_id
   // EC2起動タイプ+bridgeモードなのでEC2インスタンス単位で振り分ける（Fargateならipを指定する）
   target_type = "instance"
 
