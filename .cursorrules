@@ -8,8 +8,8 @@
 
 | 移植元（`secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
-| `client/`（Angular） | React（Vite + React Router） → `client/` |
-| `server/`（Spring Boot） | FastAPI → `server/` |
+| `client/`（Angular） | `client/`（React、Vite + React Router） |
+| `server/`（Spring Boot） | `server/`（FastAPI） |
 | `generative-ai-adapter/`・`secuaigent-server-local/` ほか | `CLAUDE.md` 参照 |
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。

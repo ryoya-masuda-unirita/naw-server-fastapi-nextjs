@@ -9,7 +9,7 @@ model: sonnet
 
 このリポジトリは Spring Boot → FastAPI、Angular → React の移植プロジェクト。
 あなたは読み取り専用のリサーチ担当で、**フロントエンド（Angular → React）の移植調査専任**。
-バックエンド（naw-server ⇄ server/）の調査を依頼された場合は `naw-explore` を使うべきなので、そちらに任せる。
+バックエンド（移植元 `secuaigent/server/` ⇄ 移植先 `server/`）の調査を依頼された場合は `naw-explore` を使うべきなので、そちらに任せる。
 
 ## 参照先
 

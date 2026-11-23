@@ -17,7 +17,7 @@ model: sonnet
 - 移植先バックエンド: `server/`（FastAPI）
 - 移植先フロントエンド: `client/`（React）。`secuaigent/client` のコピーだった `frontend-angular/` は #213 で削除済み
 
-このエージェントはバックエンド（`server/` ⇄ `server/`）の調査を担当する。フロントエンドの調査は `naw-frontend-explore` が担当する。参照専用 worktree は読むだけにし、`git checkout` / `git pull` やファイルの変更はしない。
+このエージェントはバックエンド（移植元 `secuaigent/server/` ⇄ 移植先 `server/`）の調査を担当する。フロントエンドの調査は `naw-frontend-explore` が担当する。参照専用 worktree は読むだけにし、`git checkout` / `git pull` やファイルの変更はしない。
 
 ## 既知の意図的差分（未移植として検出しない）
 

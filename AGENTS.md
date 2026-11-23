@@ -15,8 +15,8 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 
 | 移植元（`~/Documents/unirita-develop-pj/secuaigent-ref/` 配下） | 移植先 |
 |---|---|
-| `server/`（Spring Boot 3.5 / Java 21） | FastAPI: `server/` |
-| `client/`（Angular 21） | React（Vite + React Router）: `client/` |
+| `server/`（Spring Boot 3.5 / Java 21） | `server/`（FastAPI） |
+| `client/`（Angular 21） | `client/`（React、Vite + React Router） |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト） | `generative-ai-adapter/`（Python。移植元と同じ 4 つの分け方で uv ワークスペースにする。#298 で `generative-ai-core/`・`generative-ai-adapter/`（チャット・RAG 回答）、#300 で `embedding-adapter/`（文書の分割・ベクトル保存・更新・削除・Graph Candidate と、core の embedding・vector・ファイル前処理）を移植。#299 で `retrieval-adapter/`（検索）を移植。手順は `generative-ai-adapter/README.md`） |
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `secuaigent-server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `secuaigent-server-local/README.md`） |
 | （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
