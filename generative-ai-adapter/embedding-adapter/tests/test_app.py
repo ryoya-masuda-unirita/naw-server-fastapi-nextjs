@@ -233,3 +233,11 @@ def test_after_execute_is_noop_without_graph_job_context(tmp_path: Path) -> None
     app, _ = prepared_app(1, tmp_path)
     app.after_execute()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_set_property_maps_bedrock_vendor() -> None:
+    """ベンダー ID 97 は Bedrock になること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    app = App()
+    app.set_property(PropertyIds.VENDOR, "97")
+    assert app.access_credential.vendor_name == "Bedrock"

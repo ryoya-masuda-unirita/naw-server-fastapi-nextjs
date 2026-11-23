@@ -71,6 +71,8 @@ EMBEDDING_VENDOR_MAP = {
     "2": "VertexAI Gemini",
     "3": "Anthropic",
     "5": "SecuAiGent",
+    # Python 版だけ（Bedrock の Titan 埋め込み。移植元にない拡張）
+    "97": "Bedrock",  # bedrock-ext
     # Python 版だけ（キーなしで動く確認用。core の Echo 埋め込み）
     "99": "Echo",
 }

@@ -11,7 +11,15 @@ from embedding_adapter.domain import (
 from embedding_adapter.model import AbstractEmbeddingModel
 from embedding_adapter.service.core.embedding import CoreDelegatingEmbeddingModel
 
-SUPPORTED_VENDORS = frozenset({"OpenAI", "AzureOpenAI", "SecuAiGent", "Echo"})
+SUPPORTED_VENDORS = frozenset(
+    {
+        "OpenAI",
+        "AzureOpenAI",
+        "SecuAiGent",
+        "Echo",
+        "Bedrock",  # bedrock-ext
+    }
+)
 
 
 class OpenAIEmbeddingService(AbstractEmbeddingModel):
