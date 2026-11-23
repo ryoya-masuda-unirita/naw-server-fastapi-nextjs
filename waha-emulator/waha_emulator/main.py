@@ -80,9 +80,9 @@ def build_registry(
     Returns
     -------
     WorkflowRegistry
-        サービス ID → ワークフロー。
+        サービス ID → ワークフロー（ひな形に当てはまるサービス ID は呼ばれたときに作る）。
     """
-    return WorkflowRegistry(
+    registry = WorkflowRegistry(
         default=build_workflow(
             config.default,
             chat_runtime_factory,
@@ -99,6 +99,17 @@ def build_registry(
             for service_id, definition in config.services.items()
         },
     )
+    for template in config.templates:
+        registry.register_template(
+            template.prefix,
+            lambda name, template=template: build_workflow(
+                template.build_definition(name),
+                chat_runtime_factory,
+                retrieval_runtime_factory,
+                source_allowed_dir,
+            ),
+        )
+    return registry
 
 
 def create_app(

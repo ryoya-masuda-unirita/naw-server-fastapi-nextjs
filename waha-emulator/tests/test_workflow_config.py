@@ -418,3 +418,134 @@ def test_onprem_bedrock_example_file_is_valid(
     assert config.services["bedrock-rag"].retrieval is not None
     for name in ("kb-learn", "kb-sync", "kb-delete"):
         assert "vendor=Bedrock" in config.services[name].describe()
+
+
+VDB_PROPERTIES = {
+    "VDB_VENDOR": "PostgreSQL(PGVector)",
+    "VDB_URL": "db.invalid:5432",
+    "VDB_USER_NAME": "user",
+    "VDB_PASSWORD": "password",
+    "VDB_DATABASE_NAME": "appdb",
+}
+EMBEDDING_PROPERTIES = {
+    "VENDOR": "Bedrock",
+    "URL": "https://bedrock-runtime.example.invalid",
+    "API_KEY": "bedrock-key",
+    "MODEL_NAME": "amazon.titan-embed-text-v1",
+}
+VDB_TABLE_NAME_ID = 44
+
+
+def _template_config(
+    table: str = "docs_{name}", key: str = "kb-learn-*"
+) -> dict[str, Any]:
+    """学習用のひな形を 1 つ書いた設定を作る。
+
+    Parameters
+    ----------
+    table : str
+        ひな形の `VDB_TABLE_NAME`（`{name}` が接尾辞になる）。
+    key : str
+        `services` に書くひな形のキー。
+
+    Returns
+    -------
+    dict[str, Any]
+        ワークフローの設定。
+    """
+    return {
+        "default": {"properties": ECHO_PROPERTIES},
+        "services": {
+            key: {
+                "adapter": "embedding",
+                "operation": "learn",
+                "properties": {
+                    **EMBEDDING_PROPERTIES,
+                    **VDB_PROPERTIES,
+                    "TENANT_ID": "tenant",
+                    "VDB_TABLE_NAME": table,
+                },
+            }
+        },
+    }
+
+
+def test_template_service_is_parsed_with_name_substituted() -> None:
+    """末尾が * のキーがひな形として読め、接尾辞が {name} に入って定義が作られること"""
+    config = parse_workflow_config(_template_config(), {})
+
+    [template] = config.templates
+    assert template.prefix == "kb-learn-"
+    assert "kb-learn-*" not in config.services
+    definition = template.build_definition("hr")
+    assert definition.properties[VDB_TABLE_NAME_ID] == "docs_hr"
+
+
+def test_templates_with_different_names_do_not_share_table() -> None:
+    """接尾辞が違うと保存先も違うこと"""
+    config = parse_workflow_config(_template_config(), {})
+    [template] = config.templates
+
+    hr = template.build_definition("hr").properties[VDB_TABLE_NAME_ID]
+    expense = template.build_definition("expense").properties[VDB_TABLE_NAME_ID]
+
+    assert (hr, expense) == ("docs_hr", "docs_expense")
+
+
+def test_template_without_name_placeholder_is_rejected() -> None:
+    """{name} がないひな形は、全フォルダが同じ保存先になるため読み込みで失敗すること"""
+    with pytest.raises(WorkflowConfigError, match="name"):
+        parse_workflow_config(_template_config(table="docs"), {})
+
+
+def test_template_with_empty_prefix_is_rejected() -> None:
+    """前の部分が空（* だけ）のひな形は失敗すること"""
+    with pytest.raises(WorkflowConfigError, match="前の部分"):
+        parse_workflow_config(_template_config(key="*"), {})
+
+
+def test_template_with_wildcard_in_the_middle_is_rejected() -> None:
+    """* が末尾以外にあるキーは失敗すること"""
+    with pytest.raises(WorkflowConfigError, match="末尾"):
+        parse_workflow_config(_template_config(key="kb-*-learn"), {})
+
+
+def test_invalid_template_definition_is_rejected() -> None:
+    """ひな形の中身の誤りが、起動時の読み込みで分かること"""
+    config = _template_config()
+    config["services"]["kb-learn-*"]["operation"] = "unknown"
+
+    with pytest.raises(WorkflowConfigError):
+        parse_workflow_config(config, {})
+
+
+def test_config_without_template_has_no_templates() -> None:
+    """ひな形を書かない設定は、従来どおり個別のサービスだけになること"""
+    config = parse_workflow_config(_config(ECHO_PROPERTIES), {})
+
+    assert config.templates == ()
+
+
+def test_onprem_bedrock_example_file_defines_folder_templates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """onprem の例のファイルに、フォルダごとに保存先を分けるひな形が 4 つあること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    monkeypatch.setenv("BEDROCK_API_KEY", "bedrock-key")
+    example = (
+        Path(__file__).resolve().parents[2]
+        / "onprem"
+        / "config"
+        / "workflows.bedrock.example.json"
+    )
+
+    config = load_workflow_config(make_settings(WAHA_WORKFLOWS_FILE=str(example)))
+
+    assert sorted(template.prefix for template in config.templates) == [
+        "bedrock-rag-",
+        "kb-delete-",
+        "kb-learn-",
+        "kb-sync-",
+    ]
+    learn = next(t for t in config.templates if t.prefix == "kb-learn-")
+    assert learn.build_definition("hr").properties[VDB_TABLE_NAME_ID] == "docs_hr"

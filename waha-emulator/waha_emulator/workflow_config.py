@@ -13,6 +13,9 @@
   動かし、その出力（RAG Context JSON）を生成AIアダプタの入力にする（本物の Waha! のジョブで
   「検索 → 生成AI」を順に並べるのと同じ）。検索アダプタのプロパティは `RetrievalPropertyIds` の
   名前で書く（`VENDOR`・`VDB_VENDOR` は名前でも ID でもよい）
+- `services` のキーが `*` で終わるものは「ひな形」。`*` の前（前の部分）で始まるサービス ID が
+  呼ばれたとき、後ろの部分（接尾辞）を値の `{name}` に入れた定義で動かす。フォルダごとに
+  保存先（`VDB_TABLE_NAME: docs_{name}` など）を分けるのに使う
 - ファイルがなければ `LLM_PROVIDER`（echo / azure_openai）から既定の定義を作る
 - `adapter` が `embedding` の定義は、埋め込みアダプタで学習・削除・同期を行う
   （`operation` で選ぶ。プロパティは埋め込みアダプタの名前で書く）
@@ -60,6 +63,10 @@ RESERVED_PROPERTIES = frozenset(
 RETRIEVAL_RESERVED_PROPERTIES = frozenset({"OUTPUT_DIR", "TEXT_DATA_JSON_FILE_PATH"})
 # 埋め込みアダプタでエミュレーターがジョブごとに決めるもの
 EMBEDDING_RESERVED_PROPERTIES = frozenset({"OUTPUT_DIR"})
+TEMPLATE_WILDCARD = "*"
+NAME_PLACEHOLDER = "{name}"
+# ひな形の読み込み時に、構造の誤りを見つけるために入れる接尾辞
+SAMPLE_TEMPLATE_NAME = "x"
 ADAPTER_GENERATIVE_AI = "generative-ai"
 ADAPTER_EMBEDDING = "embedding"
 ADAPTERS = frozenset({ADAPTER_GENERATIVE_AI, ADAPTER_EMBEDDING})
@@ -190,6 +197,22 @@ class WorkflowDefinition:
 
 
 @dataclass(frozen=True)
+class WorkflowTemplate:
+    """サービス ID の前の部分が決まっている「ひな形」。
+
+    Attributes
+    ----------
+    prefix : str
+        サービス ID の前の部分（例: `kb-learn-`）。この後ろが接尾辞になる。
+    build_definition : Callable[[str], WorkflowDefinition]
+        接尾辞から定義を作る関数。値の `{name}` が接尾辞に置き換わる。
+    """
+
+    prefix: str
+    build_definition: Callable[[str], "WorkflowDefinition"]
+
+
+@dataclass(frozen=True)
 class WorkflowConfig:
     """既定の定義と、サービス ID ごとの定義。
 
@@ -199,10 +222,13 @@ class WorkflowConfig:
         登録のないサービス ID で使う定義。
     services : Mapping[str, WorkflowDefinition]
         サービス ID ごとの定義。
+    templates : tuple[WorkflowTemplate, ...]
+        接尾辞つきのサービス ID の「ひな形」。
     """
 
     default: WorkflowDefinition
     services: Mapping[str, WorkflowDefinition] = field(default_factory=dict)
+    templates: tuple[WorkflowTemplate, ...] = ()
 
 
 def _expand_env(value: str, environ: Mapping[str, str]) -> str:
@@ -592,6 +618,95 @@ def _definition(raw: Any, environ: Mapping[str, str], where: str) -> WorkflowDef
     return WorkflowDefinition(output_type, properties, rag_context_json, retrieval)
 
 
+def _contains_placeholder(value: Any) -> bool:
+    """値（辞書・配列の中を含む）の文字列に `{name}` が 1 つでもあるかを返す。
+
+    Parameters
+    ----------
+    value : Any
+        JSON の値。
+
+    Returns
+    -------
+    bool
+        `{name}` を含む文字列があるとき True。
+    """
+    if isinstance(value, str):
+        return NAME_PLACEHOLDER in value
+    if isinstance(value, dict):
+        return any(_contains_placeholder(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_placeholder(item) for item in value)
+    return False
+
+
+def _substitute_name(value: Any, name: str) -> Any:
+    """値（辞書・配列の中を含む）の文字列の `{name}` を接尾辞に置き換えた複製を返す。
+
+    Parameters
+    ----------
+    value : Any
+        JSON の値。
+    name : str
+        置き換える接尾辞。
+
+    Returns
+    -------
+    Any
+        置き換えた値。元の値は変えない。
+    """
+    if isinstance(value, str):
+        return value.replace(NAME_PLACEHOLDER, name)
+    if isinstance(value, dict):
+        return {key: _substitute_name(item, name) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_substitute_name(item, name) for item in value]
+    return value
+
+
+def _template(raw: Any, environ: Mapping[str, str], key: str) -> WorkflowTemplate:
+    """`services` の `*` で終わるキーから、ひな形を作る。
+
+    Parameters
+    ----------
+    raw : Any
+        ひな形の JSON の定義。
+    environ : Mapping[str, str]
+        環境変数。
+    key : str
+        `services` のキー（`*` で終わる）。
+
+    Returns
+    -------
+    WorkflowTemplate
+        ひな形。
+
+    Raises
+    ------
+    WorkflowConfigError
+        キーや定義が不正なとき。
+    """
+    where = f"services.{key}"
+    prefix = key[: -len(TEMPLATE_WILDCARD)]
+    if not prefix:
+        raise WorkflowConfigError(f"{where}: * の前の部分を書いてください")
+    if TEMPLATE_WILDCARD in prefix:
+        raise WorkflowConfigError(f"{where}: * はキーの末尾に 1 つだけ書けます")
+    if not _contains_placeholder(raw):
+        raise WorkflowConfigError(
+            f"{where}: {NAME_PLACEHOLDER} がありません。接尾辞を入れる場所"
+            "（保存先のテーブル名など）に書かないと、すべてが同じ保存先になります"
+        )
+
+    def build_definition(name: str) -> WorkflowDefinition:
+        """接尾辞を入れた定義を作る。"""
+        return _definition(_substitute_name(raw, name), environ, where)
+
+    # 構造の誤りを、サービスが呼ばれたときでなく起動時に見つける
+    build_definition(SAMPLE_TEMPLATE_NAME)
+    return WorkflowTemplate(prefix, build_definition)
+
+
 def parse_workflow_config(
     data: Any, environ: Mapping[str, str] | None = None
 ) -> WorkflowConfig:
@@ -630,12 +745,32 @@ def parse_workflow_config(
         raise WorkflowConfigError(
             "default は adapter が generative-ai の定義にしてください"
         )
+    for service_id in services:
+        # * が末尾以外にあるキーを普通のサービス ID として通すと、ひな形のつもりで
+        # 書いた設定が、気づかれないまま効かなくなる
+        if TEMPLATE_WILDCARD in service_id.rstrip(TEMPLATE_WILDCARD) or (
+            service_id.endswith(TEMPLATE_WILDCARD * 2)
+        ):
+            raise WorkflowConfigError(
+                f"services.{service_id}: * はキーの末尾に 1 つだけ書けます"
+            )
+    explicit = {
+        service_id: raw
+        for service_id, raw in services.items()
+        if not service_id.endswith(TEMPLATE_WILDCARD)
+    }
+    templates = tuple(
+        _template(raw, env, service_id)
+        for service_id, raw in services.items()
+        if service_id.endswith(TEMPLATE_WILDCARD)
+    )
     return WorkflowConfig(
         default,
         {
             service_id: _definition(raw, env, f"services.{service_id}")
-            for service_id, raw in services.items()
+            for service_id, raw in explicit.items()
         },
+        templates,
     )
 
 
