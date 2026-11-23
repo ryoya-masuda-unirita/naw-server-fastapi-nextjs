@@ -64,6 +64,54 @@ def _mock_search_client(search_results: list[dict]) -> AsyncMock:
     return mock_client
 
 
+_SEARCH_URL = (
+    "https://example.search.windows.net/indexes('t001')/docs/search.post.search"
+)
+_EMBEDDING_URL = (
+    "https://example.openai.azure.com/openai/deployments/embedding/embeddings"
+)
+
+
+def _http_error(status_code: int, url: str) -> HttpResponseError:
+    """指定したステータス・要求URLを持つHttpResponseErrorを生成する。
+
+    Parameters
+    ----------
+    status_code : int
+        レスポンスのステータスコード。
+    url : str
+        失敗した要求のURL。
+
+    Returns
+    -------
+    HttpResponseError
+        生成した例外。
+    """
+    response = MagicMock()
+    response.status_code = status_code
+    response.request.url = url
+    return HttpResponseError("error", response=response)
+
+
+def _failing_search_client(error: Exception) -> AsyncMock:
+    """検索時に例外を送出するモックの検索クライアントを生成する。
+
+    Parameters
+    ----------
+    error : Exception
+        検索時に送出する例外。
+
+    Returns
+    -------
+    AsyncMock
+        モックの検索クライアント。
+    """
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.search.side_effect = error
+    return mock_client
+
+
 class TestSimilaritySearch:
     """AzureAiSearchVectorStoreClient.similarity_search のテスト"""
 
@@ -102,6 +150,57 @@ class TestSimilaritySearch:
             VectorSearchResult(content="資料1", file_unique_id=None),
             VectorSearchResult(content="資料2", file_unique_id=None),
         ]
+
+    @patch("app.core.vector_store.SearchClient")
+    async def test_returns_empty_when_index_not_found(
+        self, mock_search_client_cls: MagicMock
+    ) -> None:
+        """インデックスへの要求が404のとき、エラーにせず0件を返すこと"""
+        mock_search_client_cls.return_value = _failing_search_client(
+            _http_error(404, _SEARCH_URL)
+        )
+
+        results = await AzureAiSearchVectorStoreClient.similarity_search(
+            "https://example.search.windows.net", "api-key", "t001", [0.1]
+        )
+
+        assert results == []
+
+    @pytest.mark.parametrize(
+        ("status_code", "url"),
+        [(404, _EMBEDDING_URL), (401, _SEARCH_URL), (500, _SEARCH_URL)],
+    )
+    @patch("app.core.vector_store.SearchClient")
+    async def test_raises_400_when_not_index_not_found(
+        self, mock_search_client_cls: MagicMock, status_code: int, url: str
+    ) -> None:
+        """インデックスへの要求の404以外のHTTPエラーは400になること"""
+        mock_search_client_cls.return_value = _failing_search_client(
+            _http_error(status_code, url)
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await AzureAiSearchVectorStoreClient.similarity_search(
+                "https://example.search.windows.net", "api-key", "t001", [0.1]
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @patch("app.core.vector_store.SearchClient")
+    async def test_raises_400_when_not_found_has_no_response(
+        self, mock_search_client_cls: MagicMock
+    ) -> None:
+        """404でも要求情報が無い場合は0件にせず400になること"""
+        error = HttpResponseError("not found")
+        error.status_code = 404
+        mock_search_client_cls.return_value = _failing_search_client(error)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await AzureAiSearchVectorStoreClient.similarity_search(
+                "https://example.search.windows.net", "api-key", "t001", [0.1]
+            )
+
+        assert exc_info.value.status_code == 400
 
     @pytest.mark.parametrize("error_cls", [HttpResponseError, ServiceRequestError])
     @patch("app.core.vector_store.SearchClient")

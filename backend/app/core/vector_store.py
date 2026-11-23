@@ -17,6 +17,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError, ServiceRequestError
@@ -31,6 +32,10 @@ FILE_UNIQUE_ID_METADATA_KEY = "fileUniqueId"
 
 # Spring AI `SearchRequest` のデフォルトtop-k値を踏襲する。
 DEFAULT_TOP_K = 4
+
+# 移植元 `IndexNotFoundTolerantVectorStore` と同じ判定値。
+_HTTP_NOT_FOUND = 404
+_SEARCH_INDEXES_PATH = "/indexes"
 
 _CONTENT_FIELD = "content"
 _METADATA_FIELD = "metadata"
@@ -75,12 +80,13 @@ class AzureAiSearchVectorStoreClient:
         Returns
         -------
         list[VectorSearchResult]
-            類似度順の検索結果一覧。
+            類似度順の検索結果一覧。インデックスが無い場合は空リスト。
 
         Raises
         ------
         HTTPException
-            Azure AI Searchへの接続・検索に失敗した場合は400。
+            Azure AI Searchへの接続・検索に失敗した場合は400
+            （インデックスが無いことによる404を除く）。
         """
         try:
             async with SearchClient(
@@ -100,12 +106,51 @@ class AzureAiSearchVectorStoreClient:
                     top=top_k,
                 )
                 return [_to_search_result(document) async for document in results]
-        except (HttpResponseError, ServiceRequestError):
+        except HttpResponseError as error:
+            if _is_index_not_found(error):
+                # 学習データ未登録のテナントやVDB接続先変更直後はインデックスが無い。
+                # 探す物が無いだけなので、チャットを止めず0件として扱う。
+                logger.info(
+                    "インデックスが無いため、学習データの検索を0件として扱います: index=%s",
+                    index_name,
+                )
+                return []
             logger.exception("ベクトルDBへの接続・検索に失敗しました")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to connect to vector database",
             ) from None
+        except ServiceRequestError:
+            logger.exception("ベクトルDBへの接続・検索に失敗しました")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to connect to vector database",
+            ) from None
+
+
+def _is_index_not_found(error: HttpResponseError) -> bool:
+    """検索の失敗が「Azure AI Searchのインデックスが無い」ことによるものか判定する。
+
+    検索の途中で呼ばれる別のAPIの404（デプロイが無い等）は設定の誤りであり、
+    0件にすると誤りが隠れるため、インデックスへの要求（`/indexes`配下）の404に限る。
+
+    Parameters
+    ----------
+    error : HttpResponseError
+        Azure SDKが送出した検索失敗の例外。
+
+    Returns
+    -------
+    bool
+        インデックスへの要求の404であればTrue。
+    """
+    if error.status_code != _HTTP_NOT_FOUND:
+        return False
+    request = getattr(error.response, "request", None)
+    url = getattr(request, "url", None)
+    if not isinstance(url, str):
+        return False
+    return urlparse(url).path.startswith(_SEARCH_INDEXES_PATH)
 
 
 def _to_search_result(document: dict) -> VectorSearchResult:
