@@ -3,10 +3,18 @@ variable "region" {
   default = "ap-northeast-1"
 }
 
+// リソース名・Projectタグの元になる名前。CIではGitHubのVariable PROJECT_NAMEがTF_VAR_project_nameで渡される
+// (deploy-backend.ymlも同じVariableから名前を組み立てるため、両者を食い違わせないこと)。
 // デフォルトがあればそのまま使える｡デフォルトがなければ､terraform.tfvarsで指定する必要がある｡
 variable "project_name" {
   type    = string
-  default = "naw-fastapi-issue160"
+  default = "naw-fastapi"
+}
+
+variable "github_repository" {
+  type        = string
+  default     = "ryoya-masuda-unirita/naw-server-fastapi-nextjs"
+  description = "OIDCの信頼条件に使うGitHubリポジトリ(<オーナー>/<リポジトリ>)。このリポジトリのdevelopブランチだけがCIロールを引き受けられる"
 }
 
 variable "db_password" {

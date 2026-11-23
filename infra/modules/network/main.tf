@@ -1,8 +1,7 @@
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   tags = {
-    Name    = "${var.project_name}-vpc"
-    Project = var.project_name
+    Name = "${var.project_name}-vpc"
   }
 }
 
@@ -17,8 +16,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true # このサブネットで起動したインスタンスに自動でパブリックIPを割り当てる
 
   tags = {
-    Name    = "${var.project_name}-public-${each.key}"
-    Project = var.project_name
+    Name = "${var.project_name}-public-${each.key}"
   }
 }
 
@@ -26,8 +24,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-igw"
-    Project = var.project_name
+    Name = "${var.project_name}-igw"
   }
 }
 
@@ -40,8 +37,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name    = "${var.project_name}-public-rt"
-    Project = var.project_name
+    Name = "${var.project_name}-public-rt"
   }
 }
 
@@ -63,7 +59,6 @@ resource "aws_subnet" "private" {
   availability_zone = "ap-northeast-${each.key}"
   tags = {
     Name           = "${var.project_name}-private-${each.key}"
-    Project        = var.project_name
     RouteTableType = "private"
   }
 }
@@ -73,8 +68,7 @@ resource "aws_route_table" "private" {
   # routeブロックなし＝localルートのみ
 
   tags = {
-    Name    = "${var.project_name}-private-rt"
-    Project = var.project_name
+    Name = "${var.project_name}-private-rt"
   }
 }
 
@@ -94,8 +88,7 @@ resource "aws_security_group" "bastion" {
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-sg-bastion"
-    Project = var.project_name
+    Name = "${var.project_name}-sg-bastion"
   }
 }
 
@@ -115,8 +108,7 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-sg-alb"
-    Project = var.project_name
+    Name = "${var.project_name}-sg-alb"
   }
 }
 
@@ -136,7 +128,7 @@ resource "aws_security_group_rule" "alb_http_in_cloudfront" {
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
-  prefix_list_ids   = ["pl-58a04531"] # CloudFrontのオリジン向けIP範囲(ap-northeast-1での)
+  prefix_list_ids   = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   security_group_id = aws_security_group.alb.id
 }
 
@@ -146,8 +138,7 @@ resource "aws_security_group" "ecs" {
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-sg-ecs"
-    Project = var.project_name
+    Name = "${var.project_name}-sg-ecs"
   }
 }
 
@@ -180,8 +171,7 @@ resource "aws_security_group" "rds" {
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-sg-rds"
-    Project = var.project_name
+    Name = "${var.project_name}-sg-rds"
   }
 }
 
@@ -213,8 +203,7 @@ resource "aws_security_group" "elasticache" {
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name    = "${var.project_name}-sg-elasticache"
-    Project = var.project_name
+    Name = "${var.project_name}-sg-elasticache"
   }
 }
 
@@ -281,3 +270,7 @@ resource "aws_security_group_rule" "elasticache_all_out" {
   security_group_id = aws_security_group.elasticache.id
 }
 
+// CloudFrontのオリジン向けIP範囲。IDはリージョンごとに違うため、直書きせず名前から引く。
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
