@@ -6,6 +6,7 @@ export interface SelectOption<T = string> {
   value: T;
   disabled?: boolean;
   description?: string;
+  /** 選択肢に添える分類。画面にバッジで表示し、SelectWithSearch では入力による絞り込みの対象にもなる（#396） */
   category?: string;
 }
 
