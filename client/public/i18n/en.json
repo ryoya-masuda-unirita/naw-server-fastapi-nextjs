@@ -1209,6 +1209,8 @@
     "ALL_RESPONSES": "All Responses",
     "SORT_ORDER": "Sort",
     "ADD_LEARNING": "Additional Learning",
+    "ADD_LEARNING_CONTENT_MISSING": "This chat contains messages whose content cannot be retrieved (such as failed messages or messages from a deleted assistant), so it cannot be added to learning.",
+    "ADD_LEARNING_ROOM_EMPTY": "This chat has no messages, so it cannot be added to learning.",
     "NO_RESPONSE": "No Response",
     "RESPONDED": "Responded",
     "UNRATED": "Unrated",

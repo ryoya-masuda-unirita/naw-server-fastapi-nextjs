@@ -7,6 +7,7 @@ import { Pagination } from '@/components/shared/pagination';
 import { Select } from '@/components/shared/select';
 import { SelectWithSearch } from '@/components/shared/select-with-search';
 import { TableList, TableListItem } from '@/components/shared/table-list';
+import { useToastStore } from '@/components/shared/toast-store';
 import type { SelectOption } from '@/components/shared/types';
 import {
   useAddAdditionalLearning,
@@ -29,6 +30,7 @@ import {
   toSatisfactionValue,
 } from './feedback-format';
 import { FolderModal } from './folder-modal';
+import { fetchRoomContents, RoomLearningError } from './room-learning-contents';
 
 const SORT_FIELD_OPTIONS: SortOption[] = [
   { value: 'updatedAt', label: 'FEEDBACK.SORT_BY_UPDATED' },
@@ -58,6 +60,8 @@ export function SatisfactionTab() {
   const assistantsQuery = useFeedbackAssistants();
   const foldersQuery = useLearningFolders();
   const addMutation = useAddAdditionalLearning();
+  const toast = useToastStore();
+  const [isFetchingContents, setIsFetchingContents] = useState(false);
 
   const satisfactionQuery = useFeedbackRooms({
     assistantId: toFilterParam(selectedAssistant),
@@ -125,15 +129,24 @@ export function SatisfactionTab() {
 
   const submitLearning = async (folderId: string) => {
     if (!learningItem?.roomId) return;
+    setIsFetchingContents(true);
     try {
+      // ルームのやり取り（画面に表示中の版）の本文を取ってから送る
+      const contents = await fetchRoomContents(learningItem.roomId);
       await addMutation.mutateAsync({
         indexId: folderId,
         target: { roomId: learningItem.roomId },
-        content: buildSatisfactionAdditionalLearningContent(learningItem),
+        content: buildSatisfactionAdditionalLearningContent(learningItem, contents),
       });
       setLearningItem(null);
-    } catch {
-      // 失敗の通知は api-client の共通エラートーストが出す。ダイアログは開いたままにする（移植元と同じ）
+    } catch (error) {
+      // 通信の失敗の通知は api-client の共通エラートーストが出す（重ねない）。ダイアログは開いたままにする（移植元と同じ）
+      if (error instanceof RoomLearningError) {
+        if (error.reason === 'empty') toast.error(t('FEEDBACK.ADD_LEARNING_ROOM_EMPTY'));
+        if (error.reason === 'missing') toast.error(t('FEEDBACK.ADD_LEARNING_CONTENT_MISSING'));
+      }
+    } finally {
+      setIsFetchingContents(false);
     }
   };
 
@@ -349,7 +362,7 @@ export function SatisfactionTab() {
       {learningItem && (
         <FolderModal
           initialFolderId={learningItem.indexId ?? null}
-          isAdding={addMutation.isPending}
+          isAdding={isFetchingContents || addMutation.isPending}
           onConfirm={(folderId) => void submitLearning(folderId)}
           onClose={() => setLearningItem(null)}
         />

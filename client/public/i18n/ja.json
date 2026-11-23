@@ -1236,6 +1236,8 @@
     "ALL_RESPONSES": "全ての精度評価",
     "SORT_ORDER": "並べ替え",
     "ADD_LEARNING": "追加学習",
+    "ADD_LEARNING_CONTENT_MISSING": "このチャットには内容を取り出せないやり取り（送信に失敗したもの、削除したアシスタントのものなど）があるため、追加学習できません",
+    "ADD_LEARNING_ROOM_EMPTY": "このチャットにはやり取りが無いため、追加学習できません",
     "NO_RESPONSE": "未回答",
     "RESPONDED": "回答済み",
     "ACCURATE": "正確",
