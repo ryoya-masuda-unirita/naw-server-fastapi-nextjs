@@ -7,7 +7,8 @@
 移植元と違う点（Python 版だけの拡張・簡略化）:
 
 - ベクトルの保存先は pgvector（`pgvector_store`）。埋め込みは Azure OpenAI か Bedrock（Titan）
-- テキストの取り出し（Tika の代わり）は、テキスト系の形式だけ（`extract_text`）
+- テキストの取り出しは、Tika が使えるときは Tika（`tika_client`）、なければテキスト系の形式だけ
+  （`extract_text`）
 - ベクトル化できる設定（pgvector の VDB 接続先と、埋め込みの接続先）がないフォルダは、
   従来どおり、ファイルの記録だけを作る
 """
@@ -32,6 +33,7 @@ from app.core.pgvector_store import (  # pgvector-ext
     VectorRow,
     is_pgvector_endpoint,
 )
+from app.core import tika_client
 from app.core.token_usage_credit import embedding_credits, positive_token_weight
 from app.models.ai_model import AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType, TenantEndpoint
@@ -224,6 +226,36 @@ def extract_text(filename: str, content_type: str | None, data: bytes) -> str:
     return text
 
 
+async def extract_content(filename: str, content_type: str | None, data: bytes) -> str:
+    """ファイルから、本文のテキストを取り出す（移植元 `TikaService.extractContent`）。
+
+    Tika の設定があるときは、すべての形式を Tika で取り出す（PDF・Office・CSV など）。
+    なければ、テキスト系の形式だけを取り出す。
+
+    Parameters
+    ----------
+    filename : str
+        ファイル名。
+    content_type : str | None
+        アップロードの Content-Type。
+    data : bytes
+        ファイルの中身。
+
+    Returns
+    -------
+    str
+        取り出した本文。
+
+    Raises
+    ------
+    HTTPException
+        取り出せないとき（400）。
+    """
+    if tika_client.is_enabled():
+        return await tika_client.TikaClient.extract_text(filename, content_type, data)
+    return extract_text(filename, content_type, data)
+
+
 @dataclass(frozen=True)
 class VectorTarget:
     """ベクトル化の保存先と、埋め込みの接続先。"""
@@ -401,7 +433,7 @@ class FileVectorizer:
         HTTPException
             形式が未対応、埋め込み・保存に失敗したとき（400）。
         """
-        text = extract_text(filename, content_type, data)
+        text = await extract_content(filename, content_type, data)
         if not text.strip():
             # 空白だけの文章を分割すると「。」だけの部分ができてしまうため、先に除く
             logger.warning("コンテンツが空のため、分割・保存はしません: %s", filename)
