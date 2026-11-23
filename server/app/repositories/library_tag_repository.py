@@ -119,7 +119,7 @@ class LibraryTagRepository:
         stmt = (
             select(LibraryTag)
             .where(*conditions)
-            .order_by(LibraryTag.name.asc())
+            .order_by(LibraryTag.name.asc(), LibraryTag.id.asc())
             .offset(page * size)
             .limit(size)
         )

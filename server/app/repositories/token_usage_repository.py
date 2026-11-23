@@ -103,7 +103,7 @@ class TokenUsageRepository:
         stmt = (
             select(TokenUsage)
             .where(*conditions)
-            .order_by(order_clause)
+            .order_by(order_clause, TokenUsage.id.asc())
             .offset(page * size)
             .limit(size)
         )
