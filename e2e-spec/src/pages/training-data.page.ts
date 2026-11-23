@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { chooseFromSelect, chooseSortItem, filterRow, gotoAdminPage } from './service-list-controls.ts';
+import { gotoAdminPage } from './service-list-controls.ts';
 
 /** 学習データ（/admin/training-data の一覧と、/admin/training-data/:id のフォルダ詳細）の Page Object。 */
 
@@ -16,16 +16,9 @@ export const TRAINING_MESSAGES = {
   bulkSync: '一括同期',
   localInfoTitle: 'ローカル接続する学習データについて',
   noData: 'データがありません',
-  allUsers: '全てのユーザー',
-  allSettings: '全ての学習設定',
-  statusOn: 'ON',
-  statusOff: 'OFF',
   today: '今日',
   past7days: '過去7日間',
   past30days: '過去30日間',
-  sortName: '学習データの表示名順',
-  asc: '昇順',
-  desc: '降順',
   deselect: '選択を解除',
   editName: '名前を変更',
   delete: '削除',
@@ -38,12 +31,7 @@ export const TRAINING_MESSAGES = {
   menuDownload: 'デバイスに保存',
 } as const;
 
-const USER_PREFIX = 'training-data-file-user';
 export const TRAINING_PERIOD_PREFIX = 'training-data-file-period';
-const SORT_PREFIX = 'training-data-file-sort';
-
-/** 学習データ一覧の列の位置（参照資料のリンク・更新日時・更新者名・学習設定）。 */
-export const FILE_COLUMN = { reference: 0, updatedAt: 1, updatedBy: 2, status: 3 } as const;
 
 export class TrainingDataPage {
   readonly page: Page;
@@ -51,10 +39,7 @@ export class TrainingDataPage {
   readonly backLink: Locator;
   readonly folderMenuButton: Locator;
   readonly searchInput: Locator;
-  readonly userTrigger: Locator;
   readonly periodTrigger: Locator;
-  readonly statusFilter: Locator;
-  readonly sortTrigger: Locator;
   readonly rows: Locator;
   readonly addButton: Locator;
   readonly dialog: Locator;
@@ -65,10 +50,7 @@ export class TrainingDataPage {
     this.backLink = page.getByRole('link', { name: TRAINING_MESSAGES.back });
     this.folderMenuButton = page.getByRole('button', { name: TRAINING_MESSAGES.folderMenu, exact: true });
     this.searchInput = page.getByTestId('training-data-file-search-input');
-    this.userTrigger = page.getByTestId(`${USER_PREFIX}-trigger`);
     this.periodTrigger = page.getByTestId(`${TRAINING_PERIOD_PREFIX}-trigger`);
-    this.statusFilter = filterRow(page).locator('.app-select');
-    this.sortTrigger = page.getByTestId(`${SORT_PREFIX}-trigger`);
     this.rows = page.getByTestId('training-data-file-row');
     this.addButton = page.getByTestId('training-data-add-button');
     this.dialog = page.getByRole('dialog');
@@ -95,19 +77,6 @@ export class TrainingDataPage {
   /** 画面に出ている学習データの表示名（上から順）。 */
   async fileNames(): Promise<string[]> {
     return this.rows.locator('.table-list-title').allTextContents();
-  }
-
-  /**
-   * 画面に出ている行の、指定の列の表示文字列（上から順）。
-   *
-   * @param column `FILE_COLUMN` の値
-   */
-  async columnTexts(column: number): Promise<string[]> {
-    return this.rows.evaluateAll(
-      (rows, index) =>
-        rows.map((row) => (row.querySelectorAll<HTMLElement>('.table-list-row-date')[index]?.innerText ?? '').trim()),
-      column
-    );
   }
 
   /**
@@ -144,16 +113,6 @@ export class TrainingDataPage {
   }
 
   /**
-   * ユーザーのフィルターで選ぶ。
-   *
-   * @param userName ユーザー名
-   */
-  async chooseUser(userName: string): Promise<void> {
-    await this.userTrigger.click();
-    await this.page.getByTestId(`${USER_PREFIX}-option`).filter({ hasText: userName }).first().click();
-  }
-
-  /**
    * 期間のフィルターで選ぶ。
    *
    * @param label 「今日」「過去7日間」など
@@ -161,35 +120,6 @@ export class TrainingDataPage {
   async choosePeriod(label: string): Promise<void> {
     await this.periodTrigger.click();
     await this.page.getByTestId(`${TRAINING_PERIOD_PREFIX}-option`).filter({ hasText: new RegExp(`^${label}$`) }).click();
-  }
-
-  /**
-   * 学習設定のフィルターで選ぶ。
-   *
-   * @param label 「ON」「OFF」
-   */
-  async chooseStatus(label: string): Promise<void> {
-    await chooseFromSelect(this.page, this.statusFilter, label);
-  }
-
-  /**
-   * 並べ替えの項目（「更新日時順」「昇順」など）を選ぶ。
-   *
-   * @param itemName 項目名
-   */
-  async sortBy(itemName: string): Promise<void> {
-    await chooseSortItem(this.page, this.sortTrigger, itemName);
-  }
-
-  /**
-   * 行の「…」メニューの項目を押す。
-   *
-   * @param name 表示名
-   * @param testid 項目の data-testid
-   */
-  async clickRowMenu(name: string, testid: string): Promise<void> {
-    await this.row(name).first().getByTestId('training-data-file-menu-button').click();
-    await this.page.getByTestId(testid).click();
   }
 
   /**

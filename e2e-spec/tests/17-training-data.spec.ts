@@ -24,7 +24,7 @@ import {
   filterRow,
   topPager,
 } from '../src/pages/service-list-controls.ts';
-import { FILE_COLUMN, TRAINING_DATA_PATH, TRAINING_MESSAGES as M, TRAINING_PERIOD_PREFIX } from '../src/pages/training-data.page.ts';
+import { TRAINING_DATA_PATH, TRAINING_MESSAGES as M, TRAINING_PERIOD_PREFIX } from '../src/pages/training-data.page.ts';
 import { TENANT_ID } from '../src/users.ts';
 
 /**
@@ -41,13 +41,13 @@ import { TENANT_ID } from '../src/users.ts';
 
 test.describe.configure({ timeout: 120_000 });
 
-const USER_NAME = 'ユーザー1';
-const ADMIN_NAME = '管理者';
 const FOLDER_NAME_MAX_LENGTH = 255;
 const PAGE_SIZE = 10;
 const SEED_FILE_COUNT = 11;
 const FILTER_REMOVED_REASON =
   '移植元の最新の学習データ詳細に学習設定（ON/OFF）の列と絞り込みが無いため（NAW-1405 で画面から削除。#375 で移植済み）。項目書 V1.1.0 の期待は現行の画面では成り立たない';
+const USER_FILTER_REMOVED_REASON =
+  '移植元の最新の学習データ詳細に更新者（ユーザー）の絞り込みが無いため（NAW-1424 で画面から削除。#411 で移植済み）。項目書 V1.1.0 の期待は現行の画面では成り立たない';
 const SORT_REMOVED_REASON =
   '移植元の最新の学習データ詳細にファイル一覧の並べ替えの操作が無いため（NAW-1427 で画面から削除。#392 で移植済み）。項目書 V1.1.0 の期待は現行の画面では成り立たない';
 const LOCAL_SERVER_REASON =
@@ -164,11 +164,8 @@ test.describe('17_学習データ', () => {
     await expect.poll(() => trainingDataPage.fileNames()).toEqual([seedFileName(5)]);
   });
 
-  test('[17-11] 詳細ユーザーフィルター', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    await trainingDataPage.chooseUser(USER_NAME);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([seedFileName(3)]);
-    expect(await trainingDataPage.columnTexts(FILE_COLUMN.updatedBy)).toEqual([USER_NAME]);
+  test('[17-11] 詳細ユーザーフィルター', async () => {
+    test.skip(true, USER_FILTER_REMOVED_REASON);
   });
 
   test('[17-12] 詳細期間（今日）', async ({ trainingDataPage, adminApi, page, prefix }) => {
@@ -342,18 +339,8 @@ test.describe('17_学習データ', () => {
     expect(download.suggestedFilename()).toContain(prefix);
   });
 
-  test('[17-30] クラウド詳細フィルター', async ({ trainingDataPage, adminApi, page, prefix }) => {
-    const { folder, names } = await makeFolder(adminApi, prefix, ['on', 'off']);
-    await trainingDataPage.gotoDetail(folder.id, folder.name);
-    // 2 つ目のデータを学習設定 OFF にする
-    await trainingDataPage.clickRowMenu(names[1], 'training-data-file-toggle-learning');
-    await expect(trainingDataPage.row(names[1])).toContainText(M.statusOff);
-    // 学習設定を切り替えてもメニューは開いたままなので、メニューの外（背景）を押して閉じる
-    await page.getByTestId('context-menu-backdrop').click({ position: { x: 5, y: 5 } });
-    await trainingDataPage.chooseUser(ADMIN_NAME);
-    await trainingDataPage.choosePeriod(M.today);
-    await trainingDataPage.chooseStatus(M.statusOn);
-    await expect.poll(() => trainingDataPage.fileNames()).toEqual([names[0]]);
+  test('[17-30] クラウド詳細フィルター', async () => {
+    test.skip(true, `${FILTER_REMOVED_REASON}。更新者の絞り込みも同様（${USER_FILTER_REMOVED_REASON}）`);
   });
 
   test('[17-31] フォルダ作成→データ追加', async ({ trainingDataPage, page, prefix }) => {
@@ -384,25 +371,12 @@ test.describe('17_学習データ', () => {
     }
   });
 
-  test('[17-33] 詳細：検索＋フィルター', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    await trainingDataPage.search('ファイル0');
-    await trainingDataPage.chooseUser(ADMIN_NAME);
-    // ファイル01〜09 のうち、ユーザー1 のファイル03 を除いたもの
-    const expected = [1, 2, 4, 5, 6, 7, 8, 9].map(seedFileName);
-    await expect.poll(async () => (await trainingDataPage.fileNames()).sort()).toEqual(expected);
+  test('[17-33] 詳細：検索＋フィルター', async () => {
+    test.skip(true, USER_FILTER_REMOVED_REASON);
   });
 
-  test('[17-34] 詳細：フィルター＋並べ替え', async ({ trainingDataPage }) => {
-    await trainingDataPage.gotoDetail(SEED_CLOUD_FOLDER_ID, SEED_CLOUD_FOLDER_NAME);
-    await trainingDataPage.chooseUser(ADMIN_NAME);
-    await trainingDataPage.sortBy(M.sortName);
-    await trainingDataPage.sortBy(M.asc);
-    await expect.poll(async () => (await trainingDataPage.fileNames())[0]).toBe(seedFileName(1));
-    await trainingDataPage.sortBy(M.desc);
-    await expect.poll(async () => (await trainingDataPage.fileNames())[0]).toBe(seedFileName(11));
-    // ユーザー1 のファイル03 は絞り込みで出ない
-    expect(await trainingDataPage.fileNames()).not.toContain(seedFileName(3));
+  test('[17-34] 詳細：フィルター＋並べ替え', async () => {
+    test.skip(true, `${SORT_REMOVED_REASON}。更新者の絞り込みも同様（${USER_FILTER_REMOVED_REASON}）`);
   });
 
   test('[17-35] フォルダ名最大長', async ({ trainingDataPage, page, prefix }) => {
