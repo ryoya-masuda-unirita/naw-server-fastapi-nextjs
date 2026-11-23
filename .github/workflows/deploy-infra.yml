@@ -40,11 +40,12 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      # state用バケット名はアカウントごとに異なるため、GitHubのVariable(TF_STATE_BUCKET)で渡す。
-      # 未登録のままだとinitの失敗理由が分かりにくいので、先に検査する。
-      - name: Check state bucket variable
+      # state用バケット名・プロジェクト名はアカウント/環境ごとに異なるため、GitHubのVariableで渡す。
+      # 未登録のままだと後続の失敗理由が分かりにくいので、先に検査する。
+      - name: Check required variables
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
         run: |
           if [ -z "$TF_STATE_BUCKET" ]; then
             echo "::error::GitHubのVariable TF_STATE_BUCKET が未登録です。infra/bootstrap の出力 state_bucket_name を登録してください。"
@@ -53,6 +54,15 @@ jobs:
           # 改行や空白が混ざる(terraform outputを-rawなしで登録した等)と、initが分かりにくいS3エラーで失敗するため
           if ! [[ "$TF_STATE_BUCKET" =~ ^[a-z0-9.-]{3,63}$ ]]; then
             echo "::error::TF_STATE_BUCKET の値がS3バケット名の形式ではありません(小文字・数字・ . ・ - の3〜63文字)。"
+            exit 1
+          fi
+          if [ -z "$PROJECT_NAME" ]; then
+            echo "::error::GitHubのVariable PROJECT_NAME が未登録です。インフラのリソース名の元になる名前(例: naw-fastapi)を登録してください。"
+            exit 1
+          fi
+          # ALBの名前は32文字までなので、接尾辞の分を見込んで30文字までにする
+          if ! [[ "$PROJECT_NAME" =~ ^[a-z0-9-]{3,30}$ ]]; then
+            echo "::error::PROJECT_NAME の値が不正です(小文字・数字・ハイフンの3〜30文字)。"
             exit 1
           fi
 
@@ -77,6 +87,7 @@ jobs:
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
           TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
+          TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
         run: terraform plan -out=tfplan
       
       - name: Terraform Apply
@@ -87,4 +98,5 @@ jobs:
           TF_VAR_allowed_admin_cidrs: ${{ secrets.ALLOWED_ADMIN_CIDRS }}
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
           TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
+          TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
         run: terraform apply -auto-approve tfplan
