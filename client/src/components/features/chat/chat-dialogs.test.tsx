@@ -123,6 +123,28 @@ describe('NewChatDialog（サイドバー）', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  test('カテゴリ名を入力すると、そのカテゴリのアシスタントに絞り込めること（案内文どおり。#396）', async () => {
+    server.use(
+      http.get(mockPath(API_PATHS.ASSISTANTS.LIST), () =>
+        HttpResponse.json([
+          buildApiAssistant('a1', '一般', { category: '業務効率' }),
+          buildApiAssistant('a2', '法務', { category: 'コンプライアンス' }),
+        ]),
+      ),
+    );
+    wrap(<NewChatDialog open onClose={vi.fn()} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('textbox'));
+    await screen.findByText('法務');
+    // 「業務効率」は一般のカテゴリ。アシスタント名（一般・法務）には含まれない
+    await user.type(screen.getByRole('textbox'), '業務効率');
+
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent('一般');
+  });
+
   test('アシスタントを選ぶまで作成できないこと', async () => {
     useAssistantsResponse();
     wrap(<NewChatDialog open onClose={vi.fn()} />);

@@ -490,7 +490,7 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 |---|---|---|---|
 | `testidPrefix` | `string \| null` | `null` | `${prefix}-trigger` / `${prefix}-option` の data-testid を付ける |
 
-トリガーが入力欄になっており、入力した文字でラベルを部分一致（大文字小文字を区別しない）で絞り込む。クリアボタンは値と検索語の両方を空にする（`onValueChange(null)`）。
+トリガーが入力欄になっており、入力した文字でラベルまたはカテゴリ（`SelectOption.category`）を部分一致（大文字小文字を区別しない）で絞り込む。移植元はラベルだけで絞り込むが、新規チャットの案内文「アシスタント表示名・カテゴリで検索できます」に合わせて、カテゴリも対象にしている（#396）。カテゴリがない選択肢はラベルだけで判定する。クリアボタンは値と検索語の両方を空にする（`onValueChange(null)`）。
 
 ```tsx
 <SelectWithSearch
