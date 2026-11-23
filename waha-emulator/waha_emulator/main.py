@@ -15,6 +15,7 @@ from waha_emulator.workflow_config import (
     ADAPTER_EMBEDDING,
     WorkflowConfig,
     WorkflowDefinition,
+    WorkflowTemplate,
     load_workflow_config,
 )
 from waha_emulator.workflows.base import Workflow
@@ -58,6 +59,43 @@ def build_workflow(
     )
 
 
+def _template_workflow_factory(
+    template: WorkflowTemplate,
+    chat_runtime_factory: ChatRuntimeFactory | None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None,
+    source_allowed_dir: Path | None,
+) -> Callable[[str], Workflow]:
+    """ひな形と接尾辞から、ワークフローを作る関数を返す。
+
+    Parameters
+    ----------
+    template : WorkflowTemplate
+        ひな形。
+    chat_runtime_factory : ChatRuntimeFactory | None
+        core の chat を作る処理。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理。
+    source_allowed_dir : Path | None
+        埋め込みの学習で `filepath` を読んでよいディレクトリ。
+
+    Returns
+    -------
+    Callable[[str], Workflow]
+        接尾辞を受け取り、その接尾辞を入れた定義のワークフローを作る関数。
+    """
+
+    def factory(name: str) -> Workflow:
+        """接尾辞を入れた定義から、ワークフローを作る。"""
+        return build_workflow(
+            template.build_definition(name),
+            chat_runtime_factory,
+            retrieval_runtime_factory,
+            source_allowed_dir,
+        )
+
+    return factory
+
+
 def build_registry(
     config: WorkflowConfig,
     chat_runtime_factory: ChatRuntimeFactory | None = None,
@@ -80,9 +118,9 @@ def build_registry(
     Returns
     -------
     WorkflowRegistry
-        サービス ID → ワークフロー。
+        サービス ID → ワークフロー（ひな形に当てはまるサービス ID は呼ばれたときに作る）。
     """
-    return WorkflowRegistry(
+    registry = WorkflowRegistry(
         default=build_workflow(
             config.default,
             chat_runtime_factory,
@@ -99,6 +137,17 @@ def build_registry(
             for service_id, definition in config.services.items()
         },
     )
+    for template in config.templates:
+        registry.register_template(
+            template.prefix,
+            _template_workflow_factory(
+                template,
+                chat_runtime_factory,
+                retrieval_runtime_factory,
+                source_allowed_dir,
+            ),
+        )
+    return registry
 
 
 def create_app(
