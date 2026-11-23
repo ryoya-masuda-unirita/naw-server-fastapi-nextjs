@@ -656,3 +656,79 @@ class TestGuards:
         assert (await session.execute(select(File))).scalars().all() == []
         assert _stored_files(file_storage_root) == []
         mocks.delete.assert_awaited_once()
+
+
+class TestTikaExtraction:
+    """Tika が使える設定のときの、登録のテスト（Issue #469）"""
+
+    async def test_pdf_is_extracted_with_tika_when_enabled(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        files_index: Index,
+        files_admin_headers: dict[str, str],
+        override_file_storage: None,
+        pgvector_setup: None,
+        mocks: _Mocks,
+    ) -> None:
+        """Tika が使える設定なら、PDF も Tika で取り出され、分割・埋め込み・保存されること"""
+        tika = AsyncMock(return_value=f"{SENTENCE}。{SENTENCE}。")
+
+        with (
+            patch(f"{FV}.tika_client.is_enabled", return_value=True),
+            patch(f"{FV}.tika_client.TikaClient.extract_text", tika),
+        ):
+            response = await _post(
+                client,
+                files_index,
+                files_admin_headers,
+                b"%PDF-1.4 binary",
+                "100",
+                content_type="application/pdf",
+                filename="rule.pdf",
+            )
+
+        assert response.status_code == 200
+        tika.assert_awaited_once_with("rule.pdf", "application/pdf", b"%PDF-1.4 binary")
+        assert mocks.embed.await_count == 2
+        mocks.add_rows.assert_awaited_once()
+        assert len((await session.execute(select(File))).scalars().all()) == 1
+
+    async def test_tika_failure_returns_400_and_cleans_up(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        files_index: Index,
+        files_admin_headers: dict[str, str],
+        file_storage_root: Path,
+        override_file_storage: None,
+        pgvector_setup: None,
+        mocks: _Mocks,
+    ) -> None:
+        """Tika が取り出せないとき、400 になり、ストレージ・記録が残らず、埋め込まれないこと"""
+        from fastapi import HTTPException
+
+        tika = AsyncMock(
+            side_effect=HTTPException(
+                status_code=400, detail="ファイルのテキストを取り出せませんでした。"
+            )
+        )
+
+        with (
+            patch(f"{FV}.tika_client.is_enabled", return_value=True),
+            patch(f"{FV}.tika_client.TikaClient.extract_text", tika),
+        ):
+            response = await _post(
+                client,
+                files_index,
+                files_admin_headers,
+                b"broken",
+                content_type="application/pdf",
+                filename="broken.pdf",
+            )
+
+        assert response.status_code == 400
+        assert "取り出せませんでした" in response.json()["message"]
+        assert (await session.execute(select(File))).scalars().all() == []
+        assert _stored_files(file_storage_root) == []
+        mocks.embed.assert_not_awaited()

@@ -225,6 +225,44 @@ class AzureOpenAISettings(BaseSettings):
     )
 
 
+class TikaSettings(BaseSettings):
+    """ファイルのテキストの取り出し（Apache Tika）の設定。
+
+    移植元（Java）は Tika をサーバー本体の中で使う。Python 版は、Tika のサーバー（jar）を
+    サーバーのコンテナの中に入れ、子プロセスとして起動して `localhost` で呼ぶ
+    （`TIKA_SERVER_JAR`）。別のサーバーを使うときは `TIKA_URL`。どちらもなければ Tika を
+    使わず、テキスト系の形式だけを取り出す。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    server_jar: str | None = Field(default=None, alias="TIKA_SERVER_JAR")
+    url: str | None = Field(default=None, alias="TIKA_URL")
+    java_command: str = Field(default="java", alias="TIKA_JAVA_COMMAND")
+    port: int = Field(default=9998, alias="TIKA_PORT", ge=1, le=65535)
+    heap: str = Field(default="256m", alias="TIKA_HEAP", pattern=r"^[0-9]+[mMgG]$")
+    start_timeout_seconds: float = Field(
+        default=60.0, alias="TIKA_START_TIMEOUT_SECONDS", gt=0
+    )
+    request_timeout_seconds: float = Field(
+        default=120.0, alias="TIKA_REQUEST_TIMEOUT_SECONDS", gt=0
+    )
+
+
+@lru_cache
+def get_tika_settings() -> TikaSettings:
+    """Tika の設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。
+
+    Returns
+    -------
+    TikaSettings
+        Tika の設定。
+    """
+    return TikaSettings()
+
+
 @lru_cache
 def get_settings() -> Settings:
     """アプリケーション全体の設定を返す。同じプロセス内ではキャッシュした同一インスタンスを使う。

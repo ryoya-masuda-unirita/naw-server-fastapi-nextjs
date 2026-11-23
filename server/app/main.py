@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_cors_settings
 from app.core.database import get_session_maker
 from app.core.errors import register_exception_handlers
+from app.core.tika_client import TikaClient
 from app.services.user_import_listener import start_listener_task
 from app.routers import (
     assistant_categories,
@@ -44,12 +45,15 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     """
     listener_task = start_listener_task(get_session_maker())
     yield
-    if listener_task is not None:
-        listener_task.cancel()
-        try:
-            await listener_task
-        except asyncio.CancelledError:
-            pass
+    try:
+        if listener_task is not None:
+            listener_task.cancel()
+            try:
+                await listener_task
+            except asyncio.CancelledError:
+                pass
+    finally:
+        await TikaClient.shutdown()
 
 
 app = FastAPI(title="naw-server FastAPI", version="0.1.0", lifespan=lifespan)
