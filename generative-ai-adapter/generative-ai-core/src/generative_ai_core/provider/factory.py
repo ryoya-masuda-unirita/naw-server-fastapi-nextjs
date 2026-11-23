@@ -12,6 +12,9 @@ from generative_ai_core.chat.models import (
 )
 from generative_ai_core.chat.runtime import CoreChatRuntime
 from generative_ai_core.provider.clients.base import CoreProviderChatClient
+from generative_ai_core.provider.clients.bedrock import (  # bedrock-ext
+    BedrockCoreChatClient,  # bedrock-ext
+)  # bedrock-ext
 from generative_ai_core.provider.clients.echo import EchoCoreChatClient
 from generative_ai_core.provider.clients.openai_compatible import (
     AzureOpenAiCoreChatClient,
@@ -69,6 +72,8 @@ def default_client(
             return SecuAiGentCoreChatClient(configuration)
         case CoreProviderId.Echo:
             return EchoCoreChatClient(configuration)
+        case CoreProviderId.Bedrock:  # bedrock-ext
+            return BedrockCoreChatClient(configuration)  # bedrock-ext
 
 
 class CoreProviderRuntimeFactory:

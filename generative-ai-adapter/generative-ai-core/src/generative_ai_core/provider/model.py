@@ -43,6 +43,9 @@ class CoreProviderId(Enum):
     # Python 版だけの確認用プロバイダ。キーなしで動き、質問をそのまま返す
     # （移植元にはない。Waha! エミュレーターの動作確認のために置く）
     Echo = (99, "Echo", "echo")
+    # Python 版だけの Bedrock（Claude）。移植元に対応する実装がない独自の拡張。  # bedrock-ext
+    # 消すときは `bedrock-ext` の目印の行と clients/bedrock.py を削除する  # bedrock-ext
+    Bedrock = (97, "Bedrock", "bedrock")  # bedrock-ext
 
     @property
     def vendor_id(self) -> int:

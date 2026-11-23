@@ -650,3 +650,47 @@ def test_build_adapter_job_rejects_stream_path_outside_allowed_dir(
 
     with pytest.raises(StreamFileError):
         build_adapter_job(_echo_definition(), request, tmp_path)
+
+
+# bedrock-ext: ここから Bedrock のテスト。Bedrock の部品を消すときは、この下を削除する
+BEDROCK_URL = "https://bedrock-mantle.example.invalid/anthropic"
+BEDROCK_MODEL = "anthropic.claude-haiku-4-5"
+BEDROCK_API_KEY = "bedrock-secret"
+BEDROCK_ANSWER = "Bedrock からの回答です"
+
+
+async def test_run_bedrock_calls_messages_endpoint() -> None:
+    """Bedrock の Messages API をキー付きで呼び、回答が出力に入ること"""
+    config = parse_workflow_config(
+        {
+            "default": {
+                "properties": {
+                    "VENDOR": "Bedrock",
+                    "URL": BEDROCK_URL,
+                    "API_KEY": BEDROCK_API_KEY,
+                    "MODEL_NAME": BEDROCK_MODEL,
+                }
+            }
+        }
+    )
+    workflow = GenerativeAiWorkflow(config.default)
+    message = {
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": BEDROCK_ANSWER}],
+    }
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post(f"{BEDROCK_URL}/v1/messages").mock(
+            return_value=httpx.Response(200, json=message)
+        )
+
+        output = await workflow.run(_request({SLOT_QUESTION: _slot(QUESTION)}))
+
+    [call] = route.calls
+    assert call.request.headers["x-api-key"] == BEDROCK_API_KEY
+    assert call.request.headers["authorization"] == f"Bearer {BEDROCK_API_KEY}"
+    body = json.loads(call.request.content)
+    assert body["model"] == BEDROCK_MODEL
+    assert body["messages"][-1] == {"role": "user", "content": QUESTION}
+    assert json.loads(output)["answer"] == BEDROCK_ANSWER
