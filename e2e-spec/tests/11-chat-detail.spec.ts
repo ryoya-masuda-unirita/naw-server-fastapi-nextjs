@@ -67,12 +67,20 @@ function viewerTitleButton(page: Page): Locator {
 
 /** ビューアに出ているライブラリのタイトルの通し番号。 */
 async function viewerLibraryNumber(page: Page): Promise<number> {
-  // ライブラリの一覧と本文の取得が終わるまでタイトルは空
-  await expect(viewerTitleButton(page)).toContainText(LIBRARY_TITLE_PREFIX, { timeout: ANSWER_TIMEOUT_MS });
-  const title = (await viewerTitleButton(page).innerText()).trim();
-  const match = new RegExp(`${LIBRARY_TITLE_PREFIX}(\\d+)`).exec(title);
-  if (!match) throw new Error(`ビューアのタイトルからライブラリの番号を取れません: ${title}`);
-  return Number(match[1]);
+  // ライブラリの一覧と本文の取得が終わるまでタイトルは空。再送信の直後は表示が切り替わるので、
+  // 「含むか」と「読む」を別々にせず、1 回の読み取りで番号が取れるまで待つ（間に切り替わると読み違えるため）
+  const pattern = new RegExp(`${LIBRARY_TITLE_PREFIX}(\\d+)`);
+  let number = '';
+  await expect
+    .poll(
+      async () => {
+        number = pattern.exec((await viewerTitleButton(page).innerText()).trim())?.[1] ?? '';
+        return number;
+      },
+      { timeout: ANSWER_TIMEOUT_MS, message: 'ビューアのタイトルからライブラリの番号を取れません' },
+    )
+    .not.toBe('');
+  return Number(number);
 }
 
 /** 回答の本文から `[mock:call] <番号>` の番号を取る。 */

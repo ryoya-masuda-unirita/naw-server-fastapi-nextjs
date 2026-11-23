@@ -163,6 +163,10 @@ test.describe('12_ワークスペース設定', () => {
       await page.goto('/admin/assistants');
       await page.getByRole('button', { name: 'アシスタントを新規作成' }).first().click();
       const dialog = dialogOf(page, 'アシスタントを新規作成');
+      // 開いた直後は先頭の入力欄にフォーカスがあり、別の場所を押すとそれが blur されて検証エラーが出る。
+      // 下の要素がずれて、押した位置と離した位置が別の要素になり、最初のクリックが効かない（実ブラウザでも同じ）。
+      // 先に見出しを押してフォーカスを外し、レイアウトが落ち着いてからラジオを選ぶ
+      await dialog.getByText('接続サーバー', { exact: true }).click();
       // 接続サーバー「セキュア」を選ぶと、接続するAPI の選択肢に Local Server の API が出る
       await dialog.getByText('セキュア', { exact: true }).click();
       const apiSelect = dialog.locator('.app-select').filter({ hasText: 'APIの接続先を選択' }).first();
@@ -245,6 +249,8 @@ test.describe('12_ワークスペース設定', () => {
       await page.goto('/admin/assistants');
       await page.getByRole('button', { name: 'アシスタントを新規作成' }).first().click();
       const assistantDialog = dialogOf(page, 'アシスタントを新規作成');
+      // 先頭の入力欄の blur で検証エラーが出て下の要素がずれ、最初のクリックが効かないため、先に見出しを押す（12-10 と同じ）
+      await assistantDialog.getByText('接続サーバー', { exact: true }).click();
       await assistantDialog.getByText('セキュア', { exact: true }).click();
       const apiSelect = assistantDialog.locator('.app-select').filter({ hasText: 'APIの接続先を選択' }).first();
       await apiSelect.locator('[aria-haspopup="listbox"]').click();
@@ -254,6 +260,8 @@ test.describe('12_ワークスペース設定', () => {
       await page.goto('/admin/training-data');
       await page.getByRole('button', { name: '学習先フォルダを新規作成' }).first().click();
       const folderDialog = dialogOf(page, '学習先フォルダを新規作成');
+      // 同じく、先にダイアログの見出しを押して先頭の入力欄のフォーカスを外す
+      await folderDialog.getByText('学習先フォルダを新規作成', { exact: true }).click();
       await folderDialog.getByText('ローカル', { exact: true }).click();
       // 先頭のエンドポイントが自動で選ばれるので、プレースホルダーではなく Select 自体で探す
       const endpointSelect = folderDialog.locator('.app-select').first();

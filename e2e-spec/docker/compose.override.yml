@@ -23,3 +23,21 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+  # 画面は Vite の開発サーバーではなく、ビルド済みの静的ファイルを nginx で配信する（#417）。
+  # 配信ポートは demo と同じ 5173（ホスト側の公開ポートは demo の ports のまま）。
+  frontend:
+    build:
+      context: ./client
+      dockerfile: ../e2e-spec/docker/frontend.Dockerfile
+      args:
+        # ブラウザ（ホスト）から見た backend の URL。ビルド時にバンドルへ埋め込まれる
+        VITE_API_URL: http://localhost:${DEMO_BACKEND_PORT:?src/environment.ts が渡す}
+    environment: !reset {}
+    volumes:
+      - ./e2e-spec/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
