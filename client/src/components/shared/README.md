@@ -180,7 +180,7 @@
 | `showDefaultActions` | `boolean` | `true` | |
 | `width` / `minWidth` | `string` | - | `.mdc-dialog__surface` の幅（移植元 `data.width`） |
 | `dialogWidth` | `string` | - | パネルの幅（移植元 `dialog.open(..., { width })`） |
-| `panelClass` | `string` | - | `dialog-xl`・`dialog-large`・`dialog-overflow-visible`・`delete-confirmation-dialog` など（`index.css` に定義あり） |
+| `panelClass` | `string` | - | `dialog-xl`・`dialog-large`・`dialog-overflow-visible`・`delete-confirmation-dialog` など（`index.css` に定義あり）。`dialog-xl` は外枠に加え、中のカード（`.modal-dialog`）の最大幅 800px も外す（#456） |
 | `disableClose` | `boolean` | `false` | Esc・背景クリックで閉じない |
 | `confirmTestid` / `cancelTestid` | `string` | `'dialog-confirm-button'` / `'dialog-cancel-button'` | |
 

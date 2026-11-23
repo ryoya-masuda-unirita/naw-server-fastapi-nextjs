@@ -58,7 +58,7 @@ export function TrainingDataAddModal({
           <div className="flex flex-col w-full">
             <div className="table-list-row table-list-row--header">
               <div className="table-list-row-content">
-                <span className="table-list-col-content table-list-label">
+                <span className="table-list-col-content table-list-label md:min-w-32">
                   {t('LEARNING_DATA.UPLOAD_FILE_NAME')}
                 </span>
                 <span className="table-list-col-date table-list-label md:w-60">
@@ -90,7 +90,7 @@ export function TrainingDataAddModal({
                   data-testid="training-data-add-row"
                 >
                   <div className="table-list-row-content items-start">
-                    <div className="table-list-col-content">
+                    <div className="table-list-col-content md:min-w-32">
                       <div className="h-9 flex items-center">
                         <span className="text-label text-text-medium truncate" title={row.file.name}>
                           {row.file.name}

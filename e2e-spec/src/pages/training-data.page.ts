@@ -5,6 +5,9 @@ import { gotoAdminPage } from './service-list-controls.ts';
 
 export const TRAINING_DATA_PATH = '/admin/training-data';
 
+/** 追加ダイアログの表の見出しが、横書きで読めるとみなす最小の幅（px）。縦に 1 文字ずつ積まれると 0 近くになる。 */
+const MIN_READABLE_LABEL_WIDTH_PX = 40;
+
 /** 画面の文言（public/i18n/ja.json の LEARNING_DATA.*。移植元の ja.json と同じ）。 */
 export const TRAINING_MESSAGES = {
   back: '戻る',
@@ -146,7 +149,32 @@ export class TrainingDataPage {
       mimeType: 'text/plain',
       buffer: Buffer.from('E2E 用の学習データです。', 'utf-8'),
     });
+    await this.expectUploadTableFitsDialog();
     await this.page.getByTestId('training-data-add-display-name').fill(displayName);
     await this.page.getByTestId('training-data-add-submit').click();
+  }
+
+  /**
+   * 追加ダイアログの、ファイルを選ぶと出る表の見出しが、読める幅で、ダイアログの中に収まっていること（#456）。
+   * 内側のカードが外枠より狭いと、左端の列が 0px に潰れて見出しが縦に積まれ、右の列がはみ出す。
+   */
+  async expectUploadTableFitsDialog(): Promise<void> {
+    const labels = this.dialog.locator('.table-list-row--header .table-list-label');
+    // 幅 0 に潰れた見出しは visible と判定されないため、存在だけを待ち、幅は下で測る
+    await expect(labels.first()).toBeAttached();
+    const boxes = await this.dialog.evaluate((dialog) => {
+      // 外枠（dialog）ではなく、中身を収める内側のカードを基準にする。外枠は広くても、カードが狭いと表がはみ出す。
+      // 狭い画面では、カードの中を横スクロールして全列に届くのが正しい状態なので、スクロールできる範囲の右端を使う
+      const card = dialog.querySelector('.modal-content') ?? dialog;
+      const right = card.getBoundingClientRect().left + card.scrollWidth;
+      return [...dialog.querySelectorAll('.table-list-row--header .table-list-label')].map((label) => {
+        const rect = label.getBoundingClientRect();
+        return { text: label.textContent?.trim() ?? '', width: rect.width, overflow: rect.right - right };
+      });
+    });
+    for (const box of boxes) {
+      expect(box.width, `見出し「${box.text}」の幅`).toBeGreaterThanOrEqual(MIN_READABLE_LABEL_WIDTH_PX);
+      expect(box.overflow, `見出し「${box.text}」のカードからのはみ出し`).toBeLessThanOrEqual(0);
+    }
   }
 }
