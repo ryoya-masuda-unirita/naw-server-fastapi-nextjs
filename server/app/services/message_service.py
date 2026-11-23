@@ -29,6 +29,7 @@ from app.core.room_access import (
     require_owned_room,
     require_viewable_room,
 )
+from app.core.shielded import run_shielded
 from app.core.sse import sse_event
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
@@ -1055,6 +1056,100 @@ class MessageService:
         attachment_files = req.attachmentFiles
         model_max_tokens = ai_model.max_tokens
 
+        async def persist_after_stream(
+            content_status: MessageContentStatus,
+            answer_text: str,
+            library_title: str | None,
+            library_content: str | None,
+            input_tokens: int,
+            output_tokens: int,
+        ) -> tuple[MessageContentResponse | None, bool]:
+            """ストリーム配信後に、回答・ライブラリ・トークン使用量を永続化する。
+
+            各保存の失敗はログに残し、呼び出し元へ例外は伝播させない。
+
+            Parameters
+            ----------
+            content_status : MessageContentStatus
+                永続化するメッセージ内容のステータス。
+            answer_text : str
+                配信済みの回答本文。
+            library_title : str | None
+                確定したライブラリのタイトル。未確定ならNone。
+            library_content : str | None
+                確定したライブラリの本文。未確定ならNone。
+            input_tokens : int
+                入力トークン数。
+            output_tokens : int
+                出力トークン数。
+
+            Returns
+            -------
+            tuple[MessageContentResponse | None, bool]
+                保存したメッセージ内容（失敗時はNone）と、いずれかの保存が失敗したか。
+            """
+            persist_failed = False
+            # 失敗時にNoneを代入するため、事前に`| None`を明示しておく
+            # （型注釈がないと最初の代入式からMessageContentResponse確定型と
+            # 推論され、後続のNone代入が型エラーになる）。
+            content_response: MessageContentResponse | None
+            try:
+                content_response = await MessageService._persist_message_content(
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    room_id=room_id,
+                    question=question_text,
+                    answer=answer_text,
+                    content_status=content_status,
+                    attachment_files=attachment_files,
+                    context=rag_context or None,
+                    reference_paths=reference_paths,
+                    existing_content_id=existing_content_id,
+                )
+            except Exception:
+                logger.exception("メッセージ内容の永続化に失敗しました")
+                content_response = None
+                persist_failed = True
+
+            if (
+                content_response is not None
+                and library_title is not None
+                and library_content is not None
+                and content_status == MessageContentStatus.OK
+            ):
+                try:
+                    await MessageService._persist_library(
+                        tenant_id=tenant_id,
+                        message_id=message_id,
+                        user_id=user_id,
+                        title=library_title,
+                        content=library_content,
+                    )
+                except Exception:
+                    logger.exception("ライブラリの永続化に失敗しました")
+                    persist_failed = True
+            # メッセージ内容の永続化に失敗しても、Azureで既に消費したトークンは
+            # 記録する。
+            try:
+                await MessageService._persist_token_usage(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    room_id=room_id,
+                    message_id=message_id,
+                    model_name=model_name,
+                    endpoint_type=model_endpoint_type,
+                    token_weight=token_weight,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    credit_settings=credit_settings,
+                    embedding_tokens=embedding_tokens,
+                    embedding_token_weight=embedding_token_weight,
+                )
+            except Exception:
+                logger.exception("トークン使用量の永続化に失敗しました")
+                persist_failed = True
+            return content_response, persist_failed
+
         async def event_stream() -> AsyncIterator[bytes]:
             """LLM（Azure OpenAI/Bedrock）の応答をSSEイベントへ変換しつつ配信し、完了後に永続化する。
 
@@ -1164,66 +1259,21 @@ class MessageService:
                 # (`streamAndPersist`の一番外側のcatchで`sendSseError`)に合わせ、
                 # 保存処理ごとに例外を捕捉してログに残し、1つでも失敗したら
                 # message_contentイベントの代わりにerrorイベントを送る（後段）。
-                persist_failed = False
-                # 失敗時にNoneを代入するため、事前に`| None`を明示しておく
-                # （型注釈がないと最初の代入式からMessageContentResponse確定型と
-                # 推論され、後続のNone代入が型エラーになる）。
-                content_response: MessageContentResponse | None
-                try:
-                    content_response = await MessageService._persist_message_content(
-                        tenant_id=tenant_id,
-                        message_id=message_id,
-                        room_id=room_id,
-                        question=question_text,
-                        answer=answer_text,
-                        content_status=content_status,
-                        attachment_files=attachment_files,
-                        context=rag_context or None,
-                        reference_paths=reference_paths,
-                        existing_content_id=existing_content_id,
+                #
+                # クライアントが切断すると、Starletteはこのストリームのタスクを
+                # キャンセルする。`finally`内の`await`も中断されるため、保存は
+                # キャンセルされない別タスクで実行する（移植元が別スレッドで
+                # 保存するのと同じ、切断の影響を受けない保存）。
+                content_response, persist_failed = await run_shielded(
+                    persist_after_stream(
+                        content_status,
+                        answer_text,
+                        library_title,
+                        library_content,
+                        input_tokens,
+                        output_tokens,
                     )
-                except Exception:
-                    logger.exception("メッセージ内容の永続化に失敗しました")
-                    content_response = None
-                    persist_failed = True
-
-                if (
-                    content_response is not None
-                    and library_title is not None
-                    and library_content is not None
-                    and content_status == MessageContentStatus.OK
-                ):
-                    try:
-                        await MessageService._persist_library(
-                            tenant_id=tenant_id,
-                            message_id=message_id,
-                            user_id=user_id,
-                            title=library_title,
-                            content=library_content,
-                        )
-                    except Exception:
-                        logger.exception("ライブラリの永続化に失敗しました")
-                        persist_failed = True
-                # メッセージ内容の永続化に失敗しても、Azureで既に消費したトークンは
-                # 記録する。
-                try:
-                    await MessageService._persist_token_usage(
-                        tenant_id=tenant_id,
-                        user_id=user_id,
-                        room_id=room_id,
-                        message_id=message_id,
-                        model_name=model_name,
-                        endpoint_type=model_endpoint_type,
-                        token_weight=token_weight,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        credit_settings=credit_settings,
-                        embedding_tokens=embedding_tokens,
-                        embedding_token_weight=embedding_token_weight,
-                    )
-                except Exception:
-                    logger.exception("トークン使用量の永続化に失敗しました")
-                    persist_failed = True
+                )
                 if (
                     stream_finished
                     and content_response is not None

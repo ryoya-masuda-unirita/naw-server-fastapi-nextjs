@@ -14,6 +14,7 @@ from app.schemas.llm import LlmChatRequest, LlmChatTurn
 from app.schemas.message import ToolConfig
 from app.services.llm_chat_service import LlmChatService
 from app.models.user import User
+from tests.unit.asgi_disconnect import FakeSession, run_until_client_disconnects
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
 
@@ -1236,3 +1237,64 @@ class TestStreamChatPersistFailure:
         }
         stream_mocks["persist_library"].assert_awaited_once()
         stream_mocks["persist_usage"].assert_awaited_once()
+
+
+class TestStreamChatClientDisconnect:
+    """LlmChatService.stream_chat でクライアントが切断した場合のテスト（Issue #402）"""
+
+    @pytest.fixture
+    def stream_mocks(self) -> Iterator[dict[str, Any]]:
+        """検証・LLM呼び出しをモックし、保存先を`FakeSession`に差し替える。"""
+        prefix = "app.services.llm_chat_service"
+        committed: list[Any] = []
+        with (
+            patch(
+                f"{prefix}.AIModelRepository.find_by_name_and_endpoint_types",
+                new_callable=AsyncMock,
+                return_value=_ai_model(),
+            ),
+            patch(
+                f"{prefix}.TenantEndpointRepository.find_by_tenant_id_and_type",
+                new_callable=AsyncMock,
+                return_value=[_tenant_endpoint()],
+            ),
+            patch(f"{prefix}.enforce_within_quota", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.MessageRepository.find_by_tenant_id_and_id",
+                new_callable=AsyncMock,
+                return_value=MagicMock(id="msg-1", room_id="room-1"),
+            ),
+            patch(f"{prefix}.require_owned_room", new_callable=AsyncMock),
+            patch(f"{prefix}.AzureLlmChatClient.stream_chat") as mock_stream_chat,
+            patch(
+                f"{prefix}.get_session_maker",
+                return_value=lambda: FakeSession(committed),
+            ),
+        ):
+            yield {"stream_chat": mock_stream_chat, "committed": committed}
+
+    async def test_persists_token_usage_when_client_disconnects_after_message_stop(
+        self, stream_mocks: dict[str, Any], test_user: User
+    ) -> None:
+        """message_stopの直後にクライアントが切断しても、トークン使用量が記録されること"""
+        from app.core.llm_client import ChatStreamChunk
+
+        stream_mocks["stream_chat"].return_value = _AsyncChunkIterator(
+            [
+                ChatStreamChunk(text_delta="こんにちは"),
+                ChatStreamChunk(input_tokens=11, output_tokens=7),
+            ]
+        )
+
+        response = await LlmChatService.stream_chat(
+            "tenant-1",
+            test_user,
+            _request(messageId="msg-1"),
+            session=None,  # type: ignore[arg-type]
+        )
+        await run_until_client_disconnects(response, b"message_stop")
+
+        committed = stream_mocks["committed"]
+        assert len(committed) == 1
+        assert committed[0].input_tokens == 11
+        assert committed[0].output_tokens == 7
