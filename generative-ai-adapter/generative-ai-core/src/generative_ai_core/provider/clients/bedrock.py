@@ -70,8 +70,8 @@ def request_target(
 ) -> tuple[str, dict[str, str]]:
     """接続先の URL と認証のヘッダーを組み立てる（接続先ごとの違いはここだけ）。
 
-    Mantle がキー用ヘッダーと Bearer のどちらを要求するかを実機で確かめられないため、
-    両方を送る。どちらか一方だけが必要な場合も、もう一方は無視される想定。
+    認証は Bearer の API キーだけを送る。Mantle は ``x-api-key`` と ``Authorization``
+    が同時にあるリクエストを 401 で拒否するため、キー用ヘッダーは付けない（実機で確認済み）。
 
     Parameters
     ----------
@@ -86,7 +86,6 @@ def request_target(
     api_key = configuration.credential.value
     url = f"{configuration.endpoint.rstrip('/')}{MESSAGES_PATH}"
     headers = {
-        "x-api-key": api_key,
         "Authorization": f"Bearer {api_key}",
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",

@@ -688,7 +688,7 @@ async def test_run_bedrock_calls_messages_endpoint() -> None:
         output = await workflow.run(_request({SLOT_QUESTION: _slot(QUESTION)}))
 
     [call] = route.calls
-    assert call.request.headers["x-api-key"] == BEDROCK_API_KEY
+    assert "x-api-key" not in call.request.headers
     assert call.request.headers["authorization"] == f"Bearer {BEDROCK_API_KEY}"
     body = json.loads(call.request.content)
     assert body["model"] == BEDROCK_MODEL
