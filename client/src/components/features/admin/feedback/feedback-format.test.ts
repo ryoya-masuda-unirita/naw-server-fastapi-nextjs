@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import type { MessageContentApiItem } from '@/types/chat/message-api.type';
 import {
   buildPageRange,
   formatUpdatedAt,
@@ -104,15 +105,22 @@ describe('追加学習のファイル', () => {
       learningFolder: '-',
       updatedAt: '2026-11-02T10:00:00',
     };
-    const file = buildSatisfactionAdditionalLearningContent(item);
+    const file = buildSatisfactionAdditionalLearningContent(item, [
+      { question: 'Q1', answer: 'A1' } as MessageContentApiItem,
+    ]);
 
     expect(file.name).toBe('追加学習_ルーム_room1.md');
-    expect(await file.text()).toContain('- ルーム名: 相談');
+    const text = await file.text();
+    expect(text).toContain('- ルーム名: 相談');
+    expect(text).toContain('## 質問\nQ1\n\n## 回答\nA1');
     expect(() =>
-      buildSatisfactionAdditionalLearningContent({
-        ...item,
-        roomId: undefined,
-      }),
+      buildSatisfactionAdditionalLearningContent(
+        {
+          ...item,
+          roomId: undefined,
+        },
+        [],
+      ),
     ).toThrow();
   });
 });

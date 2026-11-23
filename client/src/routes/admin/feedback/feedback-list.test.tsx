@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { useToastStore } from '@/components/shared/toast-store';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
@@ -108,7 +109,7 @@ const FIXTURE_USERS = {
 };
 
 /** 直近の追加学習で FormData に追加した項目（content はファイル名） */
-const pending: { fields: Record<string, string> } = { fields: {} };
+const pending: { fields: Record<string, string>; file: File | null } = { fields: {}, file: null };
 
 interface RequestLog {
   accuracy: URLSearchParams[];
@@ -118,11 +119,40 @@ interface RequestLog {
     indexId: string;
     fields: Record<string, string>;
     fileName: string;
+    /** 送った学習データの本文 */
+    text: string;
   }[];
 }
 
 /** 一覧・選択肢・追加学習の API を差し替え、受けたリクエストを記録する */
-function mockApis(options: { learningFails?: boolean } = {}): RequestLog {
+interface MockOptions {
+  learningFails?: boolean;
+  /** ルームのメッセージ一覧（GET /api/messages?roomId=）。既定は質問と回答が 1 組のルーム */
+  messages?: { id: string; parentId: string | null }[];
+  /** メッセージの本文（POST /api/messages/contents）。既定は messages の各メッセージの Q・A */
+  contents?: { messageId: string; status: string; question: string; answer: string }[];
+}
+
+/** jsdom の File は text() を持たないため、FileReader で読む */
+function readText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+function mockApis(options: MockOptions = {}): RequestLog {
+  const messages = options.messages ?? [{ id: 'm1', parentId: null }];
+  const contents =
+    options.contents ??
+    messages.map((m) => ({
+      messageId: m.id,
+      status: 'OK',
+      question: `Q-${m.id}`,
+      answer: `A-${m.id}`,
+    }));
   const log: RequestLog = {
     accuracy: [],
     satisfaction: [],
@@ -138,6 +168,7 @@ function mockApis(options: { learningFails?: boolean } = {}): RequestLog {
     fileName?: string,
   ) {
     pending.fields[name] = typeof value === 'string' ? value : ((value as File).name ?? '');
+    if (typeof value !== 'string') pending.file = value as File;
     return Reflect.apply(
       originalAppend,
       this,
@@ -188,13 +219,30 @@ function mockApis(options: { learningFails?: boolean } = {}): RequestLog {
         size: 5,
       }),
     ),
-    http.post(mockPath(API_PATHS.INDEXES.ADDITIONAL_LEARNING(':indexId')), ({ params }) => {
+    http.get(mockPath(API_PATHS.MESSAGES.LIST), () =>
+      HttpResponse.json({
+        assistants: [],
+        messages: messages.map((m) => ({
+          ...m,
+          roomId: 'room1',
+          assistantId: null,
+          isRated: false,
+        })),
+      }),
+    ),
+    http.post(mockPath(API_PATHS.MESSAGES.CONTENTS), () =>
+      HttpResponse.json(
+        contents.map((c) => ({ id: `c-${c.messageId}`, context: null, isRated: false, ...c })),
+      ),
+    ),
+    http.post(mockPath(API_PATHS.INDEXES.ADDITIONAL_LEARNING(':indexId')), async ({ params }) => {
       if (options.learningFails) return HttpResponse.json({ message: 'ng' }, { status: 500 });
       const { content, ...fields } = pending.fields;
       log.learning.push({
         indexId: String(params.indexId),
         fields,
         fileName: content ?? '',
+        text: pending.file ? await readText(pending.file) : '',
       });
       return new HttpResponse(null, { status: 204 });
     }),
@@ -205,6 +253,8 @@ function mockApis(options: { learningFails?: boolean } = {}): RequestLog {
 afterEach(() => {
   setAuthUser(null);
   pending.fields = {};
+  pending.file = null;
+  useToastStore.getState().clear();
   vi.restoreAllMocks();
 });
 
@@ -411,6 +461,68 @@ describe('AdminFeedbackListPage', () => {
       expect(log.learning[0].indexId).toBe('folder-2');
       expect(log.learning[0].fields).toEqual({ roomId: 'room1' });
       expect(log.learning[0].fileName).toBe('追加学習_ルーム_room1.md');
+      // ルームのやり取り（質問と回答）が学習データの本文に入ること
+      expect(log.learning[0].text).toContain('## 質問\nQ-m1\n\n## 回答\nA-m1');
+    });
+
+    /** 追加学習の操作（メニュー → フォルダ指定 → 確定）をする */
+    async function submitLearning() {
+      await userEvent.click(screen.getByTestId('feedback-menu-rf1'));
+      await userEvent.click(await screen.findByText('FEEDBACK.SPECIFY_FOLDER'));
+      await userEvent.click(await screen.findByTestId('dialog-confirm-button'));
+    }
+
+    test('編集で版が分かれたルームは、最新の版のやり取りだけを学習データにすること', async () => {
+      // m1 を編集して m1b を作った。古い版 m1・m2 は学習させない
+      const log = mockApis({
+        messages: [
+          { id: 'm1', parentId: null },
+          { id: 'm2', parentId: 'm1' },
+          { id: 'm1b', parentId: null },
+          { id: 'm3', parentId: 'm1b' },
+        ],
+      });
+      await renderTab('satisfaction', '見積相談');
+
+      await submitLearning();
+
+      await waitFor(() => expect(log.learning).toHaveLength(1));
+      const { text } = log.learning[0];
+      expect(text).toContain('Q-m1b');
+      expect(text).toContain('Q-m3');
+      expect(text).not.toContain('Q-m1\n');
+      expect(text).not.toContain('Q-m2');
+    });
+
+    test('やり取りが 0 件のルームは、送らずにトーストを出し、ダイアログを開いたままにすること', async () => {
+      const log = mockApis({ messages: [] });
+      await renderTab('satisfaction', '見積相談');
+
+      await submitLearning();
+
+      await waitFor(() =>
+        expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual([
+          'FEEDBACK.ADD_LEARNING_ROOM_EMPTY',
+        ]),
+      );
+      expect(log.learning).toHaveLength(0);
+      expect(screen.getByTestId('dialog-confirm-button')).toBeInTheDocument();
+    });
+
+    test('本文が ERROR のやり取りがあるルームは、送らずにトーストを出すこと', async () => {
+      const log = mockApis({
+        contents: [{ messageId: 'm1', status: 'ERROR', question: 'Q', answer: 'エラーの文' }],
+      });
+      await renderTab('satisfaction', '見積相談');
+
+      await submitLearning();
+
+      await waitFor(() =>
+        expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual([
+          'FEEDBACK.ADD_LEARNING_CONTENT_MISSING',
+        ]),
+      );
+      expect(log.learning).toHaveLength(0);
     });
   });
 
