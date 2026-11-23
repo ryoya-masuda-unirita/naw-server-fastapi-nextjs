@@ -55,14 +55,9 @@ resource "aws_ecs_task_definition" "backend" {
 
       environment = [
         {
-          name  = "DATABASE_URL"
-          value = "postgresql+asyncpg://${var.rds_username}:${var.db_password}@${var.rds_address}:5432/${var.rds_db_name}"
-        },
-        {
           name  = "REDIS_URL"
           value = "redis://${var.redis_endpoint}:6379/0"
         },
-        { name = "SECRET_KEY", value = var.secret_key },
         { name = "COOKIE_SECURE", value = "true" },
         { name = "COOKIE_SAME_SITE", value = "lax" },
         // 独自ドメインを廃止したため、CloudFrontのデフォルトドメイン1つを固定オリジンとして許可する
@@ -72,6 +67,12 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "AWS_S3_BUCKET_NAME", value = var.user_import_bucket_name },
         // backendがジョブ登録・受信に使うSQSキューのURL(user_import_queue_service/listenerが参照)
         { name = "AWS_SQS_QUEUE_URL", value = var.user_import_queue_url },
+      ]
+
+      // 機密情報は、タスク定義に値を持たせず、起動時に実行ロールがSecrets Managerから取り出して、同名の環境変数として注入する
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = "${var.secret_arn}:DATABASE_URL::" },
+        { name = "SECRET_KEY", valueFrom = "${var.secret_arn}:SECRET_KEY::" },
       ]
 
       logConfiguration = {
@@ -171,14 +172,12 @@ resource "aws_ecs_task_definition" "backend_migrate" {
       // backendイメージの既定CMD(uvicorn起動)を上書きし、マイグレーションだけ実行して終了させる
       command = ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
 
-      environment = [
-        {
-          name  = "DATABASE_URL"
-          value = "postgresql+asyncpg://${var.rds_username}:${var.db_password}@${var.rds_address}:5432/${var.rds_db_name}"
-        },
-        // alembic env.pyがapp.core.config.get_settings()経由でSettings()を構築するため、
-        // database_urlと同様に必須(デフォルト無し)のsecret_keyも渡す必要がある
-        { name = "SECRET_KEY", value = var.secret_key },
+      // alembic env.pyがapp.core.config.get_settings()経由でSettings()を構築するため、
+      // database_urlと同様に必須(デフォルト無し)のsecret_keyも渡す必要がある。どちらもSecrets Managerから注入する
+      // 機密情報は、タスク定義に値を持たせず、起動時に実行ロールがSecrets Managerから取り出して、同名の環境変数として注入する
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = "${var.secret_arn}:DATABASE_URL::" },
+        { name = "SECRET_KEY", valueFrom = "${var.secret_arn}:SECRET_KEY::" },
       ]
 
       logConfiguration = {
@@ -227,6 +226,22 @@ resource "aws_iam_role" "ecs_task_execution" {
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+// タスクの起動時に、実行ロールがSecrets Managerのシークレットを読む(タスク定義のsecretsを環境変数に注入するため)。
+// 読めるのはこのシークレットだけ。アプリのタスクロール(backend_task)には付けない(アプリは環境変数で受け取る)。
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name = "${var.project_name}-ecs-task-execution-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = [var.secret_arn]
+    }]
+  })
 }
 
 // ECSタスク(コンテナ)内で動くbackendアプリコード(boto3等)が引き受けるロール。

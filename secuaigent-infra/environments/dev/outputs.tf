@@ -47,3 +47,8 @@ output "user_import_bucket_name" {
 output "user_import_queue_url" {
   value = module.user_import.queue_url
 }
+
+// backendの機密情報を持つSecrets Managerのシークレット名(踏み台からのシード投入など、人がDBのパスワードを取得するときに使う)
+output "backend_secret_name" {
+  value = module.secrets.secret_name
+}

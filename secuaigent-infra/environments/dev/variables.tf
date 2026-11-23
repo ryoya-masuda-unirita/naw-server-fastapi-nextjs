@@ -41,12 +41,6 @@ variable "github_repository" {
   description = "OIDCの信頼条件に使うGitHubリポジトリ(<オーナー>/<リポジトリ>)。このリポジトリのdevelopブランチだけがCIロールを引き受けられる"
 }
 
-variable "db_password" {
-  type = string
-  // シークレットなデータを扱う場合はsensitive = trueを指定する
-  sensitive = true
-}
-
 variable "allowed_ssh_cidrs" {
   type        = list(string)
   description = "踏み台へのSSH接続を許可するCIDRブロックのリスト"
@@ -60,12 +54,6 @@ variable "allowed_admin_cidrs" {
 variable "key_pair_name" {
   type        = string
   description = "bastionへのSSH接続に使うキーペア名"
-}
-
-variable "secret_key" {
-  type        = string
-  sensitive   = true
-  description = "backendのSECRET_KEY"
 }
 
 variable "tfstate_bucket_name" {
