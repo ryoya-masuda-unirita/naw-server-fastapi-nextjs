@@ -47,6 +47,13 @@ export function UsageTab() {
   });
   const { data: usersData } = useUsageFilterUsers();
   const [limitDialog, setLimitDialog] = useState<UsageLimitMode | null>(null);
+  // 「全てのユーザー」（値 ''）を選んだとき、親の値が null のまま変わらないと、セレクトの内部の値が '' で残り、
+  // 入力欄にそのラベルが残って、次の検索語がその後ろに付く。作り直して、内部の値を親の値に合わせる
+  const [userFilterResetKey, setUserFilterResetKey] = useState(0);
+  const handleUserFilterChange = (value: string | null) => {
+    setUserFilter(value ?? '');
+    if (!value) setUserFilterResetKey((key) => key + 1);
+  };
 
   // 移植元の条件は画面を開き直すと初期値から始まる。残すと絞り込み欄が空に見えたまま前回の条件が効く
   useEffect(() => reset, [reset]);
@@ -202,15 +209,16 @@ export function UsageTab() {
               <span className="library-filter-label">{t('TENANT.FILTER')}</span>
               <div className="library-filter-selects">
                 <SelectWithSearch
+                  key={userFilterResetKey}
                   className="md:w-40 w-full"
                   size="small"
                   options={userOptions}
                   // 「全てのユーザー」は未選択にする。選択済みにすると、入力欄にそのラベルが残り、検索の文字が後ろに付く
                   value={userFilter || null}
                   placeholder={t('COMMON.PLACEHOLDERS.ALL_USERS')}
-                  supportText={t('CHAT_HISTORY.FILTER_USER_SUPPORT')}
+                  supportText={t('TENANT.FILTER_USER_SUPPORT')}
                   testidPrefix="tenant-usage-user-filter"
-                  onValueChange={(value) => setUserFilter(value ?? '')}
+                  onValueChange={handleUserFilterChange}
                 />
               </div>
             </div>

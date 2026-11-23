@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/setup';
@@ -149,6 +149,19 @@ describe('テナント管理', () => {
       await waitFor(() => expect(lastRequest(requested).get('userId')).toBeNull());
     });
 
+    test('未選択のまま全てのユーザーを選んでも、入力欄にラベルが残らず検索できること', async () => {
+      const user = await renderUsage();
+
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
+      await user.click(await screen.findByRole('option', { name: 'COMMON.PLACEHOLDERS.ALL_USERS' }));
+      // ラベルが残ると、次の検索語がその後ろに付いて 0 件になる。選択でセレクトが作り直されるので、要素は取り直す
+      const trigger = screen.getByTestId('tenant-usage-user-filter-trigger');
+      expect(within(trigger).getByRole('textbox')).toHaveValue('');
+      await user.type(within(trigger).getByRole('textbox'), '山田');
+
+      expect(await screen.findByRole('option', { name: '山田太郎' })).toBeInTheDocument();
+    });
+
     test('利用者名は API の種類で出し分け、ID や - を出さないこと', async () => {
       const base = FIXTURE_TOKEN_USAGES.contents[0];
       server.use(
@@ -179,15 +192,20 @@ describe('テナント管理', () => {
     test('利用者の種類が無い応答は、ID や - を出さず取得の失敗にすること', async () => {
       // undefined の項目は JSON にならないので、`userType` が無い応答になる
       const withoutType = { ...FIXTURE_TOKEN_USAGES.contents[0], userType: undefined };
+      let listRequests = 0;
       server.use(
-        http.get(listPath, () =>
-          HttpResponse.json({ ...FIXTURE_TOKEN_USAGES, contents: [withoutType] }),
-        ),
+        http.get(listPath, () => {
+          listRequests += 1;
+          return HttpResponse.json({ ...FIXTURE_TOKEN_USAGES, contents: [withoutType] });
+        }),
       );
       renderApp('/admin/tenant');
 
-      await screen.findByText('TENANT.PLAN_INFO');
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // 応答が返ったことを待ってから、描画されていないことを確かめる（待たないと、取得前でも通ってしまう）
+      await waitFor(() => expect(listRequests).toBeGreaterThan(0));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
       expect(screen.queryAllByTestId('tenant-usage-row')).toHaveLength(0);
       expect(screen.queryByText('u1')).not.toBeInTheDocument();
     });
@@ -222,9 +240,11 @@ describe('テナント管理', () => {
     });
 
     test('途中のページの取得に失敗したら、一部だけの選択肢を出さないこと', async () => {
+      const requestedPages: number[] = [];
       server.use(
         http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), ({ request }) => {
           const page = Number(new URL(request.url).searchParams.get('page'));
+          requestedPages.push(page);
           if (page === 1) return HttpResponse.json({ message: 'ng' }, { status: 500 });
           return HttpResponse.json({
             content: [
@@ -239,8 +259,12 @@ describe('テナント管理', () => {
       );
       const user = await renderUsage();
 
+      // 2 ページ目の失敗まで取ったことを待ってから、選択肢を確かめる（待たないと、1 ページ目の取得前でも通ってしまう）
+      await waitFor(() => expect(requestedPages).toEqual([0, 1]));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
       await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
-      await new Promise((resolve) => setTimeout(resolve, 300));
       expect(screen.queryByRole('option', { name: '安藤' })).not.toBeInTheDocument();
     });
 

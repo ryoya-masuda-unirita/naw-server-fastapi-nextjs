@@ -18,12 +18,12 @@ import { normalizeAdminUsersListBody } from '@/components/features/admin/users/a
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { formatApiDateTimeUtc } from '@/lib/utils/api-datetime';
-import {
-  getBillingPeriodEndFromResetAt,
-  type CreditUsageResponse,
-} from '@/types/credit-usage.type';
+import { getBillingPeriodEndFromResetAt, type CreditUsageResponse } from '@/types/credit-usage.type';
 import type { Endpoint, EndpointCreatePayload, TenantInfo } from '@/types/admin/tenant.types';
-import type { TokenUsageListResponse, TokenUsageSummaryResponse } from '@/types/token-usage.type';
+import type {
+  TokenUsageListResponse,
+  TokenUsageSummaryResponse,
+} from '@/types/token-usage.type';
 import type { UserApiItem } from '@/types/admin/user.types';
 
 // 移植元 tenant/services/tenant-api.service.ts。クエリは hooks、更新は「移植元と同じ流れ・同じトーストの関数」を返す hook にする
@@ -84,13 +84,7 @@ export interface TokenUsageListOptions {
 }
 
 /** 請求期間内の利用履歴（移植元 tokenUsageListQuery）。`to` は取得のたびの現在時刻 */
-export function useTokenUsageList({
-  from,
-  sortField,
-  sortOrder,
-  page,
-  userId,
-}: TokenUsageListOptions) {
+export function useTokenUsageList({ from, sortField, sortOrder, page, userId }: TokenUsageListOptions) {
   return useQuery<TokenUsageListResponse>({
     queryKey: ['admin', 'token-usages', 'list', from, sortField, sortOrder, page, userId],
     enabled: !!from,
@@ -155,9 +149,7 @@ export function useEndpoints(tenantId: string | undefined) {
     enabled: !!tenantId,
     refetchOnWindowFocus: false,
     queryFn: async () =>
-      mapEndpointList(
-        await apiClient.get<unknown>(API_PATHS.ADMIN.TENANTS.ENDPOINTS(tenantId ?? '')),
-      ),
+      mapEndpointList(await apiClient.get<unknown>(API_PATHS.ADMIN.TENANTS.ENDPOINTS(tenantId ?? ''))),
   });
 }
 
@@ -204,13 +196,7 @@ export function useUpdateEndpoint() {
   const queryClient = useQueryClient();
   const { data: tenant } = useTenantInfo();
   const mutation = useMutation({
-    mutationFn: async ({
-      endpointId,
-      payload,
-    }: {
-      endpointId: string;
-      payload: EndpointCreatePayload;
-    }) => {
+    mutationFn: async ({ endpointId, payload }: { endpointId: string; payload: EndpointCreatePayload }) => {
       const body = await apiClient.patch<unknown>(
         API_PATHS.ADMIN.TENANTS.ENDPOINT(tenant?.tenantId ?? '', endpointId),
         payload,
@@ -220,10 +206,7 @@ export function useUpdateEndpoint() {
       await queryClient.invalidateQueries({ queryKey: ENDPOINTS_KEY });
     },
   });
-  const updateEndpoint = async (
-    endpointId: string,
-    payload: EndpointCreatePayload,
-  ): Promise<void> => {
+  const updateEndpoint = async (endpointId: string, payload: EndpointCreatePayload): Promise<void> => {
     if (!tenant?.tenantId) return;
     const toast = useToastStore.getState();
     if (!isManageableEndpointType(payload.type)) {

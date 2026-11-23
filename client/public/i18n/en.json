@@ -1289,6 +1289,7 @@
     "TODAY_USAGE": "Today's Usage",
     "MONTHLY_HISTORY": "Monthly Usage History",
     "FILTER": "Filter",
+    "FILTER_USER_SUPPORT": "Search by user name",
     "ALL_USERS": "All Users",
     "DISPLAY_COUNT": "Display Count",
     "API_INFO_TITLE": "About API settings",

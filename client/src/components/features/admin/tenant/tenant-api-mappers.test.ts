@@ -83,9 +83,7 @@ function usageList(item: Record<string, unknown>) {
 
 describe('mapTokenUsageList', () => {
   test('snake_case の user_id を userId として読むこと', () => {
-    const result = mapTokenUsageList(
-      usageList({ ...USAGE_ITEM, userId: undefined, user_id: 'user-uuid' }),
-    );
+    const result = mapTokenUsageList(usageList({ ...USAGE_ITEM, userId: undefined, user_id: 'user-uuid' }));
 
     expect(result.contents[0].userId).toBe('user-uuid');
   });
@@ -134,9 +132,7 @@ describe('mapTokenUsageList', () => {
 
 describe('mapEndpointList', () => {
   test('contents の応答を配列にすること', () => {
-    expect(
-      mapEndpointList({ contents: [FIXTURE_ENDPOINT], totalCount: 1, hasNext: false }),
-    ).toHaveLength(1);
+    expect(mapEndpointList({ contents: [FIXTURE_ENDPOINT], totalCount: 1, hasNext: false })).toHaveLength(1);
   });
 
   test('配列の応答をそのまま返すこと', () => {
