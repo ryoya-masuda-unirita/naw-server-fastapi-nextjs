@@ -123,17 +123,6 @@ export class TrainingDataPage {
   }
 
   /**
-   * 行の「…」メニューの項目を押す。
-   *
-   * @param name 表示名
-   * @param testid 項目の data-testid
-   */
-  async clickRowMenu(name: string, testid: string): Promise<void> {
-    await this.row(name).first().getByTestId('training-data-file-menu-button').click();
-    await this.page.getByTestId(testid).click();
-  }
-
-  /**
    * フォルダの詳細ヘッダーのメニューを開いて項目を押す。
    *
    * @param item 項目名
