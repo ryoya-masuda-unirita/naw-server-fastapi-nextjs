@@ -264,7 +264,7 @@ describe('TrainingDataDetailPage', () => {
     });
   });
 
-  describe('検索と並べ替え', () => {
+  describe('検索と絞り込み', () => {
     test('検索語が表示名とファイル名の条件で送られること', async () => {
       const log = mockApis();
       await renderPage();
