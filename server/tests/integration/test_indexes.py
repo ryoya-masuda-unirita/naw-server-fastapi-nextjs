@@ -9,7 +9,7 @@ from app.core.file_storage import FileStorage, LocalFileStorage, get_file_storag
 from app.core.security import create_access_token
 from app.main import app
 from app.models.assistant import Assistant, AssistantType, GroupAssistant
-from app.models.file import File
+from app.models.file import File, FileStatus
 from app.models.group import Group, GroupUser
 from app.models.index import Index, IndexEndpoint, IndexGroup, IndexType
 from app.models.message import Message, MessageFeedback, MessageRating
@@ -449,6 +449,114 @@ def group_admin_headers(group_admin_user: User, tenant: Tenant) -> dict[str, str
 def member_headers(member_user: User, tenant: Tenant) -> dict[str, str]:
     """一般メンバーのリクエスト用ヘッダーを返す。"""
     return _headers(member_user.login_id, tenant.id)
+
+
+class RecordingFileStorage(LocalFileStorage):
+    """削除の呼び出しを記録し、指定した URL の削除だけ失敗させるテスト用ストレージ。"""
+
+    def __init__(self, root: Path, fail_urls: set[str] | None = None) -> None:
+        """記録用のリストと、失敗させる URL を初期化する。
+
+        Parameters
+        ----------
+        root : Path
+            ファイルの保存先ディレクトリ。
+        fail_urls : set[str] | None, optional
+            `delete` で例外を送出させる `storage_url`。
+        """
+        super().__init__(root=root)
+        self.deleted_urls: list[str] = []
+        self.fail_urls: set[str] = fail_urls or set()
+
+    async def delete(self, storage_url: str) -> None:
+        """削除を記録してから、実際に削除する。失敗対象の URL なら例外を送出する。
+
+        Parameters
+        ----------
+        storage_url : str
+            削除対象の `storage_url`。
+
+        Raises
+        ------
+        RuntimeError
+            `fail_urls` に含まれる URL を削除しようとしたとき。
+        """
+        self.deleted_urls.append(storage_url)
+        if storage_url in self.fail_urls:
+            raise RuntimeError("storage unavailable")
+        await super().delete(storage_url)
+
+
+@pytest.fixture
+def recording_storage(index_storage_root: Path) -> Iterator[RecordingFileStorage]:
+    """削除を記録するストレージに差し替える（実ストレージへは接続しない）。"""
+    storage = RecordingFileStorage(root=index_storage_root)
+    app.dependency_overrides[get_file_storage] = lambda: storage
+    yield storage
+    del app.dependency_overrides[get_file_storage]
+
+
+async def _add_file(
+    session: AsyncSession,
+    storage: RecordingFileStorage,
+    tenant: Tenant,
+    user: User,
+    index: Index,
+    name: str,
+    status: FileStatus = FileStatus.ENABLE,
+) -> File:
+    """ストレージに実体を置き、対応する学習データの行を作る。
+
+    Parameters
+    ----------
+    session : AsyncSession
+        テスト用の DB セッション。
+    storage : RecordingFileStorage
+        実体を置くストレージ。
+    tenant : Tenant
+        所属テナント。
+    user : User
+        登録者。
+    index : Index
+        所属するフォルダ。
+    name : str
+        ファイル名。
+    status : FileStatus, optional
+        学習データの状態。
+
+    Returns
+    -------
+    File
+        保存した学習データ。
+    """
+    file = File(
+        tenant_id=tenant.id,
+        name=name,
+        status=status,
+        user_id=user.id,
+        index_id=index.id,
+    )
+    file.storage_url = await storage.upload(tenant.id, file.id, name, b"content")
+    session.add(file)
+    await session.commit()
+    return file
+
+
+def _stored_path(file: File) -> Path:
+    """`storage_url`（`file://` スキーム）から、実体のパスを返す。
+
+    Parameters
+    ----------
+    file : File
+        学習データ。
+
+    Returns
+    -------
+    Path
+        実体のパス。
+    """
+    assert file.storage_url is not None
+    return Path(file.storage_url.removeprefix("file://"))
 
 
 @pytest.fixture
@@ -1029,6 +1137,201 @@ class TestIndexRouter:
                 )
 
             assert response.status_code == 204
+
+        async def test_delete_index_removes_stored_files_and_rows(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            saas_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """フォルダを削除すると、中の学習データのストレージの実体と行がすべて消えること"""
+            files = [
+                await _add_file(
+                    session, recording_storage, tenant, admin_user, saas_index, name
+                )
+                for name in ("a.txt", "b.txt")
+            ]
+            paths = [_stored_path(f) for f in files]
+            assert all(path.exists() for path in paths)
+
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{saas_index.id}", headers=admin_headers
+                )
+
+            assert response.status_code == 204
+            assert not any(path.exists() for path in paths)
+            session.expire_all()
+            rows = (await session.execute(select(File))).scalars().all()
+            assert rows == []
+            assert await session.get(Index, saas_index.id) is None
+
+        async def test_delete_index_skips_logically_deleted_files(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            saas_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """論理削除済み（DELETED）の学習データは、ストレージに問い合わせず、行はフォルダと一緒に消えること"""
+            enabled = await _add_file(
+                session, recording_storage, tenant, admin_user, saas_index, "ok.txt"
+            )
+            deleted = await _add_file(
+                session,
+                recording_storage,
+                tenant,
+                admin_user,
+                saas_index,
+                "gone.txt",
+                FileStatus.DELETED,
+            )
+            assert enabled.storage_url is not None
+            assert deleted.storage_url is not None
+            # 論理削除のときにストレージの実体は消し済みで、もう一度消しに行くと失敗する想定
+            recording_storage.fail_urls.add(deleted.storage_url)
+
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{saas_index.id}", headers=admin_headers
+                )
+
+            assert response.status_code == 204
+            assert recording_storage.deleted_urls == [enabled.storage_url]
+            session.expire_all()
+            assert (await session.execute(select(File))).scalars().all() == []
+
+        async def test_delete_index_keeps_index_when_storage_fails(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            saas_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """途中でストレージの削除に失敗したら、フォルダは残り、消せた分だけが確定していること"""
+            files = [
+                await _add_file(
+                    session, recording_storage, tenant, admin_user, saas_index, name
+                )
+                for name in ("a.txt", "b.txt", "c.txt")
+            ]
+            # expire_all のあとに属性を読めないため、先に ID とパスを取り出しておく
+            paths = {f.id: _stored_path(f) for f in files}
+            index_id = saas_index.id
+            failing = files[1]
+            assert failing.storage_url is not None
+            failing_id = failing.id
+            recording_storage.fail_urls.add(failing.storage_url)
+
+            async with client as c:
+                with pytest.raises(RuntimeError, match="storage unavailable"):
+                    await c.delete(
+                        f"/api/admin/indexes/{index_id}", headers=admin_headers
+                    )
+
+            session.expire_all()
+            assert await session.get(Index, index_id) is not None
+            remaining_ids = {
+                f.id for f in (await session.execute(select(File))).scalars().all()
+            }
+            # 失敗した 1 件は、行も実体も残る
+            assert failing_id in remaining_ids
+            # 行が残っているものは実体も残り、行が消えたものは実体も消えている（ずれていない）
+            for file_id, path in paths.items():
+                assert path.exists() == (file_id in remaining_ids)
+
+        async def test_delete_index_retry_after_failure_removes_rest(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            saas_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """失敗のあとにもう一度削除すると、残りが消えて、フォルダも消えること"""
+            file = await _add_file(
+                session, recording_storage, tenant, admin_user, saas_index, "a.txt"
+            )
+            assert file.storage_url is not None
+            recording_storage.fail_urls.add(file.storage_url)
+            async with client as c:
+                with pytest.raises(RuntimeError):
+                    await c.delete(
+                        f"/api/admin/indexes/{saas_index.id}", headers=admin_headers
+                    )
+                recording_storage.fail_urls.clear()
+                response = await c.delete(
+                    f"/api/admin/indexes/{saas_index.id}", headers=admin_headers
+                )
+
+            assert response.status_code == 204
+            assert not _stored_path(file).exists()
+            session.expire_all()
+            assert await session.get(Index, saas_index.id) is None
+
+        async def test_delete_local_index_does_not_touch_storage(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            local_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """LOCAL 型のフォルダは、ストレージに触れず、フォルダの行だけが消えること"""
+            file = await _add_file(
+                session, recording_storage, tenant, admin_user, local_index, "a.txt"
+            )
+
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{local_index.id}", headers=admin_headers
+                )
+
+            assert response.status_code == 204
+            assert recording_storage.deleted_urls == []
+            assert _stored_path(file).exists()
+            session.expire_all()
+            assert await session.get(Index, local_index.id) is None
+
+        async def test_delete_by_group_admin_out_of_scope_keeps_files(
+            self,
+            client: AsyncClient,
+            session: AsyncSession,
+            group_admin_headers: dict[str, str],
+            tenant: Tenant,
+            admin_user: User,
+            saas_index: Index,
+            group_linked_index: Index,
+            recording_storage: RecordingFileStorage,
+        ) -> None:
+            """グループ管理者が管理範囲外のフォルダを削除しようとしても、ストレージの実体は消えないこと"""
+            file = await _add_file(
+                session, recording_storage, tenant, admin_user, saas_index, "a.txt"
+            )
+
+            async with client as c:
+                response = await c.delete(
+                    f"/api/admin/indexes/{saas_index.id}",
+                    headers=group_admin_headers,
+                )
+
+            assert response.status_code == 404
+            assert recording_storage.deleted_urls == []
+            assert _stored_path(file).exists()
 
         async def test_delete_by_group_admin_within_scope_succeeds(
             self,
