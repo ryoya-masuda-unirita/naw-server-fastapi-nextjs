@@ -42,6 +42,8 @@ export const FIXTURE_TOKEN_USAGES = {
     {
       id: 'tu1',
       userId: 'u1',
+      userName: '山田太郎',
+      userType: 'ACTIVE',
       messageId: 'm1',
       model: 'gpt',
       inputTokens: 1,

@@ -5,7 +5,7 @@ import { CircularLoading } from '@/components/shared/circular-loading';
 import { FormSortInput, type SortOption } from '@/components/shared/form-sort-input';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
 import { Pagination } from '@/components/shared/pagination';
-import { Select } from '@/components/shared/select';
+import { SelectWithSearch } from '@/components/shared/select-with-search';
 import type { SelectOption } from '@/components/shared/types';
 import {
   useBillingPeriod,
@@ -19,7 +19,8 @@ import { useTenantUsageStore } from '@/store/tenant-store';
 import { formatNumber, formatUsageDateTime } from './tenant-format';
 import { SHOW_USAGE_LIMIT_PANELS, USAGE_HISTORY_PAGE_SIZE } from './tenant.constants';
 import { UsageLimitDialog, type UsageLimitMode } from './usage-limit-dialog';
-import { buildUserDisplayNameMap, normalizeUserApiItem, userDisplayName } from './user-display-name';
+import { usageUserLabel } from './usage-user-label';
+import { normalizeUserApiItem, userDisplayName } from './user-display-name';
 
 /** ドーナツの円周（半径 88） */
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * 88;
@@ -46,12 +47,18 @@ export function UsageTab() {
   });
   const { data: usersData } = useUsageFilterUsers();
   const [limitDialog, setLimitDialog] = useState<UsageLimitMode | null>(null);
+  // 「全てのユーザー」（値 ''）を選んだとき、親の値が null のまま変わらないと、セレクトの内部の値が '' で残り、
+  // 入力欄にそのラベルが残って、次の検索語がその後ろに付く。作り直して、内部の値を親の値に合わせる
+  const [userFilterResetKey, setUserFilterResetKey] = useState(0);
+  const handleUserFilterChange = (value: string | null) => {
+    setUserFilter(value ?? '');
+    if (!value) setUserFilterResetKey((key) => key + 1);
+  };
 
   // 移植元の条件は画面を開き直すと初期値から始まる。残すと絞り込み欄が空に見えたまま前回の条件が効く
   useEffect(() => reset, [reset]);
 
   const allUsers = useMemo(() => (usersData ?? []).map(normalizeUserApiItem), [usersData]);
-  const userDisplayNameById = useMemo(() => buildUserDisplayNameMap(allUsers), [allUsers]);
   const userOptions = useMemo<SelectOption[]>(
     () => [
       { label: t('COMMON.PLACEHOLDERS.ALL_USERS'), value: '' },
@@ -64,7 +71,8 @@ export function UsageTab() {
     id: item.id,
     datetime: item.createdAt,
     amount: item.totalCredits,
-    user: item.userId ? (userDisplayNameById.get(item.userId) ?? item.userId) : '-',
+    // 利用者の種類で決める。削除されたユーザーや SYSTEM ユーザーも、ID や `-` を出さない
+    user: usageUserLabel(item, (key) => t(key)),
   }));
   const usageHistoryTotal = usageList?.totalCount ?? 0;
   const totalPagesUsage = usageHistoryTotal > 0 ? Math.ceil(usageHistoryTotal / USAGE_HISTORY_PAGE_SIZE) : 1;
@@ -200,12 +208,17 @@ export function UsageTab() {
             <div className="library-filter-group">
               <span className="library-filter-label">{t('TENANT.FILTER')}</span>
               <div className="library-filter-selects">
-                <Select
+                <SelectWithSearch
+                  key={userFilterResetKey}
                   className="md:w-40 w-full"
                   size="small"
                   options={userOptions}
+                  // 「全てのユーザー」は未選択にする。選択済みにすると、入力欄にそのラベルが残り、検索の文字が後ろに付く
+                  value={userFilter || null}
                   placeholder={t('COMMON.PLACEHOLDERS.ALL_USERS')}
-                  onSelectionChange={(value) => setUserFilter(value ?? '')}
+                  supportText={t('TENANT.FILTER_USER_SUPPORT')}
+                  testidPrefix="tenant-usage-user-filter"
+                  onValueChange={handleUserFilterChange}
                 />
               </div>
             </div>

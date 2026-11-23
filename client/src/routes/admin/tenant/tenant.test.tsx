@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/setup';
@@ -125,11 +125,147 @@ describe('テナント管理', () => {
       const requested = recordListRequests();
       const user = await renderUsage();
 
-      await user.click(screen.getByText('COMMON.PLACEHOLDERS.ALL_USERS'));
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
       await user.click(await screen.findByRole('option', { name: '山田太郎' }));
 
       await waitFor(() => expect(lastRequest(requested).get('userId')).toBe('u1'));
       expect(lastRequest(requested).get('page')).toBe('0');
+    });
+
+    test('利用者の絞り込みは入力で検索でき、全てのユーザーに戻せること', async () => {
+      const requested = recordListRequests();
+      const user = await renderUsage();
+
+      // trigger は枠で、入力欄はその中にある
+      const trigger = screen.getByTestId('tenant-usage-user-filter-trigger');
+      await user.type(within(trigger).getByRole('textbox'), '鈴木');
+      expect(await screen.findByRole('option', { name: '鈴木花子' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: '山田太郎' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('option', { name: '鈴木花子' }));
+      await waitFor(() => expect(lastRequest(requested).get('userId')).toBe('u2'));
+
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
+      await user.click(await screen.findByRole('option', { name: 'COMMON.PLACEHOLDERS.ALL_USERS' }));
+      await waitFor(() => expect(lastRequest(requested).get('userId')).toBeNull());
+    });
+
+    test('未選択のまま全てのユーザーを選んでも、入力欄にラベルが残らず検索できること', async () => {
+      const user = await renderUsage();
+
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
+      await user.click(await screen.findByRole('option', { name: 'COMMON.PLACEHOLDERS.ALL_USERS' }));
+      // ラベルが残ると、次の検索語がその後ろに付いて 0 件になる。選択でセレクトが作り直されるので、要素は取り直す
+      const trigger = screen.getByTestId('tenant-usage-user-filter-trigger');
+      expect(within(trigger).getByRole('textbox')).toHaveValue('');
+      await user.type(within(trigger).getByRole('textbox'), '山田');
+
+      expect(await screen.findByRole('option', { name: '山田太郎' })).toBeInTheDocument();
+    });
+
+    test('利用者名は API の種類で出し分け、ID や - を出さないこと', async () => {
+      const base = FIXTURE_TOKEN_USAGES.contents[0];
+      server.use(
+        http.get(listPath, () =>
+          HttpResponse.json({
+            ...FIXTURE_TOKEN_USAGES,
+            contents: [
+              base,
+              { ...base, id: 'tu2', userId: 'sys', userName: 'system', userType: 'SYSTEM' },
+              { ...base, id: 'tu3', userId: 'gone', userName: null, userType: 'DELETED' },
+              { ...base, id: 'tu4', userId: null, userName: null, userType: 'DELETED' },
+            ],
+            totalCount: 4,
+          }),
+        ),
+      );
+      await renderUsage();
+
+      const rows = screen.getAllByTestId('tenant-usage-row');
+      expect(within(rows[0]).getByText('山田太郎')).toBeInTheDocument();
+      expect(within(rows[1]).getByText('TENANT.HISTORY_USER_SYSTEM')).toBeInTheDocument();
+      expect(within(rows[2]).getByText('TENANT.HISTORY_USER_DELETED')).toBeInTheDocument();
+      expect(within(rows[3]).getByText('TENANT.HISTORY_USER_DELETED')).toBeInTheDocument();
+      expect(screen.queryByText('gone')).not.toBeInTheDocument();
+      expect(screen.queryByText('system')).not.toBeInTheDocument();
+    });
+
+    test('利用者の種類が無い応答は、ID や - を出さず取得の失敗にすること', async () => {
+      // undefined の項目は JSON にならないので、`userType` が無い応答になる
+      const withoutType = { ...FIXTURE_TOKEN_USAGES.contents[0], userType: undefined };
+      let listRequests = 0;
+      server.use(
+        http.get(listPath, () => {
+          listRequests += 1;
+          return HttpResponse.json({ ...FIXTURE_TOKEN_USAGES, contents: [withoutType] });
+        }),
+      );
+      renderApp('/admin/tenant');
+
+      // 応答が返ったことを待ってから、描画されていないことを確かめる（待たないと、取得前でも通ってしまう）
+      await waitFor(() => expect(listRequests).toBeGreaterThan(0));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(screen.queryAllByTestId('tenant-usage-row')).toHaveLength(0);
+      expect(screen.queryByText('u1')).not.toBeInTheDocument();
+    });
+
+    test('利用者の選択肢は、全ページを名前順の 1000 件ずつで取ること', async () => {
+      const pages: URLSearchParams[] = [];
+      const row = (id: string, name: string) => ({
+        id,
+        loginId: id,
+        name,
+        role: 'USER',
+        loginKey: null,
+        isRequiredPasswordReset: false,
+        totalCredits: 0,
+      });
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          pages.push(params);
+          const page = Number(params.get('page'));
+          const content = page === 0 ? [row('a1', '安藤'), row('a2', '伊藤')] : [row('a3', '加藤')];
+          return HttpResponse.json({ content, totalElements: 3, totalPages: 2, number: page, size: 2 });
+        }),
+      );
+      const user = await renderUsage();
+
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
+      expect(await screen.findByRole('option', { name: '加藤' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: '安藤' })).toBeInTheDocument();
+      expect(pages.map((p) => p.get('page'))).toEqual(['0', '1']);
+      expect(pages.every((p) => p.get('size') === '1000' && p.get('sort') === 'name,asc')).toBe(true);
+    });
+
+    test('途中のページの取得に失敗したら、一部だけの選択肢を出さないこと', async () => {
+      const requestedPages: number[] = [];
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), ({ request }) => {
+          const page = Number(new URL(request.url).searchParams.get('page'));
+          requestedPages.push(page);
+          if (page === 1) return HttpResponse.json({ message: 'ng' }, { status: 500 });
+          return HttpResponse.json({
+            content: [
+              { id: 'a1', loginId: 'a1', name: '安藤', role: 'USER', loginKey: null, isRequiredPasswordReset: false, totalCredits: 0 },
+            ],
+            totalElements: 2,
+            totalPages: 2,
+            number: 0,
+            size: 1,
+          });
+        }),
+      );
+      const user = await renderUsage();
+
+      // 2 ページ目の失敗まで取ったことを待ってから、選択肢を確かめる（待たないと、1 ページ目の取得前でも通ってしまう）
+      await waitFor(() => expect(requestedPages).toEqual([0, 1]));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      await user.click(screen.getByTestId('tenant-usage-user-filter-trigger'));
+      expect(screen.queryByRole('option', { name: '安藤' })).not.toBeInTheDocument();
     });
 
     test('並べ替えを選ぶと orderBy・reverse に反映すること', async () => {

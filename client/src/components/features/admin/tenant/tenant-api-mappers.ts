@@ -4,6 +4,7 @@ import type {
   TokenUsageListItem,
   TokenUsageListResponse,
   TokenUsageSummaryResponse,
+  TokenUsageUserType,
 } from '@/types/token-usage.type';
 
 // 移植元 tenant/services/tenant-api.mappers.ts。backend の応答の形の揺れ（`{ success, data }` の包み・配列・`contents`）を吸収する
@@ -35,11 +36,38 @@ export function mapTokenUsageSummary(body: unknown): TokenUsageSummaryResponse {
   return unwrapApiData<TokenUsageSummaryResponse>(body);
 }
 
+const TOKEN_USAGE_USER_TYPES: readonly TokenUsageUserType[] = ['ACTIVE', 'SYSTEM', 'DELETED'];
+
+/**
+ * 利用履歴の利用者の種類を読む。種類が分からないまま利用者の ID や `-` を出さないよう、
+ * 無い・不明な値、通常のユーザーで名前が無い応答は失敗にする（移植元 `mapTokenUsageListItem` と同じ）。
+ */
+function readUsageUser(
+  item: Record<string, unknown>,
+  id: string,
+): { userName: string | null; userType: TokenUsageUserType } {
+  const typeRaw = item['userType'];
+  if (typeRaw == null) {
+    throw new Error(`Missing token usage userType: ${id}`);
+  }
+  const userType = TOKEN_USAGE_USER_TYPES.find((type) => type === typeRaw);
+  if (!userType) {
+    throw new Error(`Invalid token usage userType: ${String(typeRaw)}`);
+  }
+  const userName = item['userName'] != null ? String(item['userName']) : null;
+  if (userType === 'ACTIVE' && !userName) {
+    throw new Error(`Missing token usage userName: ${id}`);
+  }
+  return { userName, userType };
+}
+
 function mapTokenUsageListItem(item: Record<string, unknown>): TokenUsageListItem {
   const userIdRaw = item['userId'] ?? item['user_id'];
+  const id = String(item['id']);
   return {
-    id: String(item['id']),
+    id,
     userId: userIdRaw != null ? String(userIdRaw) : null,
+    ...readUsageUser(item, id),
     messageId: item['messageId'] != null ? String(item['messageId']) : null,
     model: item['model'] != null ? String(item['model']) : null,
     inputTokens: Number(item['inputTokens'] ?? 0),

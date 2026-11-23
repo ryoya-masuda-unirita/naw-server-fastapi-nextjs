@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useToastStore } from '@/components/shared/toast-store';
 import {
   isManageableEndpointType,
-  USAGE_FILTER_USER_LIMIT,
+  USAGE_FILTER_USER_PAGE_SIZE,
   USAGE_HISTORY_PAGE_SIZE,
 } from '@/components/features/admin/tenant/tenant.constants';
 import {
@@ -106,30 +106,38 @@ export function useTokenUsageList({ from, sortField, sortOrder, page, userId }: 
   });
 }
 
-/** 利用者の絞り込みに使うユーザー（移植元 usage-tab の usersQuery。名前の昇順で 500 件まで） */
+/**
+ * 利用者の絞り込みに使うユーザー（移植元 usage-tab の usersQuery・`fetchAllUsers`）。
+ * テナントの全ユーザーを、名前の昇順で 1 ページ 1000 件ずつ、最後のページまで順に取る。
+ * 途中のページで失敗したときは、一部のユーザーだけの選択肢を出さないよう、そのまま失敗にする。
+ * 同名のユーザーがページをまたいでも重複・欠落しないのは、backend が並び替えの最終キーに ID を加えるため。
+ */
 export function useUsageFilterUsers() {
   return useQuery<UserApiItem[]>({
-    queryKey: ['admin', 'users', 'tenant-usage-filter'],
+    queryKey: ['admin', 'users', 'tenant-usage-filter', 'all'],
     staleTime: USER_FILTER_STALE_TIME_MS,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const filter = {
-        pageSize: USAGE_FILTER_USER_LIMIT,
-        pageIndex: 1,
-        sortField: 'name',
-        sortOrder: 'asc',
-      } as const;
-      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
-        params: {
-          page: 0,
-          size: filter.pageSize,
-          searchText: '',
-          role: '',
-          sort: `${filter.sortField},${filter.sortOrder}`,
-          includeUsage: true,
-        },
-      });
-      return normalizeAdminUsersListBody(raw, filter).data;
+      const users: UserApiItem[] = [];
+      for (let page = 0; ; page += 1) {
+        const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
+          params: {
+            page,
+            size: USAGE_FILTER_USER_PAGE_SIZE,
+            searchText: '',
+            role: '',
+            sort: 'name,asc',
+            includeUsage: false,
+          },
+        });
+        const result = normalizeAdminUsersListBody(raw, {
+          pageSize: USAGE_FILTER_USER_PAGE_SIZE,
+          pageIndex: page + 1,
+        });
+        users.push(...result.data);
+        // 空のページでも止める（総数がずれていても終わらない取得にしない）
+        if (result.data.length === 0 || users.length >= result.total) return users;
+      }
     },
   });
 }
