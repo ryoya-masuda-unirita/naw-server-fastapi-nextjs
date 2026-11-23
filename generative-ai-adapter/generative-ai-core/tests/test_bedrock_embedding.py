@@ -175,6 +175,18 @@ class TestParseVector:
         with pytest.raises(TypeError, match="no result"):
             parse_vector(body)
 
+    @pytest.mark.parametrize("value", ["x", None, [1.0]])
+    def test_non_numeric_value_is_type_error(self, value: object) -> None:
+        """数値でない値を含むと、設定の誤りではなく TypeError（応答の不備）になること"""
+        with pytest.raises(TypeError, match="malformed"):
+            parse_vector({"embedding": [value] + _vector()[1:]})
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf")])
+    def test_non_finite_value_is_type_error(self, value: float) -> None:
+        """NaN・無限大を含むと、学習用・質問用の共通の入口で TypeError になること"""
+        with pytest.raises(TypeError, match="non-finite"):
+            parse_vector({"embedding": [value] + _vector()[1:]})
+
 
 class TestLearning:
     """学習用（文書のチャンクのベクトル化。埋め込みのランタイム経由）。"""
@@ -269,6 +281,28 @@ class TestEmbedVector:
 
         with pytest.raises(ProviderHttpError, match="HTTP 429 - slow"):
             embed_vector(_configuration(), TEXT)
+
+    def test_non_json_response_is_type_error(self, router: respx.MockRouter) -> None:
+        """200 でも JSON でない応答（プロキシの HTML など）は、TypeError になること"""
+        router.post(INVOKE_URL).mock(
+            return_value=httpx.Response(200, text="<html>proxy</html>")
+        )
+
+        with pytest.raises(TypeError, match="malformed"):
+            embed_vector(_configuration(), TEXT)
+
+    def test_non_json_response_on_query_is_malformed_response(
+        self, router: respx.MockRouter
+    ) -> None:
+        """質問用でも、JSON でない応答が、元の JSON エラーの文言ではなく、応答の不備として伝わること"""
+        router.post(INVOKE_URL).mock(
+            return_value=httpx.Response(200, text="<html>proxy</html>")
+        )
+
+        with pytest.raises(
+            QueryEmbeddingError, match="embedding response is malformed"
+        ):
+            embed_text(_configuration(), TEXT)
 
     def test_non_object_response_is_type_error(self, router: respx.MockRouter) -> None:
         """JSON のオブジェクトでない応答は、embedding なしとして TypeError になること"""

@@ -25,6 +25,7 @@ Echo と同じ「Python 版だけのプロバイダ」として作った。
 """
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import quote
@@ -113,14 +114,22 @@ def parse_vector(body: Mapping[str, Any]) -> list[float]:
     Raises
     ------
     TypeError
-        応答に埋め込みが含まれないとき。
+        応答に埋め込みが含まれない・数値でない値や有限でない値（NaN・無限大）が
+        含まれるとき。
     DimensionMismatchError
         次元数がベクトル DB のテーブルの次元数と違うとき。
     """
     embedding = body.get("embedding")
     if not isinstance(embedding, list) or not embedding:
         raise TypeError("embedding response has no result")
-    vector = [float(value) for value in embedding]
+    try:
+        vector = [float(value) for value in embedding]
+    except (TypeError, ValueError):
+        # Bedrock 側の不具合なので、設定の誤り（ValueError）ではなく TypeError にそろえる。
+        # 失敗の要約が元の例外の文言に置き換わらないよう、例外の連鎖は切る
+        raise TypeError("embedding response is malformed") from None
+    if not all(math.isfinite(value) for value in vector):
+        raise TypeError("embedding vector contains non-finite value")
     if len(vector) != EMBEDDING_DIMENSIONS:
         raise DimensionMismatchError(
             "DIMENSION_MISMATCH: embedding vector dimensions do not match "
@@ -149,7 +158,7 @@ def embed_vector(configuration: RuntimeProviderConfiguration, text: str) -> list
     ProviderHttpError
         プロバイダが HTTP エラーを返したとき。
     TypeError
-        応答に埋め込みが含まれないとき。
+        応答が JSON でない・埋め込みが含まれない・値が不正なとき。
     DimensionMismatchError
         次元数がベクトル DB のテーブルの次元数と違うとき。
     """
@@ -164,7 +173,11 @@ def embed_vector(configuration: RuntimeProviderConfiguration, text: str) -> list
     logger.info("provider embedding response: status=%d", response.status_code)
     if response.is_error:
         raise ProviderHttpError(f"HTTP {response.status_code} - {response.text}")
-    parsed: Any = response.json()
+    try:
+        parsed: Any = response.json()
+    except ValueError:
+        # 200 でも JSON でない（プロキシの HTML など）。設定の誤りではなく応答の不備にする
+        raise TypeError("embedding response is malformed") from None
     return parse_vector(parsed if isinstance(parsed, dict) else {})
 
 
