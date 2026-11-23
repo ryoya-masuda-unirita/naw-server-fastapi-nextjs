@@ -1317,6 +1317,8 @@
     "HISTORY_DATE": "Date",
     "HISTORY_AMOUNT": "Usage",
     "HISTORY_USER": "User",
+    "HISTORY_USER_SYSTEM": "SYSTEM user",
+    "HISTORY_USER_DELETED": "Deleted user",
     "NO_DATA": "No data available",
     "CREATE": "Create",
     "EDIT_API": "Edit API",

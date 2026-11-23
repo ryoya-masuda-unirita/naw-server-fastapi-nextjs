@@ -7,10 +7,19 @@ export interface TokenUsageSummaryResponse {
   totalCredits: number;
 }
 
+/**
+ * 利用履歴の利用者の種類。ACTIVE は通常のユーザー、SYSTEM は SYSTEM ユーザー、DELETED は削除されたユーザー
+ * （利用者の ID が無い行を含む）。
+ */
+export type TokenUsageUserType = 'ACTIVE' | 'SYSTEM' | 'DELETED';
+
 /** Admin token usage list item (`GET /admin/token-usages`). */
 export interface TokenUsageListItem {
   id: string;
   userId: string | null;
+  /** 利用者の名前。`userType` が ACTIVE のときだけ使う（SYSTEM・DELETED は文言を出す） */
+  userName: string | null;
+  userType: TokenUsageUserType;
   messageId: string | null;
   model: string | null;
   inputTokens: number;

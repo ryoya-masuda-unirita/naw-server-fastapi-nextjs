@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useToastStore } from '@/components/shared/toast-store';
 import {
   isManageableEndpointType,
-  USAGE_FILTER_USER_LIMIT,
+  USAGE_FILTER_USER_PAGE_SIZE,
   USAGE_HISTORY_PAGE_SIZE,
 } from '@/components/features/admin/tenant/tenant.constants';
 import {
@@ -18,12 +18,12 @@ import { normalizeAdminUsersListBody } from '@/components/features/admin/users/a
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { formatApiDateTimeUtc } from '@/lib/utils/api-datetime';
-import { getBillingPeriodEndFromResetAt, type CreditUsageResponse } from '@/types/credit-usage.type';
+import {
+  getBillingPeriodEndFromResetAt,
+  type CreditUsageResponse,
+} from '@/types/credit-usage.type';
 import type { Endpoint, EndpointCreatePayload, TenantInfo } from '@/types/admin/tenant.types';
-import type {
-  TokenUsageListResponse,
-  TokenUsageSummaryResponse,
-} from '@/types/token-usage.type';
+import type { TokenUsageListResponse, TokenUsageSummaryResponse } from '@/types/token-usage.type';
 import type { UserApiItem } from '@/types/admin/user.types';
 
 // 移植元 tenant/services/tenant-api.service.ts。クエリは hooks、更新は「移植元と同じ流れ・同じトーストの関数」を返す hook にする
@@ -84,7 +84,13 @@ export interface TokenUsageListOptions {
 }
 
 /** 請求期間内の利用履歴（移植元 tokenUsageListQuery）。`to` は取得のたびの現在時刻 */
-export function useTokenUsageList({ from, sortField, sortOrder, page, userId }: TokenUsageListOptions) {
+export function useTokenUsageList({
+  from,
+  sortField,
+  sortOrder,
+  page,
+  userId,
+}: TokenUsageListOptions) {
   return useQuery<TokenUsageListResponse>({
     queryKey: ['admin', 'token-usages', 'list', from, sortField, sortOrder, page, userId],
     enabled: !!from,
@@ -106,30 +112,38 @@ export function useTokenUsageList({ from, sortField, sortOrder, page, userId }: 
   });
 }
 
-/** 利用者の絞り込みに使うユーザー（移植元 usage-tab の usersQuery。名前の昇順で 500 件まで） */
+/**
+ * 利用者の絞り込みに使うユーザー（移植元 usage-tab の usersQuery・`fetchAllUsers`）。
+ * テナントの全ユーザーを、名前の昇順で 1 ページ 1000 件ずつ、最後のページまで順に取る。
+ * 途中のページで失敗したときは、一部のユーザーだけの選択肢を出さないよう、そのまま失敗にする。
+ * 同名のユーザーがページをまたいでも重複・欠落しないのは、backend が並び替えの最終キーに ID を加えるため。
+ */
 export function useUsageFilterUsers() {
   return useQuery<UserApiItem[]>({
-    queryKey: ['admin', 'users', 'tenant-usage-filter'],
+    queryKey: ['admin', 'users', 'tenant-usage-filter', 'all'],
     staleTime: USER_FILTER_STALE_TIME_MS,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const filter = {
-        pageSize: USAGE_FILTER_USER_LIMIT,
-        pageIndex: 1,
-        sortField: 'name',
-        sortOrder: 'asc',
-      } as const;
-      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
-        params: {
-          page: 0,
-          size: filter.pageSize,
-          searchText: '',
-          role: '',
-          sort: `${filter.sortField},${filter.sortOrder}`,
-          includeUsage: true,
-        },
-      });
-      return normalizeAdminUsersListBody(raw, filter).data;
+      const users: UserApiItem[] = [];
+      for (let page = 0; ; page += 1) {
+        const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
+          params: {
+            page,
+            size: USAGE_FILTER_USER_PAGE_SIZE,
+            searchText: '',
+            role: '',
+            sort: 'name,asc',
+            includeUsage: false,
+          },
+        });
+        const result = normalizeAdminUsersListBody(raw, {
+          pageSize: USAGE_FILTER_USER_PAGE_SIZE,
+          pageIndex: page + 1,
+        });
+        users.push(...result.data);
+        // 空のページでも止める（総数がずれていても終わらない取得にしない）
+        if (result.data.length === 0 || users.length >= result.total) return users;
+      }
     },
   });
 }
@@ -141,7 +155,9 @@ export function useEndpoints(tenantId: string | undefined) {
     enabled: !!tenantId,
     refetchOnWindowFocus: false,
     queryFn: async () =>
-      mapEndpointList(await apiClient.get<unknown>(API_PATHS.ADMIN.TENANTS.ENDPOINTS(tenantId ?? ''))),
+      mapEndpointList(
+        await apiClient.get<unknown>(API_PATHS.ADMIN.TENANTS.ENDPOINTS(tenantId ?? '')),
+      ),
   });
 }
 
@@ -188,7 +204,13 @@ export function useUpdateEndpoint() {
   const queryClient = useQueryClient();
   const { data: tenant } = useTenantInfo();
   const mutation = useMutation({
-    mutationFn: async ({ endpointId, payload }: { endpointId: string; payload: EndpointCreatePayload }) => {
+    mutationFn: async ({
+      endpointId,
+      payload,
+    }: {
+      endpointId: string;
+      payload: EndpointCreatePayload;
+    }) => {
       const body = await apiClient.patch<unknown>(
         API_PATHS.ADMIN.TENANTS.ENDPOINT(tenant?.tenantId ?? '', endpointId),
         payload,
@@ -198,7 +220,10 @@ export function useUpdateEndpoint() {
       await queryClient.invalidateQueries({ queryKey: ENDPOINTS_KEY });
     },
   });
-  const updateEndpoint = async (endpointId: string, payload: EndpointCreatePayload): Promise<void> => {
+  const updateEndpoint = async (
+    endpointId: string,
+    payload: EndpointCreatePayload,
+  ): Promise<void> => {
     if (!tenant?.tenantId) return;
     const toast = useToastStore.getState();
     if (!isManageableEndpointType(payload.type)) {

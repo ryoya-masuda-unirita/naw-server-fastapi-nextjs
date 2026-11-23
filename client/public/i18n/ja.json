@@ -1388,6 +1388,8 @@
     "HISTORY_DATE": "利用日時",
     "HISTORY_AMOUNT": "利用量",
     "HISTORY_USER": "利用者名",
+    "HISTORY_USER_SYSTEM": "SYSTEMユーザー",
+    "HISTORY_USER_DELETED": "削除されたユーザー",
     "NO_DATA": "データがありません",
     "CREATE": "作成",
     "EDIT_API": "APIを編集",
