@@ -9,7 +9,7 @@
 #   PEM_KEY_PATH  bastion接続用のSSH秘密鍵のパス
 #
 # 任意の環境変数:
-#   DB_PASSWORD   RDSのマスターパスワード。未指定なら、Secrets Manager（terraform output の backend_secret_name）から取得する
+#   DB_PASSWORD   RDSのマスターパスワード。未指定（空文字列を含む）なら、Secrets Manager（terraform output の backend_secret_name）から取得する
 #                 （パスワードはTerraformが自動生成するため、通常は指定不要。AWS CLIとjqが必要）
 #
 # オプション:
@@ -72,10 +72,12 @@ if [ -z "${DB_PASSWORD:-}" ]; then
     echo "terraform output の backend_secret_name を取得できません。DB_PASSWORD を環境変数で渡してください" >&2
     exit 1
   fi
-  DB_PASSWORD="$(aws secretsmanager get-secret-value --secret-id "${SECRET_NAME}" \
+  # シークレットのリージョンは、Terraformのリージョン(既定 ap-northeast-1)。手元のAWS設定の既定リージョンに依存しないよう、明示する
+  SECRET_REGION="${AWS_REGION:-ap-northeast-1}"
+  DB_PASSWORD="$(aws secretsmanager get-secret-value --region "${SECRET_REGION}" --secret-id "${SECRET_NAME}" \
     --query SecretString --output text | jq -r '.DB_PASSWORD // empty')" || DB_PASSWORD=""
   if [ -z "${DB_PASSWORD}" ]; then
-    echo "シークレット ${SECRET_NAME} から DB_PASSWORD を取得できません(権限・名前・キーを確認してください)" >&2
+    echo "シークレット ${SECRET_NAME}(リージョン ${SECRET_REGION})から DB_PASSWORD を取得できません(権限・名前・キー・リージョンを確認してください。リージョンは AWS_REGION で変えられます)" >&2
     exit 1
   fi
 fi

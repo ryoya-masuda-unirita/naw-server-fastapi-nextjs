@@ -116,6 +116,10 @@ resource "aws_ecs_service" "backend" {
     assign_public_ip = false
   }
 
+  // タスクの起動時に、実行ロールがSecrets Managerを読む。ポリシーの作成前にサービスができると、最初のタスクが
+  // AccessDeniedで起動に失敗し、ECSの再試行を待つことになる(ポリシーはサービスの属性から参照されないため、明示する)
+  depends_on = [aws_iam_role_policy.ecs_task_execution_secrets]
+
   load_balancer {
     target_group_arn = var.target_group_arn
     container_name   = "backend"
