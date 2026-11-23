@@ -6,6 +6,11 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.bedrock_embedding import (  # bedrock-ext
+    BEDROCK_EMBEDDING_MODEL_ID,
+    BedrockEmbeddingError,
+    BedrockLlmEmbeddingClient,
+)
 from app.core.config import get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.llm_client import AzureLlmEmbeddingClient
@@ -56,6 +61,11 @@ class LlmEmbeddingService:
         """
         await enforce_within_quota(tenant_id, session)
 
+        if req.deployName == BEDROCK_EMBEDDING_MODEL_ID:  # bedrock-ext
+            return await LlmEmbeddingService._create_bedrock_embedding(
+                tenant_id, current_user, req, session
+            )
+
         ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
             AIModelEndpointType.AZURE_OPENAI_EMBEDDING, req.deployName, session
         )
@@ -100,4 +110,80 @@ class LlmEmbeddingService:
         session.add(token_usage)
         await session.commit()
 
+        return LlmEmbeddingResponse(embedding=result.embedding)
+
+    @staticmethod
+    async def _create_bedrock_embedding(
+        tenant_id: str,
+        current_user: User,
+        req: LlmEmbeddingRequest,
+        session: AsyncSession,
+    ) -> LlmEmbeddingResponse:
+        """入力テキストを Bedrock（Titan）でベクトル化する（`bedrock-ext`）。
+
+        Parameters
+        ----------
+        tenant_id : str
+            テナントID。
+        current_user : User
+            認証済みユーザー。
+        req : LlmEmbeddingRequest
+            埋め込みリクエスト（`deployName` は Titan のモデル ID）。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        LlmEmbeddingResponse
+            埋め込みベクトルを含むレスポンス。
+
+        Raises
+        ------
+        HTTPException
+            テナントに Bedrock の埋め込みエンドポイントが存在しない・呼び出しに
+            失敗した場合は400を返す。
+        """
+        endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
+            tenant_id, EndpointType.BEDROCK_EMBEDDING, session
+        )
+        if not endpoints:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="埋め込み用のテナントエンドポイントが見つかりません。",
+            )
+        tenant_endpoint = min(endpoints, key=lambda endpoint: endpoint.id)
+        try:
+            result = await BedrockLlmEmbeddingClient.create_embedding(
+                tenant_endpoint.endpoint,
+                tenant_endpoint.api_key,
+                req.deployName,
+                req.input,
+            )
+        except BedrockEmbeddingError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
+            ) from None
+
+        ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
+            AIModelEndpointType.BEDROCK_EMBEDDING, req.deployName, session
+        )
+        weight = (
+            positive_token_weight(float(ai_model.token_weight))
+            if ai_model is not None
+            else 1.0
+        )
+        credit_settings = get_llm_credit_settings()
+        session.add(
+            TokenUsage(
+                tenant_id=tenant_id,
+                user_id=current_user.id,
+                endpoint_type=AIModelEndpointType.BEDROCK_EMBEDDING.value,
+                model=req.deployName,
+                embedding_tokens=result.tokens,
+                embedding_credits=embedding_credits(
+                    result.tokens, credit_settings.tokens_per_credit, weight
+                ),
+            )
+        )
+        await session.commit()
         return LlmEmbeddingResponse(embedding=result.embedding)
