@@ -93,17 +93,6 @@ export async function waitForList(page: Page, emptyText: string): Promise<void> 
   await expect(dataRows(page).first().or(page.getByText(emptyText))).toBeVisible();
 }
 
-/**
- * 並べ替えの結果を「同じ値のまとまり」の並びにする（連続する同じ値を 1 つにする）。
- * 更新者名や学習設定のように同じ値の行が続く列で、並びの向き（昇順か降順か）だけを確かめるときに使う。
- *
- * @param values 列の値（上から順）
- * @returns 連続する重複を除いた値の並び
- */
-export function groupOrder(values: string[]): string[] {
-  return values.filter((value, index) => index === 0 || value !== values[index - 1]);
-}
-
 /** 期間フィルターで選べる範囲の指定（カレンダーで押す日）。月は「今月から何か月前か」で表す。 */
 export interface CustomRange {
   fromMonthsAgo: number;
