@@ -156,6 +156,16 @@ export const API_PATHS = {
       `${API_PREFIX}/admin/indexes/${indexId}/additionalLearning`,
   },
 
+  // ─── ローカル用サーバー（ローカルの学習先フォルダのファイル操作）────────
+  LOCAL_SERVER: {
+    /** 接続先の URL と API キーを取る（クラウドの API） */
+    ENDPOINT: (endpointId: string) => `${API_PREFIX}/tenants/endpoints/local/${endpointId}`,
+    // 以降は接続先の URL に付けるパス。接続先がパスを持っても残すため、先頭に `/` を付けない
+    FILES: (indexId: string) => `api/admin/indexes/${indexId}/files`,
+    FILE: (indexId: string, fileId: string) => `api/admin/indexes/${indexId}/files/${fileId}`,
+    SYNC: (indexId: string) => `api/admin/indexes/${indexId}/sync`,
+  },
+
   // ─── User: Glossary ───────────────────────────────────────
   USER_GLOSSARY: {
     TERMS: `${API_PREFIX}/user/glossary/terms`,

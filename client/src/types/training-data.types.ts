@@ -30,8 +30,16 @@ export interface TrainingDataApiItem {
   delete?: string;
   get?: string;
   endpointIds?: string[];
+  /** 接続先（`LOCAL_SERVER`）の ID。ローカルの学習先フォルダでだけある。ファイルの操作はこの接続先へ送る */
+  localServerEndpointId?: string;
   groupIds?: string[];
   files?: TrainingDataFile[];
+}
+
+/** ローカル用サーバーの URL と API キー（移植元 `LocalServerEndpoint`） */
+export interface LocalServerEndpoint {
+  endpoint: string;
+  apiKey: string;
 }
 
 export type TrainingDataFileSortField = 'updatedAt' | 'displayName' | 'updatedBy';

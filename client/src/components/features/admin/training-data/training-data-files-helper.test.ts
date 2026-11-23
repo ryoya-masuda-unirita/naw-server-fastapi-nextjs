@@ -7,6 +7,7 @@ import {
   buildFileUserFilterOptions,
   formatDateTimeMinutes,
   resolveFileUpdatedByNames,
+  resolveLocalFileUpdatedByNames,
   toFileListApiParams,
 } from './training-data-files-helper';
 
@@ -129,5 +130,30 @@ describe('fileRowToTrainingDataFile', () => {
 
   test('未知の状態は DISABLE として扱うこと', () => {
     expect(fileRowToTrainingDataFile({ ...ROW, status: 'UNKNOWN' }).status).toBe('DISABLE');
+  });
+});
+
+describe('resolveLocalFileUpdatedByNames', () => {
+  const FILE = { id: 'f1', displayName: 'a', updatedBy: 'yamada', userId: 'yamada' } as TrainingDataFile;
+
+  test('replaces the login id with the display name of the user', () => {
+    /** ローカルのファイルの更新者はログイン ID。ユーザーが見つかれば表示名にする */
+    const resolved = resolveLocalFileUpdatedByNames([FILE], new Map([['yamada', '山田太郎']]));
+
+    expect(resolved[0].updatedBy).toBe('山田太郎');
+  });
+
+  test('keeps the login id when the user is not found', () => {
+    /** 削除されたユーザーなど見つからないときは、ログイン ID のまま出す */
+    const resolved = resolveLocalFileUpdatedByNames([FILE], new Map());
+
+    expect(resolved[0].updatedBy).toBe('yamada');
+  });
+
+  test('keeps the row as it is when it has no user id', () => {
+    /** 更新者の ID が無い行は、そのまま返す */
+    const row = { ...FILE, userId: undefined } as TrainingDataFile;
+
+    expect(resolveLocalFileUpdatedByNames([row], new Map([['yamada', '山田太郎']]))[0]).toBe(row);
   });
 });

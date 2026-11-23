@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  indexRowToApiItem,
   normalizeTrainingDataListBody,
   toTrainingDataItem,
   type IndexRow,
@@ -66,5 +67,29 @@ describe('training-folder-form', () => {
 
     expect(resolveSaasGlobalEndpointIds(options, options)).toEqual(['a', 'a']);
     expect(resolveSaasGlobalEndpointIds(options, [])).toBeNull();
+  });
+});
+
+describe('indexRowToApiItem', () => {
+  test('takes the LOCAL_SERVER endpoint id as the endpoint the files are sent to', () => {
+    /** ローカルの学習先フォルダのファイルは、接続先（LOCAL_SERVER）へ送るため、その ID を取り出す */
+    const item = indexRowToApiItem({
+      ...FIXTURE_ROW,
+      type: 'LOCAL',
+      tenantEndpoints: [{ id: 'e9', type: 'LOCAL_SERVER' }],
+    });
+
+    expect(item.localServerEndpointId).toBe('e9');
+    expect(item.endpointIds).toEqual(['e9']);
+  });
+
+  test('has no local server endpoint id when the endpoints are not LOCAL_SERVER', () => {
+    /** クラウドのフォルダ（VDB・埋め込み）や、種類が無い接続先からは取り出さない */
+    const item = indexRowToApiItem({
+      ...FIXTURE_ROW,
+      tenantEndpoints: [{ id: 'e1', type: 'VDB' }, { id: 'e2' }],
+    });
+
+    expect(item.localServerEndpointId).toBeUndefined();
   });
 });

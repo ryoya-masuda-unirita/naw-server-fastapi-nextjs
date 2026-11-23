@@ -29,6 +29,17 @@ docker compose -f docker-compose.demo.yml down            # 停止（データ�
 | チャット履歴 | `/admin/chat-history` | 社員のチャット 12 件（問い合わせ・議事録・メール作成など） |
 | ワークスペース | `/admin/tenant` | プランとクレジットの利用状況・今月の利用履歴 |
 
+**ローカルの学習先フォルダ（「営業ナレッジ（社内サーバー）」）を操作するには、`server-local` を手元で起動する。** ローカルのフォルダのファイルは、クラウドの API ではなく、フォルダの接続先（デモでは `http://localhost:8090`）の `server-local` へ画面から直接送る。起動していないと、このフォルダの一覧は開けずエラーになる。
+
+```bash
+cd secuaigent-server-local
+cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=demo-local-server-key に設定する（デモデータの接続先の API キーと同じ値）
+mkdir -p data/stream-output
+docker compose up -d --build   # 公開ポートは既定の 8090（詳細は secuaigent-server-local/README.md）
+```
+
+ファイルの追加・更新・同期は、`server-local` が Waha! を呼ぶため、Waha! がないと失敗する。Waha! の代わりには `waha-emulator/`（[waha-emulator/README.md](waha-emulator/README.md)）を使う。
+
 チャットの送信先（Azure OpenAI など）はダミーなので、画面からの新しい質問には答えが返らない。SECURE アシスタントのチャットは、`onprem/` をつなぐと試せる。
 
 ```bash

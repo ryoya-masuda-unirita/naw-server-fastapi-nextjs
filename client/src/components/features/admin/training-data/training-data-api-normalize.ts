@@ -20,9 +20,12 @@ export interface IndexRow {
   createdAt: string;
   updatedAt: string;
   /** backend は `endpointIds` ではなく、接続先をオブジェクトの配列で返す */
-  tenantEndpoints: { id: string }[];
+  tenantEndpoints: { id: string; type?: string }[];
   groupIds: string[];
 }
+
+/** ローカルの学習先フォルダの接続先の種類（backend の `TenantEndpointType.LOCAL_SERVER`） */
+const LOCAL_SERVER_ENDPOINT_TYPE = 'LOCAL_SERVER';
 
 /** 種別を画面で扱う 2 種類に寄せる（移植元 `normalizeIndexType`）。`SAAS_GLOBAL` 以外はすべて `LOCAL` */
 function normalizeIndexType(type: string): TrainingDataApiItem['type'] {
@@ -42,6 +45,8 @@ export function indexRowToApiItem(row: IndexRow): TrainingDataApiItem {
     delete: row.delete ?? undefined,
     get: row.get ?? undefined,
     endpointIds: row.tenantEndpoints.map((endpoint) => endpoint.id),
+    localServerEndpointId: row.tenantEndpoints.find((endpoint) => endpoint.type === LOCAL_SERVER_ENDPOINT_TYPE)
+      ?.id,
     groupIds: row.groupIds,
   };
 }
