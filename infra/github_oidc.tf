@@ -122,8 +122,8 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.tfstate.arn,
-          "${aws_s3_bucket.tfstate.arn}/*"
+          "arn:aws:s3:::${var.tfstate_bucket_name}",
+          "arn:aws:s3:::${var.tfstate_bucket_name}/*"
         ]
       }
     ]
