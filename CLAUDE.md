@@ -80,7 +80,7 @@
 | レイヤー | 選定 |
 |---|---|
 | フロントエンド | CloudFront + S3（SPA 静的デプロイ） |
-| バックエンド | AWS ECS（EC2 起動タイプ、t4g.nano）※ メモリ不足時は t4g.micro に変更 |
+| バックエンド | AWS ECS（Fargate、ARM64、0.5 vCPU / 1 GB）。private サブネットに置き、NAT Gateway で外向きに通信する（#384）。NAT Gateway は固定費がかかる |
 | DB | Amazon RDS PostgreSQL（db.t4g.micro） |
 | コンテナレジストリ | Amazon ECR |
 | IaC | Terraform（`secuaigent-infra/` ディレクトリ） |

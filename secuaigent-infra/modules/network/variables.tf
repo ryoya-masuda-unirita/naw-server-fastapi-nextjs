@@ -12,3 +12,8 @@ variable "project_name" {
   type        = string
   description = "リソース名・タグに使うプロジェクト名"
 }
+
+variable "vpc_cidr" {
+  type        = string
+  description = "VPCのCIDR。サブネットはここから計算する"
+}
