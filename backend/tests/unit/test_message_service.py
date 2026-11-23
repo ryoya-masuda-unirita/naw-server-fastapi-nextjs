@@ -22,6 +22,7 @@ from app.services.message_service import (
 )
 from typing import Any
 from app.models.user import User
+from tests.unit.asgi_disconnect import FakeSession, run_until_client_disconnects
 from collections.abc import AsyncIterator
 from collections.abc import Iterator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -3262,6 +3263,85 @@ class TestStreamMessageContentPersistFailure:
 
         stream_mocks["persist_content"].assert_awaited_once()
         stream_mocks["persist_usage"].assert_awaited_once()
+
+
+class TestStreamMessageContentClientDisconnect:
+    """MessageService.stream_message_content でクライアントが切断した場合のテスト（Issue #402）"""
+
+    @pytest.fixture
+    def stream_mocks(self) -> Iterator[dict[str, Any]]:
+        """検証・LLM呼び出しをモックし、保存先を`FakeSession`・待機点つきの保存処理に差し替える。"""
+        from app.core.llm_client import ChatStreamChunk
+
+        prefix = "app.services.message_service"
+        committed: list[Any] = []
+        persisted_contents: list[str] = []
+
+        async def _persist_content(**kwargs: Any) -> MagicMock:
+            """イベントループへ制御を渡してから、回答の保存を記録する。"""
+            import asyncio
+
+            await asyncio.sleep(0)
+            persisted_contents.append(kwargs["answer"])
+            return MagicMock(model_dump=MagicMock(return_value={"id": "content-1"}))
+
+        with (
+            patch(
+                f"{prefix}.MessageRepository.find_by_tenant_id_and_id",
+                new_callable=AsyncMock,
+                return_value=_message(),
+            ),
+            patch(f"{prefix}.require_owned_room", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.AssistantRepository.find_by_id_and_tenant_id",
+                new_callable=AsyncMock,
+                return_value=_assistant(),
+            ),
+            patch(f"{prefix}.enforce_within_quota", new_callable=AsyncMock),
+            patch(
+                f"{prefix}.AssistantEndpointRepository.find_chat_endpoint",
+                new_callable=AsyncMock,
+                return_value=(_assistant_endpoint(), _tenant_endpoint()),
+            ),
+            patch(
+                f"{prefix}.AIModelRepository.find_by_endpoint_type_and_name",
+                new_callable=AsyncMock,
+                return_value=_ai_model(),
+            ),
+            patch(f"{prefix}.AzureLlmChatClient.stream_chat") as mock_stream_chat,
+            patch.object(
+                MessageService, "_persist_message_content", side_effect=_persist_content
+            ),
+            patch(
+                f"{prefix}.get_session_maker",
+                return_value=lambda: FakeSession(committed),
+            ),
+        ):
+            mock_stream_chat.return_value = _AsyncChunkIterator(
+                [
+                    ChatStreamChunk(text_delta="回答"),
+                    ChatStreamChunk(input_tokens=10, output_tokens=5),
+                ]
+            )
+            yield {"committed": committed, "persisted_contents": persisted_contents}
+
+    async def test_persists_content_and_usage_when_client_disconnects_after_message_stop(
+        self, stream_mocks: dict[str, Any], test_user: User
+    ) -> None:
+        """message_stopの直後にクライアントが切断しても、回答とトークン使用量が記録されること"""
+        response = await MessageService.stream_message_content(
+            "tenant-1",
+            test_user,
+            _request(),
+            session=None,  # type: ignore[arg-type]
+        )
+        await run_until_client_disconnects(response, b"message_stop")
+
+        assert stream_mocks["persisted_contents"] == ["回答"]
+        committed = stream_mocks["committed"]
+        assert len(committed) == 1
+        assert committed[0].input_tokens == 10
+        assert committed[0].output_tokens == 5
 
 
 _BEDROCK_MODEL = "anthropic.claude-sonnet-5"

@@ -32,6 +32,7 @@ from app.core.llm_client import (
 )
 from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
+from app.core.shielded import run_shielded
 from app.core.sse import sse_event
 from app.core.token_usage_credit import (
     input_credits,
@@ -303,6 +304,54 @@ class LlmChatService:
         library_tenant_id = tenant_id
         library_message_id = message_id_for_usage
 
+        async def persist_after_stream(
+            library_title: str | None,
+            library_content: str | None,
+            input_tokens: int,
+            output_tokens: int,
+        ) -> None:
+            """ストリーム配信後に、ライブラリとトークン使用量を永続化する。
+
+            各保存の失敗はログに残すだけで、呼び出し元へは伝播させない。
+
+            Parameters
+            ----------
+            library_title : str | None
+                確定したライブラリのタイトル。未確定ならNone。
+            library_content : str | None
+                確定したライブラリの本文。未確定ならNone。
+            input_tokens : int
+                入力トークン数。
+            output_tokens : int
+                出力トークン数。
+            """
+            if library_title is not None and library_content is not None:
+                try:
+                    await LlmChatService._persist_library(
+                        tenant_id=library_tenant_id,
+                        message_id=library_message_id,
+                        user_id=user_id,
+                        title=library_title,
+                        content=library_content,
+                    )
+                except Exception:
+                    logger.exception("ライブラリの永続化に失敗しました")
+            try:
+                await LlmChatService._persist_token_usage(
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    room_id=room_id,
+                    message_id=message_id_for_usage,
+                    model_name=model_name,
+                    endpoint_type=model_endpoint_type,
+                    token_weight=token_weight,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    credit_settings=credit_settings,
+                )
+            except Exception:
+                logger.exception("トークン使用量の永続化に失敗しました")
+
         async def event_stream() -> AsyncIterator[bytes]:
             """LLMの応答をSSEイベントへ変換しつつ配信する。
 
@@ -398,32 +447,16 @@ class LlmChatService:
                 # なお移植元の最新版はこのAPIでライブラリを永続化しない(local-server側で
                 # 登録する)ため、ライブラリの永続化失敗の扱いに移植元の根拠はない。
                 # トークン使用量と同じくログのみとし、トークン使用量の記録は続ける。
-                if library_title is not None and library_content is not None:
-                    try:
-                        await LlmChatService._persist_library(
-                            tenant_id=library_tenant_id,
-                            message_id=library_message_id,
-                            user_id=user_id,
-                            title=library_title,
-                            content=library_content,
-                        )
-                    except Exception:
-                        logger.exception("ライブラリの永続化に失敗しました")
-                try:
-                    await LlmChatService._persist_token_usage(
-                        tenant_id=tenant_id,
-                        user_id=user_id,
-                        room_id=room_id,
-                        message_id=message_id_for_usage,
-                        model_name=model_name,
-                        endpoint_type=model_endpoint_type,
-                        token_weight=token_weight,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        credit_settings=credit_settings,
+                #
+                # クライアントが切断すると、Starletteはこのストリームのタスクを
+                # キャンセルする。`finally`内の`await`も中断されるため、保存は
+                # キャンセルされない別タスクで実行する（移植元が別スレッドで
+                # 保存するのと同じ、切断の影響を受けない保存）。
+                await run_shielded(
+                    persist_after_stream(
+                        library_title, library_content, input_tokens, output_tokens
                     )
-                except Exception:
-                    logger.exception("トークン使用量の永続化に失敗しました")
+                )
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
