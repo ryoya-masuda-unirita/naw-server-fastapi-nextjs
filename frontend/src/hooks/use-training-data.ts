@@ -1,4 +1,10 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import {
   normalizeTrainingDataListBody,
   indexRowToApiItem,
@@ -25,6 +31,21 @@ import type { TrainingDataApiResponse, TrainingDataFilter } from '@/types/traini
 // TrainingFolderModalService の通信部分。
 
 export const TRAINING_DATA_QUERY_KEY = 'admin-training-data';
+
+/**
+ * フィードバック一覧が学習先フォルダの一覧（`/admin/indexes`）をキャッシュする key（移植元 `LEARNING_FOLDERS_QUERY_KEY`）。
+ * 学習データ画面でフォルダを変えたときに、このキャッシュを古いものにする。
+ */
+export const LEARNING_FOLDERS_QUERY_KEY = ['feedback', 'learning-folders'] as const;
+
+/**
+ * 学習先フォルダを作成・削除・更新したあとに、フィードバック一覧の学習先フォルダの一覧を取り直す
+ * （移植元 `invalidateLearningFolders`）。取り直しはフィードバック一覧の側の処理なので、
+ * フォルダの操作の完了を待たせない
+ */
+export function invalidateLearningFolders(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: LEARNING_FOLDERS_QUERY_KEY });
+}
 
 /** 移植元 `TRAINING_FOLDER_GROUP_PAGE_SIZE` */
 const GROUP_PAGE_SIZE = 100;
@@ -70,6 +91,7 @@ export function useCreateTrainingFolder(filter: TrainingDataFilter) {
     mutationFn: (payload: CreateIndexPayload) =>
       apiClient.post<IndexRow>(API_PATHS.INDEXES.CREATE, payload),
     onSuccess: (created) => {
+      invalidateLearningFolders(queryClient);
       const item = indexRowToApiItem(created);
       queryClient.setQueryData<TrainingDataApiResponse>(listKey(filter), (current) =>
         current ? { ...current, data: [item, ...current.data], total: current.total + 1 } : current,

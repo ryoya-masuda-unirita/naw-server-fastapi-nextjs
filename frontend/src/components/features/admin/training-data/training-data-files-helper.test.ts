@@ -6,7 +6,6 @@ import { fromSplitLength, toSplitLength } from './training-data-chunk-size';
 import {
   buildFileUserFilterOptions,
   formatDateTimeMinutes,
-  initialLearningEnabled,
   resolveFileUpdatedByNames,
   toFileListApiParams,
 } from './training-data-files-helper';
@@ -16,7 +15,6 @@ const FIXTURE_FILTER: TrainingDataFileFilter = {
   userId: '',
   selectedPeriod: null,
   filterPeriodRange: null,
-  selectedStatus: null,
   pageSize: 10,
   pageIndex: 1,
   sortField: 'updatedAt',
@@ -72,12 +70,6 @@ describe('toFileListApiParams', () => {
     expect(toFileListApiParams(FIXTURE_FILTER, 'self').userId).toBeUndefined();
   });
 
-  test('学習設定の ON・OFF が ENABLE・DISABLE になること', () => {
-    expect(toFileListApiParams({ ...FIXTURE_FILTER, selectedStatus: 'ON' }).status).toBe('ENABLE');
-    expect(toFileListApiParams({ ...FIXTURE_FILTER, selectedStatus: 'OFF' }).status).toBe('DISABLE');
-    expect(toFileListApiParams(FIXTURE_FILTER).status).toBeUndefined();
-  });
-
   test('更新者名順は userId で並べ、方向が空なら降順になること', () => {
     const params = toFileListApiParams({ ...FIXTURE_FILTER, sortField: 'updatedBy', sortOrder: '' });
 
@@ -105,14 +97,6 @@ describe('buildFileUserFilterOptions', () => {
     const options = buildFileUserFilterOptions([FIXTURE_USER], (key) => key);
 
     expect(options.map((option) => option.value)).toEqual(['', 'me', 'u1']);
-  });
-});
-
-describe('initialLearningEnabled', () => {
-  test('ファイルが無いときはオン、あるときはその状態に従うこと', () => {
-    expect(initialLearningEnabled(undefined)).toBe(true);
-    expect(initialLearningEnabled(FIXTURE_FILE)).toBe(true);
-    expect(initialLearningEnabled({ ...FIXTURE_FILE, status: 'DISABLE' })).toBe(false);
   });
 });
 
