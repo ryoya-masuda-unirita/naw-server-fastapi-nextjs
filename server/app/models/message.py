@@ -32,6 +32,10 @@ class Message(SQLModel, table=True):
             ondelete="CASCADE",
             name="fk_messages_room_id",
         ),
+        # 一覧の絞り込みと、rooms からの CASCADE の探索。マイグレーション issue442 と同じ名前・列
+        sa.Index("messages_tenant_id_room_id_idx", "tenant_id", "room_id"),
+        # 自己参照の外部キー（CASCADE）の探索。マイグレーション issue442 と同じ名前・列
+        sa.Index("messages_parent_id_idx", "parent_id"),
     )
 
     id: str = Field(
