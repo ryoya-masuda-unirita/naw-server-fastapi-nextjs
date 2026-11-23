@@ -682,8 +682,19 @@ class TestJsonPayload:
 
         assert json_payload(text) == '{"answer":"設定は {name} と } で書く","id":[1]}'
 
+    def test_braces_in_surrounding_text_are_skipped(self) -> None:
+        """説明文の中に { } があっても、読める JSON が取り出されること"""
+        text = '設定は {name} の形式です。\n{"answer":"x","id":[1]}\n以上です。'
+
+        assert json_payload(text) == '{"answer":"x","id":[1]}'
+
     @pytest.mark.parametrize(
-        "text", ["JSON ではない文章です", '{"answer": "閉じていない"']
+        "text",
+        [
+            "JSON ではない文章です",
+            '{"answer": "閉じていない"',
+            "  ```json\nJSON ではない\n```  ",
+        ],
     )
     def test_unreadable_text_is_returned_as_is(self, text: str) -> None:
         """読めない返答は、そのまま返り、読み取りで却下される形のままであること"""

@@ -18,6 +18,7 @@ OpenAI 系（`openai_compatible.py`）と同じ作りにしている。
 接続先ごとの違い（URL・認証のヘッダー）は `request_target` に集めてある。
 """
 
+import json
 import logging
 import re
 from collections.abc import Mapping
@@ -220,8 +221,9 @@ def json_payload(text: str | None) -> str | None:
 
     Messages API には、OpenAI 系のような JSON 形式の出力の指定がなく、Claude は JSON を
     コードフェンスで包んだり、前後に説明文を付けたりして返す。読み取りの前に、前後の空白と
-    コードフェンスを取り除き、それでも読めなければ、最初の ``{`` から最後の ``}`` までを
-    取り出す。読めないものは、そのまま返す（読み取りで従来どおり却下される）。
+    コードフェンスを取り除き、それでも読めなければ、前後の説明文の中から、読める最初の
+    JSON オブジェクトを探して取り出す（説明文の中の ``{`` ``}`` は読み飛ばす）。読めない
+    ものは、元の文字列をそのまま返す（読み取りで従来どおり却下される）。
 
     Parameters
     ----------
@@ -231,7 +233,7 @@ def json_payload(text: str | None) -> str | None:
     Returns
     -------
     str | None
-        JSON として読める部分。読めなければ前後の空白を除いた元の文字列。None は None。
+        JSON として読める部分。読めなければ元の文字列そのまま。None は None。
     """
     if text is None:
         return None
@@ -241,10 +243,18 @@ def json_payload(text: str | None) -> str | None:
         stripped = fenced.group("body").strip()
     if _is_json(stripped):
         return stripped
-    start, end = stripped.find("{"), stripped.rfind("}")
-    if 0 <= start < end and _is_json(stripped[start : end + 1]):
-        return stripped[start : end + 1]
-    return stripped
+    decoder = json.JSONDecoder()
+    for start, character in enumerate(stripped):
+        if character != "{":
+            continue
+        # 説明文の中の { } に惑わされないよう、各 { から読める最初の JSON を探す
+        try:
+            _, end = decoder.raw_decode(stripped, start)
+        except ValueError:
+            continue
+        if _is_json(stripped[start:end]):
+            return stripped[start:end]
+    return text
 
 
 def extract_text(response_body: Mapping[str, Any] | None) -> str | None:
