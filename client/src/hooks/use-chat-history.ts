@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { userDisplayName } from '@/components/features/admin/tenant/user-display-name';
-import { fetchAllUsers } from './fetch-all-users';
 import { toDateTimeRange } from '@/components/shared/period-filter-utils';
 import type {
   ChatHistoryApiResponse,
   ChatHistoryFilter,
   ChatHistorySortField,
 } from '@/types/chat-history.types';
+import { fetchAllUsers } from './fetch-all-users';
 
 // 移植元 ChatHistoryApiService（list・listUsers）
 

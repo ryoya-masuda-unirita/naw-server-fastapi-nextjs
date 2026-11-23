@@ -14,7 +14,6 @@ import {
   mapTokenUsageSummary,
 } from '@/components/features/admin/tenant/tenant-api-mappers';
 import { apiClient } from '@/lib/api-client';
-import { fetchAllUsers } from './fetch-all-users';
 import { API_PATHS } from '@/lib/constants/api-paths';
 import { formatApiDateTimeUtc } from '@/lib/utils/api-datetime';
 import { getBillingPeriodEndFromResetAt, type CreditUsageResponse } from '@/types/credit-usage.type';
@@ -24,6 +23,7 @@ import type {
   TokenUsageSummaryResponse,
 } from '@/types/token-usage.type';
 import type { UserApiItem } from '@/types/admin/user.types';
+import { fetchAllUsers } from './fetch-all-users';
 
 // 移植元 tenant/services/tenant-api.service.ts。クエリは hooks、更新は「移植元と同じ流れ・同じトーストの関数」を返す hook にする
 

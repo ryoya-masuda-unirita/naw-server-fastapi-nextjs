@@ -7,7 +7,13 @@ import { API_PATHS } from '@/lib/constants/api-paths';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
 import type { GroupApiItem } from '@/types/admin/group-management.types';
-import { needsNameLookup, useNameLookup } from './use-group-list';
+import {
+  EMPTY_LOOKUP,
+  needsNameLookup,
+  toViewModel,
+  useNameLookup,
+  type NameLookup,
+} from './use-group-list';
 
 const createWrapper = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -62,6 +68,71 @@ describe('needsNameLookup', () => {
     expect(needsNameLookup({ ...base, assistantIds: ['a1', 'a2'], assistants: ['営業'] })).toBe(
       true,
     );
+  });
+});
+
+describe('needsNameLookup と toViewModel の整合', () => {
+  /**
+   * 対応表の名前は、一覧が返す名前と同じ（実際の backend は、同じデータから両方を作る）。
+   * 対応表を要らないと判定した項目は、この対応表を使っても、使わなくても、同じ表示になる
+   */
+  const richLookup: NameLookup = {
+    users: new Map([
+      ['u1', '山田'],
+      ['u2', '鈴木'],
+    ]),
+    assistants: new Map([
+      ['a1', '営業'],
+      ['a2', '開発'],
+    ]),
+    templates: new Map([
+      ['t1', '議事録'],
+      ['t2', '報告書'],
+    ]),
+  };
+  const items: Record<string, GroupApiItem> = {
+    名前が揃っている: {
+      ...base,
+      users: ['u1'],
+      adminUserIds: ['u1'],
+      adminUserNames: ['山田'],
+      userNames: ['山田'],
+      assistants: ['営業'],
+      assistantIds: ['a1'],
+      promptTemplates: ['議事録'],
+      promptTemplateIds: ['t1'],
+    },
+    'ID も名前もない': base,
+    '管理者の名前が ID の件数より少ない': {
+      ...base,
+      adminUserIds: ['u1', 'u2'],
+      adminUserNames: ['山田'],
+    },
+    'アシスタントの名前だけで ID がない': { ...base, assistants: ['営業', '開発'] },
+    'アシスタントの ID だけ': { ...base, assistantIds: ['a1', 'a2'] },
+    テンプレートの名前の件数が合わない: {
+      ...base,
+      promptTemplateIds: ['t1', 't2'],
+      promptTemplates: ['議事録'],
+    },
+    'ユーザーの ID だけ': { ...base, users: ['u1', 'u2'] },
+  };
+
+  test.each(Object.entries(items))(
+    '%s: 対応表を要らないと判定した項目は、対応表の有無で表示が変わらないこと',
+    (_label, item) => {
+      // 判定と toViewModel の取捨選択がずれて、対応表を取らないのに ID のまま表示される、を防ぐ
+      if (!needsNameLookup(item)) {
+        expect(toViewModel(item, EMPTY_LOOKUP)).toEqual(toViewModel(item, richLookup));
+      }
+    },
+  );
+
+  test('対応表を要ると判定した項目は、対応表があると表示が変わること', () => {
+    const item = items['ユーザーの ID だけ'];
+
+    expect(needsNameLookup(item)).toBe(true);
+    expect(toViewModel(item, EMPTY_LOOKUP)).not.toEqual(toViewModel(item, richLookup));
   });
 });
 
