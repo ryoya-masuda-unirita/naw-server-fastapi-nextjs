@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from app.models.assistant import (
     AssistantType,
     GroupAssistant,
 )
+from app.models.group import GroupUser
 from app.repositories.assistant_category_mapping_repository import (
     PRIMARY_CATEGORY_NAME,
 )
@@ -227,6 +229,42 @@ class GroupAssistantRepository:
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def exists_available_to_user(
+        assistant_id: str, user_id: UUID, tenant_id: str, session: AsyncSession
+    ) -> bool:
+        """アシスタントが、ユーザーの所属グループのいずれかに割り当てられているかを返す。
+
+        アシスタント一覧（所属グループに割り当てられたアシスタント）と同じ条件を、
+        1つのアシスタントについて1クエリ（EXISTS）で判定する。
+
+        Parameters
+        ----------
+        assistant_id : str
+            判定するアシスタントID。
+        user_id : UUID
+            ユーザーID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        bool
+            ユーザーの所属グループのいずれかに割り当てられているときTrue。
+        """
+        stmt = select(
+            exists().where(
+                GroupAssistant.assistant_id == assistant_id,
+                GroupAssistant.tenant_id == tenant_id,
+                GroupUser.group_id == GroupAssistant.group_id,
+                GroupUser.tenant_id == tenant_id,
+                GroupUser.user_id == user_id,
+            )
+        )
+        return bool(await session.scalar(stmt))
 
     @staticmethod
     async def find_group_ids_grouped_by_assistant_id(
