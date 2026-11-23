@@ -20,7 +20,7 @@
 同じ名前の索引を手で作る運用は、想定していない（既存のマイグレーションも、同じ作り）。`IF NOT EXISTS` を入れると、モデルと食い違った別の定義の索引を、黙って通してしまう。
 
 ### 3. `# type: ignore` の位置（対応済み）
-モデルの `__table__` の取得を 1 行に分け、そこに `# type: ignore[assignment]` を付けた。`mypy` を、テストのファイルに対しても実行して、エラーなしを確認した（CI は `mypy app` のみ）。
+モデルの `__table__` の取得を 1 行に分け、そこに `# type: ignore[assignment]` を付けた。`mypy` をテストのファイルに対しても実行し、最初の直し方ではエラー 3 件が残っていたため、`str(index.name)` と `attr-defined` の指定に直して、エラーなしを確認した（CI は `mypy app` のみ）。
 
 ### 4. PostgreSQL での確認（対応しない）
 自動テストは、他のテストと同じく SQLite。PostgreSQL での `upgrade` → `downgrade` → `upgrade` と実行計画は、手動で確認し、`08_動作確認.md` に記録した。PostgreSQL に対するマイグレーションのテストを CI に足すかは、別に決める。

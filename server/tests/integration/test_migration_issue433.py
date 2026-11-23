@@ -123,7 +123,9 @@ def test_downgrade_drops_message_id_index(connection: sa.Connection) -> None:
 
 def test_model_declares_the_same_index() -> None:
     """モデルが、マイグレーションと同じ名前・列の索引を宣言していること（ずれると差分が出る）"""
-    table: sa.Table = MessageContent.__table__  # type: ignore[assignment]
-    indexes = {index.name: [c.name for c in index.columns] for index in table.indexes}
+    table: sa.Table = MessageContent.__table__  # type: ignore[attr-defined]
+    indexes = {
+        str(index.name): [c.name for c in index.columns] for index in table.indexes
+    }
 
     assert indexes[_INDEX_NAME] == ["message_id"]
