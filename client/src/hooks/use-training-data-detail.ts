@@ -59,7 +59,9 @@ interface FileDto {
 }
 
 /** ローカルの学習先フォルダか。ローカルのファイル操作は、クラウドではなくフォルダの接続先へ送る */
-function isLocalFolder(folder: TrainingDataApiItem | undefined): folder is TrainingDataApiItem {
+type LocalFolder = TrainingDataApiItem & { type: 'LOCAL' };
+
+function isLocalFolder(folder: TrainingDataApiItem | undefined): folder is LocalFolder {
   return folder?.type === 'LOCAL';
 }
 
