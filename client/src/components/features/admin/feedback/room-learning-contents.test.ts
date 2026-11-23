@@ -111,13 +111,14 @@ describe('fetchRoomContents', () => {
     expect(await reasonOf(fetchRoomContents('room-1'))).toBe('missing');
   });
 
-  test('only fetch_failed failures are rejected as fetch_failed so the toast is not doubled', async () => {
+  test('fetch_failed failures are rejected as missing so the user is told', async () => {
+    // 通信の失敗は fetchMessageContents が握るため、ここで伝えないと何も表示されない
     serveMessages([record('m1', null)]);
     fetchMessageContents.mockResolvedValue({
       contents: [content('m1', 'ERROR')],
       failures: [{ messageIds: ['m1'], reason: 'fetch_failed' }],
     });
 
-    expect(await reasonOf(fetchRoomContents('room-1'))).toBe('fetch_failed');
+    expect(await reasonOf(fetchRoomContents('room-1'))).toBe('missing');
   });
 });

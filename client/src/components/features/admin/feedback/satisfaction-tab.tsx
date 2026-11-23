@@ -62,6 +62,7 @@ export function SatisfactionTab() {
   const addMutation = useAddAdditionalLearning();
   const toast = useToastStore();
   const [isFetchingContents, setIsFetchingContents] = useState(false);
+  const isAddingLearning = isFetchingContents || addMutation.isPending;
 
   const satisfactionQuery = useFeedbackRooms({
     assistantId: toFilterParam(selectedAssistant),
@@ -140,10 +141,16 @@ export function SatisfactionTab() {
       });
       setLearningItem(null);
     } catch (error) {
-      // 通信の失敗の通知は api-client の共通エラートーストが出す（重ねない）。ダイアログは開いたままにする（移植元と同じ）
+      // 送れない理由は、ここでトーストを出す。ダイアログは開いたままにする（移植元と同じ）。
+      // 追加学習の送信自体の失敗は、api-client の共通エラートーストが出す
       if (error instanceof RoomLearningError) {
-        if (error.reason === 'empty') toast.error(t('FEEDBACK.ADD_LEARNING_ROOM_EMPTY'));
-        if (error.reason === 'missing') toast.error(t('FEEDBACK.ADD_LEARNING_CONTENT_MISSING'));
+        toast.error(
+          t(
+            error.reason === 'empty'
+              ? 'FEEDBACK.ADD_LEARNING_ROOM_EMPTY'
+              : 'FEEDBACK.ADD_LEARNING_CONTENT_MISSING',
+          ),
+        );
       }
     } finally {
       setIsFetchingContents(false);
@@ -362,9 +369,12 @@ export function SatisfactionTab() {
       {learningItem && (
         <FolderModal
           initialFolderId={learningItem.indexId ?? null}
-          isAdding={isFetchingContents || addMutation.isPending}
+          isAdding={isAddingLearning}
           onConfirm={(folderId) => void submitLearning(folderId)}
-          onClose={() => setLearningItem(null)}
+          // 取得・送信中に閉じると、あとで別のルームのダイアログを閉じてしまうため、終わるまで閉じさせない
+          onClose={() => {
+            if (!isAddingLearning) setLearningItem(null);
+          }}
         />
       )}
     </>

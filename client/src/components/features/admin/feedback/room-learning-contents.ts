@@ -7,10 +7,11 @@ import { selectVisibleThread } from './room-thread';
 /**
  * 追加学習に送れない理由。
  * - `empty`: ルームにやり取りが無い
- * - `missing`: 本文を取れないやり取りがある（失敗・件数の不一致・`status=ERROR`）
- * - `fetch_failed`: 通信の失敗だけが理由（共通のエラートーストが出るので、画面では重ねて出さない）
+ * - `missing`: 本文を取れないやり取りがある（失敗・件数の不一致・`status=ERROR`）。
+ *   通信の失敗も含める。`fetchMessageContents` は失敗を握って返すため、HTTP 以外の失敗
+ *   （ローカル用サーバーに繋がらないなど）は共通のエラートーストに乗らず、ここで伝えないと何も出ない
  */
-export type RoomLearningErrorReason = 'empty' | 'missing' | 'fetch_failed';
+export type RoomLearningErrorReason = 'empty' | 'missing';
 
 export class RoomLearningError extends Error {
   readonly reason: RoomLearningErrorReason;
@@ -45,10 +46,8 @@ export async function fetchRoomContents(roomId: string): Promise<MessageContentA
   // 回答の生成に失敗したやり取り（status が ERROR）は、エラーの文が回答として入ってくるので同じく送らない
   const hasFailedContent = contents.some((content) => content.status === 'ERROR');
   if (failures.length > 0 || contents.length !== thread.length || hasFailedContent) {
-    const onlyFetchFailed =
-      failures.length > 0 && failures.every((failure) => failure.reason === 'fetch_failed');
     throw new RoomLearningError(
-      onlyFetchFailed ? 'fetch_failed' : 'missing',
+      'missing',
       'ルームのやり取りの一部を取れなかったため、追加学習を送りません',
     );
   }
