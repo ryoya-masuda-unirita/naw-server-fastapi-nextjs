@@ -11,10 +11,10 @@ data "aws_ami" "amazon_linux" {
 resource "aws_instance" "bastion" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t4g.nano"
-  subnet_id     = values(aws_subnet.public)[0].id
+  subnet_id     = var.public_subnet_id
   // パブリックIPアドレスを自動的に割り当てる
   associate_public_ip_address = true
-  vpc_security_group_ids      = [aws_security_group.bastion.id]
+  vpc_security_group_ids      = [var.bastion_sg_id]
   key_name                    = var.key_pair_name
 
   tags = {

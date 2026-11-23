@@ -14,7 +14,7 @@ resource "aws_cloudfront_distribution" "main" {
 
   // オリジン2: ALB(backend API)。CloudFront→ALB間はHTTPで通信する
   origin {
-    domain_name = aws_lb.main.dns_name
+    domain_name = var.alb_dns_name
     origin_id   = "alb-backend"
 
     custom_origin_config {
@@ -113,13 +113,13 @@ resource "aws_cloudfront_distribution" "main" {
 }
 
 // S3(フロントエンド)ビヘイビア用: 画面パス(拡張子なし)をindex.htmlに書き換える(SPAフォールバック)。
-// コードは単体テスト(cloudfront_functions/functions.test.mjs)から同じファイルを読むため、別ファイルにしている
+// コードは単体テスト(functions/functions.test.mjs)から同じファイルを読むため、別ファイルにしている
 resource "aws_cloudfront_function" "spa_fallback" {
   name    = "${var.project_name}-spa-fallback"
   runtime = "cloudfront-js-2.0"
   comment = "SPA fallback: rewrite extensionless paths to /index.html"
   publish = true
-  code    = file("${path.module}/cloudfront_functions/spa_fallback.js")
+  code    = file("${path.module}/functions/spa_fallback.js")
 }
 
 // /backend/auth/* ビヘイビア用: /backend を外してbackendへ /auth/... で渡す
@@ -128,5 +128,56 @@ resource "aws_cloudfront_function" "strip_backend_prefix" {
   runtime = "cloudfront-js-2.0"
   comment = "Strip /backend prefix before forwarding auth API requests to ALB"
   publish = true
-  code    = file("${path.module}/cloudfront_functions/strip_backend_prefix.js")
+  code    = file("${path.module}/functions/strip_backend_prefix.js")
+}
+// フロントエンド(SPA)の静的ファイルを置くS3バケット
+resource "aws_s3_bucket" "frontend" {
+  bucket = "${var.project_name}-frontend"
+
+  // 中身が空でないとterraform destroyが失敗するため、destroy時にオブジェクトごと削除させる
+  force_destroy = true
+
+  tags = {
+    Name    = "${var.project_name}-frontend"
+    Project = var.project_name
+  }
+}
+
+// バケットへのパブリックアクセスを全面的にブロックする（CloudFront経由のみアクセス可にするため）
+resource "aws_s3_bucket_public_access_block" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+// CloudFrontがS3に安全にアクセスするための仕組み(Origin Access Control)
+resource "aws_cloudfront_origin_access_control" "frontend" {
+  name                              = "${var.project_name}-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+// CloudFront(OAC)からのアクセスのみを許可するバケットポリシー(S3はポリシーを直接アタッチ可能)
+resource "aws_s3_bucket_policy" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowCloudFrontServicePrincipal"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.frontend.arn}/*"
+      Condition = {
+        StringEquals = {
+          "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
+        }
+      }
+    }]
+  })
 }

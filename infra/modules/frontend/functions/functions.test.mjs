@@ -1,5 +1,5 @@
 // CloudFront Functionの単体テスト。AWSに接続せずに書き換えロジックを確認する。
-// 実行: cd infra && node --test cloudfront_functions/functions.test.mjs
+// 実行: node --test infra/modules/frontend/functions/functions.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

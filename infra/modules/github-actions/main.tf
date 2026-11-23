@@ -90,8 +90,8 @@ resource "aws_iam_role_policy" "github_actions" {
         Effect = "Allow"
         Action = "iam:PassRole"
         Resource = [
-          aws_iam_role.ecs_task_execution.arn,
-          aws_iam_role.backend_task.arn
+          var.ecs_task_execution_role_arn,
+          var.backend_task_role_arn
         ]
       },
       {
@@ -103,15 +103,15 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.frontend.arn,
-          "${aws_s3_bucket.frontend.arn}/*"
+          var.frontend_bucket_arn,
+          "${var.frontend_bucket_arn}/*"
         ]
       },
       {
         Sid      = "CloudFrontInvalidation"
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
-        Resource = aws_cloudfront_distribution.main.arn
+        Resource = var.cloudfront_distribution_arn
       },
       {
         Sid    = "TerraformStateAccess"
