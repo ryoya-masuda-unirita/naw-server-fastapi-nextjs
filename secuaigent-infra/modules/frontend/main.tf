@@ -83,7 +83,6 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods         = ["GET", "HEAD"]
-    compress               = true
 
     forwarded_values {
       query_string = true
@@ -105,7 +104,9 @@ resource "aws_cloudfront_distribution" "main" {
   // CloudFrontは既定で5xxを短時間キャッシュするため、S3の一時的な503がその間すべての閲覧者に返り、
   // 画面のチャンク読み込み失敗時の自動リロード(client の chunk-reload.initializer.ts)でも回復できない(NAW-1338)。
   // 5xxはキャッシュせず毎回オリジンへ取りに行かせる。response_code・response_page_path は指定しないので、
-  // エラー応答の中身は置き換えない(上の #240 の理由で使えない「応答の置き換え」とは別物)
+  // エラー応答の中身は置き換えない(上の #240 の理由で使えない「応答の置き換え」とは別物)。
+  // この設定はディストリビューション全体に効くため、ALBの5xx(/api/*・/backend/auth/*)も毎回オリジンへ取りに行く。
+  // 移植元(secuaigent-infra)も同じ設定で、障害から回復した直後に古い5xxが返り続けるのを避けられる
   dynamic "custom_error_response" {
     for_each = [500, 502, 503, 504]
     content {
