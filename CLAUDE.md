@@ -118,9 +118,12 @@ naw-server-fastapi-nextjs/
 ├── secuaigent-server-local/  # FastAPI（移植元 secuaigent-server-local/ の移植先。server/ とは独立した uv プロジェクト）
 ├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト。generative-ai-adapter/ をパス依存で使う）
 ├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/・embedding-adapter/）
+├── onprem/            # 顧客の社内（オンプレ）側の環境を Docker でまとめて起動する検証用 compose（#301。移植元にはない独自のもの）
 ├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
 └── secuaigent-infra/       # Terraform（AWS インフラ定義。移植元 secuaigent-infra/ に合わせた名前）
 ```
+
+`onprem/` は、`secuaigent-server-local/`・`waha-emulator/`・ベクトル DB・ファイルサーバー代わりのサンプル文書を 1 つの compose で起動する。ルートの compose（クラウド側）とつなぐと、SECURE アシスタントの経路（backend → server-local → Waha!）をローカルで通しで確かめられる。移植元の server-local は本物の Waha! を前提にしており、Waha! 本体はどちらのリポジトリにもないため、動作確認用にここで作った。プロダクトの一部ではなく検証用の道具。起動手順・クラウド側とのつなぎ方は `onprem/README.md` を参照すること。
 
 `e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。
 
