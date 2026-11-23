@@ -3,10 +3,12 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import { MOCK_LOCAL_SERVER_URL } from '@/mocks/handlers/training-data';
 import { mockPath } from '@/mocks/utils';
 import { server } from '@/test/setup';
 import { FIXTURE_TENANT_ADMIN, renderApp, setAuthUser } from '@/test/render-app';
 import { LEARNING_FOLDERS_QUERY_KEY } from '@/hooks/use-training-data';
+import { useToastStore } from '@/components/shared/toast-store';
 import { useTrainingDataStore } from '@/store/training-data-store';
 
 const INDEX_ID = 'i1';
@@ -89,6 +91,9 @@ const DETAIL_PATH = mockPath(API_PATHS.INDEXES.DETAIL(':id'));
 const FILES_PATH = mockPath(API_PATHS.INDEXES.FILES(':id'));
 const FILE_PATH = mockPath(API_PATHS.INDEXES.FILE(':id', ':fileId'));
 const SYNC_PATH = mockPath(API_PATHS.INDEXES.SYNC(':id'));
+const LOCAL_FILES_PATH = `${MOCK_LOCAL_SERVER_URL}/${API_PATHS.LOCAL_SERVER.FILES(':id')}`;
+const LOCAL_FILE_PATH = `${MOCK_LOCAL_SERVER_URL}/${API_PATHS.LOCAL_SERVER.FILE(':id', ':fileId')}`;
+const LOCAL_SYNC_PATH = `${MOCK_LOCAL_SERVER_URL}/${API_PATHS.LOCAL_SERVER.SYNC(':id')}`;
 const ENDPOINTS_PATH = mockPath(API_PATHS.ADMIN.TENANTS.ENDPOINTS_BY_TYPE(':type'));
 const GROUPS_PATH = mockPath(API_PATHS.ADMIN.GROUPS.LIST);
 
@@ -100,12 +105,24 @@ interface RequestLog {
   deletedFiles: string[];
   deletedFolders: string[];
   synced: string[];
+  /** ローカル用サーバー（接続先）へ届いたファイルの操作 */
+  localRequests: { method: string; path: string; authKey: string | null }[];
+  /** クラウドの API へ届いたファイルの操作 */
+  cloudFileRequests: string[];
 }
 
 interface MockOptions {
   index?: IndexFixture;
   files?: typeof FIXTURE_FILES;
   detailFails?: boolean;
+}
+
+function recordLocal(log: RequestLog, request: Request) {
+  log.localRequests.push({
+    method: request.method,
+    path: new URL(request.url).pathname,
+    authKey: request.headers.get('X-Server-Auth-Key'),
+  });
 }
 
 /** 詳細・ファイル・接続先・グループ・各更新系の API を差し替え、受けたリクエストを記録する */
@@ -118,11 +135,33 @@ function mockApis(options: MockOptions = {}): RequestLog {
     deletedFiles: [],
     deletedFolders: [],
     synced: [],
+    localRequests: [],
+    cloudFileRequests: [],
   };
   const index = options.index ?? FIXTURE_CLOUD_INDEX;
   const files = options.files ?? FIXTURE_FILES;
 
   server.use(
+    // ローカルのフォルダのファイル操作は、クラウドではなく接続先（ローカル用サーバー）へ送られる。
+    // クラウド側のパスは先頭がワイルドカードでローカル用サーバーの URL にも一致するため、先に登録する
+    http.get(LOCAL_FILES_PATH, ({ request }) => {
+      recordLocal(log, request);
+      log.fileListParams.push(new URL(request.url).searchParams);
+      return HttpResponse.json({
+        content: files,
+        totalElements: files.length,
+        number: 0,
+        size: 10,
+      });
+    }),
+    http.delete(LOCAL_FILE_PATH, ({ request }) => {
+      recordLocal(log, request);
+      return new HttpResponse(null, { status: 204 });
+    }),
+    http.post(LOCAL_SYNC_PATH, ({ params }) => {
+      log.synced.push(String(params.id));
+      return new HttpResponse(null, { status: 204 });
+    }),
     http.get(DETAIL_PATH, () =>
       options.detailFails ? HttpResponse.json({ message: 'ng' }, { status: 404 }) : HttpResponse.json(index),
     ),
@@ -140,6 +179,7 @@ function mockApis(options: MockOptions = {}): RequestLog {
       return new HttpResponse(null, { status: 204 });
     }),
     http.get(FILES_PATH, ({ request }) => {
+      log.cloudFileRequests.push('GET files');
       log.fileListParams.push(new URL(request.url).searchParams);
       return HttpResponse.json({
         content: files,
@@ -149,6 +189,7 @@ function mockApis(options: MockOptions = {}): RequestLog {
       });
     }),
     http.post(FILES_PATH, async ({ request }) => {
+      log.cloudFileRequests.push('POST files');
       // jsdom の File は undici の formData() で読めないため、本文は読まずにクエリだけ記録する
       log.uploaded.push({ params: new URL(request.url).searchParams });
       return HttpResponse.json(files[0]);
@@ -163,6 +204,7 @@ function mockApis(options: MockOptions = {}): RequestLog {
       return HttpResponse.json(files[0]);
     }),
     http.delete(FILE_PATH, ({ params }) => {
+      log.cloudFileRequests.push('DELETE file');
       log.deletedFiles.push(String(params.fileId));
       return new HttpResponse(null, { status: 204 });
     }),
@@ -566,6 +608,79 @@ describe('TrainingDataDetailPage', () => {
       await waitFor(() => expect(log.uploaded).toHaveLength(1));
       expect(log.uploaded[0].params.get('displayName')).toBe('sp');
       expect(log.uploaded[0].params.get('reference')).toBe('sp.txt');
+    });
+  });
+
+  describe('ローカルのフォルダ', () => {
+    test('一覧はクラウドではなくローカル用サーバーから、API キーを付けて取ること', async () => {
+      const log = mockApis({ index: FIXTURE_LOCAL_INDEX });
+      await renderPage();
+
+      expect(log.localRequests).toEqual([
+        {
+          method: 'GET',
+          path: `/api/admin/indexes/${INDEX_ID}/files`,
+          authKey: 'mock-local-key',
+        },
+      ]);
+      expect(log.cloudFileRequests).toEqual([]);
+    });
+
+    test('削除はクラウドではなくローカル用サーバーへ送られること', async () => {
+      const log = mockApis({ index: FIXTURE_LOCAL_INDEX });
+      await renderPage();
+      const user = userEvent.setup({ applyAccept: false });
+
+      await openFileMenu(user, 1);
+      await user.click(await screen.findByTestId('training-data-file-menu-delete'));
+      await user.click(await screen.findByTestId('training-data-delete-confirm'));
+
+      await waitFor(() =>
+        expect(log.localRequests).toContainEqual({
+          method: 'DELETE',
+          path: `/api/admin/indexes/${INDEX_ID}/files/f2`,
+          authKey: 'mock-local-key',
+        }),
+      );
+      expect(log.cloudFileRequests).toEqual([]);
+    });
+
+    test('更新者名は、表示しているファイルのログイン ID だけでユーザーを引いて出すこと', async () => {
+      const loginIdQueries: string[][] = [];
+      server.use(
+        http.get(mockPath(API_PATHS.ADMIN.USERS.LIST), ({ request }) => {
+          loginIdQueries.push(new URL(request.url).searchParams.getAll('loginIds'));
+          return HttpResponse.json({
+            content: [
+              { id: 'uuid-1', loginId: 'yamada', name: '山田太郎', role: 'USER', loginKey: null, isRequiredPasswordReset: false, totalCredits: 0 },
+            ],
+            totalElements: 1,
+            totalPages: 1,
+            page: 0,
+            size: 10,
+          });
+        }),
+      );
+      mockApis({
+        index: FIXTURE_LOCAL_INDEX,
+        files: FIXTURE_FILES.map((file) => ({ ...file, userId: 'yamada', updatedBy: 'yamada' })),
+      });
+      await renderPage();
+
+      await waitFor(() => expect(screen.getAllByText('山田太郎').length).toBeGreaterThan(0));
+      expect(loginIdQueries).toContainEqual(['yamada']);
+    });
+
+    test('接続先が登録されていないときは、どこにも送らずエラーを表示すること', async () => {
+      const log = mockApis({ index: { ...FIXTURE_LOCAL_INDEX, tenantEndpoints: [] } });
+      useToastStore.getState().clear();
+      setAuthUser(FIXTURE_TENANT_ADMIN);
+      renderApp(`/admin/training-data/${INDEX_ID}`);
+
+      await waitFor(() => expect(useToastStore.getState().toasts).toHaveLength(1));
+      expect(useToastStore.getState().toasts[0].type).toBe('error');
+      expect(log.localRequests).toEqual([]);
+      expect(log.cloudFileRequests).toEqual([]);
     });
   });
 

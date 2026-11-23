@@ -17,8 +17,19 @@ import {
   triggerBlobDownload,
 } from '@/components/features/admin/training-data/training-data-files-helper';
 import type { CreateIndexPayload } from '@/components/features/admin/training-data/training-folder-form';
-import { apiClient, type QueryParams } from '@/lib/api-client';
+import { normalizeAdminUsersListBody } from '@/components/features/admin/users/admin-users-api-normalize';
+import {
+  addLocalFiles,
+  deleteLocalFiles,
+  listLocalFiles,
+  syncLocalFolder,
+  updateLocalFile,
+} from '@/components/features/admin/training-data/local-training-api';
+import { apiClient, ApiError, type QueryParams } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
+import i18n from 'i18next';
+import { useToastStore } from '@/components/shared/toast-store';
+import { useAuthStore } from '@/store/auth-store';
 import type { UserApiItem } from '@/types/admin/user.types';
 import type { PagedResponse } from '@/types/api-response.type';
 import type {
@@ -45,6 +56,35 @@ interface FileDto {
   reference?: string;
   /** 画面の値（プリセットのキーか数値）。送るときに `splitLength` の数値にする */
   splitLength?: string;
+}
+
+/** ローカルの学習先フォルダか。ローカルのファイル操作は、クラウドではなくフォルダの接続先へ送る */
+function isLocalFolder(folder: TrainingDataApiItem | undefined): folder is TrainingDataApiItem {
+  return folder?.type === 'LOCAL';
+}
+
+/**
+ * ローカル用サーバーへの操作を実行する。
+ * ApiError はクラウドの API と同じく共通のエラートーストが出す。接続先が取れない・ユーザーが取れないなど
+ * HTTP 以外の失敗は共通のトーストに乗らず何も出ないため、ここで表示する（移植元と同じ）。
+ */
+async function viaLocalServer<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      useToastStore.getState().error(i18n.t('COMMON.MESSAGES.ERROR.GENERAL'));
+    }
+    throw error;
+  }
+}
+
+/** ローカル用サーバーへ送る更新者。取れないときは更新者なしで送らず、失敗させる */
+function requireUserId(userId: string | undefined): string {
+  if (!userId) {
+    throw new Error('ログイン中のユーザーが取れないため、ローカル用サーバーへ送れません');
+  }
+  return userId;
 }
 
 function detailKey(id: string) {
@@ -79,6 +119,38 @@ export function useTrainingFilterUsers(): UserApiItem[] {
   return query.data?.data ?? NO_USERS;
 }
 
+/** 取得前・対象なしのときの空の対応。毎回新しい Map を返すと、これに依存する計算が描画のたびにやり直しになる */
+const NO_NAMES: ReadonlyMap<string, string> = new Map();
+
+/**
+ * ローカルの学習先フォルダの更新者名（ログイン ID → 表示名）。
+ * ローカル用サーバーは更新者名を持たないため、表示しているページの更新者のログイン ID だけでユーザーを引く
+ * （テナントの全ユーザーを取ると、ユーザー数に比例して表示が遅くなる。移植元 NAW-1424）。
+ */
+export function useLocalUpdaterNames(
+  folder: TrainingDataApiItem | undefined,
+  files: TrainingDataFile[],
+): ReadonlyMap<string, string> {
+  const loginIds = isLocalFolder(folder)
+    ? [...new Set(files.map((file) => file.userId).filter((id): id is string => !!id))].sort()
+    : [];
+  const query = useQuery({
+    queryKey: [TRAINING_DATA_QUERY_KEY, 'local-updaters', loginIds],
+    enabled: loginIds.length > 0,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<ReadonlyMap<string, string>> => {
+      const raw = await apiClient.get<unknown>(API_PATHS.ADMIN.USERS.LIST, {
+        // backend は searchText・role を必須にしているため、絞り込みなしでも空文字を送る
+        params: { page: 0, size: loginIds.length, searchText: '', role: '', loginIds },
+      });
+      const users = normalizeAdminUsersListBody(raw, { pageIndex: 1, pageSize: loginIds.length });
+      return new Map(users.data.map((user) => [user.userId, user.displayName]));
+    },
+  });
+  return query.data ?? NO_NAMES;
+}
+
 /**
  * 移植元 `TrainingApiService.listFiles`。
  * 読み込み中も前の一覧を出したままにする（移植元は読み込み中に一覧を消さない）。
@@ -87,12 +159,21 @@ export function useTrainingDataFiles(
   id: string,
   filter: TrainingDataFileFilter,
   currentUserId: string | undefined,
+  folder?: TrainingDataApiItem,
 ) {
   return useQuery({
-    queryKey: [...filesKeyPrefix(id), filter, currentUserId],
+    // ローカルのフォルダは接続先が違うため、種類と接続先もキーに含める
+    queryKey: [
+      ...filesKeyPrefix(id),
+      filter,
+      currentUserId,
+      folder?.type,
+      folder?.localServerEndpointId,
+    ],
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<TrainingDataFileApiResponse> => {
+      if (isLocalFolder(folder)) return viaLocalServer(() => listLocalFiles(folder, filter));
       const raw = await apiClient.get<PagedResponse<FileRow>>(API_PATHS.INDEXES.FILES(id), {
         params: { ...toFileListApiParams(filter, currentUserId) } as QueryParams,
       });
@@ -125,20 +206,16 @@ async function uploadFiles(indexId: string, entries: TrainingFileUploadEntry[]):
   for (const entry of entries) {
     const file =
       entry.file ?? new File([], entry.displayName, { type: 'application/octet-stream' });
-    await apiClient.post(
-      API_PATHS.INDEXES.FILES(indexId),
-      buildFileFormData(file),
-      {
-        params: toFileDtoParams(
-          {
-            displayName: entry.displayName,
-            reference: entry.reference,
-            splitLength: entry.chunkSize,
-          },
-          file.name,
-        ),
-      },
-    );
+    await apiClient.post(API_PATHS.INDEXES.FILES(indexId), buildFileFormData(file), {
+      params: toFileDtoParams(
+        {
+          displayName: entry.displayName,
+          reference: entry.reference,
+          splitLength: entry.chunkSize,
+        },
+        file.name,
+      ),
+    });
   }
 }
 
@@ -153,6 +230,18 @@ async function patchFile(
     file ? buildFileFormData(file) : null,
     { params: toFileDtoParams(dto, file?.name) },
   );
+}
+
+/**
+ * ファイル 1 件の更新。ローカルのフォルダはローカル用サーバーへ、それ以外はクラウドへ送る。
+ * ローカルは学習の ON/OFF を受け付けないため、`FileDto` に無い項目は送らない。
+ */
+function usePatchFile(indexId: string, folder: TrainingDataApiItem | undefined) {
+  const userId = useAuthStore((state) => state.user?.id);
+  return (fileId: string, dto: FileDto, file?: File): Promise<void> =>
+    isLocalFolder(folder)
+      ? viaLocalServer(() => updateLocalFile(folder, fileId, dto, requireUserId(userId), file))
+      : patchFile(indexId, fileId, dto, file);
 }
 
 /** 現在のファイル一覧の読み込み結果。どの条件の一覧でも同じ ID の行を書き換えられるよう、一覧ごとに持つ */
@@ -222,11 +311,16 @@ export function useDeleteTrainingFolder() {
 }
 
 /** 移植元 `TrainingDataStore.syncFolder`。3 秒待ってから同期し、詳細と一覧を読み直す */
-export function useSyncTrainingFolder(id: string) {
+export function useSyncTrainingFolder(id: string, folder?: TrainingDataApiItem) {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id);
   return useMutation({
     mutationFn: async () => {
       await new Promise((resolve) => setTimeout(resolve, SYNC_DELAY_MS));
+      if (isLocalFolder(folder)) {
+        await viaLocalServer(() => syncLocalFolder(folder, requireUserId(userId)));
+        return;
+      }
       await apiClient.post(API_PATHS.INDEXES.SYNC(id), {});
     },
     onSuccess: async () => {
@@ -237,23 +331,32 @@ export function useSyncTrainingFolder(id: string) {
 }
 
 /** 移植元 `TrainingDataStore.addFiles` */
-export function useAddTrainingFiles(id: string) {
+export function useAddTrainingFiles(id: string, folder?: TrainingDataApiItem) {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id);
   return useMutation({
-    mutationFn: (entries: TrainingFileUploadEntry[]) => uploadFiles(id, entries),
+    mutationFn: (entries: TrainingFileUploadEntry[]) =>
+      isLocalFolder(folder)
+        ? viaLocalServer(() => addLocalFiles(folder, entries, requireUserId(userId)))
+        : uploadFiles(id, entries),
     // 途中のファイルで失敗しても、登録できた分を一覧に出すため成否を問わず読み直す
     onSettled: () => refetchFiles(queryClient, id),
   });
 }
 
 /** 移植元 `TrainingDataStore.deleteFiles`。1 件ずつの削除を同時に送る */
-export function useDeleteTrainingFiles(id: string) {
+export function useDeleteTrainingFiles(id: string, folder?: TrainingDataApiItem) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (fileIds: string[]) =>
-      Promise.all(
+    mutationFn: async (fileIds: string[]) => {
+      if (isLocalFolder(folder)) {
+        await viaLocalServer(() => deleteLocalFiles(folder, fileIds));
+        return;
+      }
+      await Promise.all(
         fileIds.map((fileId) => apiClient.delete(API_PATHS.INDEXES.FILE(id, fileId))),
-      ),
+      );
+    },
     // 一部だけ失敗しても、削除できた分を一覧から消すため成否を問わず読み直す
     onSettled: () => refetchFiles(queryClient, id),
   });
@@ -270,8 +373,9 @@ interface UpdateTrainingFileVariables {
 }
 
 /** 移植元 `TrainingDataStore.updateFile`（編集ダイアログの保存）。保存後に一覧を読み直す */
-export function useUpdateTrainingFile(id: string) {
+export function useUpdateTrainingFile(id: string, folder?: TrainingDataApiItem) {
   const queryClient = useQueryClient();
+  const patch = usePatchFile(id, folder);
   return useMutation({
     mutationFn: ({
       fileId,
@@ -283,8 +387,7 @@ export function useUpdateTrainingFile(id: string) {
       const chunkSizeChanged =
         data.chunkSize !== undefined &&
         data.chunkSize !== (currentFile?.chunkSize || defaultChunkSize);
-      return patchFile(
-        id,
+      return patch(
         fileId,
         {
           displayName: data.displayName,
@@ -305,11 +408,12 @@ interface RenameTrainingFileVariables {
 }
 
 /** 移植元 `TrainingDataStore.updateFileNames`（一覧上の名前変更）。先に画面を書き換え、失敗したら戻す */
-export function useRenameTrainingFile(id: string) {
+export function useRenameTrainingFile(id: string, folder?: TrainingDataApiItem) {
   const { apply, rollback } = useOptimisticFilePatch(id);
+  const patch = usePatchFile(id, folder);
   return useMutation({
     mutationFn: ({ fileId, displayName, reference }: RenameTrainingFileVariables) =>
-      patchFile(id, fileId, { displayName, ...(reference !== undefined ? { reference } : {}) }),
+      patch(fileId, { displayName, ...(reference !== undefined ? { reference } : {}) }),
     onMutate: ({ fileId, displayName, reference }) =>
       apply(fileId, { displayName, ...(reference !== undefined ? { reference } : {}) }),
     onError: (_error, _variables, snapshot) => {

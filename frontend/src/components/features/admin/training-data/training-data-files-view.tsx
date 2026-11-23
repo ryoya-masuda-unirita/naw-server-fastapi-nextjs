@@ -13,6 +13,7 @@ import {
   useDeleteTrainingFiles,
   useRenameTrainingFile,
   useTrainingDataFiles,
+  useLocalUpdaterNames,
   useTrainingFilterUsers,
   useUpdateTrainingFile,
 } from '@/hooks/use-training-data-detail';
@@ -30,6 +31,7 @@ import { TrainingDataEditModal } from './training-data-edit-modal';
 import {
   buildFileUserFilterOptions,
   resolveFileUpdatedByNames,
+  resolveLocalFileUpdatedByNames,
 } from './training-data-files-helper';
 import { applyLinkPrefix } from './training-data-link-prefix';
 import { TrainingDataFilters } from './training-data-filters';
@@ -97,6 +99,9 @@ interface PendingDelete {
   deselectAll: boolean;
 }
 
+/** 取得前の一覧。毎回新しい配列を返すと、これに依存する計算が描画のたびにやり直しになる */
+const NO_FILES: TrainingDataFile[] = [];
+
 interface TrainingDataFilesViewProps {
   data: TrainingDataApiItem;
   /** 同期（ローカル接続のみ）。ページ全体を読み込み中にするため、ページ側で処理する */
@@ -117,16 +122,19 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const { filesFilter: filter, updateFilesFilter } = useTrainingDataStore();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const filterUsers = useTrainingFilterUsers();
-  const filesQuery = useTrainingDataFiles(indexId, filter, currentUserId);
-  const addFiles = useAddTrainingFiles(indexId);
-  const deleteFiles = useDeleteTrainingFiles(indexId);
-  const updateFile = useUpdateTrainingFile(indexId);
-  const renameFile = useRenameTrainingFile(indexId);
+  const filesQuery = useTrainingDataFiles(indexId, filter, currentUserId, data);
+  const addFiles = useAddTrainingFiles(indexId, data);
+  const deleteFiles = useDeleteTrainingFiles(indexId, data);
+  const updateFile = useUpdateTrainingFile(indexId, data);
+  const renameFile = useRenameTrainingFile(indexId, data);
 
-  const files = useMemo(
-    () => resolveFileUpdatedByNames(filesQuery.data?.data ?? [], filterUsers),
-    [filesQuery.data, filterUsers],
-  );
+  const localUpdaterNames = useLocalUpdaterNames(data, filesQuery.data?.data ?? NO_FILES);
+  const files = useMemo(() => {
+    const rows = filesQuery.data?.data ?? NO_FILES;
+    return isLocal
+      ? resolveLocalFileUpdatedByNames(rows, localUpdaterNames)
+      : resolveFileUpdatedByNames(rows, filterUsers);
+  }, [filesQuery.data, filterUsers, isLocal, localUpdaterNames]);
   const total = filesQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / filter.pageSize));
   const from = (filter.pageIndex - 1) * filter.pageSize + 1;

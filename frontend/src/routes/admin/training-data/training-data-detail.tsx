@@ -37,7 +37,7 @@ function TrainingDataDetail({ id }: { id: string }) {
   const detailQuery = useTrainingDataDetail(id);
   const updateFolder = useUpdateTrainingFolder(id);
   const deleteFolder = useDeleteTrainingFolder();
-  const syncFolder = useSyncTrainingFolder(id);
+  const syncFolder = useSyncTrainingFolder(id, detailQuery.data);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);

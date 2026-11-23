@@ -86,6 +86,20 @@ export function resolveFileUpdatedByNames(
   });
 }
 
+/**
+ * ローカルの学習先フォルダの更新者の欄を、ログイン ID からユーザーの表示名に置き換える。見つからなければそのまま。
+ * ローカル用サーバーは更新者名を持たず、ファイルの `userId` にはログイン ID が入っている。
+ */
+export function resolveLocalFileUpdatedByNames(
+  files: TrainingDataFile[],
+  nameByLoginId: ReadonlyMap<string, string>,
+): TrainingDataFile[] {
+  return files.map((file) => {
+    const displayName = file.userId ? nameByLoginId.get(file.userId) : undefined;
+    return displayName ? { ...file, updatedBy: displayName } : file;
+  });
+}
+
 /** ダウンロードの開始を待ってから URL を失効させるまでの時間 */
 const REVOKE_DELAY_MS = 1000;
 
