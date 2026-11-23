@@ -17,6 +17,24 @@ variable "project_name" {
   }
 }
 
+variable "vpc_cidr" {
+  type        = string
+  default     = "10.10.0.0/16"
+  description = "VPCのCIDR。public/privateサブネットはここから計算する(各/24)"
+
+  // サブネットは cidrsubnet(var.vpc_cidr, 8, ...) で /24〜/26 を切り出す。プレフィックス長が /16〜/18 でないと、
+  // サブネットが小さすぎたり計算に失敗したりする。ホストビットが立っている値(10.10.0.5/16など)も弾く。
+  validation {
+    condition = (
+      can(cidrnetmask(var.vpc_cidr))
+      && tonumber(split("/", var.vpc_cidr)[1]) >= 16
+      && tonumber(split("/", var.vpc_cidr)[1]) <= 18
+      && var.vpc_cidr == format("%s/%s", cidrhost(var.vpc_cidr, 0), split("/", var.vpc_cidr)[1])
+    )
+    error_message = "vpc_cidr は、ホストビットのない /16〜/18 のCIDR(例: 10.10.0.0/16)で指定すること。"
+  }
+}
+
 variable "github_repository" {
   type        = string
   default     = "ryoya-masuda-unirita/naw-server-fastapi-nextjs"

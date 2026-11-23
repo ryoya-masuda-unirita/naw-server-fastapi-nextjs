@@ -19,8 +19,8 @@ resource "aws_lb_target_group" "backend" {
   port     = 8000
   protocol = "HTTP"
   vpc_id   = var.vpc_id
-  // EC2起動タイプ+bridgeモードなのでEC2インスタンス単位で振り分ける（Fargateならipを指定する）
-  target_type = "instance"
+  // Fargate(awsvpc)のタスクはタスクごとのIPを持つため、IPアドレス単位で振り分ける
+  target_type = "ip"
 
   health_check {
     path                = "/health"
