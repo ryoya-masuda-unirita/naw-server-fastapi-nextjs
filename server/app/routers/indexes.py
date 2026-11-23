@@ -82,10 +82,13 @@ async def delete_index(
     index_id: str,
     x_tenant_id: str = Depends(get_verified_tenant_id),
     current_user: User = Depends(require_admin_or_group_admin),
+    storage: FileStorage = Depends(get_file_storage),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """インデックス削除"""
-    await IndexService.delete_index(index_id, x_tenant_id, current_user, session)
+    """インデックス削除（中のファイルのストレージ上の実体も削除する）"""
+    await IndexService.delete_index(
+        index_id, x_tenant_id, current_user, storage, session
+    )
 
 
 @admin_router.post("/{index_id}/sync", status_code=status.HTTP_204_NO_CONTENT)

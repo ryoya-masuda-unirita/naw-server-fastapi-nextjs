@@ -118,6 +118,34 @@ class FileRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_by_index_id_and_tenant_id(
+        index_id: str, tenant_id: str, session: AsyncSession
+    ) -> list[File]:
+        """インデックスに属するファイルを、状態にかかわらずすべて取得する。
+
+        Parameters
+        ----------
+        index_id : str
+            インデックスID。
+        tenant_id : str
+            テナントID。
+        session : AsyncSession
+            非同期DBセッション。
+
+        Returns
+        -------
+        list[File]
+            該当するファイル。順序は ID の昇順（処理順を決めるため）。
+        """
+        stmt = (
+            select(File)
+            .where(File.index_id == index_id, File.tenant_id == tenant_id)
+            .order_by(File.id.asc())
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def find_not_deleted_by_ids_and_tenant_id(
         file_ids: list[str], tenant_id: str, session: AsyncSession
     ) -> list[File]:

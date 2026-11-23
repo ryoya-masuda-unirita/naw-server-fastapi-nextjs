@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import credit_quota, file_creation
 from app.core.file_storage import FileStorage
 from app.core.sort import SortOrder
+from app.models.file import FileStatus
 from app.models.index import Index, IndexType
 from app.models.user import User, UserRole
 from app.repositories.assistant_repository import AssistantRepository
+from app.repositories.file_repository import FileRepository
 from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_repository import GroupRepository
 from app.repositories.group_user_repository import GroupUserRepository
@@ -22,6 +24,7 @@ from app.schemas.index import (
     PagedIndexResponse,
     TenantEndpointItemResponse,
 )
+from app.services.file_service import FileService
 
 SAAS_INDEX_LIMIT = 15
 
@@ -606,13 +609,25 @@ class IndexService:
 
     @staticmethod
     async def delete_index(
-        index_id: str, tenant_id: str, current_user: User, session: AsyncSession
+        index_id: str,
+        tenant_id: str,
+        current_user: User,
+        storage: FileStorage,
+        session: AsyncSession,
     ) -> None:
         """インデックスを削除する。存在しない場合は何もしない（冪等）。
 
         `indexes_endpoints`・`indexes_groups`はDBのON DELETE CASCADEにより連動削除される。
         グループ管理者が自分の管理範囲外のインデックスを削除できないよう、
         `update_index`と同様に可視性チェックを行う。
+
+        ファイルの行は外部キーでインデックスと一緒に消えるが、ストレージ上の実体は
+        消えないため、先にファイルを1件ずつ物理削除する（移植元`IndexService.deleteIndex`）。
+        `FileService.delete_file`は1件ごとにコミットするため、途中で失敗しても、
+        消せたファイルの行と実体は食い違わない。失敗したらインデックスは消さず、
+        中身が残ったままインデックスだけが消えて画面から触れなくなることを防ぐ。
+        `LOCAL`型はファイルがローカル用サーバー側にあるため、ストレージには触れない。
+        論理削除済み（`DELETED`）のファイルは、削除時に実体を消し済みなのでスキップする。
 
         Parameters
         ----------
@@ -622,6 +637,8 @@ class IndexService:
             テナントID。
         current_user : User
             認証済みユーザー。
+        storage : FileStorage
+            ファイルストレージ。
         session : AsyncSession
             非同期DBセッション。
 
@@ -638,6 +655,17 @@ class IndexService:
             return
 
         await IndexService._ensure_visible(index, tenant_id, current_user, session)
+
+        if index.type != IndexType.LOCAL:
+            files = await FileRepository.find_by_index_id_and_tenant_id(
+                index_id, tenant_id, session
+            )
+            for file in files:
+                if file.status == FileStatus.DELETED:
+                    continue
+                await FileService.delete_file(
+                    index_id, file.id, tenant_id, True, storage, session
+                )
 
         await IndexRepository.delete(index, session)
 
