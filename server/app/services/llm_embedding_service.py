@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.bedrock_embedding import (  # bedrock-ext
     BEDROCK_EMBEDDING_MODEL_ID,
+    EMBEDDING_DIMENSIONS,
     BedrockEmbeddingError,
     BedrockLlmEmbeddingClient,
 )
@@ -56,8 +57,9 @@ class LlmEmbeddingService:
         ------
         HTTPException
             クレジット上限超過時は429、指定deployNameのAIモデルが
-            存在しない・テナントにAzure OpenAI Embeddingエンドポイントが
-            存在しない場合は400を返す。
+            存在しない・テナントに対応する埋め込みエンドポイント（Azure OpenAI
+            Embedding、deployNameが`amazon.titan-embed-text-v1`のときはBedrock
+            Embedding）が存在しない場合は400を返す。
         """
         await enforce_within_quota(tenant_id, session)
 
@@ -140,9 +142,22 @@ class LlmEmbeddingService:
         Raises
         ------
         HTTPException
-            テナントに Bedrock の埋め込みエンドポイントが存在しない・呼び出しに
-            失敗した場合は400を返す。
+            AIモデルが未登録・テナントに Bedrock の埋め込みエンドポイントが存在しない・
+            `dimensions`が1536以外・呼び出しに失敗した場合は400を返す。
         """
+        if req.dimensions is not None and req.dimensions != EMBEDDING_DIMENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bedrock の埋め込みは {EMBEDDING_DIMENSIONS} 次元だけに対応しています。",
+            )
+        ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
+            AIModelEndpointType.BEDROCK_EMBEDDING, req.deployName, session
+        )
+        if ai_model is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"指定された deployName の AI モデルが見つかりません: {req.deployName}",
+            )
         endpoints = await TenantEndpointRepository.find_by_tenant_id_and_type(
             tenant_id, EndpointType.BEDROCK_EMBEDDING, session
         )
@@ -164,14 +179,7 @@ class LlmEmbeddingService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
             ) from None
 
-        ai_model = await AIModelRepository.find_by_endpoint_type_and_name(
-            AIModelEndpointType.BEDROCK_EMBEDDING, req.deployName, session
-        )
-        weight = (
-            positive_token_weight(float(ai_model.token_weight))
-            if ai_model is not None
-            else 1.0
-        )
+        weight = positive_token_weight(float(ai_model.token_weight))
         credit_settings = get_llm_credit_settings()
         session.add(
             TokenUsage(

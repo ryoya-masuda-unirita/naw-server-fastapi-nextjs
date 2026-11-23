@@ -103,8 +103,10 @@ def _to_result(response: httpx.Response) -> EmbeddingResult:
         raise BedrockEmbeddingError(
             "Bedrock の埋め込みの応答の形式が想定と違います"
         ) from None
+    # bool は int のサブクラスなので、数値として通らないよう明示的に除く
     if not isinstance(embedding, list) or not all(
-        isinstance(value, int | float) for value in embedding
+        isinstance(value, int | float) and not isinstance(value, bool)
+        for value in embedding
     ):
         raise BedrockEmbeddingError("Bedrock の埋め込みの応答の形式が想定と違います")
     if len(embedding) != EMBEDDING_DIMENSIONS:

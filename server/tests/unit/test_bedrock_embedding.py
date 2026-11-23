@@ -159,6 +159,7 @@ class TestCreateEmbedding:
             {"inputTextTokenCount": 3},
             {"embedding": "not-a-list", "inputTextTokenCount": 3},
             {"embedding": ["a"] * EMBEDDING_DIMENSIONS},
+            {"embedding": [True] * EMBEDDING_DIMENSIONS},
         ],
     )
     async def test_malformed_response_is_rejected(self, body: dict[str, Any]) -> None:

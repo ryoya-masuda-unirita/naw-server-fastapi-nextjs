@@ -266,7 +266,10 @@ def _session() -> MagicMock:
 
 @contextmanager
 def _embedding_api_patches(
-    azure: AsyncMock, bedrock: AsyncMock, bedrock_endpoints: list[TenantEndpoint]
+    azure: AsyncMock,
+    bedrock: AsyncMock,
+    bedrock_endpoints: list[TenantEndpoint],
+    has_bedrock_model: bool = True,
 ) -> Iterator[None]:
     """埋め込み API の、DB・外部通信を差し替える。
 
@@ -278,6 +281,8 @@ def _embedding_api_patches(
         Bedrock の埋め込みクライアントの代わり。
     bedrock_endpoints : list[TenantEndpoint]
         テナントの Bedrock の埋め込みの接続先。
+    has_bedrock_model : bool
+        Bedrock の埋め込みモデルが ai_models に登録されているか。
 
     Yields
     ------
@@ -296,10 +301,10 @@ def _embedding_api_patches(
     async def find_model(
         endpoint_type: AIModelEndpointType, name: str, session: Any
     ) -> AIModel | None:
-        """Azure のモデルだけが登録されている状況を作る。"""
-        if endpoint_type == AIModelEndpointType.AZURE_OPENAI_EMBEDDING:
-            return _ai_model(endpoint_type, name, "1.0")
-        return None
+        """種別ごとに、登録されたモデルを返す（Bedrock のモデルがないテナントも作れる）。"""
+        if endpoint_type == AIModelEndpointType.BEDROCK_EMBEDDING:
+            return _ai_model(endpoint_type, name, "3.0") if has_bedrock_model else None
+        return _ai_model(endpoint_type, name, "1.0")
 
     with ExitStack() as stack:
         stack.enter_context(
@@ -423,3 +428,61 @@ class TestLlmEmbeddingServiceBedrock:
 
         assert raised.value.status_code == 400
         session.add.assert_not_called()
+
+    async def test_titan_without_registered_model_returns_400(
+        self, test_user: User
+    ) -> None:
+        """Titan のモデルが ai_models に未登録なら、Azure と同じく 400 になり、呼び出さないこと"""
+        azure, bedrock, _ = _clients()
+
+        with _embedding_api_patches(
+            azure, bedrock, [_bedrock_endpoint()], has_bedrock_model=False
+        ):
+            with pytest.raises(HTTPException) as raised:
+                await LlmEmbeddingService.create_embedding(
+                    "tenant-1",
+                    test_user,
+                    LlmEmbeddingRequest(
+                        input="x", deployName=BEDROCK_EMBEDDING_MODEL_ID
+                    ),
+                    _session(),
+                )
+
+        assert raised.value.status_code == 400
+        bedrock.assert_not_awaited()
+
+    async def test_titan_rejects_other_dimensions(self, test_user: User) -> None:
+        """dimensions に 1536 以外を指定すると、400 になり、呼び出さないこと"""
+        azure, bedrock, _ = _clients()
+
+        with _embedding_api_patches(azure, bedrock, [_bedrock_endpoint()]):
+            with pytest.raises(HTTPException) as raised:
+                await LlmEmbeddingService.create_embedding(
+                    "tenant-1",
+                    test_user,
+                    LlmEmbeddingRequest(
+                        input="x",
+                        deployName=BEDROCK_EMBEDDING_MODEL_ID,
+                        dimensions=256,
+                    ),
+                    _session(),
+                )
+
+        assert raised.value.status_code == 400
+        bedrock.assert_not_awaited()
+
+    async def test_titan_accepts_1536_dimensions(self, test_user: User) -> None:
+        """dimensions に 1536 を指定した場合は、受け付けられること"""
+        azure, bedrock, _ = _clients()
+
+        with _embedding_api_patches(azure, bedrock, [_bedrock_endpoint()]):
+            response = await LlmEmbeddingService.create_embedding(
+                "tenant-1",
+                test_user,
+                LlmEmbeddingRequest(
+                    input="x", deployName=BEDROCK_EMBEDDING_MODEL_ID, dimensions=1536
+                ),
+                _session(),
+            )
+
+        assert response.embedding == [0.2]
