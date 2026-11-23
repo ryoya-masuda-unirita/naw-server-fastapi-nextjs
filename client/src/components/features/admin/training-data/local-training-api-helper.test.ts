@@ -46,12 +46,11 @@ describe('buildLocalServerUrl', () => {
 
 describe('toLocalFileListParams', () => {
   test('sends only page, size, the period as dates and the search word', () => {
-    /** ローカル用サーバーが受け取る条件だけを送る（更新者・並べ替え・ファイル名・学習設定は送らない） */
+    /** ローカル用サーバーが受け取る条件だけを送る（並べ替え・ファイル名の検索は送らない） */
     const params = toLocalFileListParams({
       ...customPeriod('2026/11/10', '2026/11/12'),
       pageIndex: 3,
       query: ' 規程 ',
-      userId: 'u1',
       sortField: 'updatedBy',
       sortOrder: 'asc',
     });

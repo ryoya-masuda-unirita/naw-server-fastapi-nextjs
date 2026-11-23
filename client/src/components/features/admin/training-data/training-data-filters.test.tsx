@@ -10,8 +10,6 @@ function renderFilters() {
     <MemoryRouter>
       <TrainingDataFilters
         query=""
-        userOptions={[]}
-        selectedUser={null}
         periodOptions={[]}
         selectedPeriod={null}
         filterPeriodRange={null}
@@ -19,7 +17,6 @@ function renderFilters() {
         totalPages={3}
         currentPage={1}
         onSearchQuery={vi.fn()}
-        onUserChange={vi.fn()}
         onPeriodChange={vi.fn()}
         onPageChange={vi.fn()}
       />
@@ -34,6 +31,14 @@ describe('TrainingDataFilters', () => {
 
     expect(container.querySelector(`[data-testid^="${SORT_TESTID_PREFIX}"]`)).toBeNull();
     expect(screen.queryByText(/SORT_LABEL|並べ替え/)).toBeNull();
+  });
+
+  test('does not render a user filter', () => {
+    /** 更新者の絞り込みを出さない（NAW-1424。ローカルでは効かず、選択肢のために全ユーザーを取っていた） */
+    const { container } = renderFilters();
+
+    expect(container.querySelector('[data-testid^="training-data-file-user"]')).toBeNull();
+    expect(screen.queryByText(/ALL_USERS|全てのユーザー/)).toBeNull();
   });
 
   test('keeps the search input and the pagination', () => {

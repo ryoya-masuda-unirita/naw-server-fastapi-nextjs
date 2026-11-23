@@ -30,7 +30,6 @@ import { API_PATHS } from '@/lib/constants/api-paths';
 import i18n from 'i18next';
 import { useToastStore } from '@/components/shared/toast-store';
 import { useAuthStore } from '@/store/auth-store';
-import type { UserApiItem } from '@/types/admin/user.types';
 import type { PagedResponse } from '@/types/api-response.type';
 import type {
   TrainingDataApiItem,
@@ -40,15 +39,11 @@ import type {
   TrainingFileUploadEntry,
 } from '@/types/training-data.types';
 import { TRAINING_DATA_QUERY_KEY, invalidateLearningFolders } from './use-training-data';
-import { useAdminUsers } from './use-admin-users';
 
 // 移植元 training-data の TrainingApiService（詳細・ファイル）と TrainingDataStore の詳細まわり。
 
 /** 移植元 `syncFolder` が同期の前に置く待ち時間 */
 export const SYNC_DELAY_MS = 3000;
-
-/** 更新者の名前を引くために取るユーザー数（移植元 `loadFilterUsers`） */
-const FILTER_USERS_PAGE_SIZE = 1000;
 
 /** ファイルを更新・追加するときにクエリで送る項目（移植元 `UpdateFileDto`） */
 interface FileDto {
@@ -107,20 +102,6 @@ export function useTrainingDataDetail(id: string) {
   });
 }
 
-/** 取得前のユーザー一覧。毎回新しい配列を返すと、これに依存する計算が描画のたびにやり直しになる */
-const NO_USERS: UserApiItem[] = [];
-
-/** 更新者の絞り込みと、一覧の更新者名の表示に使うユーザー（移植元 `loadFilterUsers`） */
-export function useTrainingFilterUsers(): UserApiItem[] {
-  const query = useAdminUsers({
-    pageSize: FILTER_USERS_PAGE_SIZE,
-    pageIndex: 1,
-    sortField: 'name',
-    sortOrder: 'asc',
-  });
-  return query.data?.data ?? NO_USERS;
-}
-
 /** 取得前・対象なしのときの空の対応。毎回新しい Map を返すと、これに依存する計算が描画のたびにやり直しになる */
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
 
@@ -160,7 +141,6 @@ export function useLocalUpdaterNames(
 export function useTrainingDataFiles(
   id: string,
   filter: TrainingDataFileFilter,
-  currentUserId: string | undefined,
   folder?: TrainingDataApiItem,
 ) {
   return useQuery({
@@ -168,7 +148,6 @@ export function useTrainingDataFiles(
     queryKey: [
       ...filesKeyPrefix(id),
       filter,
-      currentUserId,
       folder?.type,
       folder?.localServerEndpointId,
     ],
@@ -177,7 +156,7 @@ export function useTrainingDataFiles(
     queryFn: async (): Promise<TrainingDataFileApiResponse> => {
       if (isLocalFolder(folder)) return viaLocalServer(() => listLocalFiles(folder, filter));
       const raw = await apiClient.get<PagedResponse<FileRow>>(API_PATHS.INDEXES.FILES(id), {
-        params: { ...toFileListApiParams(filter, currentUserId) } as QueryParams,
+        params: { ...toFileListApiParams(filter) } as QueryParams,
       });
       return normalizeTrainingDataFileListBody(raw);
     },

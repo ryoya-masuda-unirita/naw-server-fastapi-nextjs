@@ -105,7 +105,8 @@ export function fileRowToTrainingDataFile(row: FileRow): TrainingDataFile {
     id: row.id,
     displayName: (row.displayName ?? row.fileName).trim(),
     updatedAt: row.updatedAt,
-    updatedBy: (row.updatedBy ?? row.userId).trim(),
+    // 名前が無いときにユーザーの ID を出さない（一覧は「削除されたユーザー」と出す）
+    updatedBy: (row.updatedBy ?? '').trim(),
     userId: row.userId,
     status: normalizeFileStatus(row.status),
     chunkSize: fromSplitLength(row.splitLength),

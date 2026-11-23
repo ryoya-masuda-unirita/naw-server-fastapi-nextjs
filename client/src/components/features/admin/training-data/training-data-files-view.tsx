@@ -13,10 +13,8 @@ import {
   useRenameTrainingFile,
   useTrainingDataFiles,
   useLocalUpdaterNames,
-  useTrainingFilterUsers,
   useUpdateTrainingFile,
 } from '@/hooks/use-training-data-detail';
-import { useAuthStore } from '@/store/auth-store';
 import { useTrainingDataStore } from '@/store/training-data-store';
 import type {
   TrainingDataApiItem,
@@ -27,9 +25,7 @@ import { TrainingDataAddModal } from './training-data-add-modal';
 import { DEFAULT_CHUNK_SIZE_PRESET } from './training-data-chunk-size';
 import { TrainingDataEditModal } from './training-data-edit-modal';
 import {
-  buildFileUserFilterOptions,
-  resolveFileUpdatedByNames,
-  resolveLocalFileUpdatedByNames,
+  resolveFileUpdaters,
 } from './training-data-files-helper';
 import { applyLinkPrefix } from './training-data-link-prefix';
 import { TrainingDataFilters } from './training-data-filters';
@@ -111,21 +107,22 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
   const widths = DIALOG_WIDTHS[data.type];
 
   const { filesFilter: filter, updateFilesFilter } = useTrainingDataStore();
-  const currentUserId = useAuthStore((state) => state.user?.id);
-  const filterUsers = useTrainingFilterUsers();
-  const filesQuery = useTrainingDataFiles(indexId, filter, currentUserId, data);
+  const filesQuery = useTrainingDataFiles(indexId, filter, data);
   const addFiles = useAddTrainingFiles(indexId, data);
   const deleteFiles = useDeleteTrainingFiles(indexId, data);
   const updateFile = useUpdateTrainingFile(indexId, data);
   const renameFile = useRenameTrainingFile(indexId, data);
 
   const localUpdaterNames = useLocalUpdaterNames(data, filesQuery.data?.data ?? NO_FILES);
-  const files = useMemo(() => {
-    const rows = filesQuery.data?.data ?? NO_FILES;
-    return isLocal
-      ? resolveLocalFileUpdatedByNames(rows, localUpdaterNames)
-      : resolveFileUpdatedByNames(rows, filterUsers);
-  }, [filesQuery.data, filterUsers, isLocal, localUpdaterNames]);
+  // クラウドは API が更新者名を返す。ローカルは更新者名を持たないため、ログイン ID で引いた名前を使う
+  const files = useMemo(
+    () =>
+      resolveFileUpdaters(
+        filesQuery.data?.data ?? NO_FILES,
+        isLocal ? { kind: 'LOCAL', nameByLoginId: localUpdaterNames } : { kind: 'CLOUD' },
+      ),
+    [filesQuery.data, isLocal, localUpdaterNames],
+  );
   const total = filesQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / filter.pageSize));
   const from = (filter.pageIndex - 1) * filter.pageSize + 1;
@@ -168,11 +165,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
     editUploadFileRef.current = file;
     setEditUploadFile(file);
   };
-
-  const userOptions = useMemo(
-    () => buildFileUserFilterOptions(filterUsers, (key) => t(key)),
-    [filterUsers, t],
-  );
 
   // ---- 選択 ----
 
@@ -510,8 +502,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
 
       <TrainingDataFilters
         query={filter.query ?? ''}
-        userOptions={userOptions}
-        selectedUser={filter.userId || null}
         periodOptions={PERIOD_OPTIONS}
         selectedPeriod={filter.selectedPeriod ?? null}
         filterPeriodRange={filter.filterPeriodRange ?? null}
@@ -519,7 +509,6 @@ export function TrainingDataFilesView({ data, onSync }: TrainingDataFilesViewPro
         totalPages={totalPages}
         currentPage={filter.pageIndex}
         onSearchQuery={(query) => updateFilesFilter({ query })}
-        onUserChange={(value) => updateFilesFilter({ userId: value ?? '' })}
         onPeriodChange={handlePeriodChange}
         onPageChange={(pageIndex) => updateFilesFilter({ pageIndex })}
       />
