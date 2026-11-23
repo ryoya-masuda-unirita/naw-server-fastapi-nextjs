@@ -1,6 +1,6 @@
 ---
 name: e2e-explorer-triage
-description: Use when the user asks to triage (仕分け) a report produced by e2e-explorer (the E2E exploration harness in e2e-explorer/), i.e. to read reports/<run>/report.json or report.md, decide for each suspicion whether it is a real bug, intended behavior, an unported feature, or a harness false positive by checking the frontend/backend code and the reference implementation, and draft GitHub Issue texts. Drafts only — never files Issues itself; the human decides. Do not use for running the crawl itself (see e2e-explorer/README.md) or for fixing the bugs.
+description: Use when the user asks to triage (仕分け) a report produced by e2e-explorer (the E2E exploration harness in e2e-explorer/), i.e. to read reports/<run>/report.json or report.md, decide for each suspicion whether it is a real bug, intended behavior, an unported feature, or a harness false positive by checking the client/backend code and the reference implementation, and draft GitHub Issue texts. Drafts only — never files Issues itself; the human decides. Do not use for running the crawl itself (see e2e-explorer/README.md) or for fixing the bugs.
 ---
 
 # E2E 探索レポートの仕分け
@@ -24,10 +24,10 @@ description: Use when the user asks to triage (仕分け) a report produced by e
 2. 疑いを重大度の高い順に 1 件ずつ仕分ける。件数が多いときは、高 → 中 → 低の順で、低は種類ごとにまとめて扱ってよい
 3. 1 件ごとに次を確かめる
    - **再現手順**（`example.steps`）とスクリーンショットから、どの画面で何をしたときの症状かを把握する
-   - **frontend のコード**（`frontend/src/`）: その画面のコンポーネント・呼んでいる API・エラー処理
-   - **backend のコード**（`backend/app/`）: 該当する API の router・service・schema。500 なら例外の出どころ、4xx なら返す条件
+   - **frontend のコード**（`client/src/`）: その画面のコンポーネント・呼んでいる API・エラー処理
+   - **backend のコード**（`server/app/`）: 該当する API の router・service・schema。500 なら例外の出どころ、4xx なら返す条件
    - **移植元**（`~/Documents/unirita-develop-pj/secuaigent-ref/`。読むだけ。`git checkout` / `git pull` はしない）: 同じ画面・API が移植元でどう振る舞うか。移植元と同じ振る舞いなら「仕様どおり」の根拠になる
-   - 必要なら backend の単体テストで再現を試す（`cd backend && uv run pytest ...`）。専用環境を起動して確かめる場合は `e2e-explorer/README.md` の手順で行い、既存のローカル環境（`naw-fastapi-*`）には触れない
+   - 必要なら backend の単体テストで再現を試す（`cd server && uv run pytest ...`）。専用環境を起動して確かめる場合は `e2e-explorer/README.md` の手順で行い、既存のローカル環境（`naw-fastapi-*`）には触れない
 4. 次のどれかに判定する
 
    | 判定 | 意味 | 文案 |
@@ -49,7 +49,7 @@ description: Use when the user asks to triage (仕分け) a report produced by e
 ```markdown
 | # | 重大度 | 症状 | 場所 | 判定 | 根拠 | 文案 |
 |---|---|---|---|---|---|---|
-| 1 | 高 | API が 500 番台を返した | POST /api/xxx | バグ | backend/app/services/xxx_service.py で None を参照 | あり（下記 A） |
+| 1 | 高 | API が 500 番台を返した | POST /api/xxx | バグ | server/app/services/xxx_service.py で None を参照 | あり（下記 A） |
 | 2 | 低 | 横スクロールが出た | /dashboard @mobile | 誤検知 | 表の横スクロールは移植元も同じ | なし（設定の追加案あり） |
 ```
 

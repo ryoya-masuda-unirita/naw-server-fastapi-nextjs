@@ -11,13 +11,13 @@ on:
     paths:
       - "generative-ai-adapter/**"
       - "waha-emulator/**"
-      - "server-local/**"
+      - "secuaigent-server-local/**"
       - ".github/workflows/generative-ai-adapter-tests.yml"
   push:
     paths:
       - "generative-ai-adapter/**"
       - "waha-emulator/**"
-      - "server-local/**"
+      - "secuaigent-server-local/**"
       - ".github/workflows/generative-ai-adapter-tests.yml"
 
 jobs:

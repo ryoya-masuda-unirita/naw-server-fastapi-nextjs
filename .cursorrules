@@ -8,8 +8,8 @@
 
 | 移植元（`secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
-| `client/`（Angular） | React（Vite + React Router） → `frontend/` |
-| `server/`（Spring Boot） | FastAPI → `backend/` |
+| `client/`（Angular） | React（Vite + React Router） → `client/` |
+| `server/`（Spring Boot） | FastAPI → `server/` |
 | `generative-ai-adapter/`・`secuaigent-server-local/` ほか | `CLAUDE.md` 参照 |
 
 **両参照リポジトリは日々更新される**。実装前に必ず参照リポジトリの最新状態を確認し、現時点の実装を把握してからポートすること。
@@ -37,7 +37,7 @@
 | バックエンド | AWS ECS（EC2 起動タイプ、t4g.nano）※ メモリ不足時は t4g.micro に変更 |
 | DB | Amazon RDS PostgreSQL（db.t4g.micro） |
 | コンテナレジストリ | Amazon ECR |
-| IaC | Terraform（`infra/` ディレクトリ） |
+| IaC | Terraform（`secuaigent-infra/` ディレクトリ） |
 | CI/CD | GitHub Actions + OIDC（IAM ロール） |
 | リージョン | ap-northeast-1 |
 
@@ -67,12 +67,12 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 
 ```
 naw-server-fastapi-nextjs/
-├── frontend/    # React（Vite + React Router、Angular の移植先）
-├── backend/     # FastAPI（Spring Boot の移植先）
-└── infra/       # Terraform（AWS インフラ定義）
+├── client/    # React（Vite + React Router、Angular の移植先）
+├── server/     # FastAPI（Spring Boot の移植先）
+└── secuaigent-infra/       # Terraform（AWS インフラ定義）
 ```
 
-フロントエンド固有の規約は `frontend/.claude/CLAUDE.md`、バックエンド固有は `backend/.claude/CLAUDE.md` を参照すること。
+フロントエンド固有の規約は `client/.claude/CLAUDE.md`、バックエンド固有は `server/.claude/CLAUDE.md` を参照すること。
 
 ---
 

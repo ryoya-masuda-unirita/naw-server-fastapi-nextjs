@@ -1,12 +1,12 @@
 # waha-emulator
 
-Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（FastAPI）のサービス（Issue #274）。`server-local/` から SECURE アシスタントのチャットを通しで動かすために、Waha! の代わりに置く。
+Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（FastAPI）のサービス（Issue #274）。`secuaigent-server-local/` から SECURE アシスタントのチャットを通しで動かすために、Waha! の代わりに置く。
 
-移植元のリポジトリには Waha! 本体がないため、API は `server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。学習・削除・同期は、移植した**埋め込みアダプタ**（#300）をワークフローに差し込んで動かす（ベクトルDB は PostgreSQL + pgvector）。RAG には、移植した**検索アダプタ**（#299）を前段に差し込める（`retrieval`）。
+移植元のリポジトリには Waha! 本体がないため、API は `secuaigent-server-local/app/clients/waha_client.py`（移植元 `ServiceRunService` の移植）が使うものだけを、同じパス・パラメータ・応答で作っている。ワークフローは、移植した**生成AIアダプタ**（ルートの `generative-ai-adapter/`。通常チャットと RAG 回答。#298）を呼ぶ。学習・削除・同期は、移植した**埋め込みアダプタ**（#300）をワークフローに差し込んで動かす（ベクトルDB は PostgreSQL + pgvector）。RAG には、移植した**検索アダプタ**（#299）を前段に差し込める（`retrieval`）。
 
 - 動作環境: Linux（Docker コンテナ）。ホストで直接動かしてもよい
 - セッションはメモリに持つ（再起動で消える）
-- `backend/`・`server-local/` とは独立したプロジェクトで、コードは共有しない（テストだけ `server-local/` を読み込む）。生成AIアダプタだけは `../generative-ai-adapter/generative-ai-adapter` をパス依存で使う（core も一緒に入る）
+- `server/`・`secuaigent-server-local/` とは独立したプロジェクトで、コードは共有しない（テストだけ `secuaigent-server-local/` を読み込む）。生成AIアダプタだけは `../generative-ai-adapter/generative-ai-adapter` をパス依存で使う（core も一緒に入る）
 - 設計は [docs/issue-274](../docs/issue-274/)（土台）・[docs/issue-298](../docs/issue-298/)（アダプタの差し込み）
 
 ## API
@@ -165,19 +165,19 @@ data:{"type":"completed"}
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の URL のモデル名になる |
 | `LOG_LEVEL` | `INFO` | |
 
-Docker Compose では、ほかに `WAHA_EMULATOR_PORT`（既定 8091）・`WAHA_EMULATOR_STREAM_DIR`（既定 `../server-local/data/stream-output`）・`WAHA_EMULATOR_CONFIG_DIR`（既定 `./config`。`/app/config` に読み取り専用でマウントする）・`WAHA_EMULATOR_UID`/`WAHA_EMULATOR_GID`（既定 1000）・`TZ`（既定 `Asia/Tokyo`）を使う。ビルドのコンテキストはリポジトリのルート（生成AIアダプタをイメージに含めるため）。
+Docker Compose では、ほかに `WAHA_EMULATOR_PORT`（既定 8091）・`WAHA_EMULATOR_STREAM_DIR`（既定 `../secuaigent-server-local/data/stream-output`）・`WAHA_EMULATOR_CONFIG_DIR`（既定 `./config`。`/app/config` に読み取り専用でマウントする）・`WAHA_EMULATOR_UID`/`WAHA_EMULATOR_GID`（既定 1000）・`TZ`（既定 `Asia/Tokyo`）を使う。ビルドのコンテキストはリポジトリのルート（生成AIアダプタをイメージに含めるため）。
 
 ## Docker で起動する
 
 ```bash
-mkdir -p server-local/data/stream-output   # マウントするディレクトリを先に作る（下記）
+mkdir -p secuaigent-server-local/data/stream-output   # マウントするディレクトリを先に作る（下記）
 cd waha-emulator
 cp .env.example .env          # WAHA_AUTHKEY を設定する（azure_openai を使うなら接続先も）
 docker compose up -d --build
 curl "http://localhost:8091/WahaServer/servicerun/api/startsession?authkey=<WAHA_AUTHKEY>"   # → セッション ID
 ```
 
-ストリームファイルのディレクトリ（`WAHA_EMULATOR_STREAM_DIR`、既定 `../server-local/data/stream-output`）は、**起動前に自分のユーザーで作っておく**。ないまま起動すると Docker が root 所有で作り、Linux では uid 1000 の server-local が書き込めなくなるため、compose はディレクトリを作らずに起動エラー（`bind source path does not exist`）にしている。
+ストリームファイルのディレクトリ（`WAHA_EMULATOR_STREAM_DIR`、既定 `../secuaigent-server-local/data/stream-output`）は、**起動前に自分のユーザーで作っておく**。ないまま起動すると Docker が root 所有で作り、Linux では uid 1000 の server-local が書き込めなくなるため、compose はディレクトリを作らずに起動エラー（`bind source path does not exist`）にしている。
 
 停止・削除は `docker compose down`。
 
@@ -187,21 +187,21 @@ server-local の `WAHA_URL` をエミュレーターに向け、`WAHA_AUTHKEY` �
 
 ### 両方とも Docker で動かす
 
-server-local のコンテナはストリームファイルを `/app/data/stream-output` に作る（ホストの `server-local/data/stream-output`）。エミュレーターの compose は既定で同じホストのディレクトリを同じパスにマウントするため、パスの読み替え（server-local の `STREAM_WAHA_OUTPUT_DIR`）は要らない。
+server-local のコンテナはストリームファイルを `/app/data/stream-output` に作る（ホストの `secuaigent-server-local/data/stream-output`）。エミュレーターの compose は既定で同じホストのディレクトリを同じパスにマウントするため、パスの読み替え（server-local の `STREAM_WAHA_OUTPUT_DIR`）は要らない。
 
 ```bash
 # 0. 共有するディレクトリを先に作る（root 所有で作られないように）
-mkdir -p server-local/data/stream-output
+mkdir -p secuaigent-server-local/data/stream-output
 
 # 1. エミュレーター（waha-emulator/.env の WAHA_AUTHKEY=任意の値）
 cd waha-emulator && docker compose up -d --build
 
-# 2. server-local（server-local/.env）
+# 2. server-local（secuaigent-server-local/.env）
 #    WAHA_URL=http://host.docker.internal:8091/
 #    WAHA_AUTHKEY=エミュレーターと同じ値
 cd ../server-local && docker compose up -d --build
 
-# 3. 確かめる（SECURITY_SERVER_AUTH_KEY は server-local/.env の値）
+# 3. 確かめる（SECURITY_SERVER_AUTH_KEY は secuaigent-server-local/.env の値）
 curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \
   -F 'textData={"assistantId":"gpt-4o","messageId":"m-1","userInput":"こんにちは"};type=application/json' \
   http://localhost:8090/api/messages/content
@@ -213,18 +213,18 @@ curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \
 
 ### 両方ともホストで動かす
 
-同じファイルシステムなので、server-local が渡すパスをそのまま使える。`STREAM_ALLOWED_DIR` は server-local のストリームファイルの出力先（既定 `server-local/data/stream-output`）にする。
+同じファイルシステムなので、server-local が渡すパスをそのまま使える。`STREAM_ALLOWED_DIR` は server-local のストリームファイルの出力先（既定 `secuaigent-server-local/data/stream-output`）にする。
 
 ```bash
 # エミュレーター
-mkdir -p server-local/data/stream-output
+mkdir -p secuaigent-server-local/data/stream-output
 cd waha-emulator
 uv sync
-WAHA_AUTHKEY=local-key STREAM_ALLOWED_DIR=../server-local/data/stream-output \
+WAHA_AUTHKEY=local-key STREAM_ALLOWED_DIR=../secuaigent-server-local/data/stream-output \
   uv run uvicorn waha_emulator.main:app_factory --factory --port 8091 --no-access-log
 
-# server-local（別のターミナル。server-local/.env で WAHA_URL=http://localhost:8091/、WAHA_AUTHKEY=local-key）
-cd server-local
+# server-local（別のターミナル。secuaigent-server-local/.env で WAHA_URL=http://localhost:8091/、WAHA_AUTHKEY=local-key）
+cd secuaigent-server-local
 uv run uvicorn app.main:app_factory --factory --port 8090
 ```
 
@@ -238,6 +238,6 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy
 ```
 
-- `tests/test_server_local_roundtrip.py` は、リポジトリの `server-local/` を読み込み、server-local の `WahaClient` とアプリ（SSE・同期 API）から ASGI でエミュレーターを呼ぶ。server-local の Waha! の呼び方が変わったら、ここで食い違いが分かる
+- `tests/test_server_local_roundtrip.py` は、リポジトリの `secuaigent-server-local/` を読み込み、server-local の `WahaClient` とアプリ（SSE・同期 API）から ASGI でエミュレーターを呼ぶ。server-local の Waha! の呼び方が変わったら、ここで食い違いが分かる
 - チャット 1 回でどの部品がどの順に動いたかのログの読み方と、Docker での通しの確認手順は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md)
 - uvicorn のアクセスログは出さない（`startsession` のクエリの authkey がログに残るため）

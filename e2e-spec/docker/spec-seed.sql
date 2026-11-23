@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- e2e-spec 専用の追加データ（backend/seed.sql・seed-demo.sql の後に流す）。
+-- e2e-spec 専用の追加データ（server/seed.sql・seed-demo.sql の後に流す）。
 -- seed にはシステム管理者（role = SYSTEM）がいないため、権限別のログインの確認用に足す。
 -- login_id: system-admin / password: admin@1234（admin と同じ bcrypt ハッシュ）
 INSERT INTO users (id, login_id, tenant_id, name, role, is_required_password_reset)

@@ -1,3 +1,0 @@
-# terraform init -backend-config=backend.hcl で渡す。実体(backend.hcl)は git 管理しない。
-# 値は infra/bootstrap の出力 state_bucket_name（terraform output -raw backend_config で出せる）。
-bucket = "naw-fastapi-tfstate-123456789012"

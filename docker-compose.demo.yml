@@ -75,8 +75,8 @@ services:
     environment:
       PGPASSWORD: root
     volumes:
-      - ./backend/seed.sql:/seed/seed.sql:ro
-      - ./backend/seed-demo.sql:/seed/seed-demo.sql:ro
+      - ./server/seed.sql:/seed/seed.sql:ro
+      - ./server/seed-demo.sql:/seed/seed-demo.sql:ro
     command: ["sh", "-c", "psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed.sql && psql -h postgres -U root -d postgres -v ON_ERROR_STOP=1 -q -f /seed/seed-demo.sql"]
     depends_on:
       migrate:

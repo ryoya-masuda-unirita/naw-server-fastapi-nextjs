@@ -1,5 +1,5 @@
 -- クラウド側 backend に、社内側（onprem/docker-compose.yml）の server-local を使う SECURE アシスタントを登録する。
--- backend/seed.sql（test-tenant・動作確認用グループ）を流した後に流す。
+-- server/seed.sql（test-tenant・動作確認用グループ）を流した後に流す。
 -- endpoint・api_key は onprem/docker-compose.yml の server-local の公開ポートと認証キー（既定値）に合わせる
 
 INSERT INTO assistants (id, tenant_id, type, name, description, include_history)

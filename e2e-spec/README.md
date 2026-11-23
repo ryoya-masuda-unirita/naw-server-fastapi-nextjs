@@ -5,14 +5,14 @@
 このリポジトリ（`naw-server-fastapi-nextjs`）は、ユニリタの企業向け AI チャット管理 SaaS **「SecuAiGent」**（旧称 NAW）を、**Spring Boot（Java）+ Angular から FastAPI（Python）+ React へ移植する**プロジェクトです。
 
 - SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS です。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使います
-- 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `backend/`（FastAPI）・`frontend/`（React）・`server-local/` などに移植しています
+- 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `server/`（FastAPI）・`client/`（React）・`secuaigent-server-local/` などに移植しています
 - 目標は移植元の**完璧なクローン**です（見た目・文言・操作・ルート・入力チェックまで揃える）
 
 ## このモジュールは何のためにあるか
 
 移植元（SecuAiGent V1.1.0）には、人が手で確かめた**結合テスト項目書**（ルートの `25DA61_結合テスト項目書_md/`。20 カテゴリ・627 項目。各項目に「テスト方法」「確認内容」「備考」が書かれている）があります。
 
-`e2e-spec` は、この**項目書の 1 項目 = 1 つの Playwright テスト**にして、**React（`frontend/`）+ backend が移植元と同じに動くか**を自動で確かめるためのモジュールです。
+`e2e-spec` は、この**項目書の 1 項目 = 1 つの Playwright テスト**にして、**React（`client/`）+ backend が移植元と同じに動くか**を自動で確かめるためのモジュールです。
 
 - 結果は項目書のサマリと同じ形（カテゴリごとの 項目数・OK・NG・未実施）で集計します
 - NG は「移植元の挙動と React/backend の挙動の本当の差」です。原因ごとに `docs/issue-316/` に記録し、Issue にします
@@ -85,13 +85,13 @@ E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55274 E2E_SPEC_BACKEND_PO
 
 ## 専用環境
 
-ルートの `docker-compose.demo.yml`（backend・frontend・PostgreSQL・Redis・LocalStack、`backend/seed.sql` + `backend/seed-demo.sql` のデモデータ入り）を、**別のプロジェクト名 `naw-e2e-spec`・別ポート**で起動します。
+ルートの `docker-compose.demo.yml`（backend・frontend・PostgreSQL・Redis・LocalStack、`server/seed.sql` + `server/seed-demo.sql` のデモデータ入り）を、**別のプロジェクト名 `naw-e2e-spec`・別ポート**で起動します。
 
 - 既存の開発用コンテナ（`naw-fastapi-*`）・手元のデモ（`naw-demo`。5173/8001）・`e2e-explorer`（55173/58000）には触れません。ネットワーク・ボリューム・イメージ名（`docker/compose.override.yml` で `naw-e2e-spec-backend` に変更）も別です
 - ホストに公開するのは画面（`127.0.0.1:55273`）と backend（`127.0.0.1:58100`）だけです
 - `env:up` は、demo の seed に無いシステム管理者（`system-admin`、`docker/spec-seed.sql`）を追加します
 - **安全策**: 実行先の URL がローカル（`localhost`・`127.0.0.1`・`::1`）以外のときは起動もテストも拒否します（テストはデータを作成・削除します）
-- frontend は今の `frontend/` を Vite の開発サーバーで動かすので、画面を直したら再度 `env:up`（イメージの再ビルド）が要ります
+- frontend は今の `client/` を Vite の開発サーバーで動かすので、画面を直したら再度 `env:up`（イメージの再ビルド）が要ります
 
 ### ログインできるユーザー（`src/users.ts`）
 
@@ -173,7 +173,7 @@ test('[07-30] Azure OpenAI の実応答', async () => {
 - **失敗を隠さない。** `test.fail`・`retries`・テストを緩める（期待値を実際の挙動に合わせる）は禁止。移植元の仕様どおりの期待値で書き、React/backend が違えば NG のまま残す
 - ただし、**テストの書き方の間違い**（ロケーターの誤り、待ちの不足、期待値の読み違え）は直す。NG が出たら必ず「本当の差か」を確かめる:
   1. 移植元のコード（`client/`・`server/`）と項目書の備考で、どちらが正しいかを確かめる
-  2. React 側のコード（`frontend/src`）・backend（`backend/app`）で原因を特定する
+  2. React 側のコード（`client/src`）・backend（`server/app`）で原因を特定する
   3. 本当の差なら `docs/issue-316/ng-<カテゴリ>.md` に書く（Issue 起票は担当者が決める。**自動では起票しない**）
 
 `ng-<カテゴリ>.md` の書き方（`docs/issue-316/ng-ログイン.md` が見本）:
