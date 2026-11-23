@@ -12,7 +12,6 @@ from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
-from app.core.shielded import run_shielded
 from app.core.library_stream_router import (
     DEFAULT_LIBRARY_TITLE,
     LIBRARY_USER_INSTRUCTION_PREFIX,
@@ -30,6 +29,7 @@ from app.core.room_access import (
     require_owned_room,
     require_viewable_room,
 )
+from app.core.shielded import run_shielded
 from app.core.sse import sse_event
 from app.core.token_usage_credit import (
     embedding_credits as calc_embedding_credits,
