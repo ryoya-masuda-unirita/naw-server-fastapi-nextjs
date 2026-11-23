@@ -51,6 +51,11 @@ resource "aws_s3_bucket" "tfstate" {
   lifecycle {
     prevent_destroy = true
   }
+
+  tags = {
+    Name    = local.bucket_name
+    Project = var.project_name
+  }
 }
 
 // 誤ってstateを上書き・削除してしまった場合に復元できるよう、バージョニングを有効化する

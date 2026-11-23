@@ -26,7 +26,16 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
    AWS_PROFILE=oic terraform output -raw backend_config > ../backend.hcl
    ```
 
-   バケット名は`<project_name>-tfstate-<AWSアカウントID>`になる。`bootstrap/`の`terraform.tfstate`（ローカル）は消さないこと。消えた場合は`terraform import`で復元する。`../backend.hcl`は`.gitignore`済みで、git管理しない（雛形は`backend.hcl.example`）。
+   バケット名は`<project_name>-tfstate-<AWSアカウントID>`になる。`bootstrap/`の`terraform.tfstate`（ローカル）は消さないこと。消えた場合（別のPCで実行する場合も）は、`apply`の前に次の`import`で復元する（バケットが既にあるのに`apply`すると`BucketAlreadyOwnedByYou`で失敗する）。`../backend.hcl`は`.gitignore`済みで、git管理しない（雛形は`backend.hcl.example`）。
+
+   ```bash
+   cd infra/bootstrap
+   B=<project_name>-tfstate-<AWSアカウントID>
+   AWS_PROFILE=oic terraform import aws_s3_bucket.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_versioning.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_server_side_encryption_configuration.tfstate "$B"
+   AWS_PROFILE=oic terraform import aws_s3_bucket_public_access_block.tfstate "$B"
+   ```
 
 2. **メイン構成を初期化する**
 
@@ -38,6 +47,8 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
 3. `terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）
 4. `AWS_PROFILE=oic terraform apply`を実行する
 5. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
+
+> `infra/`の変更を含むpushでも、インフラは自動適用されない（`deploy.yml`が警告を出す）。backend/frontendより先に、`gh workflow run deploy.yml -f run_infra=true`で反映すること。
 
 ### Route53（もう不要）
 
