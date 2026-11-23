@@ -234,3 +234,6 @@ secuaigent-infra/**/backend.hcl
 
 # backend: LocalFileStorageのローカル実体ファイル置き場（動作確認・E2Eテストで生成される）
 server/data/
+
+# onprem: Bedrock 用のワークフロー定義（例から作る。bedrock-ext）
+onprem/config/workflows.json

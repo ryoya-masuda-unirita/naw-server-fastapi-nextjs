@@ -320,3 +320,36 @@ def test_load_invalid_json_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(WorkflowConfigError, match="WAHA_WORKFLOWS_FILE を読めません"):
         load_workflow_config(make_settings(WAHA_WORKFLOWS_FILE=str(path)))
+
+
+def test_load_bedrock_vendor_with_env_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """VENDOR: Bedrock の定義が読め、`${BEDROCK_API_KEY}` が展開されること"""
+    # bedrock-ext: Bedrock の部品を消すときは、このテストも削除する
+    monkeypatch.setenv("BEDROCK_API_KEY", "bedrock-key")
+    path = tmp_path / "workflows.json"
+    path.write_text(
+        json.dumps(
+            {
+                "default": {
+                    "properties": {
+                        "VENDOR": "Bedrock",
+                        "URL": "https://bedrock-mantle.example.invalid/anthropic",
+                        "API_KEY": "${BEDROCK_API_KEY}",
+                        "MODEL_NAME": "anthropic.claude-haiku-4-5",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_workflow_config(make_settings(WAHA_WORKFLOWS_FILE=str(path)))
+
+    assert config.default.properties == {
+        PropertyIds.VENDOR: "97",
+        PropertyIds.URL: "https://bedrock-mantle.example.invalid/anthropic",
+        PropertyIds.API_KEY: "bedrock-key",
+        PropertyIds.MODEL_NAME: "anthropic.claude-haiku-4-5",
+    }

@@ -41,3 +41,34 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
 
 2. `cloud-seed.sql` で、`test-tenant` に SECURE アシスタント「社内アシスタント（オンプレ）」と LOCAL_SERVER エンドポイント（URL `http://localhost:18090/`、API キー `onprem-local-key`）が登録される。ブラウザはこの URL の server-local に直接質問を送る（`.env` で認証キーを変えたら `cloud-seed.sql` の `api_key` も同じ値にする）
 3. server-local はライブラリのスタブ作成で `http://host.docker.internal:8001`（ルートの compose の backend）を呼ぶ。backend を別のポートで動かすときは `.env` の `NAW_BASE_URL` を変える
+
+## Bedrock で動かす（Azure OpenAI の代わり）
+
+waha-emulator の LLM を、AWS Bedrock（Claude）にする。社内側（waha-emulator のアダプタ）から Bedrock を直接呼ぶので、質問はクラウドの server を通らない。
+
+1. Bedrock の API key（Bearer 方式）を用意する。Claude のモデルアクセスが有効なリージョンのもの
+2. ワークフロー定義を作る（接続先のリージョン・モデル名は書き換えてよい）
+
+   ```bash
+   cd onprem
+   cp config/workflows.bedrock.example.json config/workflows.json
+   ```
+
+3. `.env` に次を書く（`cp .env.example .env` してコメントを外す）
+
+   ```
+   WAHA_WORKFLOWS_FILE=/app/onprem-config/workflows.json
+   BEDROCK_API_KEY=<Bedrock API key>
+   ```
+
+4. 起動し直して、上の curl で質問する
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+- `config/workflows.json` の `default` は、`workflows.json` に書いていないすべてのサービス ID（`onprem-chat` を含む）に使われる。`.gitignore` 済み（キーは `${BEDROCK_API_KEY}` で環境変数から渡す）
+- モデル名は、Bedrock で使えるモデル ID（例: `anthropic.claude-haiku-4-5`）。違うと HTTP 400 の失敗になる
+- **埋め込み（学習・検索のベクトル化）は、まだ Bedrock では動かない。** Claude に埋め込みモデルがないため、この設定は回答の生成（チャット）だけ
+- Bedrock の部品は Python 版だけの独自の拡張で、後から消せる。手順は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md) の「移植元にない拡張」
+- 実機（本物の Bedrock）での確認は、`docs/issue-436/08_動作確認.md` に記録する
