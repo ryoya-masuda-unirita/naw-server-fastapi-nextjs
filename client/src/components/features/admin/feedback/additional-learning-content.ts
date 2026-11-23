@@ -1,4 +1,5 @@
 import type { FeedbackItem, SatisfactionFeedbackItem } from '@/types/admin/feedback.types';
+import type { MessageContentApiItem } from '@/types/chat/message-api.type';
 
 /**
  * 追加学習に送るファイルの本文。移植元 `additional-learning-content.ts` の文言を変えない
@@ -30,8 +31,19 @@ function requireRoomId(item: SatisfactionFeedbackItem): string {
   return item.roomId;
 }
 
-export function buildSatisfactionAdditionalLearningContent(item: SatisfactionFeedbackItem): File {
+export function buildSatisfactionAdditionalLearningContent(
+  item: SatisfactionFeedbackItem,
+  contents: MessageContentApiItem[],
+): File {
   const roomId = requireRoomId(item);
+  const conversation = contents.flatMap((content) => [
+    '## 質問',
+    content.question || '-',
+    '',
+    '## 回答',
+    content.answer || '-',
+    '',
+  ]);
   const markdown = [
     '# 追加学習',
     '',
@@ -42,6 +54,7 @@ export function buildSatisfactionAdditionalLearningContent(item: SatisfactionFee
     `- 評価: ${item.satisfaction}`,
     item.updatedAt ? `- 更新日時: ${item.updatedAt}` : undefined,
     '',
+    ...conversation,
   ]
     .filter((line): line is string => line !== undefined)
     .join('\n');
