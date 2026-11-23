@@ -187,7 +187,9 @@ class MessageFeedbackRepository:
         else:
             order_col = MessageFeedback.updated_at
 
-        stmt = stmt.order_by(order_col.desc() if sort_desc else order_col.asc())
+        stmt = stmt.order_by(
+            order_col.desc() if sort_desc else order_col.asc(), MessageFeedback.id.asc()
+        )
         stmt = stmt.offset(page * size).limit(size)
         result = await session.execute(stmt)
         return list(result.all()), total
@@ -295,7 +297,8 @@ class MessageFeedbackRepository:
         order_column = getattr(stats.c, sort_column)
         rows_stmt = (
             filtered_stmt.order_by(
-                order_column.desc() if sort_desc else order_column.asc()
+                order_column.desc() if sort_desc else order_column.asc(),
+                stats.c.user_id.asc(),
             )
             .offset(page * size)
             .limit(size)

@@ -173,7 +173,7 @@ class LibraryRepository:
         stmt = (
             select(Library)
             .where(*conditions)
-            .order_by(order)
+            .order_by(order, Library.id.asc())
             .offset(page * size)
             .limit(size)
         )

@@ -84,7 +84,7 @@ class RoomRepository:
                     & (RoomPin.user_id == user_id)
                 ),
             )
-            .order_by(pinned_order.asc(), Room.updated_at.desc())
+            .order_by(pinned_order.asc(), Room.updated_at.desc(), Room.id.asc())
             .offset(page * size)
             .limit(size)
         )
@@ -232,7 +232,9 @@ class RoomRepository:
         else:
             order_col = Room.updated_at
 
-        stmt = stmt.order_by(order_col.desc() if sort_desc else order_col.asc())
+        stmt = stmt.order_by(
+            order_col.desc() if sort_desc else order_col.asc(), Room.id.asc()
+        )
         stmt = stmt.offset(page * size).limit(size)
         result = await session.execute(stmt)
         return list(result.all()), total
@@ -335,7 +337,9 @@ class RoomRepository:
             order_col = User.name
         else:
             order_col = Room.updated_at
-        stmt = stmt.order_by(order_col.desc() if reverse else order_col.asc())
+        stmt = stmt.order_by(
+            order_col.desc() if reverse else order_col.asc(), Room.id.asc()
+        )
         stmt = stmt.offset(page * size).limit(size)
 
         result = await session.execute(stmt)
