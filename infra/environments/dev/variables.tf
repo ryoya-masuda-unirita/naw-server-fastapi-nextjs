@@ -17,6 +17,17 @@ variable "project_name" {
   }
 }
 
+variable "vpc_cidr" {
+  type        = string
+  default     = "10.10.0.0/16"
+  description = "VPCのCIDR。public/privateサブネットはここから計算する(各/24)"
+
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr はCIDR形式(例: 10.10.0.0/16)で指定すること。"
+  }
+}
+
 variable "github_repository" {
   type        = string
   default     = "ryoya-masuda-unirita/naw-server-fastapi-nextjs"
