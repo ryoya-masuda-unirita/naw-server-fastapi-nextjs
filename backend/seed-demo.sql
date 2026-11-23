@@ -66,6 +66,12 @@ VALUES
 ('d0200000000400080000000000000001', 'test-tenant', 'AZURE_OPENAI_CHAT', 'Azure OpenAI（東日本）', 'https://demo-japaneast.openai.azure.com', 'dummy-demo-key')
 ON CONFLICT (id) DO NOTHING;
 
+-- ローカルの学習先フォルダの接続先。画面（ブラウザ）から直接呼ばれるため、手元で起動した server-local
+-- （server-local/README.md。既定の公開ポート 8090）と、その SECURITY_SERVER_AUTH_KEY に合わせる
+UPDATE tenant_endpoints
+SET endpoint = 'http://localhost:8090', api_key = 'demo-local-server-key'
+WHERE id = 'e1000000000040008000000000000001' AND tenant_id = 'test-tenant';
+
 -- 学習先フォルダ（クラウド 1・ローカル 1）。接続先は seed.sql の学習データ確認用エンドポイントを使う
 INSERT INTO indexes (id, tenant_id, type, name, description, add, delete, get)
 VALUES
