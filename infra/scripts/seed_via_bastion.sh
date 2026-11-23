@@ -25,6 +25,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${INFRA_DIR}")"
+# terraform output は、Terraformを実行する環境のディレクトリで取る(#382でmodules/environments構成に分けた)
+ENV_DIR="${INFRA_DIR}/environments/dev"
 BACKEND_DIR="${REPO_ROOT}/backend"
 
 if [ -f "${SCRIPT_DIR}/.env" ]; then
@@ -59,8 +61,8 @@ if [ -z "${DB_PASSWORD:-}" ]; then
 fi
 
 echo "==> terraform outputから接続先を取得しています..."
-RDS_ENDPOINT="$(cd "${INFRA_DIR}" && terraform output -raw rds_endpoint)"
-BASTION_IP="$(cd "${INFRA_DIR}" && terraform output -raw bastion_public_ip)"
+RDS_ENDPOINT="$(cd "${ENV_DIR}" && terraform output -raw rds_endpoint)"
+BASTION_IP="$(cd "${ENV_DIR}" && terraform output -raw bastion_public_ip)"
 echo "RDS_ENDPOINT=${RDS_ENDPOINT}"
 echo "BASTION_IP=${BASTION_IP}"
 

@@ -7,7 +7,7 @@
 // 使い方(初回のみ。ローカルstateのまま実行する):
 //   AWS_PROFILE=oic terraform init
 //   AWS_PROFILE=oic terraform apply
-//   terraform output -raw backend_config > ../backend.hcl
+//   terraform output -raw backend_config > ../environments/dev/backend.hcl
 //
 // このディレクトリのterraform.tfstate(ローカル)は消さないこと。消えた場合はterraform importで復元する。
 

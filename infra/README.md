@@ -6,10 +6,14 @@ Issue #160 でTerraform化したAWSインフラ（dev/staging用、本番なし�
 
 ```
 infra/
-├── bootstrap/ # tfstate用S3バケットのみ。メインとは別state（初回に一度だけ作る）
-├── route53/   # Route53ホストゾーンのみ。メインとは別state（理由は後述）
-└── （このディレクトリ） # 上記以外の全リソース（VPC/ECS/RDS/ALB/CloudFront/S3など）
+├── bootstrap/        # tfstate用S3バケットのみ。メインとは別state（初回に一度だけ作る）
+├── route53/          # Route53ホストゾーンのみ。メインとは別state（理由は後述）
+├── environments/dev/ # メイン構成。各モジュールを組み合わせる（terraformはここで実行する）
+├── modules/          # network・rds・elasticache・ecr・alb・ecs・frontend・github-actions・bastion・user-import
+└── scripts/          # 踏み台経由のseed投入スクリプトなど
 ```
+
+メイン構成は`modules/`（再利用できる単位）を`environments/dev/`が入力と出力でつなぐ形（移植元`secuaigent-infra`と同じ分け方）。ALBだけは移植元のecsモジュールから独立させている。ECSのタスクがCloudFrontのドメイン（CORS）を使い、CloudFrontがALBをオリジンにするため、同じモジュールにするとモジュール同士が循環する。**以降の`terraform`コマンドは、特記がなければ`infra/environments/dev`で実行する。**
 
 ## 初回セットアップ手順（新しいAWSアカウントへの構築時、`terraform destroy`後の再構築時も同様）
 
@@ -23,10 +27,10 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
    cd infra/bootstrap
    AWS_PROFILE=oic terraform init
    AWS_PROFILE=oic terraform apply
-   AWS_PROFILE=oic terraform output -raw backend_config > ../backend.hcl
+   AWS_PROFILE=oic terraform output -raw backend_config > ../environments/dev/backend.hcl
    ```
 
-   バケット名は`<project_name>-tfstate-<AWSアカウントID>`になる。`bootstrap/`の`terraform.tfstate`（ローカル）は消さないこと。消えた場合（別のPCで実行する場合も）は、`apply`の前に次の`import`で復元する（バケットが既にあるのに`apply`すると`BucketAlreadyOwnedByYou`で失敗する）。`../backend.hcl`は`.gitignore`済みで、git管理しない（雛形は`backend.hcl.example`）。
+   バケット名は`<project_name>-tfstate-<AWSアカウントID>`になる。`bootstrap/`の`terraform.tfstate`（ローカル）は消さないこと。消えた場合（別のPCで実行する場合も）は、`apply`の前に次の`import`で復元する（バケットが既にあるのに`apply`すると`BucketAlreadyOwnedByYou`で失敗する）。`infra/environments/dev/backend.hcl`は`.gitignore`済みで、git管理しない（雛形は`backend.hcl.example`）。
 
    ```bash
    cd infra/bootstrap
@@ -40,11 +44,11 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
 2. **メイン構成を初期化する**
 
    ```bash
-   cd infra
+   cd infra/environments/dev
    AWS_PROFILE=oic terraform init -backend-config=backend.hcl
    ```
 
-3. `terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）
+3. `infra/environments/dev/terraform.tfvars`を用意する（`terraform.tfvars.example`を参考に。`tfstate_bucket_name`には手順1のバケット名を入れる）
 4. `AWS_PROFILE=oic terraform apply`を実行する
 5. 以降は通常どおり`terraform plan`/`apply`/`destroy`を使う（S3ネイティブロックにより複数人での同時applyも安全）
 
@@ -65,7 +69,7 @@ tfstate用S3バケットは、メインの`infra/`構成とは別のstate（`inf
 デプロイに使うSecrets/Variablesのうち、`AWS_ROLE_ARN`・`FRONTEND_BUCKET_NAME`・`CLOUDFRONT_DISTRIBUTION_ID`は`terraform output`で取得できる。それ以外（`DB_PASSWORD`等）は`terraform.tfvars`と同じ値を使う。`gh` CLI（[GitHub CLI](https://cli.github.com/)、要ログイン済み）で以下のように一括登録できる。
 
 ```bash
-cd infra
+cd infra/environments/dev
 
 # terraform outputから取得できるもの
 gh secret set AWS_ROLE_ARN --body "$(terraform output -raw github_actions_role_arn)"
@@ -82,7 +86,7 @@ gh secret set ALLOWED_SSH_CIDRS --body "<terraform.tfvarsのallowed_ssh_cidrsを
 gh secret set ALLOWED_ADMIN_CIDRS --body "<terraform.tfvarsのallowed_admin_cidrsをそのままコピー、例: [\"1.2.3.4/32\"]>"
 gh variable set KEY_PAIR_NAME --body "<terraform.tfvarsのkey_pair_name>"
 # bootstrapで作ったstate用バケット名（deploy-infra.ymlのterraform initとplan/applyで使う。未登録だとインフラのジョブは失敗する）
-gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=bootstrap output -raw state_bucket_name)"
+gh variable set TF_STATE_BUCKET --body "$(terraform -chdir=../../bootstrap output -raw state_bucket_name)"
 
 # GitHub Projects連携用(project-status-sync.ymlが使用。デプロイとは別用途。未登録なら要発行)
 gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access Token>"
@@ -112,7 +116,7 @@ gh secret set PROJECT_PAT --body "<repo・project権限を持つPersonal Access 
 cd infra/route53 && terraform apply   # ホストゾーン作成、NS取得してムームーに登録
 
 【以降、何度でも】
-cd infra && terraform apply/destroy   # ホストゾーンは data参照のみなので絶対に消えない
+cd infra/environments/dev && terraform apply/destroy   # ホストゾーンは data参照のみなので絶対に消えない
 ```
 
 `lifecycle { prevent_destroy = true }`という手もあったが、これは`terraform destroy`（引数なし）自体が使えなくなる（`-target`が必須になる）副作用があるため、state分離の方を採用した。
