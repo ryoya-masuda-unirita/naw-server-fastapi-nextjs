@@ -7,7 +7,6 @@ resource "aws_ecr_repository" "backend" {
     scan_on_push = true
   }
   tags = {
-    Name    = "${var.project_name}-backend"
-    Project = var.project_name
+    Name = "${var.project_name}-backend"
   }
 }

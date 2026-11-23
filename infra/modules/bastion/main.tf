@@ -18,7 +18,6 @@ resource "aws_instance" "bastion" {
   key_name                    = var.key_pair_name
 
   tags = {
-    Name    = "${var.project_name}-bastion"
-    Project = var.project_name
+    Name = "${var.project_name}-bastion"
   }
 }

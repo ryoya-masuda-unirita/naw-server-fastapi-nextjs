@@ -107,8 +107,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   tags = {
-    Name    = "${var.project_name}-cf"
-    Project = var.project_name
+    Name = "${var.project_name}-cf"
   }
 }
 
@@ -139,8 +138,7 @@ resource "aws_s3_bucket" "frontend" {
   force_destroy = true
 
   tags = {
-    Name    = "${var.project_name}-frontend"
-    Project = var.project_name
+    Name = "${var.project_name}-frontend"
   }
 }
 

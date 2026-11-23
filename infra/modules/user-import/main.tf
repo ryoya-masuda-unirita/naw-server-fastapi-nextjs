@@ -6,8 +6,7 @@ resource "aws_s3_bucket" "user_import" {
   force_destroy = true
 
   tags = {
-    Name    = "${var.project_name}-user-import-jobs"
-    Project = var.project_name
+    Name = "${var.project_name}-user-import-jobs"
   }
 }
 
@@ -32,8 +31,7 @@ resource "aws_sqs_queue" "user_import_dlq" {
   name = "${var.project_name}-user-import-jobs-queue-dlq"
 
   tags = {
-    Name    = "${var.project_name}-user-import-jobs-queue-dlq"
-    Project = var.project_name
+    Name = "${var.project_name}-user-import-jobs-queue-dlq"
   }
 }
 
@@ -53,7 +51,6 @@ resource "aws_sqs_queue" "user_import" {
   })
 
   tags = {
-    Name    = "${var.project_name}-user-import-jobs-queue"
-    Project = var.project_name
+    Name = "${var.project_name}-user-import-jobs-queue"
   }
 }

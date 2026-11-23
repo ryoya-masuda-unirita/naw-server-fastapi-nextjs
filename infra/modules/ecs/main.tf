@@ -2,8 +2,7 @@ resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster"
 
   tags = {
-    Name    = "${var.project_name}-cluster"
-    Project = var.project_name
+    Name = "${var.project_name}-cluster"
   }
 }
 
@@ -33,6 +32,7 @@ resource "aws_launch_template" "ecs" {
   EOF
   )
 
+  // 起動テンプレートのtag_specificationsには、provider の default_tags が効かないため手書きで残す
   tag_specifications {
     resource_type = "instance"
     tags = {
@@ -100,8 +100,7 @@ resource "aws_cloudwatch_log_group" "backend" {
   retention_in_days = 7
 
   tags = {
-    Name    = "${var.project_name}-backend-logs"
-    Project = var.project_name
+    Name = "${var.project_name}-backend-logs"
   }
 }
 
@@ -168,8 +167,7 @@ resource "aws_ecs_task_definition" "backend" {
     }
   ])
   tags = {
-    Name    = "${var.project_name}-backend-task"
-    Project = var.project_name
+    Name = "${var.project_name}-backend-task"
   }
 
   // deploy-backend.ymlがpushのたびにAWS CLIで新しいイメージタグのリビジョンを登録する。
@@ -219,8 +217,7 @@ resource "aws_cloudwatch_log_group" "backend_migrate" {
   retention_in_days = 7
 
   tags = {
-    Name    = "${var.project_name}-backend-migrate-logs"
-    Project = var.project_name
+    Name = "${var.project_name}-backend-migrate-logs"
   }
 }
 
@@ -269,8 +266,7 @@ resource "aws_ecs_task_definition" "backend_migrate" {
   ])
 
   tags = {
-    Name    = "${var.project_name}-backend-migrate-task"
-    Project = var.project_name
+    Name = "${var.project_name}-backend-migrate-task"
   }
 
   // deploy-backend.ymlがpushのたびに新しいイメージタグでこのタスク定義も更新登録するため、

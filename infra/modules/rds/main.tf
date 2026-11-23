@@ -3,8 +3,7 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids = var.private_subnet_ids
 
   tags = {
-    Name    = "${var.project_name}-db-subnet-group"
-    Project = var.project_name
+    Name = "${var.project_name}-db-subnet-group"
   }
 }
 
@@ -23,7 +22,6 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot    = true
 
   tags = {
-    Name    = "${var.project_name}-db"
-    Project = var.project_name
+    Name = "${var.project_name}-db"
   }
 }
