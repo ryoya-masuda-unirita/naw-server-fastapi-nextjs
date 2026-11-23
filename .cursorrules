@@ -67,7 +67,7 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 
 ```
 naw-server-fastapi-nextjs/
-├── client/    # React（Vite + React Router、Angular の移植先）
+├── client/     # React（Vite + React Router、Angular の移植先）
 ├── server/     # FastAPI（Spring Boot の移植先）
 └── secuaigent-infra/       # Terraform（AWS インフラ定義）
 ```

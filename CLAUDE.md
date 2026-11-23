@@ -10,12 +10,13 @@
 
 | 移植元（`~/Documents/unirita-develop-pj/secuaigent-ref/` 配下） | 移植先（このリポジトリ） |
 |---|---|
-| `server/`（Spring Boot 3.5 / Java 21） | `server/`（FastAPI） |
+| `server/`（Spring Boot 3.5 / Java 21） | `server/`（FastAPI。名前は移植元と同じ） |
 | `client/`（Angular 21） | `client/`（React、Vite + React Router） |
 | `generative-ai-adapter/`（Java。Waha! 向けの生成AI・埋め込み・検索アダプター。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト） | `generative-ai-adapter/`（Python。移植元と同じ 4 つの分け方で uv ワークスペースにする。#298 で `generative-ai-core/`・`generative-ai-adapter/`（チャット・RAG 回答）、#300 で `embedding-adapter/`（文書の分割・ベクトル保存・更新・削除・Graph Candidate と、core の embedding・vector・ファイル前処理）を移植。#299 で `retrieval-adapter/`（検索）を移植。手順は `generative-ai-adapter/README.md`） |
 | `secuaigent-server-local/`（Java。オンプレ配布用サーバー） | `secuaigent-server-local/`（Python / FastAPI + SQLite。Linux（Docker）で動かす。#210 で新設。手順は `secuaigent-server-local/README.md`） |
 | （移植元なし。Waha! 本体はユニリタの製品で、どちらのリポジトリにもない） | `waha-emulator/`（Python / FastAPI。Waha! の servicerun API の代わり。server-local から SECURE のチャットを通しで動かすために #274 で新設。アダプタはここのワークフローに差し込む。手順は `waha-emulator/README.md`） |
-| `secuaigent-infra/`・`e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める（`secuaigent-infra/` とこのリポジトリの `secuaigent-infra/` の関係も着手時に確認する） |
+| `secuaigent-infra/` | `secuaigent-infra/`（Terraform。名前は移植元と同じ。#399 で `infra/` から変更） |
+| `e2e-test/`・`ops-scripts/`・`ci-runner/`・`test-reporting/`・`documents/` | 移植先は着手時に決める |
 
 `frontend-angular/`（`secuaigent/client` のコピー。React 移植完了までの backend 動作確認用）は Issue #213 で削除した。backend の動作確認は自動テスト、または React（`client/`）の移植済み画面で行う。
 
@@ -112,13 +113,13 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 
 ```
 naw-server-fastapi-nextjs/
-├── client/          # React（Vite + React Router、client/ の移植先）
-├── server/           # FastAPI（server/ の移植先）
-├── secuaigent-server-local/      # FastAPI（secuaigent-server-local/ の移植先。server/ とは独立した uv プロジェクト）
+├── client/                 # React（Vite + React Router。移植元 secuaigent/client/（Angular）の移植先）
+├── server/                 # FastAPI（移植元 secuaigent/server/（Spring Boot）の移植先）
+├── secuaigent-server-local/  # FastAPI（移植元 secuaigent-server-local/ の移植先。server/ とは独立した uv プロジェクト）
 ├── waha-emulator/     # FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト。generative-ai-adapter/ をパス依存で使う）
 ├── generative-ai-adapter/  # Python（generative-ai-adapter/ の移植先。uv ワークスペース: generative-ai-core/・generative-ai-adapter/・embedding-adapter/）
 ├── e2e-explorer/      # Playwright（TypeScript）。画面操作を再帰的にたどってバグの疑いを探す E2E 探索ハーネス（#275。移植元にはない独自のもの）
-└── secuaigent-infra/             # Terraform（AWS インフラ定義）
+└── secuaigent-infra/       # Terraform（AWS インフラ定義。移植元 secuaigent-infra/ に合わせた名前）
 ```
 
 `e2e-explorer/` は専用の docker compose（プロジェクト名 `naw-e2e-explorer`、別ポート）で PostgreSQL・Redis・backend・frontend を起動して巡回し、終わったら破棄する。既存のローカル環境には触れない。実行方法・担当範囲（画面のまとまり × 権限）の分け方は `e2e-explorer/README.md`、レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md` を参照すること。

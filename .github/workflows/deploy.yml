@@ -42,7 +42,7 @@ jobs:
       - name: Warn about unapplied infra changes
         if: github.event_name == 'push' && steps.filter.outputs.infra == 'true'
         run: |
-          echo "::warning::secuaigent-infra/** の変更が含まれていますが、インフラは自動適用されません。server/frontendより先に、Deployを手動実行(run_infra=true)して反映してください。"
+          echo "::warning::secuaigent-infra/** の変更が含まれていますが、インフラは自動適用されません。server/clientより先に、Deployを手動実行(run_infra=true)して反映してください。"
 
   # 手動実行でrun_infraがtrueのときだけ deploy-infra.yml を呼び出す(secrets: inherit で
   # このワークフローに渡っているsecretsをそのまま呼び出し先にも渡す)。pushではスキップされる。

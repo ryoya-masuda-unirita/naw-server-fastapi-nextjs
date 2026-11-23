@@ -93,7 +93,7 @@ Waha! 本体はどちらのリポジトリにもないため、server-local が�
 ```bash
 mkdir -p secuaigent-server-local/data/stream-output   # 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
 cd waha-emulator && cp .env.example .env && docker compose up -d --build     # WAHA_AUTHKEY を設定
-cd ../server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
+cd ../secuaigent-server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
 docker compose up -d --build
 ```
 
@@ -162,7 +162,7 @@ alembic upgrade head
 docker exec -i naw-fastapi-postgres psql -U root -d postgres < seed.sql
 
 # 4. frontend の依存関係
-cd ../frontend
+cd ../client
 npm install
 ```
 

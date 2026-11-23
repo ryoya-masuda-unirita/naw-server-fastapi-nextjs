@@ -892,7 +892,7 @@ class MessageService:
             # スキーマの相関バリデーション(`_validate_target_specified`)により、
             # messageContentIdがNoneの場合はmessageIdが必ず指定されているはずだが、
             # `assert`は`-O`実行時に無効化され得るため、型narrowingを兼ねて明示的に
-            # 例外を送出する（`docs/backend/.claude/CLAUDE.md`のエラー処理を握り
+            # 例外を送出する（`server/.claude/CLAUDE.md`のエラー処理を握り
             # 潰さない方針に合わせる）。
             if req.messageId is None:
                 raise HTTPException(

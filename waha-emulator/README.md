@@ -199,7 +199,7 @@ cd waha-emulator && docker compose up -d --build
 # 2. server-local（secuaigent-server-local/.env）
 #    WAHA_URL=http://host.docker.internal:8091/
 #    WAHA_AUTHKEY=エミュレーターと同じ値
-cd ../server-local && docker compose up -d --build
+cd ../secuaigent-server-local && docker compose up -d --build
 
 # 3. 確かめる（SECURITY_SERVER_AUTH_KEY は secuaigent-server-local/.env の値）
 curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \

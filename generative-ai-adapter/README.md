@@ -147,7 +147,7 @@ cp .env.example .env     # WAHA_AUTHKEY=local-key にする（LLM_PROVIDER=echo 
 docker compose up -d --build
 
 # 2. server-local
-cd ../server-local
+cd ../secuaigent-server-local
 cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=server-key、WAHA_URL=http://host.docker.internal:8091/、WAHA_AUTHKEY=local-key
 docker compose up -d --build
 

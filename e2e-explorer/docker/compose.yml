@@ -45,7 +45,7 @@ services:
 
   migrate:
     build:
-      context: ../../backend
+      context: ../../server
       dockerfile: Dockerfile
     image: naw-e2e-explorer-backend
     environment: *backend-env
@@ -83,7 +83,7 @@ services:
 
   frontend:
     build:
-      context: ../../frontend
+      context: ../../client
       dockerfile: ../e2e-explorer/docker/frontend.Dockerfile
     environment:
       # ブラウザ（ホスト）から見た backend の URL
