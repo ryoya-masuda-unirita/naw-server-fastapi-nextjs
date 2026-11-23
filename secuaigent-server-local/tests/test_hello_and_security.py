@@ -72,6 +72,37 @@ async def test_preflight_without_auth_key(client: httpx.AsyncClient) -> None:
     assert "x-server-auth-key" in res.headers["access-control-allow-headers"].lower()
 
 
+async def test_hello_lookalike_paths_require_auth(client: httpx.AsyncClient) -> None:
+    """/api/hello で始まるだけの別のパスは、稼働確認として除外せず、認証キーが必要なこと"""
+    del client.headers["X-SERVER-AUTH-KEY"]
+    for path in ("/api/helloX", "/api/hello-world", "/api/hello.json"):
+        res = await client.get(path)
+        assert res.status_code == 401, path
+
+
+async def test_hello_subpath_is_excluded_from_auth(client: httpx.AsyncClient) -> None:
+    """/api/hello 配下（/api/hello/ ...）は、これまでどおり認証キーなしで通ること（401 にならない）"""
+    del client.headers["X-SERVER-AUTH-KEY"]
+    res = await client.get("/api/hello/")
+    assert res.status_code != 401
+
+
+async def test_hello_lookalike_path_requires_auth_with_context_path(
+    tmp_path: Path, app_factory: Callable[[Settings], Any]
+) -> None:
+    """コンテキストパス配下でも、/api/hello で始まるだけの別のパスは、認証キーが必要なこと"""
+    app = app_factory(make_settings(tmp_path, CONTEXT_PATH="secuaigent/"))
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            hello = await client.get("/secuaigent/api/hello")
+            assert hello.status_code == 200
+            lookalike = await client.get("/secuaigent/api/helloX")
+            assert lookalike.status_code == 401
+
+
 async def test_context_path(
     tmp_path: Path, app_factory: Callable[[Settings], Any]
 ) -> None:
