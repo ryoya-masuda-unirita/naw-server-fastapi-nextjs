@@ -340,7 +340,7 @@ test.describe('17_学習データ', () => {
   });
 
   test('[17-30] クラウド詳細フィルター', async () => {
-    test.skip(true, FILTER_REMOVED_REASON);
+    test.skip(true, `${FILTER_REMOVED_REASON}。更新者の絞り込みも同様（${USER_FILTER_REMOVED_REASON}）`);
   });
 
   test('[17-31] フォルダ作成→データ追加', async ({ trainingDataPage, page, prefix }) => {
@@ -376,7 +376,7 @@ test.describe('17_学習データ', () => {
   });
 
   test('[17-34] 詳細：フィルター＋並べ替え', async () => {
-    test.skip(true, SORT_REMOVED_REASON);
+    test.skip(true, `${SORT_REMOVED_REASON}。更新者の絞り込みも同様（${USER_FILTER_REMOVED_REASON}）`);
   });
 
   test('[17-35] フォルダ名最大長', async ({ trainingDataPage, page, prefix }) => {
