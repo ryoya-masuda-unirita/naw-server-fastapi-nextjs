@@ -9,6 +9,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.attachment_media import build_user_content
+from app.core.pgvector_store import (  # pgvector-ext
+    PgVectorStoreClient,
+    is_pgvector_endpoint,
+)
 from app.core.bedrock_embedding import (  # bedrock-ext
     BEDROCK_EMBEDDING_MODEL_ID,
     BedrockLlmEmbeddingClient,
@@ -1459,13 +1463,22 @@ class MessageService:
 
         # 移植元同様、Azure Searchのインデックス名にはベクトルDB接続情報が属する
         # テナントIDを使う（`assistant.index_id`ではない）。
-        search_results = await AzureAiSearchVectorStoreClient.similarity_search(
-            vdb.endpoint,
-            vdb.api_key,
-            vdb.tenant_id,
-            embedding_result.embedding,
-            DEFAULT_TOP_K,
-        )
+        if is_pgvector_endpoint(vdb.endpoint):  # pgvector-ext
+            search_results = await PgVectorStoreClient.similarity_search(
+                vdb.endpoint,
+                vdb.api_key,
+                vdb.tenant_id,
+                embedding_result.embedding,
+                DEFAULT_TOP_K,
+            )
+        else:
+            search_results = await AzureAiSearchVectorStoreClient.similarity_search(
+                vdb.endpoint,
+                vdb.api_key,
+                vdb.tenant_id,
+                embedding_result.embedding,
+                DEFAULT_TOP_K,
+            )
 
         seen_file_ids: set[str] = set()
         file_ids: list[str] = []

@@ -19,6 +19,26 @@ services:
       timeout: 5s
       retries: 20
 
+  # クラウドの RAG のベクトル DB（pgvector）。#461。bedrock-ext と同じ Python 版だけの拡張
+  # backend からは postgresql://vector@vector-db:5432/vector（パスワード vector）
+  vector-db:
+    image: pgvector/pgvector:pg17
+    container_name: naw-fastapi-vector-db
+    environment:
+      POSTGRES_DB: vector
+      POSTGRES_USER: vector
+      POSTGRES_PASSWORD: vector
+      TZ: Asia/Tokyo
+    ports:
+      - "5434:5432"
+    volumes:
+      - naw_fastapi_vectordata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vector -d vector"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # ログインセッションの保存先
   redis:
     image: redis:7
@@ -80,6 +100,7 @@ services:
         condition: service_healthy
 
 volumes:
+  naw_fastapi_vectordata:
   naw_fastapi_pgdata:
   naw_fastapi_redisdata:
   naw_fastapi_localstack_data:
