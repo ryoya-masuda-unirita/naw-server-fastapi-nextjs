@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -5,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from generative_ai_adapter.core_mappers import ChatRuntimeFactory
+from generative_ai_core.media import shutdown_tika
 from generative_ai_core.retrieval.runtime import CoreRetrievalRuntime
 
 from waha_emulator.config import Settings, get_settings
@@ -203,7 +205,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """終了時に実行中のジョブを止める。
+        """終了時に実行中のジョブと、起動した Tika を止める。
 
         Parameters
         ----------
@@ -218,7 +220,12 @@ def create_app(
         try:
             yield
         finally:
-            await session_store.close()
+            try:
+                await session_store.close()
+            finally:
+                # Tika は同じコンテナの子プロセスとして起動している。止めるのは同期の処理
+                # （終了を待つ）なので、イベントループを止めないよう別スレッドで行う
+                await asyncio.to_thread(shutdown_tika)
 
     app = FastAPI(title="naw-waha-emulator", lifespan=lifespan)
     app.state.settings = settings
