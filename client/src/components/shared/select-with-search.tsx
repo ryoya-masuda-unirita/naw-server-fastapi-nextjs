@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import './select-with-search.css';
@@ -73,6 +73,7 @@ export function SelectWithSearch<T = string>({
   className,
 }: SelectWithSearchProps<T>) {
   const { t } = useTranslation();
+  const listboxId = useId();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
   // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
@@ -316,6 +317,7 @@ export function SelectWithSearch<T = string>({
             placeholder={placeholder}
             role="combobox"
             aria-label={selectedOption?.label ?? placeholder}
+            aria-controls={isOpen ? listboxId : undefined}
             aria-expanded={isOpen}
             aria-haspopup="listbox"
             onClick={handleInputClick}
@@ -349,6 +351,7 @@ export function SelectWithSearch<T = string>({
             maxHeight: dropdownStyle.maxHeight,
           }}
           role="listbox"
+          id={listboxId}
           aria-label={selectedOption?.label ?? placeholder}
         >
           {supportText && <div className="px-4 pb-4 text-xs text-text-muted font-normal shrink-0">{supportText}</div>}
@@ -422,7 +425,7 @@ export function SelectWithSearch<T = string>({
               </div>
               {supportText && <div className="combobox-list__hint">{supportText}</div>}
             </div>
-            <div className="combobox-list__body" role="listbox" aria-label={selectedOption?.label ?? placeholder}>
+            <div className="combobox-list__body" id={listboxId} role="listbox" aria-label={selectedOption?.label ?? placeholder}>
               {emptyResult}
               {filteredOptions.map((option, index) => (
                 <button

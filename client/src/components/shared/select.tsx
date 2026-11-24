@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './select.css';
@@ -64,6 +64,7 @@ export function Select<T = string>({
   className,
 }: SelectProps<T>) {
   const { t } = useTranslation();
+  const listboxId = useId();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
   // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
@@ -220,6 +221,7 @@ export function Select<T = string>({
           role="combobox"
           tabIndex={disabled ? -1 : 0}
           aria-expanded={isOpen}
+          aria-controls={isOpen ? listboxId : undefined}
           aria-haspopup="listbox"
           aria-disabled={disabled}
           aria-label={displayLabel}
@@ -260,6 +262,7 @@ export function Select<T = string>({
             width: dropdownStyle.width,
             maxHeight: dropdownStyle.maxHeight,
           }}
+          id={listboxId}
           role="listbox"
           aria-label={displayLabel}
         >
@@ -328,7 +331,7 @@ export function Select<T = string>({
             onClick={(event) => event.stopPropagation()}
           >
             {supportText && <div className="px-4 pt-4 text-xs text-text-muted font-normal shrink-0">{supportText}</div>}
-            <div className="flex flex-col gap-1 overflow-y-auto min-h-0 py-4" role="listbox" aria-label={displayLabel}>
+            <div className="flex flex-col gap-1 overflow-y-auto min-h-0 py-4" id={listboxId} role="listbox" aria-label={displayLabel}>
               {emptyResult}
               {options.map((option, index) => (
                 <button
