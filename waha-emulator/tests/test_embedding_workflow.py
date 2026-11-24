@@ -593,13 +593,14 @@ async def test_server_local_learn_sync_delete_roundtrip(tmp_path: Path) -> None:
         },
     )
     async with connected(tmp_path, registry=registry) as env:
-        file_id, part_ids = await file_service._run_waha_create_job(
+        job = await file_service._run_waha_create_job(
             env.waha,
             service_name="learn-svc",
             upload=UploadedFile("規程.txt", "text/plain", TEXT.encode("utf-8")),
             split_length="30",
             reference="/mnt/file-server",
         )
+        file_id, part_ids = job.file_id, job.part_ids
         assert part_ids == [r["id"] for r in db.rows] and len(part_ids) >= 2
         assert {r["fileid"] for r in db.rows} == {file_id}
 
