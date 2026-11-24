@@ -63,13 +63,17 @@ _MAGIC: tuple[tuple[bytes, str], ...] = (
     (b"II*\x00", "image/tiff"),
     (b"MM\x00*", "image/tiff"),
     (b"%PDF-", "application/pdf"),
+    # RTF は中身がテキストとして読めるため、先頭で判定しないと text/plain になり、Tika が
+    # RTF として読まない（移植元は Tika の判定で application/rtf になる）
+    (b"{\\rtf", "application/rtf"),
 )
 _ZIP_MAGIC = b"PK\x03\x04"
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
-_OOXML_TYPES = {
+_ZIP_BASED_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".epub": "application/epub+zip",
 }
 _OLE_TYPES = {
     ".doc": "application/msword",
@@ -110,7 +114,7 @@ def _sniff_magic(head: bytes, suffix: str) -> str | None:
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "image/webp"
     if head.startswith(_ZIP_MAGIC):
-        return _OOXML_TYPES.get(suffix, "application/zip")
+        return _ZIP_BASED_TYPES.get(suffix, "application/zip")
     if head.startswith(_OLE_MAGIC):
         return _OLE_TYPES.get(suffix, "application/x-tika-msoffice")
     return None
