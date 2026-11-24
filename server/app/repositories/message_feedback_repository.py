@@ -181,7 +181,9 @@ class MessageFeedbackRepository:
 
         if sort_column == "assistant_name":
             # 画面に出すのは表示名なので、内部 ID ではなく表示名で並べる。
-            # 外部結合なので、アシスタントが削除された行も一覧に残る
+            # 外部結合なので、アシスタントが削除された行も一覧に残る。
+            # 移植元（message.assistant.name）に合わせ、小文字化せず照合順序に従う
+            # （チャット満足度は移植元が小文字化して比べるので、そちらは lower を使う）
             stmt = stmt.outerjoin(
                 Assistant,
                 and_(
