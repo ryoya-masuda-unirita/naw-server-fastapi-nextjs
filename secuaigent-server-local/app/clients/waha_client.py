@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from app.core.errors import ExternalServiceError
+from app.core.errors import ExternalServiceError, WahaJobCompletionUnconfirmedError
 
 logger = logging.getLogger(__name__)
 
@@ -456,7 +456,8 @@ class WahaClient:
         """ジョブ完了を待つ。
 
         ジョブ起動直後の未確定応答を FAILURE と誤判定しないよう、初回取得前から
-        間隔を空ける。上限回数 RUNNING が続いた場合は例外にせず戻る（移植元どおり）。
+        間隔を空ける。上限回数 RUNNING が続いた場合は、成功とみなさず完了未確認の例外にする
+        （移植元 `WahaJobCompletionUnconfirmedException`）。
 
         Parameters
         ----------
@@ -465,6 +466,8 @@ class WahaClient:
 
         Raises
         ------
+        WahaJobCompletionUnconfirmedError
+            上限回数の照会でも ``RUNNING`` のままで、完了を確認できなかった場合。
         ExternalServiceError
             Waha! がジョブの失敗を返した場合、または呼び出しに失敗した場合。
         """
@@ -482,6 +485,11 @@ class WahaClient:
                 continue
             logger.error("Response is FAILURE.")
             raise ExternalServiceError("ジョブの実行に失敗しました。")
+        logger.warning(
+            "Waha! の処理完了を確認できません。段階=結果照会, 照会回数=%d, 最終状態=RUNNING",
+            self._max_retries,
+        )
+        raise WahaJobCompletionUnconfirmedError()
 
     async def download_file(self, session_id: str, slot: str) -> str:
         """セッションのスロットから実行結果のファイルを取り出す。

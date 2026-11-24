@@ -12,7 +12,7 @@ import app.models  # noqa: F401 — テーブル定義をメタデータに登�
 from app.clients.waha_client import ResultStatus
 from app.core.config import Settings
 from app.core.database import create_engine, create_session_factory
-from app.core.errors import ExternalServiceError
+from app.core.errors import ExternalServiceError, WahaJobCompletionUnconfirmedError
 from app.main import create_app
 
 AUTH_KEY = "test-key"
@@ -75,6 +75,8 @@ class FakeWahaClient:
     )
     download_content: str | None = '{"answer":"回答です"}'
     fail_on: set[str] = field(default_factory=set)
+    # True なら get_results が「完了を確認できない」（結果照会が上限に達した）例外になる
+    unconfirmed: bool = False
     on_execute_with_stream_file: Callable[[str], None] | None = None
     # Waha! のジョブ完了を待っている間に割り込ませる処理（#251 のロック確認用）
     on_get_results: Callable[[], Awaitable[None]] | None = None
@@ -278,6 +280,8 @@ class FakeWahaClient:
             セッションID。
         """
         self._record("get_results", session_id)
+        if self.unconfirmed:
+            raise WahaJobCompletionUnconfirmedError()
         if self.on_get_results is not None:
             await self.on_get_results()
 

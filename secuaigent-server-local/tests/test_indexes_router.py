@@ -335,6 +335,25 @@ class TestUploadFile:
         assert res.status_code == 500
         assert res.json()["message"] == "get_results failed"
 
+    async def test_upload_file_unconfirmed_returns_504_and_does_not_save(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """完了を確認できないときは 504 になり、出力を取得せず、保存もしないこと"""
+        fake_waha.unconfirmed = True
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 504
+        assert res.json()["message"] == "Waha! の処理完了を確認できませんでした。"
+        assert "download_file" not in fake_waha.call_names()
+        assert fake_waha.call_names()[-1] == "end_session"
+
 
 class TestUpdateFile:
     """学習ファイル更新 API（項目の更新とファイルの差し替え）のテスト。"""
@@ -522,6 +541,25 @@ class TestDeleteFile:
         assert await get_file(session_factory, "f1") is not None
         assert fake_waha.call_names()[-1] == "end_session"
 
+    @pytest.mark.parametrize("physical_delete", [True, False])
+    async def test_delete_unconfirmed_returns_504_and_keeps_file(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        physical_delete: bool,
+    ) -> None:
+        """完了を確認できない削除は 504 になり、ファイルを消さない・状態を変えないこと"""
+        await insert_file(session_factory, "f1")
+        fake_waha.unconfirmed = True
+        res = await client.request(
+            "DELETE", f"{BASE}/files/f1", json={"physicalDelete": physical_delete}
+        )
+        assert res.status_code == 504
+        file = await get_file(session_factory, "f1")
+        assert file is not None
+        assert file.status == FileStatus.ENABLE.value
+
 
 class TestSyncFiles:
     """Waha! 側の学習ファイルを DB に取り込む同期 API のテスト。"""
@@ -691,3 +729,20 @@ async def test_download_returns_500(client: httpx.AsyncClient) -> None:
     res = await client.get(f"{BASE}/files/f1")
     assert res.status_code == 500
     assert res.json()["status"] == 500
+
+    async def test_sync_unconfirmed_returns_504_even_if_end_session_fails(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+    ) -> None:
+        """同期で完了を確認できず、セッション終了にも失敗しても、完了未確認（504）を伝えること"""
+        fake_waha.unconfirmed = True
+        fake_waha.fail_on = {"end_session"}
+        res = await client.post(
+            f"{BASE}/sync",
+            headers=TENANT,
+            json={"userId": "u1", "syncServiceName": "sync-svc"},
+        )
+        assert res.status_code == 504
+        assert res.json()["message"] == "Waha! の処理完了を確認できませんでした。"
+        assert fake_waha.call_names()[-1] == "end_session"

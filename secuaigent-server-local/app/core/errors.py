@@ -11,6 +11,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
+UNCONFIRMED_MESSAGE = "Waha! の処理完了を確認できませんでした。"
+
 
 class AppError(Exception):
     """移植元 APIControllerAdvice が ErrorResponse に変換していた例外の基底。"""
@@ -45,6 +47,16 @@ class ExternalServiceError(AppError):
     """RestClientException 相当（500）。Waha! のジョブ失敗など。"""
 
     status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class WahaJobCompletionUnconfirmedError(ExternalServiceError):
+    """WahaJobCompletionUnconfirmedException 相当（504）。結果照会が上限回数に達しても完了を確認できない。"""
+
+    status_code = HTTPStatus.GATEWAY_TIMEOUT
+
+    def __init__(self) -> None:
+        """移植元と同じ固定のメッセージで作る。"""
+        super().__init__(UNCONFIRMED_MESSAGE)
 
 
 class PayloadTooLargeError(Exception):
