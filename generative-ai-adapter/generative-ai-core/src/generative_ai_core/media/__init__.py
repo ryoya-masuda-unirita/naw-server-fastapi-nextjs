@@ -31,6 +31,15 @@ from generative_ai_core.media.runtime import (
     TextCoreMediaProcessor,
     detect_mime_type,
 )
+from generative_ai_core.media.tika import (
+    TikaClient,
+    TikaError,
+    TikaFileError,
+    TikaSettings,
+    TikaUnavailableError,
+    get_tika_client,
+    shutdown_tika,
+)
 
 __all__ = [
     "CORRUPT_FILE",
@@ -52,6 +61,13 @@ __all__ = [
     "PdfCoreMediaProcessor",
     "PowerPointCoreMediaProcessor",
     "TextCoreMediaProcessor",
+    "TikaClient",
+    "TikaError",
+    "TikaFileError",
+    "TikaSettings",
+    "TikaUnavailableError",
     "WordCoreMediaProcessor",
     "detect_mime_type",
+    "get_tika_client",
+    "shutdown_tika",
 ]
