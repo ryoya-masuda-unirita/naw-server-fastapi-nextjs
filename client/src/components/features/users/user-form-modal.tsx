@@ -115,6 +115,7 @@ export function UserFormModal({ user, onSave, onCancel, onDelete }: UserFormModa
             </p>
             <select
               name="role"
+              aria-label={t('ADMIN_CONSOLE.PERMISSION')}
               value={role}
               onChange={(event) => setRole(event.target.value as FormRole | '')}
               required
