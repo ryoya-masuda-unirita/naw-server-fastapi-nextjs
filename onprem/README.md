@@ -22,6 +22,10 @@ docker compose down            # 停止（データも消すなら down -v）
 
 server-local と エミュレーターの接続・ストリームファイルの共有は設定済み。
 
+- 一部だけ起動するときは、サービス名を指定する（`docker compose up -d --build waha-emulator`。エミュレーターだけを起動し、server-local とベクトルDB は起動しない。`docker compose up -d --build server-local` は、`depends_on` でエミュレーターも起動する）。エミュレーター単体用の compose はない（#483 で廃止した）
+- エミュレーターのログは `docker compose logs waha-emulator`
+- エミュレーターには、`file-server/` が `/mnt/file-server`（読み取り専用）に見え、`SOURCE_ALLOWED_DIR` に設定してある（`filepath` で渡されたパスの学習を、この中だけ許す）。`waha-emulator/config/`（ワークフロー定義の例）は `/app/config` に見える。`.env` で `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して、`assistantId` を `echo-rag` などにすると使える
+
 ```bash
 curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
   -F 'textData={"assistantId":"onprem-chat","messageId":"m-1","userInput":"こんにちは"};type=application/json' \

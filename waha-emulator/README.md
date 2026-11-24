@@ -82,7 +82,7 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - 不正な設定（未知の名前・不正な値・未知のベンダー）は起動時にエラーにする（アダプタの保存時チェック `validate_property` を通す）
 - **ひな形（フォルダごとに保存先を分ける）**: `services` のキーの末尾を `*` にすると、その前の部分（`kb-learn-` など）で始まるサービス ID が呼ばれたとき、後ろの部分（接尾辞）を値の `{name}` に入れた定義で動く（Python 版だけ）。`VDB_TABLE_NAME` を `docs_{name}` にすると、サービス ID の末尾ごとに保存先が分かれる（テーブルは最初の学習で自動で作られる）。`{name}` がないひな形は、読み込みで失敗する。接尾辞は英小文字・数字・`_` の 1〜40 文字で、違うと 400（ハイフン `-`・大文字・ドットは使えない。保存先のテーブル名になるため。例: `kb-learn-hr-dept` は 400 になるので `kb-learn-hr_dept` にする）。個別に書いたサービス ID は、ひな形より優先する。手順は [onprem/README.md](../onprem/README.md) の「学習先フォルダごとに検索の対象を分ける」
 - `VENDOR` に `Bedrock`（Python 版だけ。AWS Bedrock の Claude）も書ける。例は [onprem/config/workflows.bedrock.example.json](../onprem/config/workflows.bedrock.example.json)、手順は [onprem/README.md](../onprem/README.md) の「Bedrock で動かす」（`bedrock-ext`）
-- 例は [config/workflows.example.json](./config/workflows.example.json)（Docker では `config/` が `/app/config` に読み取り専用でマウントされる）
+- 例は [config/workflows.example.json](./config/workflows.example.json)（`onprem/` の compose では `config/` が `/app/config` に読み取り専用でマウントされる）
 
 ### 検索 → 生成AI（RAG チャット）
 
@@ -159,7 +159,7 @@ data:{"type":"completed"}
 |---|---|---|
 | `WAHA_AUTHKEY` | なし（必須） | `startsession` の `authkey` と照合する。server-local の `WAHA_AUTHKEY` と同じ値にする |
 | `EXECUTE_WAIT_FOR_COMPLETION` | `true` | `true`: execute はジョブの完了まで応答しない。`false`: すぐ応答する。server-local の同期 API・学習は execute の後に「間隔 × 回数」（既定 2 秒 × 10 回）しか結果を待たないため、`false` で LLM が遅いと失敗する |
-| `SOURCE_ALLOWED_DIR` | 未設定（Docker では `/mnt/file-server` を読み取り専用でマウントしたときだけ設定する） | 埋め込みの学習で `file` スロットが空のとき、`filepath` で渡されたパスを読んでよいディレクトリ。未設定だと `filepath` による学習は失敗にする（任意のファイルを読ませないため） |
+| `SOURCE_ALLOWED_DIR` | 未設定（`onprem/` の compose では、`/mnt/file-server`（サンプル文書）に設定済み） | 埋め込みの学習で `file` スロットが空のとき、`filepath` で渡されたパスを読んでよいディレクトリ。未設定だと `filepath` による学習は失敗にする（任意のファイルを読ませないため） |
 | `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する。未設定だと、セッションを開ければ（authkey を知っていれば）任意の既存ファイルに追記できるため、ホストで動かすときも設定する |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | `3600` | この時間使われていないセッション（実行中のジョブがないもの）を、次の `startsession` で破棄する。server-local は失敗時に `endsession` を呼ばない経路がある（学習データの同期など）ため |
 | `WAHA_WORKFLOWS_FILE` | 未設定 | サービス ID → ワークフローの JSON（上の「ワークフローの設定」）。空文字列は未設定。Docker では `/app/config/workflows.example.json` など |
@@ -167,21 +167,21 @@ data:{"type":"completed"}
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の URL のモデル名になる |
 | `LOG_LEVEL` | `INFO` | |
 
-Docker Compose では、ほかに `WAHA_EMULATOR_PORT`（既定 8091）・`WAHA_EMULATOR_STREAM_DIR`（既定 `../secuaigent-server-local/data/stream-output`）・`WAHA_EMULATOR_CONFIG_DIR`（既定 `./config`。`/app/config` に読み取り専用でマウントする）・`WAHA_EMULATOR_UID`/`WAHA_EMULATOR_GID`（既定 1000）・`TZ`（既定 `Asia/Tokyo`）を使う。ビルドのコンテキストはリポジトリのルート（生成AIアダプタをイメージに含めるため）。
+Docker では、公開ポート・認証キー・ストリームファイルの共有などを `onprem/docker-compose.yml` と `onprem/.env`（[onprem/README.md](../onprem/README.md)）で決める。ビルドのコンテキストはリポジトリのルート（生成AIアダプタをイメージに含めるため）。
 
 ## Docker で起動する
 
+エミュレーター単体用の compose はない（#483 で廃止した）。`onprem/` の compose で、エミュレーターだけを指定して起動する（ほかのサービスは起動しない）。
+
 ```bash
-mkdir -p secuaigent-server-local/data/stream-output   # マウントするディレクトリを先に作る（下記）
-cd waha-emulator
-cp .env.example .env          # WAHA_AUTHKEY を設定する（azure_openai を使うなら接続先も）
-docker compose up -d --build
-curl "http://localhost:8091/WahaServer/servicerun/api/startsession?authkey=<WAHA_AUTHKEY>"   # → セッション ID
+cd onprem
+docker compose up -d --build waha-emulator
+curl "http://localhost:18091/WahaServer/servicerun/api/startsession?authkey=onprem-waha-key"   # → セッション ID
 ```
 
-ストリームファイルのディレクトリ（`WAHA_EMULATOR_STREAM_DIR`、既定 `../secuaigent-server-local/data/stream-output`）は、**起動前に自分のユーザーで作っておく**。ないまま起動すると Docker が root 所有で作り、Linux では uid 1000 の server-local が書き込めなくなるため、compose はディレクトリを作らずに起動エラー（`bind source path does not exist`）にしている。
-
-停止・削除は `docker compose down`。
+- 認証キー・LLM の接続先などの既定値は `onprem/docker-compose.yml` にある。変えるときは `onprem/.env.example` を `onprem/.env` にコピーして書き換える
+- ストリームファイルは named volume（`stream-output`）に置かれ、server-local と共有する
+- ログは `docker compose logs waha-emulator`。停止・削除は `docker compose down`
 
 ## server-local と組み合わせる
 
@@ -189,29 +189,21 @@ server-local の `WAHA_URL` をエミュレーターに向け、`WAHA_AUTHKEY` �
 
 ### 両方とも Docker で動かす
 
-server-local のコンテナはストリームファイルを `/app/data/stream-output` に作る（ホストの `secuaigent-server-local/data/stream-output`）。エミュレーターの compose は既定で同じホストのディレクトリを同じパスにマウントするため、パスの読み替え（server-local の `STREAM_WAHA_OUTPUT_DIR`）は要らない。
+`onprem/` の compose で、server-local・エミュレーター・ベクトルDB をまとめて起動する。接続先（`WAHA_URL`）・認証キー・ストリームファイルの共有は設定済み（named volume `stream-output` を、両方のコンテナが `/app/data/stream-output` にマウントする）。
 
 ```bash
-# 0. 共有するディレクトリを先に作る（root 所有で作られないように）
-mkdir -p secuaigent-server-local/data/stream-output
+cd onprem
+docker compose up -d --build        # すべて healthy になるまで待つ（docker compose ps）
 
-# 1. エミュレーター（waha-emulator/.env の WAHA_AUTHKEY=任意の値）
-cd waha-emulator && docker compose up -d --build
-
-# 2. server-local（secuaigent-server-local/.env）
-#    WAHA_URL=http://host.docker.internal:8091/
-#    WAHA_AUTHKEY=エミュレーターと同じ値
-cd ../secuaigent-server-local && docker compose up -d --build
-
-# 3. 確かめる（SECURITY_SERVER_AUTH_KEY は secuaigent-server-local/.env の値）
-curl -N -H "X-SERVER-AUTH-KEY: <SECURITY_SERVER_AUTH_KEY>" \
-  -F 'textData={"assistantId":"gpt-4o","messageId":"m-1","userInput":"こんにちは"};type=application/json' \
-  http://localhost:8090/api/messages/content
+# 確かめる（認証キーの既定は onprem-local-key）
+curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
+  -F 'textData={"assistantId":"onprem-chat","messageId":"m-1","userInput":"こんにちは"};type=application/json' \
+  http://localhost:18090/api/messages/content
 # → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content
 ```
 
-- server-local の `SERVER_LOCAL_DATA_DIR` を変えた場合は、エミュレーターの `WAHA_EMULATOR_STREAM_DIR` を `<そのディレクトリ>/stream-output` にする
-- 両方のコンテナは既定で uid 1000 で動く。server-local の `SERVER_LOCAL_UID`/`GID` を変えたら、エミュレーターの `WAHA_EMULATOR_UID`/`GID` も揃える（server-local が作ったファイルにエミュレーターが追記するため）
+- 認証キーを変えるときは、`onprem/.env` の `SERVER_LOCAL_AUTH_KEY`・`WAHA_AUTHKEY` を変える
+- 「server-local をホストで動かし、エミュレーターだけ Docker で動かす」構成は、ストリームファイルを共有できないため使えない。ホストで動かすなら、下の「両方ともホストで動かす」にする
 
 ### 両方ともホストで動かす
 
