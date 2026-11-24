@@ -138,7 +138,7 @@ describe('テナント管理', () => {
 
       // trigger は枠で、入力欄はその中にある
       const trigger = screen.getByTestId('tenant-usage-user-filter-trigger');
-      await user.type(within(trigger).getByRole('textbox'), '鈴木');
+      await user.type(within(trigger).getByRole('combobox'), '鈴木');
       expect(await screen.findByRole('option', { name: '鈴木花子' })).toBeInTheDocument();
       expect(screen.queryByRole('option', { name: '山田太郎' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('option', { name: '鈴木花子' }));
@@ -156,8 +156,8 @@ describe('テナント管理', () => {
       await user.click(await screen.findByRole('option', { name: 'COMMON.PLACEHOLDERS.ALL_USERS' }));
       // ラベルが残ると、次の検索語がその後ろに付いて 0 件になる。選択でセレクトが作り直されるので、要素は取り直す
       const trigger = screen.getByTestId('tenant-usage-user-filter-trigger');
-      expect(within(trigger).getByRole('textbox')).toHaveValue('');
-      await user.type(within(trigger).getByRole('textbox'), '山田');
+      expect(within(trigger).getByRole('combobox')).toHaveValue('');
+      await user.type(within(trigger).getByRole('combobox'), '山田');
 
       expect(await screen.findByRole('option', { name: '山田太郎' })).toBeInTheDocument();
     });
