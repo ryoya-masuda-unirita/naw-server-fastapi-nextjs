@@ -500,6 +500,8 @@ export function PeriodFilter({
           isOpen && 'is-open',
           disabled && 'bg-surface-disabled opacity-60 cursor-not-allowed',
         )}
+        role="combobox"
+        aria-label={selectedLabel}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         data-testid={testid('trigger')}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import './select-with-search.css';
@@ -73,6 +73,7 @@ export function SelectWithSearch<T = string>({
   className,
 }: SelectWithSearchProps<T>) {
   const { t } = useTranslation();
+  const listboxId = useId();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
   // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
@@ -287,8 +288,6 @@ export function SelectWithSearch<T = string>({
           disabled && 'bg-surface-disabled opacity-60',
         )}
         data-testid={testidPrefix ? `${testidPrefix}-trigger` : undefined}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         onClick={handleWrapperClick}
       >
         <div className="flex-1 min-w-0 relative h-full flex items-center">
@@ -316,6 +315,9 @@ export function SelectWithSearch<T = string>({
             value={triggerInputValue}
             disabled={disabled}
             placeholder={placeholder}
+            role="combobox"
+            aria-label={selectedOption?.label ?? placeholder}
+            aria-controls={isOpen ? listboxId : undefined}
             aria-expanded={isOpen}
             aria-haspopup="listbox"
             onClick={handleInputClick}
@@ -325,6 +327,7 @@ export function SelectWithSearch<T = string>({
         {(searchQuery || selectedOption) && (
           <button
             type="button"
+            aria-label={t('COMMON.CLEAR')}
             className="shrink-0 flex items-center justify-center h-4 w-4 ml-2 cursor-pointer text-white bg-text-default rounded-full"
             onClick={(event) => {
               clearSearch();
@@ -348,6 +351,8 @@ export function SelectWithSearch<T = string>({
             maxHeight: dropdownStyle.maxHeight,
           }}
           role="listbox"
+          id={listboxId}
+          aria-label={selectedOption?.label ?? placeholder}
         >
           {supportText && <div className="px-4 pb-4 text-xs text-text-muted font-normal shrink-0">{supportText}</div>}
           <div className="flex flex-col gap-2 overflow-y-auto min-h-0">
@@ -420,7 +425,7 @@ export function SelectWithSearch<T = string>({
               </div>
               {supportText && <div className="combobox-list__hint">{supportText}</div>}
             </div>
-            <div className="combobox-list__body" role="listbox">
+            <div className="combobox-list__body" id={listboxId} role="listbox" aria-label={selectedOption?.label ?? placeholder}>
               {emptyResult}
               {filteredOptions.map((option, index) => (
                 <button

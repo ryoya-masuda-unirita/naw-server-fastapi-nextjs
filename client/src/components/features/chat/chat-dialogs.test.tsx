@@ -135,10 +135,10 @@ describe('NewChatDialog（サイドバー）', () => {
     wrap(<NewChatDialog open onClose={vi.fn()} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('textbox'));
+    await user.click(screen.getByRole('combobox'));
     await screen.findByText('法務');
     // 「業務効率」は一般のカテゴリ。アシスタント名（一般・法務）には含まれない
-    await user.type(screen.getByRole('textbox'), '業務効率');
+    await user.type(screen.getByRole('combobox'), '業務効率');
 
     const options = screen.getAllByRole('option');
     expect(options).toHaveLength(1);
@@ -176,7 +176,7 @@ describe('NewChatDialog（サイドバー）', () => {
     wrap(<NewChatDialog open onClose={onClose} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('textbox'));
+    await user.click(screen.getByRole('combobox'));
     await user.click(await screen.findByText('法務'));
     await user.click(screen.getByRole('button', { name: 'COMMON.CREATE' }));
 
@@ -193,7 +193,7 @@ describe('NewChatDialog（サイドバー）', () => {
     wrap(<NewChatDialog open onClose={onClose} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('textbox'));
+    await user.click(screen.getByRole('combobox'));
     await user.click(await screen.findByText('法務'));
     await user.click(screen.getByRole('button', { name: 'COMMON.CREATE' }));
 

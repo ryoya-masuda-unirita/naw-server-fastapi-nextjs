@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import './select.css';
@@ -64,6 +64,7 @@ export function Select<T = string>({
   className,
 }: SelectProps<T>) {
   const { t } = useTranslation();
+  const listboxId = useId();
   const isMobile = useIsMobile();
   const hostRef = useRef<HTMLDivElement>(null);
   // 閉じたあと遅れて非表示にするタイマー。すぐ開き直したときに取り消せるよう持っておく
@@ -200,6 +201,8 @@ export function Select<T = string>({
 
   return (
     <div ref={hostRef} className={cx('app-select block relative', className)} onKeyDown={handleKeyDown}>
+      {/* 外側は見た目とクリックだけを受ける。combobox の中にクリアボタンを入れ子にしない（axe: nested-interactive）ため、
+          役割は中のラベル部分に付ける */}
       <div
         className={cx(
           'trigger-wrapper relative flex items-center w-full pl-3 pr-4 rounded-lg text-sm transition-all duration-200 overflow-hidden cursor-pointer',
@@ -212,11 +215,16 @@ export function Select<T = string>({
           disabled && 'bg-surface-disabled opacity-60 cursor-not-allowed',
           classNameInputSelect,
         )}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         onClick={toggle}
       >
         <span
+          role="combobox"
+          tabIndex={disabled ? -1 : 0}
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? listboxId : undefined}
+          aria-haspopup="listbox"
+          aria-disabled={disabled}
+          aria-label={displayLabel}
           className={cx(
             'flex-1 min-w-0 text-ellipsis whitespace-nowrap overflow-hidden font-medium',
             size !== 'small' && 'text-sm',
@@ -224,7 +232,7 @@ export function Select<T = string>({
             !!selectedOption && !isOpen && !plainStyle && 'text-brand-secondary',
             !!selectedOption && !plainStyle && 'text-text-strong',
             !!selectedOption && plainStyle && 'text-text-medium',
-            !selectedOption && 'text-text-lighter',
+            !selectedOption && 'text-text-muted',
           )}
         >
           {displayLabel}
@@ -232,6 +240,7 @@ export function Select<T = string>({
         {selectedOption && showClear && (
           <button
             type="button"
+            aria-label={t('COMMON.CLEAR')}
             className="shrink-0 flex items-center justify-center h-4 w-4 ml-2 cursor-pointer text-white bg-text-default rounded-full"
             onClick={(event: MouseEvent<HTMLButtonElement>) => {
               clearValue();
@@ -253,7 +262,9 @@ export function Select<T = string>({
             width: dropdownStyle.width,
             maxHeight: dropdownStyle.maxHeight,
           }}
+          id={listboxId}
           role="listbox"
+          aria-label={displayLabel}
         >
           {supportText && <div className="px-4 pb-4 text-xs text-text-muted font-normal shrink-0">{supportText}</div>}
           <div className="flex flex-col overflow-y-auto min-h-0">
@@ -320,7 +331,7 @@ export function Select<T = string>({
             onClick={(event) => event.stopPropagation()}
           >
             {supportText && <div className="px-4 pt-4 text-xs text-text-muted font-normal shrink-0">{supportText}</div>}
-            <div className="flex flex-col gap-1 overflow-y-auto min-h-0 py-4" role="listbox">
+            <div className="flex flex-col gap-1 overflow-y-auto min-h-0 py-4" id={listboxId} role="listbox" aria-label={displayLabel}>
               {emptyResult}
               {options.map((option, index) => (
                 <button

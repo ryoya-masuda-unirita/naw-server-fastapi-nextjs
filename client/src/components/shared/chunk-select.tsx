@@ -273,6 +273,8 @@ export function ChunkSelect({
           isOpen && 'is-open',
           disabled && 'disabled cursor-not-allowed',
         )}
+        role="combobox"
+        aria-label={displayLabel}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         onClick={toggle}

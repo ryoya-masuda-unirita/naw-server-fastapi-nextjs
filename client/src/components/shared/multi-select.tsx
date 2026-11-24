@@ -230,6 +230,8 @@ export function MultiSelect<T = string>({
           hasValue && !isOpen && 'has-value',
           disabled && 'bg-surface-disabled opacity-60 cursor-not-allowed',
         )}
+        role="combobox"
+        aria-label={placeholder}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         onClick={toggle}
