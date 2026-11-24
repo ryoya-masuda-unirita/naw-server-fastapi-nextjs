@@ -138,13 +138,16 @@ export async function updateLocalFile(
 /**
  * 移植元 `LocalTrainingApiService.deleteFiles`。1 件ずつの削除を同時に送る。
  * ローカル用サーバーは物理削除で消す（論理削除の `false` を送ると、消したはずのファイルが残る）。
+ *
+ * 全件の結果が出そろってから返す。1 件が先に失敗しても、残りの削除の完了を待たずに返すと、
+ * 呼び出し側が一覧を読み直した時点で、まだ削除中のファイルが残って見えるため。失敗があれば最初の失敗を投げる。
  */
 export async function deleteLocalFiles(
   folder: TrainingDataApiItem,
   fileIds: string[],
 ): Promise<void> {
   const server = await resolveLocalServer(folder);
-  await Promise.all(
+  const results = await Promise.allSettled(
     fileIds.map((fileId) =>
       apiClient.delete(server.url(API_PATHS.LOCAL_SERVER.FILE(folder.id, fileId)), {
         ...server.options,
@@ -152,6 +155,8 @@ export async function deleteLocalFiles(
       }),
     ),
   );
+  const firstFailure = results.find((result) => result.status === 'rejected');
+  if (firstFailure) throw firstFailure.reason;
 }
 
 /** 移植元 `LocalTrainingApiService.syncFolder` */
