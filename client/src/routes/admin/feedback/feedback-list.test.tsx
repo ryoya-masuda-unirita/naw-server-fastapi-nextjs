@@ -367,6 +367,20 @@ describe('AdminFeedbackListPage', () => {
       );
     });
 
+    test('並べ替えの項目に、追加学習順と学習先フォルダ名順を出さないこと', async () => {
+      mockApis();
+      await renderTab('accuracy', '営業アシスタント');
+
+      await userEvent.click(screen.getByTestId('feedback-sort-trigger'));
+      const fieldOptions = await screen.findAllByTestId('feedback-sort-field-option');
+
+      expect(fieldOptions.map((option) => option.textContent)).toEqual([
+        'FEEDBACK.SORT_BY_UPDATED',
+        'FEEDBACK.SORT_BY_ASSISTANT',
+        'FEEDBACK.SORT_BY_ACCURACY',
+      ]);
+    });
+
     test('学習先フォルダを選んで追加学習すると feedbackId を送り、ダイアログを閉じること', async () => {
       const log = mockApis();
       await renderTab('accuracy', '営業アシスタント');
@@ -435,6 +449,21 @@ describe('AdminFeedbackListPage', () => {
       expect(params.get('sortField')).toBe('updatedAt');
       expect(params.get('sortOrder')).toBe('desc');
       expect(params.has('rating')).toBe(false);
+    });
+
+    test('並べ替えの項目に、追加学習順と学習先フォルダ名順を出さないこと', async () => {
+      mockApis();
+      await renderTab('satisfaction', '見積相談');
+
+      await userEvent.click(screen.getByTestId('feedback-sort-trigger'));
+      const fieldOptions = await screen.findAllByTestId('feedback-sort-field-option');
+
+      expect(fieldOptions.map((option) => option.textContent)).toEqual([
+        'FEEDBACK.SORT_BY_UPDATED',
+        'FEEDBACK.SORT_BY_CHAT',
+        'FEEDBACK.SORT_BY_ASSISTANT',
+        'FEEDBACK.SORT_BY_LEVEL',
+      ]);
     });
 
     test('満足度で絞り込むと rating を付けて取得し直すこと', async () => {

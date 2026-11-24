@@ -1269,8 +1269,6 @@
     "SORT_BY_UPDATED": "更新日時順",
     "SORT_BY_ASSISTANT": "アシスタント表示名順",
     "SORT_BY_ACCURACY": "精度順",
-    "SORT_BY_ADD_LEARNING": "追加学習順",
-    "SORT_BY_FOLDER": "学習先フォルダ名順",
     "SORT_BY_CHAT": "チャット名順",
     "SORT_BY_USER": "ユーザー表示名順",
     "SORT_BY_LEVEL": "満足度順",

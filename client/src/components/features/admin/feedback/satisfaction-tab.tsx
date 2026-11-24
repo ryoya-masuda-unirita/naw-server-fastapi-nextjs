@@ -37,8 +37,6 @@ const SORT_FIELD_OPTIONS: SortOption[] = [
   { value: 'chat', label: 'FEEDBACK.SORT_BY_CHAT' },
   { value: 'name', label: 'FEEDBACK.SORT_BY_ASSISTANT' },
   { value: 'level', label: 'FEEDBACK.SORT_BY_LEVEL' },
-  { value: 'add', label: 'FEEDBACK.SORT_BY_ADD_LEARNING' },
-  { value: 'folder', label: 'FEEDBACK.SORT_BY_FOLDER' },
 ];
 
 const SORT_ORDER_OPTIONS: SortOption[] = [

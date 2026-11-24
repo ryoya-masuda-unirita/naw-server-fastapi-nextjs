@@ -25,13 +25,12 @@ import { TENANT_ID } from '../src/users.ts';
  *
  * 移植元との対応:
  * - 期待値の「正」は DB（SQL）。一覧の件数・並び順は画面や API を介さず DB から取り、画面に出る値と突き合わせる
- * - 並べ替えは、移植元 server の実装に合わせる（項目書の「〜名順」でも、移植元は次の列で並べる）:
- *     アシスタント名順 = message.assistantId（ID）、追加学習順・学習先フォルダ順 = index_id、
- *     精度順 = rating の文字列（移植元の列は varchar なので BAD < GOOD）、満足度順 = rating の文字列（varchar）
+ * - 並べ替えは、移植元 server の実装（NAW-1448・1449・1451）に合わせる:
+ *     アシスタント名順 = アシスタントの表示名（満足度タブは小文字化して比べる）、
+ *     精度順 = rating の文字列（移植元の列は varchar なので BAD < GOOD）、満足度順 = 星の数（星 1〜5）
+ * - 精度・満足度タブの「追加学習順」「学習先フォルダ名順」は、NAW-1449 で画面の選択肢から外れたため test.skip にしている
  * - 一括選択（複数行のチェックボックス・一括の学習先指定）は、移植元の現行 client（accuracy-tab・satisfaction-tab）に UI がない。
  *   項目書の 16〜19・35・50 は、移植元の画面に存在しないため test.skip にしている
- * - 満足度タブの「追加学習順」「学習先フォルダ順」は、移植元 server が sortField に受け付けない（`^(updatedAt|chat|name|level)$`）ため、
- *   移植元でも成立しない。test.skip にしている
  * - 一覧が空にならないよう seed を使い、追加学習など状態を変えるテストは SQL で自分用の行を入れて消す
  * - 同じ DB の件数を数えるため、このファイルのテストは直列で流す
  */
@@ -221,8 +220,15 @@ test.describe('18_フィードバック管理', () => {
     const response = await fb.sortBy('accuracy', 'アシスタント表示名順');
     const items = await bodyOf<MessageFeedbackItem>(response);
     expect(new URL(response.url()).searchParams.get('sortField')).toBe('name');
-    // 移植元は message.assistantId で並べる（画面の表示名ではない）。既定の降順
-    expectOrdered(items.map((item) => item.message.assistantId), 'desc');
+    // 移植元は、アシスタントの表示名で並べる（NAW-1448）。既定の降順。表示名の無い行（アシスタント削除済み）は降順で先頭。
+    // 同じ名前の行は ID の昇順
+    const expected = sql(
+      `SELECT coalesce(a.name, '') FROM message_feedbacks f
+       LEFT JOIN messages m ON m.id = f.message_id AND m.tenant_id = f.tenant_id
+       LEFT JOIN assistants a ON a.id = m.assistant_id AND a.tenant_id = f.tenant_id
+       WHERE f.tenant_id = ${quote(TENANT_ID)} ORDER BY a.name DESC, f.id ASC LIMIT ${FEEDBACK_PAGE_SIZE}`
+    ).map((row) => row[0]);
+    expect(items.map((item) => item.message.assistantName ?? '')).toEqual(expected);
     await expectAccuracyRowsMatch(fb, items);
   });
 
@@ -237,31 +243,12 @@ test.describe('18_フィードバック管理', () => {
     await expectAccuracyRowsMatch(fb, items);
   });
 
-  test('[18-10] 精度：並替（追加学習）', async ({ page }) => {
-    const fb = new FeedbackPage(page);
-    await fb.open();
-    const response = await fb.sortBy('accuracy', '追加学習順');
-    const items = await bodyOf<MessageFeedbackItem>(response);
-    expect(new URL(response.url()).searchParams.get('sortField')).toBe('add');
-    // 移植元は index_id で並べる。降順は PostgreSQL の既定で NULL（OFF）が先
-    const expected = sql(
-      `SELECT coalesce(index_id, '') FROM message_feedbacks WHERE tenant_id = ${quote(TENANT_ID)} ORDER BY index_id DESC LIMIT ${FEEDBACK_PAGE_SIZE}`
-    ).map((row) => row[0]);
-    expect(items.map((item) => item.indexId ?? '')).toEqual(expected);
-    await expectAccuracyRowsMatch(fb, items);
+  test('[18-10] 精度：並替（追加学習）', async () => {
+    test.skip(true, '移植元は NAW-1449 で、回答精度評価の並べ替えから「追加学習順」を画面の選択肢から外したため、移植元でも成立しない');
   });
 
-  test('[18-11] 精度：並替（学習先フォルダ）', async ({ page }) => {
-    const fb = new FeedbackPage(page);
-    await fb.open();
-    const response = await fb.sortBy('accuracy', '学習先フォルダ名順');
-    const items = await bodyOf<MessageFeedbackItem>(response);
-    expect(new URL(response.url()).searchParams.get('sortField')).toBe('folder');
-    const expected = sql(
-      `SELECT coalesce(index_id, '') FROM message_feedbacks WHERE tenant_id = ${quote(TENANT_ID)} ORDER BY index_id DESC LIMIT ${FEEDBACK_PAGE_SIZE}`
-    ).map((row) => row[0]);
-    expect(items.map((item) => item.indexId ?? '')).toEqual(expected);
-    await expectAccuracyRowsMatch(fb, items);
+  test('[18-11] 精度：並替（学習先フォルダ）', async () => {
+    test.skip(true, '移植元は NAW-1449 で、回答精度評価の並べ替えから「学習先フォルダ名順」を画面の選択肢から外したため、移植元でも成立しない');
   });
 
   test('[18-12] 精度：並替（昇順/降順）', async ({ page }) => {
@@ -440,8 +427,13 @@ test.describe('18_フィードバック管理', () => {
     const response = await fb.sortBy('satisfaction', 'アシスタント表示名順');
     const items = await bodyOf<RoomFeedbackItem>(response);
     expect(new URL(response.url()).searchParams.get('sortField')).toBe('name');
-    // 移植元は defaultAssistantId で並べる
-    expectOrdered(items.map((item) => item.room.defaultAssistantId), 'desc');
+    // 移植元は、アシスタントの表示名（小文字化して比べる）で並べる（NAW-1449）。既定の降順。同じ名前の行は ID の昇順
+    const expected = sql(
+      `SELECT coalesce(a.name, '') FROM rooms r
+       LEFT JOIN assistants a ON a.id = r.default_assistant_id AND a.tenant_id = r.tenant_id
+       WHERE r.tenant_id = ${quote(TENANT_ID)} AND r.rating IS NOT NULL ORDER BY lower(a.name) DESC, r.id ASC LIMIT ${FEEDBACK_PAGE_SIZE}`
+    ).map((row) => row[0]);
+    expect(items.map((item) => item.room.defaultAssistantName ?? '')).toEqual(expected);
   });
 
   test('[18-29] 満足度：並替（満足度）', async ({ page }) => {
@@ -450,16 +442,21 @@ test.describe('18_フィードバック管理', () => {
     const response = await fb.sortBy('satisfaction', '満足度順');
     const items = await bodyOf<RoomFeedbackItem>(response);
     expect(new URL(response.url()).searchParams.get('sortField')).toBe('level');
-    // 移植元の rooms.rating は varchar(32)。文字列の降順（VERY_GOOD → POOR → GOOD → EXCELLENT → AVERAGE）
-    expectOrdered(items.map((item) => item.rating), 'desc');
+    // 移植元は、星の数（EXCELLENT=5 〜 POOR=1）で並べる（NAW-1449）。既定の降順で、星 5 → 星 1。同じ星の行は ID の昇順
+    const expected = sql(
+      `SELECT r.rating FROM rooms r WHERE r.tenant_id = ${quote(TENANT_ID)} AND r.rating IS NOT NULL
+       ORDER BY CASE r.rating WHEN 'EXCELLENT' THEN 5 WHEN 'VERY_GOOD' THEN 4 WHEN 'GOOD' THEN 3 WHEN 'AVERAGE' THEN 2 WHEN 'POOR' THEN 1 END DESC, r.id ASC
+       LIMIT ${FEEDBACK_PAGE_SIZE}`
+    ).map((row) => row[0]);
+    expect(items.map((item) => item.rating)).toEqual(expected);
   });
 
   test('[18-30] 満足度：並替（追加学習）', async () => {
-    test.skip(true, '移植元 server の GET /api/admin/feedbackRoom が sortField=add を受け付けず（`^(updatedAt|chat|name|level)$`）、移植元でも成立しないため');
+    test.skip(true, '移植元は NAW-1449 で「追加学習順」を画面の選択肢から外したため、移植元でも成立しない');
   });
 
   test('[18-31] 満足度：並替（学習先フォルダ）', async () => {
-    test.skip(true, '移植元 server の GET /api/admin/feedbackRoom が sortField=folder を受け付けず（`^(updatedAt|chat|name|level)$`）、移植元でも成立しないため');
+    test.skip(true, '移植元は NAW-1449 で「学習先フォルダ名順」を画面の選択肢から外したため、移植元でも成立しない');
   });
 
   test('[18-32] 満足度：並替（昇順/降順）', async ({ page }) => {
