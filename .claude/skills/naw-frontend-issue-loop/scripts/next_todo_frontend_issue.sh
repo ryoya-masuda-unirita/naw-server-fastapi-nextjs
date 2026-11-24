@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/naw-server-fastapi-nextjs}"
+REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/secuaigent-fastapi-react}"
 
 gh issue list --repo "$REPO" --label "frontend-port" --state open --json number,projectItems --limit 200 \
   --jq '[.[] | select((.projectItems[]?.status.name // "") == "Todo") | .number] | sort | .[0] // empty'

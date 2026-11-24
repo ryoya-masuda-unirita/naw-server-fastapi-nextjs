@@ -4,7 +4,7 @@ set -euo pipefail
 
 OWNER="ryoya-masuda-unirita"
 PROJECT_NUMBER="3"
-REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/naw-server-fastapi-nextjs}"
+REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/secuaigent-fastapi-react}"
 
 usage() {
   cat <<'EOF'

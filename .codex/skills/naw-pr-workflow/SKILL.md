@@ -1,6 +1,6 @@
 ---
 name: naw-pr-workflow
-description: Use when preparing a pull request for naw-server-fastapi-nextjs, including PR body drafting, review note creation, test result summarization, and Closes #XX handling.
+description: Use when preparing a pull request for secuaigent-fastapi-react, including PR body drafting, review note creation, test result summarization, and Closes #XX handling.
 ---
 
 # NAW PR Workflow

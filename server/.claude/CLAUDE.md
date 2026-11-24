@@ -312,7 +312,7 @@ git config --unset core.hooksPath
 
 ## ローカル開発環境のDB
 
-プロジェクトルート（`naw-server-fastapi-nextjs/`）の `docker-compose.yml` で PostgreSQL を起動する。
+プロジェクトルート（`secuaigent-fastapi-react/`）の `docker-compose.yml` で PostgreSQL を起動する。
 
 ```bash
 docker compose up -d

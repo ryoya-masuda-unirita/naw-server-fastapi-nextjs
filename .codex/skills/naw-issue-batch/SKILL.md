@@ -1,6 +1,6 @@
 ---
 name: naw-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
+description: Use ONLY when the user explicitly invokes /naw-issue-batch or explicitly asks to bulk-create backend porting Issues for secuaigent-fastapi-react without implementing them. Repeatedly detects one unported unit (endpoint or controller, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/server and creates a GitHub Issue for it — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-issue-workflow instead).
 ---
 
 # NAW Issue Batch
