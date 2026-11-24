@@ -3,6 +3,21 @@
 移植元 `secuaigent/client` の `src/app/shared/components/*` と `core/services`（toast・confirm・dropdown）を React に移した部品です（Issue #278）。
 画面を移植するときは、移植元のテンプレートにある `<app-xxx>` をここの部品に置き換えてください。見た目（Tailwind クラス・DOM 構造）と挙動は移植元に揃えてあります。
 
+## 目次
+
+見出しの一覧です。部品名は、ブラウザの検索（`Ctrl+F`）か、GitHub の画面の右上のアウトラインで探せます。
+
+| 節 | 含まれる部品・項目 |
+|---|---|
+| 共通の約束事 | 移植元との対応・文言・アイコン・CSS の置き場所・アプリのルートに置くもの・クラス結合 |
+| ボタン・アイコンボタン | Button・IconButton |
+| チェック・スイッチ | Checkbox・Switch |
+| ダイアログ・通知 | Dialog・Toast（`useToastStore` / `ToastContainer`）・Confirm（`useConfirmStore`）・dropdownService / DropdownBackdrop |
+| 一覧・ページ | Table・TableList / TableListItem・Pagination・Tab・PageHeader・ContextMenu |
+| 選択系（Select ほか） | Select・SelectWithSearch・ChunkSelect・MultiSelect・ComboboxMulti・FormSelect |
+| フォーム部品 | FormInput・FormTextarea・FormSwitch・FormRadio・FormSortInput・FormCombobox・SearchInput |
+| フィルター・ファイル・ローディングほか | PeriodFilter（期間フィルター）・DropdownSelect（ドロップダウン選択）・DateRangeSelect（期間選択・日付入力つき）・FileUpload（ファイルのドロップ・選択）・FileChip（添付ファイルのチップ）・FileImageChip（添付画像のサムネイル）・FileChipDocument（文書ファイルのチップ）・CircularProgress（使用量の円グラフ）・CircularLoading（リングのローディング）・Skeleton / SkeletonBlock（読み込み中のプレースホルダー）・Loading（ロゴつきローディング）・OptionalLabel（「任意」ラベル）・Radio（ラジオボタン）・MarkdownView（Markdown・チャート・mermaid の描画） |
+
 ## 共通の約束事
 
 ### 移植元との対応
