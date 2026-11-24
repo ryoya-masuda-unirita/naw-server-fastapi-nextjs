@@ -41,16 +41,16 @@ _SORT_FIELD_TO_COLUMN = {
 }
 _FEEDBACK_MESSAGE_SORT_FIELD_TO_COLUMN = {
     "updatedAt": "updated_at",
-    "name": "assistant_id",
+    "name": "assistant_name",
     "accuracy": "rating",
     "add": "index_id",
-    "folder": "index_id",
+    "folder": "folder_name",
 }
 _FEEDBACK_ROOM_SORT_FIELD_TO_COLUMN = {
     "updatedAt": "updated_at",
     "chat": "room_name",
-    "name": "assistant_id",
-    "level": "rating",
+    "name": "assistant_name",
+    "level": "rating_stars",
 }
 
 

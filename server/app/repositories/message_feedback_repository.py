@@ -3,6 +3,8 @@ from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.sort import enum_as_string
+from app.models.assistant import Assistant
+from app.models.index import Index
 from app.models.message import Message, MessageContent, MessageFeedback
 from app.models.room import Room, RoomRating
 from app.models.user import User
@@ -177,8 +179,30 @@ class MessageFeedbackRepository:
             await session.execute(select(func.count()).select_from(stmt.subquery()))
         ).scalar() or 0
 
-        if sort_column == "assistant_id":
-            order_col = Message.assistant_id
+        if sort_column == "assistant_name":
+            # 画面に出すのは表示名なので、内部 ID ではなく表示名で並べる。
+            # 外部結合なので、アシスタントが削除された行も一覧に残る。
+            # 移植元（message.assistant.name）に合わせ、小文字化せず照合順序に従う
+            # （チャット満足度は移植元が小文字化して比べるので、そちらは lower を使う）
+            stmt = stmt.outerjoin(
+                Assistant,
+                and_(
+                    Assistant.id == Message.assistant_id,
+                    Assistant.tenant_id == tenant_id,
+                ),
+            )
+            order_col = Assistant.name
+        elif sort_column == "folder_name":
+            # 画面に出すのは学習先フォルダ名なので、内部 ID ではなく名前で並べる。
+            # 外部結合なので、フォルダが無い・削除された行も一覧に残る
+            stmt = stmt.outerjoin(
+                Index,
+                and_(
+                    Index.id == MessageFeedback.index_id,
+                    Index.tenant_id == tenant_id,
+                ),
+            )
+            order_col = Index.name
         elif sort_column == "rating":
             # 移植元は評価を varchar で持つため、宣言順ではなく文字列順で並べる
             order_col = enum_as_string(MessageFeedback.rating)

@@ -1254,7 +1254,7 @@ class TestFeedbackRouter:
             admin_headers: dict[str, str],
             feedback_dataset: dict[str, Any],
         ) -> None:
-            """sortField=level&sortOrder=ascで評価の昇順に並ぶこと"""
+            """sortField=level&sortOrder=ascで星の数の昇順に並ぶこと"""
             async with client as c:
                 response = await c.get(
                     "/api/admin/feedbackRoom?sortField=level&sortOrder=asc",
@@ -1265,7 +1265,8 @@ class TestFeedbackRouter:
             ratings = [
                 item["rating"] for item in response.json()["feedbacks"]["content"]
             ]
-            assert ratings == sorted(ratings)
+            # 評価名の文字列順（EXCELLENT, GOOD）ではなく、星の数順（GOOD=3, EXCELLENT=5）
+            assert ratings == ["GOOD", "EXCELLENT"]
 
         async def test_paginates_feedback_rooms(
             self,
