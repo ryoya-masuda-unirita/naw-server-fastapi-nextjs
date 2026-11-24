@@ -277,11 +277,13 @@ class _StubTika:
     """Tika のクライアントの代わり。決めた本文を返すか、決めた例外を投げる。"""
 
     def __init__(self, text: str = "", error: Exception | None = None) -> None:
+        """返す本文、または投げる例外を決める。"""
         self._text = text
         self._error = error
         self.calls: list[tuple[str, str, bytes]] = []
 
     def extract_text(self, filename: str, mime_type: str, data: bytes) -> str:
+        """呼び出しを控え、決めた本文を返すか、決めた例外を投げる。"""
         self.calls.append((filename, mime_type, data))
         if self._error is not None:
             raise self._error
@@ -404,7 +406,9 @@ def test_octet_stream_stays_unsupported_when_tika_enabled(tmp_path: Path) -> Non
     assert stub.calls == []
 
 
-def test_default_processors_use_tika_only_when_configured(monkeypatch) -> None:
+def test_default_processors_use_tika_only_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """既定のプロセッサは、環境変数があるときだけ Tika を使うこと"""
     from generative_ai_core.media import shutdown_tika
 

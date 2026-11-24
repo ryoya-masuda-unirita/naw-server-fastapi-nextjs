@@ -105,6 +105,7 @@ class FakeTika:
         clock = {"now": 0.0}
 
         def fake_sleep(seconds: float) -> None:
+            """待たずに、偽の時計だけを進める。"""
             clock["now"] += seconds
 
         resolved = settings or TikaSettings(
@@ -147,6 +148,14 @@ class TestTikaSettings:
         assert settings.heap == "256m"
         assert settings.start_timeout_seconds == 60.0
         assert settings.request_timeout_seconds == 120.0
+
+    @pytest.mark.parametrize(
+        "url", ["tika:9998", "http://", "ftp://tika:9998", "localhost"]
+    )
+    def test_invalid_url_raises(self, url):
+        """TIKA_URL が http(s) の URL でないとき、エラーになること"""
+        with pytest.raises(ValueError):
+            TikaSettings.from_env({"TIKA_URL": url})
 
     @pytest.mark.parametrize("port", ["0", "65536", "abc"])
     def test_invalid_port_raises(self, port):
@@ -210,9 +219,10 @@ class TestExtractText:
             client.extract_text("a.doc", DOC_TYPE, b"x")
         assert info.value.code == CORRUPT_FILE
 
-    def test_500_raises_unavailable(self):
-        """5xx は、Tika 側の障害になること"""
-        fake = FakeTika(ready=True, status=500)
+    @pytest.mark.parametrize("status", [500, 503, 404, 405, 413, 429, 302])
+    def test_non_file_status_raises_unavailable(self, status):
+        """5xx と、ファイルの中身を表さない状態（404・405・413・429・3xx）は、Tika 側の障害になること"""
+        fake = FakeTika(ready=True, status=status)
         client = fake.client(TikaSettings(url="http://tika:9998"))
         with pytest.raises(TikaUnavailableError):
             client.extract_text("a.doc", DOC_TYPE, b"x")
@@ -221,6 +231,7 @@ class TestExtractText:
         """接続できないとき、Tika 側の障害になること"""
 
         def refuse(request: httpx.Request) -> httpx.Response:
+            """どの要求も、接続できないことにする。"""
             raise httpx.ConnectError("refused")
 
         client = TikaClient(
@@ -275,6 +286,7 @@ class TestServerLifecycle:
         errors: list[Exception] = []
 
         def call() -> None:
+            """別のスレッドから抽出を呼び、失敗を集める。"""
             try:
                 client.extract_text("a.doc", DOC_TYPE, b"x")
             except Exception as error:  # noqa: BLE001 — テストで集めて検査する
@@ -336,6 +348,7 @@ class TestServerLifecycle:
         original = fake.popen
 
         def dying_popen(args: list[str], **kwargs: object) -> FakeProcess:
+            """起動した直後に終了する子プロセスを返す。"""
             process = original(args, **kwargs)
             process.returncode = 1
             return process
@@ -390,6 +403,17 @@ class TestShutdown:
         assert config.exists()
         client.shutdown()
         assert not config.exists()
+
+    def test_no_restart_after_shutdown(self):
+        """止めたあとの呼び出しは、Tika を起動し直さず、失敗すること"""
+        fake = FakeTika()
+        client = fake.client()
+        client.extract_text("a.doc", DOC_TYPE, b"x")
+        client.shutdown()
+        fake.ready = False
+        with pytest.raises(TikaUnavailableError):
+            client.extract_text("a.doc", DOC_TYPE, b"x")
+        assert len(fake.processes) == 1
 
     def test_shutdown_without_start_is_noop(self):
         """起動していなくても、止める呼び出しがエラーにならないこと"""

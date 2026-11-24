@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -48,9 +48,10 @@ DEFAULT_START_TIMEOUT_SECONDS = 60.0
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 120.0
 MIN_PORT = 1
 MAX_PORT = 65535
+HTTP_BAD_REQUEST = 400
 HTTP_UNSUPPORTED_MEDIA = 415
-HTTP_CLIENT_ERROR = 400
-HTTP_SERVER_ERROR = 500
+HTTP_UNPROCESSABLE_ENTITY = 422
+ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
 # 移植元は OCR をしない（`TesseractOCRConfig#setSkipOcr(true)`）。Tika の設定ファイルでは、
 # OCR のパーサーを除外して再現する（コンテナに tesseract は入れないが、入っても動かさない）
 CONFIG_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -115,8 +116,12 @@ class TikaSettings:
         Raises
         ------
         ValueError
-            ポート・ヒープ・時間が不正なとき。
+            URL・ポート・ヒープ・時間が不正なとき。
         """
+        if self.url:
+            parsed = urlparse(self.url)
+            if parsed.scheme not in ALLOWED_URL_SCHEMES or not parsed.netloc:
+                raise ValueError("TIKA_URL must be an http(s) URL")
         if not MIN_PORT <= self.port <= MAX_PORT:
             raise ValueError(f"TIKA_PORT must be {MIN_PORT}-{MAX_PORT}")
         if not HEAP_PATTERN.match(self.heap):
@@ -159,6 +164,7 @@ class TikaSettings:
         env = os.environ if environ is None else environ
 
         def text(name: str) -> str | None:
+            """環境変数を、前後の空白を除いて返す。空なら None。"""
             return (env.get(name) or "").strip() or None
 
         try:
@@ -220,6 +226,8 @@ class TikaClient:
         # すでに応答する Tika を、起動せずに借りているか（複数のプロセスで同じポートを
         # 取り合わないため）。借りた先が落ちたら、次の呼び出しで自分で起動する
         self._borrowed = False
+        # 止めたあとの呼び出しで、止める人のいない Tika を、また起動しないための印
+        self._closed = False
 
     def extract_text(self, filename: str, mime_type: str, data: bytes) -> str:
         """ファイルから、本文のテキストを取り出す。
@@ -241,9 +249,9 @@ class TikaClient:
         Raises
         ------
         TikaFileError
-            未対応の形式（415）・解析できない文書（そのほかの 4xx）のとき。
+            未対応の形式（415）・解析できない文書（400・422）のとき。
         TikaUnavailableError
-            Tika が使えない・応答しない・5xx のとき。
+            Tika が使えない・応答しない・そのほかの成功でない状態のとき。
         """
         base_url = self._ensure_server()
         headers = {
@@ -261,23 +269,28 @@ class TikaClient:
                 response = client.put(f"{base_url}/tika", content=data, headers=headers)
         except httpx.HTTPError as error:
             logger.error("Tika の呼び出しに失敗しました: %s", type(error).__name__)
-            self._borrowed = False  # 借りた先が落ちていたら、次は自分で起動する
+            with self._lock:
+                self._borrowed = False  # 借りた先が落ちていたら、次は自分で起動する
             raise TikaUnavailableError("Tika is unavailable") from None
         status = response.status_code
         if status == HTTP_UNSUPPORTED_MEDIA:
             raise TikaFileError(UNSUPPORTED_MIME, "Tika does not support this format")
-        if status >= HTTP_SERVER_ERROR:
-            # Tika 側の障害（子の JVM のメモリ不足など）。ファイルの問題とは区別する
-            logger.error("Tika が HTTP %d を返しました", status)
-            raise TikaUnavailableError("Tika failed temporarily")
-        if status >= HTTP_CLIENT_ERROR:  # 422（解析できない文書）など
+        if status in (HTTP_BAD_REQUEST, HTTP_UNPROCESSABLE_ENTITY):
+            # 解析できない文書。ファイルの問題
             logger.error("Tika が HTTP %d を返しました", status)
             raise TikaFileError(CORRUPT_FILE, "Tika could not parse this file")
+        if not httpx.codes.is_success(status):
+            # 5xx（子の JVM のメモリ不足など）のほか、404・405・413・429・3xx など、ファイルの
+            # 中身を表さない状態。設定の誤り（プロキシ・別のサービス）も含め、ファイルの問題とは
+            # 区別する
+            logger.error("Tika が HTTP %d を返しました", status)
+            raise TikaUnavailableError("Tika returned an unexpected status")
         return response.text
 
     def shutdown(self) -> None:
         """起動した Tika のサーバーを止める（アプリの終了時）。"""
         with self._lock:
+            self._closed = True
             self._stop_process()
 
     def _ensure_server(self) -> str:
@@ -291,7 +304,7 @@ class TikaClient:
         Raises
         ------
         TikaUnavailableError
-            設定がない・起動できない・時間内に起動しないとき。
+            設定がない・止めたあと・起動できない・時間内に起動しないとき。
         """
         if self._settings.url:
             return self._settings.url.rstrip("/")
@@ -299,6 +312,8 @@ class TikaClient:
             raise TikaUnavailableError("Tika is not configured")
         base_url = f"http://{LOOPBACK_HOST}:{self._settings.port}"
         with self._lock:
+            if self._closed:
+                raise TikaUnavailableError("Tika is shut down")
             running = self._process is not None and self._process.poll() is None
             if not running and not self._borrowed:
                 self._start(base_url)
