@@ -92,7 +92,7 @@ npm run explore:all
 
 #### 今の担当範囲の分け方
 
-`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。`client/` の全画面のルート（`routes/index.tsx`。多くは「未移植」の仮画面）に合わせて、次の 9 つのまとまりに分け、権限と組み合わせた 15 の担当範囲があります。
+`explorer.config.json` の `groups`（画面のまとまり）と `roles`（権限）で決まります。`npm run shards` で一覧を見られます。`client/` の全画面のルート（`client/src/routes/index.tsx`。多くは「未移植」の仮画面）に合わせて、次の 9 つのまとまりに分け、権限と組み合わせた 15 の担当範囲があります。
 
 | まとまり | 起点 | 範囲（URL のパス） | 権限 |
 |---|---|---|---|
