@@ -92,6 +92,40 @@ async def test_sync_waha_failure_saves_error(
     assert fake_waha.call_names()[-1] == "end_session"
 
 
+async def test_sync_unconfirmed_saves_error(
+    client: httpx.AsyncClient,
+    fake_waha: FakeWahaClient,
+) -> None:
+    """Waha! の完了を確認できないときも、ERROR 状態で保存して返し、セッションは終了すること"""
+    fake_waha.unconfirmed = True
+    res = await client.post(
+        SYNC_URL,
+        files=multipart_files(
+            {"assistantId": "svc", "messageId": "msg-1", "userInput": "質問"}
+        ),
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "ERROR"
+    assert body["answer"] == "Waha! の処理完了を確認できませんでした。"
+    assert fake_waha.call_names()[-1] == "end_session"
+
+
+async def test_sync_end_session_failure_after_answer_is_raised(
+    client: httpx.AsyncClient,
+    fake_waha: FakeWahaClient,
+) -> None:
+    """回答を得たあとのセッション終了の失敗は、ERROR として保存せず、そのまま失敗にすること"""
+    fake_waha.fail_on = {"end_session"}
+    res = await client.post(
+        SYNC_URL,
+        files=multipart_files(
+            {"assistantId": "svc", "messageId": "msg-1", "userInput": "質問"}
+        ),
+    )
+    assert res.status_code == 500
+
+
 async def test_sync_regenerate(
     client: httpx.AsyncClient,
     fake_waha: FakeWahaClient,

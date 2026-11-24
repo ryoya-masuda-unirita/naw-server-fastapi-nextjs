@@ -16,6 +16,7 @@ from app.schemas.message import (
     get_message_contents_response,
 )
 from app.services.waha_inputs import upload_question_history_and_attachment
+from app.services.waha_session import waha_session
 
 logger = logging.getLogger(__name__)
 
@@ -139,24 +140,27 @@ async def post_message_content(
     reference_paths: list[str] | None = []
     status = MessageContentStatus.OK
 
-    session_id = await waha.start_session()
+    execution_succeeded = False
     try:
-        await upload_question_history_and_attachment(waha, command, session_id)
-        await waha.execute(session_id, command.assistant_id or "")
-        await waha.get_results(session_id)
-        response = await waha.download_file(session_id, SLOT_OUTPUT)
-        answer = RetrievalAnswer.from_output_file(response)
-        answer_text = answer.answer
-        if answer.references:
-            context = answer.context_text()
-            reference_paths = answer.filepaths
-    except Exception as e:  # noqa: BLE001
-        # 移植元どおり、Waha! 側の失敗は例外にせず ERROR 状態で保存して返す
+        async with waha_session(waha, "旧チャット") as session_id:
+            await upload_question_history_and_attachment(waha, command, session_id)
+            await waha.execute(session_id, command.assistant_id or "")
+            await waha.get_results(session_id)
+            response = await waha.download_file(session_id, SLOT_OUTPUT)
+            answer = RetrievalAnswer.from_output_file(response)
+            answer_text = answer.answer
+            if answer.references:
+                context = answer.context_text()
+                reference_paths = answer.filepaths
+            execution_succeeded = True
+    except Exception as e:
+        if execution_succeeded:
+            # 回答を得たあとのセッション終了の失敗は、回答の失敗として保存せず、そのまま伝える
+            raise
+        # 移植元どおり、Waha! 側の失敗（完了未確認を含む）は例外にせず ERROR 状態で保存して返す
         logger.warning("Waha job failed: %s", e)
         answer_text = str(e)
         status = MessageContentStatus.ERROR
-    finally:
-        await waha.end_session(session_id)
 
     if existing is not None:
         existing.status = status.value

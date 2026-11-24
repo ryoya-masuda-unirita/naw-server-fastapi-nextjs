@@ -17,6 +17,7 @@ from app.repositories import file_repository
 from app.repositories.file_repository import FileSearchCondition
 from app.schemas.index import file_to_dict, page_to_dict
 from app.schemas.message import UploadedFile
+from app.services.waha_session import waha_session
 
 logger = logging.getLogger(__name__)
 
@@ -292,8 +293,7 @@ async def _run_waha_create_job(
     # Waha! のセッションを無駄に作らないよう、開始前に確認する
     if upload is None:
         raise BadRequestError(FILE_NOT_SPECIFIED_MESSAGE)
-    session_id = await waha.start_session()
-    try:
+    async with waha_session(waha, "ファイル登録") as session_id:
         await waha.upload_file(
             filename=upload.filename or UPLOAD_FALLBACK_FILENAME,
             content=upload.data,
@@ -304,10 +304,9 @@ async def _run_waha_create_job(
         await waha.execute_learning(
             session_id, service_name or "", split_length, reference
         )
+        # 完了を確認できなければ例外になり、出力を取得せず、保存もしない
         await waha.get_results(session_id)
         tsv_content = await waha.download_file(session_id, SLOT_OUTPUT)
-    finally:
-        await waha.end_session(session_id)
     return _parse_create_result(tsv_content)
 
 
@@ -487,8 +486,7 @@ async def _run_waha_delete_job(
         Waha! から削除するパート ID の一覧。
     """
     ids_text = "".join(f"{part_id}\n" for part_id in part_ids)
-    session_id = await waha.start_session()
-    try:
+    async with waha_session(waha, "削除") as session_id:
         await waha.upload_file(
             filename=(
                 f"{DELETE_IDS_FILENAME_PREFIX}{uuid.uuid4().hex}"
@@ -499,9 +497,8 @@ async def _run_waha_delete_job(
             session_id=session_id,
         )
         await waha.execute(session_id, service_name or "")
+        # 完了を確認できなければ例外になり、呼び出し側はファイルとチャンクを消さない
         await waha.get_results(session_id)
-    finally:
-        await waha.end_session(session_id)
 
 
 async def _delete_from_db(
@@ -848,23 +845,22 @@ async def sync_files(
     files: dict[str, File] = {}
     parts: dict[str, list[str]] = {}
 
-    session_id = await waha.start_session()
-    # 移植元はページングのループ構造を持つが、1 回で抜ける実装のため 1 ページ分のみ取得する
-    await waha.execute_sync(session_id, sync_service_name or "", 0, SYNC_PAGE_SIZE)
-    await waha.get_results(session_id)
-    tsv_content = await waha.download_file(session_id, SLOT_OUTPUT)
-    if tsv_content is not None:
-        for line in java_split(_strip_bom(tsv_content), LINE_SEPARATOR):
-            sanitized = line.replace("\n", "").replace("\r", "")
-            fields = _split_fields(sanitized)
-            file_id = fields[2]
-            if file_id not in files:
-                files[file_id] = _build_synced_file(
-                    fields, tenant_id, user_id, index_id
-                )
-                parts[file_id] = []
-            parts[file_id].append(fields[1])
-    await waha.end_session(session_id)
+    async with waha_session(waha, "同期") as session_id:
+        # 移植元はページングのループ構造を持つが、1 回で抜ける実装のため 1 ページ分のみ取得する
+        await waha.execute_sync(session_id, sync_service_name or "", 0, SYNC_PAGE_SIZE)
+        await waha.get_results(session_id)
+        tsv_content = await waha.download_file(session_id, SLOT_OUTPUT)
+        if tsv_content is not None:
+            for line in java_split(_strip_bom(tsv_content), LINE_SEPARATOR):
+                sanitized = line.replace("\n", "").replace("\r", "")
+                fields = _split_fields(sanitized)
+                file_id = fields[2]
+                if file_id not in files:
+                    files[file_id] = _build_synced_file(
+                        fields, tenant_id, user_id, index_id
+                    )
+                    parts[file_id] = []
+                parts[file_id].append(fields[1])
 
     existing_ids = await file_repository.find_all_ids(session)
     if user_id is None and any(file_id not in existing_ids for file_id in files):

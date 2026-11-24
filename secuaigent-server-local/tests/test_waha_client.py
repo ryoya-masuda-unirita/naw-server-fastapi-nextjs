@@ -1,10 +1,11 @@
 from collections.abc import Callable
+from http import HTTPStatus
 
 import httpx
 import pytest
 
 from app.clients.waha_client import ResultStatus, WahaClient
-from app.core.errors import ExternalServiceError
+from app.core.errors import ExternalServiceError, WahaJobCompletionUnconfirmedError
 
 API = "http://waha.test/WahaServer/servicerun/api"
 ENCODED_AUTH_KEY = "key%2B%2F%3D"
@@ -201,7 +202,7 @@ async def test_get_results_failure() -> None:
 
 
 async def test_get_results_gives_up_after_max_retries() -> None:
-    """RUNNING が上限回数続いたら例外にせず戻ること（移植元どおり）"""
+    """RUNNING が上限回数続いたら、成功とみなさず完了未確認の例外になること"""
     count = 0
 
     def handler(_request: httpx.Request) -> httpx.Response:
@@ -223,8 +224,11 @@ async def test_get_results_gives_up_after_max_retries() -> None:
 
     client, http = make_client(handler, max_retries=3)
     async with http:
-        await client.get_results("s1")
+        with pytest.raises(WahaJobCompletionUnconfirmedError) as e:
+            await client.get_results("s1")
     assert count == 3
+    assert e.value.status_code == HTTPStatus.GATEWAY_TIMEOUT
+    assert e.value.message == "Waha! の処理完了を確認できませんでした。"
 
 
 async def test_download_and_end_session() -> None:
