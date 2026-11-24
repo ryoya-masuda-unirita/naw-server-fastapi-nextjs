@@ -41,14 +41,19 @@ services:
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      # 埋め込みの学習で、filepath で渡されたパスを読んでよいディレクトリ（下の file-server のマウント先）
+      SOURCE_ALLOWED_DIR: /mnt/file-server
+      # サービス ID ごとの設定（/app/config の例、Bedrock の定義など）。Bedrock の拡張とは別に使う
+      WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}
       # bedrock-ext: Bedrock で動かすときだけ使う（手順は README の「Bedrock で動かす」）
-      WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}  # bedrock-ext
       BEDROCK_API_KEY: ${BEDROCK_API_KEY:-}  # bedrock-ext
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       TZ: Asia/Tokyo
     volumes:
       - stream-output:/app/data/stream-output
       - ./file-server:/mnt/file-server:ro
+      # ワークフロー定義の例（workflows.example.json など）。WAHA_WORKFLOWS_FILE=/app/config/... で指定する
+      - ../waha-emulator/config:/app/config:ro
       - ./config:/app/onprem-config:ro  # bedrock-ext
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 3)"]

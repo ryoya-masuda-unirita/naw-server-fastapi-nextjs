@@ -97,16 +97,10 @@ Waha! 本体はどちらのリポジトリにもないため、server-local が�
 
 | 項目 | 設定 |
 |---|---|
-| 接続先 | server-local の `WAHA_URL` をエミュレーターに向ける（Docker 同士なら `http://host.docker.internal:8091/`、ホスト同士なら `http://localhost:8091/`。末尾 `/` 付き） |
-| 認証キー | server-local とエミュレーターの `WAHA_AUTHKEY` を同じ値にする |
-| ストリームファイル | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする。Docker では、エミュレーターの compose が既定で `secuaigent-server-local/data/stream-output` を server-local と同じ `/app/data/stream-output` にマウントする |
-
-```bash
-mkdir -p secuaigent-server-local/data/stream-output   # 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
-cd waha-emulator && cp .env.example .env && docker compose up -d --build     # WAHA_AUTHKEY を設定
-cd ../secuaigent-server-local && cp .env.example .env    # WAHA_URL・WAHA_AUTHKEY を設定
-docker compose up -d --build
-```
+| Docker | `onprem/` の compose がまとめて起動する（下の「社内（オンプレ）側をまとめて起動する」）。接続先・認証キー・ストリームファイルの共有は設定済み。エミュレーター単体用の compose はない（#483 で廃止） |
+| 接続先（ホストで動かす） | server-local の `WAHA_URL` をエミュレーターに向ける（`http://localhost:8091/`。末尾 `/` 付き） |
+| 認証キー（ホストで動かす） | server-local とエミュレーターの `WAHA_AUTHKEY` を同じ値にする |
+| ストリームファイル（ホストで動かす） | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする（手順は waha-emulator/README.md の「両方ともホストで動かす」） |
 
 ## 社内（オンプレ）側をまとめて起動する
 

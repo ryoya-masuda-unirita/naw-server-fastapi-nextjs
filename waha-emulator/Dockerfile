@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# ビルドコンテキストはリポジトリのルート（waha-emulator/docker-compose.yml の build.context）。
+# ビルドコンテキストはリポジトリのルート（onprem/docker-compose.yml の build.context）。
 # エミュレーターは生成AIアダプタ・検索アダプタ（generative-ai-adapter/）をパス依存で使うため、
 # uv.lock の相対パス（../generative-ai-adapter/...）が解決できる位置に並べて置く
 WORKDIR /app/waha-emulator

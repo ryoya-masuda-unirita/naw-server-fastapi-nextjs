@@ -80,10 +80,8 @@ switchVersion(versionInfo.groupKey, 'prev');
 自動テスト（MSW）では実物の server-local に届かないため、`onprem/` を起動して確かめる手動用のテストがある（`npm test` には含まれない）。
 
 ```bash
-# リポジトリのルートで。waha-emulator は build context がルートのため、onprem/docker-compose.yml の `build: ../waha-emulator` のままでは build できない
-docker build -f waha-emulator/Dockerfile -t naw-onprem-waha-emulator .
-# onprem/docker-compose.yml の waha-emulator を image: naw-onprem-waha-emulator にする上書きファイルで server-local と waha-emulator を起動する
-cd client && npx vitest run --config vitest.e2e-local.config.ts
+cd onprem && docker compose up -d --build server-local   # server-local と、depends_on で waha-emulator が起動する（ポート 18090）
+cd ../client && npx vitest run --config vitest.e2e-local.config.ts
 ```
 
 `e2e-local/local-server.e2e.ts` が preflight・送信（SSE）・ルームの読み込み（`POST /api/messages/contents`）・認証キー違いの 401 を確かめる。NAW 側（メッセージ作成・`GET /api/auth`）は MSW で用意する。環境変数 `LOCAL_SERVER_URL`・`LOCAL_SERVER_KEY` で接続先を変えられる。
