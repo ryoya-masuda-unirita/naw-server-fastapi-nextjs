@@ -750,7 +750,7 @@ async function specifyFolder(
 ): Promise<void> {
   await openFolderDialog(page, row);
   const dialog = page.getByRole('dialog');
-  const folderTrigger = dialog.locator('[aria-haspopup="listbox"]:not(input)').first();
+  const folderTrigger = dialog.locator('[role="combobox"]').first();
   await chooseOption(page, folderTrigger, folderName);
   const learned = page.waitForResponse((r) => /\/additionalLearning$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
   const reloaded = fb.page.waitForResponse(

@@ -141,7 +141,7 @@ export class FeedbackPage {
    * @returns トリガーのロケーター
    */
   filter(index: number): Locator {
-    return this.main.locator('.library-filters [aria-haspopup="listbox"]:not(input)').nth(index);
+    return this.main.locator('.library-filters [role="combobox"]').nth(index);
   }
 
   /** 並べ替えのトリガー。 */
