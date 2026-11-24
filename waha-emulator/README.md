@@ -165,6 +165,10 @@ data:{"type":"completed"}
 | `WAHA_WORKFLOWS_FILE` | 未設定 | サービス ID → ワークフローの JSON（上の「ワークフローの設定」）。空文字列は未設定。Docker では `/app/config/workflows.example.json` など |
 | `LLM_PROVIDER` | `echo` | `WAHA_WORKFLOWS_FILE` がないときの既定。`echo` / `azure_openai` |
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の URL のモデル名になる |
+| `TIKA_SERVER_JAR` | Docker では `/opt/tika-server.jar`。ホストでは未設定 | Apache Tika のサーバーの jar。設定があると、旧形式の Office（`.doc`・`.xls`・`.ppt`）・RTF・HTML・EPUB・HWP など（専用のプロセッサが読まない形式）の取り出しに、必要になったとき（遅延起動）に起動して使う。未設定ならテキスト系の形式だけを自前で読む。詳細は [generative-ai-adapter の README](../generative-ai-adapter/README.md#apache-tika-の呼び方移植元との違い) |
+| `TIKA_URL` | 未設定 | 別に起動してある Tika のサーバーを使う（起動しない）。`TIKA_SERVER_JAR` より優先 |
+| `TIKA_HEAP` / `TIKA_PORT` / `TIKA_JAVA_COMMAND` | `256m` / `9998` / `java` | 起動する Tika の子の JVM のヒープ上限・待ち受けポート（`127.0.0.1`）・JRE のコマンド |
+| `TIKA_START_TIMEOUT_SECONDS` / `TIKA_REQUEST_TIMEOUT_SECONDS` | `60` / `120` | 起動を待つ時間・1 回の取り出しの時間 |
 | `LOG_LEVEL` | `INFO` | |
 
 Docker では、公開ポート・認証キー・ストリームファイルの共有などを `onprem/docker-compose.yml` と `onprem/.env`（[onprem/README.md](../onprem/README.md)）で決める。ビルドのコンテキストはリポジトリのルート（生成AIアダプタをイメージに含めるため）。

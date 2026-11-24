@@ -75,6 +75,38 @@ set_property → connect(出力モード) → set_column_information → set_vie
 | JDBC | psycopg 3 で接続（自動コミット）。移植元の Spring・Azure SDK・Tika・POI・PDFBox は Python の標準的な手段に置き換えた（差は docs/issue-300/03） |
 | PowerPoint の画像説明（ページ全体） | Python に描画の手段がなく `RENDERING_FAILURE` にする（埋め込み画像の説明は動く） |
 
+### Apache Tika の呼び方（移植元との違い）
+
+入力ファイルのテキスト抽出で、移植元は Apache Tika を使う。Python からは Java のライブラリを直接呼べないため、呼び方が変わる（#482）。
+
+| | 移植元（Java） | Python 版 |
+|---|---|---|
+| Tika の入れ方 | 依存ライブラリ（jar）としてアダプタに組み込む（`generative-ai-core/pom.xml` の `spring-ai-tika-document-reader`） | Tika のサーバー（3.1.0 の jar）と JRE を、`waha-emulator` の Docker イメージに入れる。jar はビルドのときに取得し、固定した SHA-512 で検証する（実行時のダウンロードはしない） |
+| 動く場所 | アダプタと同じプロセスの中（Waha! のプロセス） | 同じコンテナの中の子プロセス。コンテナ（デプロイの単位）は増やさない |
+| 呼び方 | Java のメソッド呼び出し（`AutoDetectParser#parse`） | HTTP。`PUT http://127.0.0.1:9998/tika`（`Accept: text/plain`、`Content-Type` に判定済みの MIME、`Content-Disposition` にファイル名） |
+| 起動 | アダプタの起動と一緒 | 初めて必要になったときに起動する（遅延起動）。すでに応答する Tika があれば、起動せずにそれを使う。子プロセスが落ちたら、次の呼び出しで起動し直す。エミュレーターの終了時に止める |
+| 設定 | `TextCoreMediaProcessor#parseContext`（OCR なし・埋め込み画像は読み飛ばす） | 環境変数 `TIKA_SERVER_JAR`（jar を起動）・`TIKA_URL`（既存のサーバーを使う）。どちらもなければ Tika を使わない（下の「Tika を使わないとき」）。`TIKA_HEAP` などは [waha-emulator の README](../waha-emulator/README.md#環境変数) |
+| 失敗 | `RuntimeException`（すべて `PARSER_FAILURE`） | core の `CoreMediaPreprocessingResult` の失敗。ファイルの問題は、未対応の形式（415）が `UNSUPPORTED_MIME`、解析できない文書（そのほかの 4xx）が `CORRUPT_FILE`。Tika 側の障害（起動できない・応答しない・5xx・設定が不正）は `PARSER_FAILURE` |
+
+**Tika を使う対象**は、移植元の `TextCoreMediaProcessor` と同じ。画像、`.pdf`・`.docx`・`.pptx`・`.xlsx`（それぞれ専用のプロセッサが読む）、MIME が `application/octet-stream` のものを除くすべて（`.doc`・`.xls`・`.ppt`・RTF・HTML・EPUB・HWP など）。`application/octet-stream` は、移植元と同じく、どのプロセッサも受け持たず `UNSUPPORTED_MIME` になる。
+
+**入れるコンテナ**は `waha-emulator`（`waha-emulator/Dockerfile`）だけ。アダプタはこのコンテナのプロセスの中で動くため。`onprem/docker-compose.yml` も同じ Dockerfile からビルドする。`secuaigent-server-local` は Waha! にファイルを渡すだけで、テキスト抽出はしないため、入れない。本物の Waha! には入れない（移植元の Java 版アダプタが、すでに Tika を組み込んでいる）。
+
+クラウド側の `server/` は、同じ方式で Tika を使っている（#469。`server/app/core/tika_client.py`、`server/Dockerfile`）。移植元の `server/` も `TikaService` で Tika を使っている。
+
+**Tika を使わないとき**（`TIKA_SERVER_JAR`・`TIKA_URL` がどちらもない。core 単体のテストなど）: `TextCoreMediaProcessor` は Tika を使わず、テキスト系の MIME だけを自前のデコード（HTML はタグを除く）で読む。旧形式の Office や RTF などは `UNSUPPORTED_MIME` になる。
+
+**移植元との差**（Tika 3.1.0 の jar を実際に動かして確かめた）:
+
+| 点 | 内容 |
+|---|---|
+| OCR | 移植元は OCR をしない。Python 版は、Tika の設定ファイルで `TesseractOCRParser` を除外して同じにする（コンテナに `tesseract` は入れない） |
+| 埋め込み画像 | 移植元は、埋め込みの画像を読み飛ばす（`EmbeddedDocumentExtractor`）。Tika のサーバーの設定では再現できなかった。画像のパーサーを除外しても、本文に `[image: ]` と埋め込みのファイル名（`image1.png` など）が出る。画像の中の文字は出ない（OCR なし） |
+| `embedding-adapter/tika-config.xml` | 移植元の中で、この設定ファイルを読み込む箇所が見つからなかったため、再現しない |
+| 失敗のコード | 上の表のとおり、ファイルの問題を `UNSUPPORTED_MIME`・`CORRUPT_FILE` に分ける（移植元はすべて `PARSER_FAILURE`） |
+| MIME の判定 | 移植元は Tika が判定する。Python 版は先頭のバイト・拡張子・中身で判定する（`detect_mime_type`）。RTF（先頭の `{\rtf`）と EPUB（ZIP の先頭＋拡張子 `.epub`）を判定に足した。足さないと、RTF は `text/plain`、EPUB は `application/zip` と判定され、Tika が RTF・EPUB として読まない。**Tika を使わない環境では、RTF・EPUB は `UNSUPPORTED_MIME` になる**（RTF は、これまでは制御語がそのまま本文に入っていた）。`.hwp` など、ほかの形式の判定は足していない |
+| 呼び出しの条件 | Tika に渡すときは、必ず判定済みの MIME を `Content-Type` に付ける（付けないと、200 で本文が空になることがある） |
+
 ### 実 DB での確認
 
 `onprem/vector-db` のイメージ（pgvector + PGroonga + Apache AGE）で確認できる。自動テストは DB に接続しない（偽の接続）。
@@ -130,7 +162,7 @@ Claude には埋め込みモデルがないため、回答の生成とは別に�
 
 ## チャット 1 回でどの部品がどの順に動いたかを見る
 
-エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker（`onprem/`）なら `cd onprem && docker compose logs waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
+エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker なら `docker logs naw-waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
 
 server-local から「こんにちは、通しの確認です」（履歴 2 件付き、アシスタント ID `gpt-4o`、Echo）を送ったときの実際のログ（時刻・セッション ID は省略。`←` は説明）:
 
@@ -165,28 +197,36 @@ server-local から「こんにちは、通しの確認です」（履歴 2 件�
 
 ## Docker で server-local → エミュレーター → アダプタを通して確かめる
 
-`onprem/` の compose で、server-local のコンテナがエミュレーターを呼び、エミュレーターのコンテナの中でアダプタが動く。ストリームファイルは named volume で、両方のコンテナが同じパス（`/app/data/stream-output`）で見る。ポートが他で使われていたら `onprem/docker-compose.yml` の公開ポートを変える（下は 18090・18091）。
+server-local のコンテナがエミュレーターを呼び、エミュレーターのコンテナの中でアダプタが動く。ストリームファイルは両方のコンテナが同じパス（`/app/data/stream-output`）で見る。ポートが他で使われていたら `*_PORT` を変える（下は 8091・8090）。
 
 ```bash
-# 1. 起動（エミュレーターはアダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
-cd onprem
-docker compose up -d --build server-local   # depends_on でエミュレーターも起動する。ベクトルDB は学習・検索を使うときだけ要る
-docker compose ps                           # healthy になるまで待つ
+# 0. 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
+mkdir -p secuaigent-server-local/data/stream-output
 
-# 2. 通しで確かめる（履歴付き。認証キーの既定は onprem-local-key）
-curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
+# 1. エミュレーター（アダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
+cd waha-emulator
+cp .env.example .env     # WAHA_AUTHKEY=local-key にする（LLM_PROVIDER=echo のままでよい）
+docker compose up -d --build
+
+# 2. server-local
+cd ../secuaigent-server-local
+cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=server-key、WAHA_URL=http://host.docker.internal:8091/、WAHA_AUTHKEY=local-key
+docker compose up -d --build
+
+# 3. 通しで確かめる（履歴付き）
+curl -N -H "X-SERVER-AUTH-KEY: server-key" \
   -F 'textData={"assistantId":"gpt-4o","messageId":"m-1","userInput":"こんにちは","historyMessages":[{"type":"USER","content":"前の質問"},{"type":"ASSISTANT","content":"前の回答"}]};type=application/json' \
-  http://localhost:18090/api/messages/content
+  http://localhost:8090/api/messages/content
 # → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content（answer が「こんにちは」）
 
-# 3. アダプタの動きを見る
-docker compose logs waha-emulator                               # 上のログ
-docker compose exec waha-emulator ls /app/data/stream-output    # 途中経過ファイル
+# 4. アダプタの動きを見る
+docker logs naw-waha-emulator           # 上のログ
+ls secuaigent-server-local/data/stream-output/     # 途中経過ファイル
 ```
 
-サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`onprem/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して `docker compose up -d` し直し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
+サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`waha-emulator/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して再起動し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
 
-実際の LLM（Azure OpenAI）に向けるときは、`onprem/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
+実際の LLM（Azure OpenAI）に向けるときは、`waha-emulator/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
 
 ## 検索アダプタ（retrieval-adapter, #299）
 

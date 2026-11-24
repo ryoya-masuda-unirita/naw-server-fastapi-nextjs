@@ -114,3 +114,20 @@ def test_detects_binary_without_extension_as_octet_stream(
         detect_mime_type(write_file("blob", b"\x01\x02\x00\x04"))
         == "application/octet-stream"
     )
+
+
+def test_detects_rtf_from_magic_not_as_text(
+    write_file: Callable[[str, bytes], Path],
+) -> None:
+    """RTF は、中身がテキストでも、拡張子がなくても application/rtf と判定すること"""
+    body = b"{\\rtf1\\ansi Hello}"
+    assert detect_mime_type(write_file("a.rtf", body)) == "application/rtf"
+    assert detect_mime_type(write_file("noext", body)) == "application/rtf"
+
+
+def test_detects_epub_from_zip_magic_and_extension(
+    write_file: Callable[[str, bytes], Path],
+) -> None:
+    """EPUB は、ZIP の先頭と拡張子から application/epub+zip と判定すること"""
+    path = write_file("book.epub", ZIP_MAGIC + b"rest")
+    assert detect_mime_type(path) == "application/epub+zip"
