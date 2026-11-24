@@ -31,8 +31,6 @@ const SORT_FIELD_OPTIONS: SortOption[] = [
   { value: 'updatedAt', label: 'FEEDBACK.SORT_BY_UPDATED' },
   { value: 'name', label: 'FEEDBACK.SORT_BY_ASSISTANT' },
   { value: 'accuracy', label: 'FEEDBACK.SORT_BY_ACCURACY' },
-  { value: 'add', label: 'FEEDBACK.SORT_BY_ADD_LEARNING' },
-  { value: 'folder', label: 'FEEDBACK.SORT_BY_FOLDER' },
 ];
 
 const SORT_ORDER_OPTIONS: SortOption[] = [
