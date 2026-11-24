@@ -1092,7 +1092,7 @@ props は `className` のみ。文言は `CHAT.VIEWER.SAVE_LIBRARY_DIALOG.OPTION
 
 ### MarkdownView（Markdown・チャート・mermaid の描画）
 
-移植元: `<markdown mermaid appChartBlocks [data] [disableSanitizer]="true">`（ngx-markdown）+ `shared/directives/chart-block.directive.ts` → `markdown-view.tsx`。使い方は `src/features/chat/README.md`。
+移植元: `<markdown mermaid appChartBlocks [data] [disableSanitizer]="true">`（ngx-markdown）+ `shared/directives/chart-block.directive.ts` → `markdown-view.tsx`。使い方は `src/components/features/chat/README.md`。
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
