@@ -142,6 +142,7 @@
     "ADMINS_PLACEHOLDER": "Select team administrators",
     "MEMBERS_LABEL": "Members",
     "MEMBERS_PLACEHOLDER": "Select members",
+    "MEMBERS_SEARCH_HINT": "Search by user name",
     "ASSISTANTS_LABEL": "Assistants",
     "ASSISTANTS_PLACEHOLDER": "Select assistants",
     "TEMPLATES_LABEL": "Templates",

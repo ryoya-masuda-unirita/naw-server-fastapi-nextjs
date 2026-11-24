@@ -9,10 +9,10 @@ import {
 import { GroupUsersTable } from '@/components/features/admin/groups/group-users-table';
 import { Button } from '@/components/shared/button';
 import { CircularLoading } from '@/components/shared/circular-loading';
+import { ComboboxMulti } from '@/components/shared/combobox-multi';
 import { Dialog } from '@/components/shared/dialog';
 import { FormRadio, type FormRadioOption } from '@/components/shared/form-radio';
 import { SvgIcon } from '@/components/shared/icons/svg-icon';
-import { MultiSelect } from '@/components/shared/multi-select';
 import { Pagination } from '@/components/shared/pagination';
 import { useDocumentClick } from '@/components/shared/select-hooks';
 import { useToastStore } from '@/components/shared/toast-store';
@@ -276,11 +276,18 @@ export function GroupDetailUsersPage() {
             <p className="text-xs text-text-muted leading-[1.4] mb-2">
               {t('GROUPS.ADD_USER_SUPPORT')}
             </p>
-            <MultiSelect
+            <ComboboxMulti
+              id="group-add-users"
+              name="group-add-users"
               value={addSelection}
+              onCommit={setAddSelection}
               options={addOptions}
               placeholder={t('GROUPS.MEMBERS_PLACEHOLDER')}
-              onSelectionChange={setAddSelection}
+              searchHint={t('GROUPS.MEMBERS_SEARCH_HINT')}
+              emptyMessage={t('COMMON.EMPTY_RESULT')}
+              testidPrefix="admin-groups-add-user-select"
+              panelSize="full"
+              scrollChipsWhenOpen
             />
           </div>
         </Dialog>
