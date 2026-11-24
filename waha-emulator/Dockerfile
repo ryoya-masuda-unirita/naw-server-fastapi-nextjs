@@ -7,6 +7,21 @@ WORKDIR /app/waha-emulator
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.25 /uv /usr/local/bin/uv
 
+# ファイルのテキストの取り出し（Apache Tika）のため、Tika のサーバー（jar）と JRE を、この
+# コンテナの中に入れる。移植元は Tika をアダプタのプロセスの中で使う。Python 版は、同じコンテナの
+# 中で子プロセスとして起動し、localhost で呼ぶ（別のサービスにしない）。jar はビルドのときに
+# 取得し、固定した SHA-512（server/Dockerfile と同じ値）で検証する。実行時にはダウンロードしない。
+# tesseract は入れない（OCR はしない）
+ARG TIKA_VERSION=3.1.0
+ARG TIKA_SHA512=e9f6df28329cb36519b748e04eb9c96db2e776f4bfafcb92a48b799e9448ee182c908eeb3e807a98f6c59af79a01e72022d7f5654764342b6d6688c288817c8e
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends default-jre-headless curl ca-certificates \
+    && curl -fsSL -o /opt/tika-server.jar "https://archive.apache.org/dist/tika/${TIKA_VERSION}/tika-server-standard-${TIKA_VERSION}.jar" \
+    && echo "${TIKA_SHA512}  /opt/tika-server.jar" | sha512sum -c - \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/*
+ENV TIKA_SERVER_JAR=/opt/tika-server.jar
+
 # uv.lock も併せてコピーし --frozen を付けることで、ロックファイルで固定した
 # バージョンをそのままイメージに焼き込む。先に依存パッケージ（アダプタ）の定義を
 # コピーする（ソースのコピーより前にし、依存の層をキャッシュできるようにする）
