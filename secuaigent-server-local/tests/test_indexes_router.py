@@ -354,6 +354,98 @@ class TestUploadFile:
         assert "download_file" not in fake_waha.call_names()
         assert fake_waha.call_names()[-1] == "end_session"
 
+    async def test_upload_file_end_session_server_error_after_verified_is_a_warning(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """出力を確認できたあとのセッション終了の 5xx は、登録を DB に反映し、警告のヘッダーで返すこと"""
+        fake_waha.download_content = "file-1\tpart-1\r\nfile-1\tpart-2\r\n"
+        fake_waha.end_session_http_status = 503
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+            # ブラウザからヘッダーを読めるよう、CORS で公開されること
+        )
+        assert res.status_code == 200
+        assert res.headers["X-Waha-Session-End-Status"] == "unconfirmed"
+        assert res.json()["id"] == "file-1"
+        assert await get_part_ids(session_factory, "file-1") == ["part-1", "part-2"]
+
+    async def test_upload_file_exposes_session_end_header_to_browsers(
+        self, client: httpx.AsyncClient, fake_waha: FakeWahaClient
+    ) -> None:
+        """警告のヘッダーが CORS の公開ヘッダーに含まれること"""
+        fake_waha.download_content = "file-1\tpart-1"
+        res = await client.post(
+            f"{BASE}/files",
+            headers={**TENANT, "Origin": "http://example.test"},
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert (
+            "X-Waha-Session-End-Status" in res.headers["access-control-expose-headers"]
+        )
+
+    async def test_upload_file_end_session_client_error_is_a_failure(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """セッション終了の 4xx は、5xx と違い失敗にして、保存しないこと"""
+        fake_waha.download_content = "file-1\tpart-1"
+        fake_waha.end_session_http_status = 404
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 500
+        assert await get_part_ids(session_factory, "file-1") == []
+
+    @pytest.mark.parametrize("separator", ["\n", "\r"])
+    async def test_upload_file_rejects_non_crlf_line_breaks(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        separator: str,
+    ) -> None:
+        """TSV に単独の CR・LF があれば、終了の失敗が重なっても保存せず失敗にすること"""
+        fake_waha.download_content = f"file-bad\tpart-1{separator}file-bad\tpart-2"
+        fake_waha.end_session_http_status = 500
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 500
+        assert await get_file(session_factory, "file-bad") is None
+        assert await get_part_ids(session_factory, "file-bad") == []
+
+    async def test_upload_file_rejects_mixed_file_ids(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """行ごとにファイル ID が違う出力は、保存せず失敗にすること"""
+        fake_waha.download_content = "file-a\tpart-1\r\nfile-b\tpart-2"
+        res = await client.post(
+            f"{BASE}/files",
+            headers=TENANT,
+            data={"name": "a.txt", "userId": "u"},
+            files={"file": ("a.txt", b"x", "text/plain")},
+        )
+        assert res.status_code == 500
+        assert await get_file(session_factory, "file-b") is None
+
 
 class TestUpdateFile:
     """学習ファイル更新 API（項目の更新とファイルの差し替え）のテスト。"""
@@ -413,6 +505,31 @@ class TestUpdateFile:
         delete_upload = fake_waha.uploads[0]
         assert delete_upload.content == b"p1\np2\n"
         assert delete_upload.filename.startswith("ids")
+
+    async def test_update_with_file_end_session_server_error_is_a_failure(
+        self,
+        client: httpx.AsyncClient,
+        fake_waha: FakeWahaClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """差し替えは通常登録と違い、セッション終了の 5xx も失敗にし、元のファイルを残すこと"""
+        await insert_file(session_factory, "f1", part_ids=["p1"])
+        fake_waha.download_content = "f-new\tq1"
+        fake_waha.end_session_http_status = 503
+        res = await client.patch(
+            f"{BASE}/files/f1",
+            headers=TENANT,
+            data={
+                "creationServiceName": "c",
+                "deletionServiceName": "d",
+                "name": "b.txt",
+                "userId": "u",
+            },
+            files={"file": ("b.txt", b"new", "text/plain")},
+        )
+        assert res.status_code == 500
+        assert await get_file(session_factory, "f1") is not None
+        assert await get_file(session_factory, "f-new") is None
 
     async def test_update_with_same_ids_recreates_parts(
         self,

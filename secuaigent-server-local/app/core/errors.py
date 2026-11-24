@@ -49,6 +49,23 @@ class ExternalServiceError(AppError):
     status_code = HTTPStatus.INTERNAL_SERVER_ERROR
 
 
+class WahaHttpStatusError(ExternalServiceError):
+    """Waha! が成功以外の HTTP ステータスを返した（HttpStatusCodeException 相当）。"""
+
+    def __init__(self, message: str, http_status: int) -> None:
+        """メッセージと Waha! が返したステータスを受け取る。
+
+        Parameters
+        ----------
+        message : str
+            エラーメッセージ（URL を含まない）。
+        http_status : int
+            Waha! が返した HTTP ステータス。
+        """
+        super().__init__(message)
+        self.http_status = http_status
+
+
 class WahaJobCompletionUnconfirmedError(ExternalServiceError):
     """WahaJobCompletionUnconfirmedException 相当（504）。結果照会が上限回数に達しても完了を確認できない。"""
 

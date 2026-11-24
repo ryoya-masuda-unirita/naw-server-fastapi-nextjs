@@ -18,7 +18,11 @@ from fastapi import (
 from fastapi import UploadFile as FastAPIUploadFile
 from fastapi.exceptions import RequestValidationError
 
-from app.core.config import MAX_FILE_SIZE_BYTES
+from app.core.config import (
+    MAX_FILE_SIZE_BYTES,
+    SESSION_END_STATUS_HEADER,
+    SESSION_END_UNCONFIRMED,
+)
 from app.core.deps import SessionDep, WahaDep
 from app.core.errors import BadRequestError, PayloadTooLargeError
 from app.models import FileStatus
@@ -205,6 +209,7 @@ async def list_files(
 @router.post("/files")
 async def upload_file(
     indexId: str,
+    response: Response,
     session: SessionDep,
     waha: WahaDep,
     tenant_id: TenantHeader,
@@ -222,6 +227,8 @@ async def upload_file(
     ----------
     indexId : str
         インデックス ID（パス）。
+    response : Response
+        応答。登録は済んだが Waha! のセッション終了を確認できないとき、警告のヘッダーを付ける。
     session : AsyncSession
         DB セッション。
     waha : WahaClient
@@ -260,7 +267,7 @@ async def upload_file(
         Waha! の学習結果の TSV からファイルの登録内容を読み取れない場合（500）。
     """
     _require_name(name)
-    return await file_service.create_file(
+    result = await file_service.create_file(
         session,
         waha,
         creation_service_name=creationServiceName,
@@ -273,6 +280,10 @@ async def upload_file(
         split_length=splitLength,
         tenant_id=tenant_id,
     )
+    if result.session_end_unconfirmed:
+        # 登録は済んでいるが、Waha! のセッション終了を確認できなかった。応答のヘッダーで警告する
+        response.headers[SESSION_END_STATUS_HEADER] = SESSION_END_UNCONFIRMED
+    return result.body
 
 
 @router.patch("/files/{fileId}")

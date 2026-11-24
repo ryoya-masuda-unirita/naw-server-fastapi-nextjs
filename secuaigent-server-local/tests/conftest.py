@@ -12,7 +12,11 @@ import app.models  # noqa: F401 — テーブル定義をメタデータに登�
 from app.clients.waha_client import ResultStatus
 from app.core.config import Settings
 from app.core.database import create_engine, create_session_factory
-from app.core.errors import ExternalServiceError, WahaJobCompletionUnconfirmedError
+from app.core.errors import (
+    ExternalServiceError,
+    WahaHttpStatusError,
+    WahaJobCompletionUnconfirmedError,
+)
 from app.main import create_app
 
 AUTH_KEY = "test-key"
@@ -77,6 +81,8 @@ class FakeWahaClient:
     fail_on: set[str] = field(default_factory=set)
     # True なら get_results が「完了を確認できない」（結果照会が上限に達した）例外になる
     unconfirmed: bool = False
+    # 設定すると end_session が、そのステータスの HTTP エラーで失敗する（Waha! の 5xx・4xx の再現）
+    end_session_http_status: int | None = None
     on_execute_with_stream_file: Callable[[str], None] | None = None
     # Waha! のジョブ完了を待っている間に割り込ませる処理（#251 のロック確認用）
     on_get_results: Callable[[], Awaitable[None]] | None = None
@@ -137,6 +143,11 @@ class FakeWahaClient:
             Waha! の成功応答に合わせた "OK"。
         """
         self._record("end_session", session_id)
+        if self.end_session_http_status is not None:
+            raise WahaHttpStatusError(
+                f"{self.end_session_http_status} error: [no body]",
+                self.end_session_http_status,
+            )
         return "OK"
 
     async def upload_file(

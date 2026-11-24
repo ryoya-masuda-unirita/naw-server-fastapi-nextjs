@@ -142,7 +142,8 @@ async def post_message_content(
 
     execution_succeeded = False
     try:
-        async with waha_session(waha, "旧チャット") as session_id:
+        async with waha_session(waha, "旧チャット") as handle:
+            session_id = handle.id
             await upload_question_history_and_attachment(waha, command, session_id)
             await waha.execute(session_id, command.assistant_id or "")
             await waha.get_results(session_id)

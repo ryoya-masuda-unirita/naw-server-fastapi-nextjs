@@ -7,7 +7,11 @@ from typing import Any
 
 import httpx
 
-from app.core.errors import ExternalServiceError, WahaJobCompletionUnconfirmedError
+from app.core.errors import (
+    ExternalServiceError,
+    WahaHttpStatusError,
+    WahaJobCompletionUnconfirmedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +195,9 @@ class WahaClient:
         except httpx.RequestError as e:
             raise ExternalServiceError(io_error_message(method, url, e)) from e
         if not response.is_success:
-            raise ExternalServiceError(status_error_message(response))
+            raise WahaHttpStatusError(
+                status_error_message(response), response.status_code
+            )
         return response
 
     async def _get_text(self, path: str, params: dict[str, str | int]) -> str:
