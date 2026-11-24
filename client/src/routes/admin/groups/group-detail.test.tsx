@@ -230,7 +230,7 @@ describe('GroupDetailPage', () => {
       mockApis();
       await renderTab('users');
 
-      const links = screen.getAllByRole('link');
+      const links = screen.getAllByRole('tab');
       const tabLabels = links
         .map((link) => link.textContent)
         .filter((text) => text?.startsWith('GROUPS.TAB_'));
@@ -241,7 +241,7 @@ describe('GroupDetailPage', () => {
       mockApis();
       const { router } = await renderTab('users');
 
-      await userEvent.click(screen.getByRole('link', { name: 'GROUPS.TAB_ASSISTANTS' }));
+      await userEvent.click(screen.getByRole('tab', { name: 'GROUPS.TAB_ASSISTANTS' }));
 
       expect(router.state.location.pathname).toBe('/admin/groups/g1/assistants');
       expect(await screen.findByText('営業アシスタント')).toBeInTheDocument();
@@ -252,7 +252,7 @@ describe('GroupDetailPage', () => {
       await renderTab('templates');
 
       expect(await screen.findByText('議事録')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'GROUPS.TAB_TEMPLATES' })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: 'GROUPS.TAB_TEMPLATES' })).toHaveAttribute(
         'aria-current',
         'page',
       );

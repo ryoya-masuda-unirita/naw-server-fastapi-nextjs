@@ -130,7 +130,7 @@ export class FeedbackPage {
    * @returns ボタンのロケーター
    */
   tabButton(tab: FeedbackTab): Locator {
-    return this.page.getByRole('button', { name: TAB_LABELS[tab], exact: true });
+    return this.page.getByRole('tab', { name: TAB_LABELS[tab], exact: true });
   }
 
   /**
