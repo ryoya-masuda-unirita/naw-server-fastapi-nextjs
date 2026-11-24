@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 # 巡回のレポート（スクリーンショット・trace を含み大きいため git 管理しない）
 reports/
 test-results/
