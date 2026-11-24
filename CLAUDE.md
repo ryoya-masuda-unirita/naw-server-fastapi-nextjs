@@ -1,4 +1,4 @@
-# naw-server-fastapi-nextjs — Claude 向けプロジェクト設定
+# secuaigent-fastapi-react — Claude 向けプロジェクト設定
 
 @.claude/memory/MEMORY.md
 
@@ -112,7 +112,7 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 ## モノレポ構成
 
 ```
-naw-server-fastapi-nextjs/
+secuaigent-fastapi-react/
 ├── client/                 # React（Vite + React Router。移植元 secuaigent/client/（Angular）の移植先）
 ├── server/                 # FastAPI（移植元 secuaigent/server/（Spring Boot）の移植先）
 ├── secuaigent-server-local/  # FastAPI（移植元 secuaigent-server-local/ の移植先。server/ とは独立した uv プロジェクト）

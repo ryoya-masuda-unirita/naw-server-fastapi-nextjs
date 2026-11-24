@@ -1,6 +1,6 @@
 ---
 name: naw-pr-workflow
-description: Use when preparing a pull request for naw-server-fastapi-nextjs, including PR body drafting, review note creation, test result summarization, and Closes #XX handling.
+description: Use when preparing a pull request for secuaigent-fastapi-react, including PR body drafting, review note creation, test result summarization, and Closes #XX handling.
 ---
 
 # NAW PR Workflow
@@ -101,7 +101,7 @@ PR を積み上げず、マージしてよい PR は AI が自動でマージす
 5. `08_動作確認.md` に未確認事項が残っていない（残っていれば人に確認する）
 
 ```bash
-gh pr merge <PR番号> --repo ryoya-masuda-unirita/naw-server-fastapi-nextjs --merge
+gh pr merge <PR番号> --repo ryoya-masuda-unirita/secuaigent-fastapi-react --merge
 ```
 
 - マージ方式は従来どおり merge commit（`--merge`）

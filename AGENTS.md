@@ -1,4 +1,4 @@
-# naw-server-fastapi-nextjs — Codex 運用ガイド
+# secuaigent-fastapi-react — Codex 運用ガイド
 
 ## 目的
 
@@ -62,7 +62,7 @@ Codex の運用ルールは、この `AGENTS.md` と `.codex/skills/` を正と�
 ## モノレポ構成
 
 ```text
-naw-server-fastapi-nextjs/
+secuaigent-fastapi-react/
 ├── client/          # React 実装（移植先）
 ├── server/           # FastAPI 実装
 ├── waha-emulator/     # Waha! の servicerun API のエミュレーター（FastAPI。独立した uv プロジェクト）

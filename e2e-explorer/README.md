@@ -2,7 +2,7 @@
 
 ## このリポジトリは何のプロジェクトか
 
-このリポジトリ（`naw-server-fastapi-nextjs`）は、ユニリタの企業向け AI チャット管理 SaaS **「SecuAiGent」**（旧称 NAW）を、**Spring Boot（Java）+ Angular から FastAPI（Python）+ React へ移植する**プロジェクトです。
+このリポジトリ（`secuaigent-fastapi-react`）は、ユニリタの企業向け AI チャット管理 SaaS **「SecuAiGent」**（旧称 NAW）を、**Spring Boot（Java）+ Angular から FastAPI（Python）+ React へ移植する**プロジェクトです。
 
 - SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS です。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使います
 - 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `server/`（FastAPI）・`client/`（React）・`secuaigent-server-local/` などに移植しています
@@ -272,7 +272,7 @@ shards/<担当範囲>/
 
 （または「e2e-explorer のレポートを仕分けして」）
 
-スキルは疑いを 1 件ずつ、frontend・backend のコードと移植元に照らして **バグ / 未移植 / 仕様どおり / 誤検知 / 判断できない** に分け、バグと未移植には Issue の文案を作ります。**起票は人が判断します**。起票先は必ず `ryoya-masuda-unirita/naw-server-fastapi-nextjs`（`gh` には `--repo ryoya-masuda-unirita/naw-server-fastapi-nextjs` を付ける）で、移植元には起票しません。誤検知は `explorer.config.json` の `expectedHttp`・`ignoreConsole`・`excludeSelectors` への追加案として返ります。
+スキルは疑いを 1 件ずつ、frontend・backend のコードと移植元に照らして **バグ / 未移植 / 仕様どおり / 誤検知 / 判断できない** に分け、バグと未移植には Issue の文案を作ります。**起票は人が判断します**。起票先は必ず `ryoya-masuda-unirita/secuaigent-fastapi-react`（`gh` には `--repo ryoya-masuda-unirita/secuaigent-fastapi-react` を付ける）で、移植元には起票しません。誤検知は `explorer.config.json` の `expectedHttp`・`ignoreConsole`・`excludeSelectors` への追加案として返ります。
 
 ## ハーネス自体の開発
 
