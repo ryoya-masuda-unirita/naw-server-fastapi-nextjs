@@ -59,6 +59,8 @@ export interface ComboboxMultiProps<T = string> {
   filled?: FilledState;
   /** デスクトップのパネル幅（default=240px、big=280px、full=トリガー幅） */
   panelSize?: PanelSize;
+  /** 一覧を開いている間、選んだチップの欄の高さに上限を付けて中でスクロールさせる（大量に選ぶ欄で使う） */
+  scrollChipsWhenOpen?: boolean;
   value?: T[];
   /** 確定（選択を確定・閉じた状態でのチップ削除）で値が変わったとき。移植元の `(valueChange)` */
   onValueChange?: (value: T[]) => void;
@@ -87,6 +89,7 @@ export function ComboboxMulti<T = string>({
   emptyMessage = '表示するデータがありません',
   filled,
   panelSize = 'default',
+  scrollChipsWhenOpen = false,
   value: valueProp = EMPTY_VALUE,
   onValueChange,
   onCommit,
@@ -107,6 +110,7 @@ export function ComboboxMulti<T = string>({
   const [listStyle, setListStyle] = useState<ListStyle>({});
 
   const effectiveValue = staging ?? value;
+  const chipsScrollable = isOpen && scrollChipsWhenOpen;
   const hasValue = effectiveValue.length > 0;
   const selectedOptions = options.filter((opt) => effectiveValue.includes(opt.value));
   const q = query.trim().toLowerCase();
@@ -124,6 +128,18 @@ export function ComboboxMulti<T = string>({
   const someSelected = selectedVisibleCount > 0 && selectedVisibleCount < enabledVisibleValues.length;
 
   /**
+   * 閉じている間に隠したチップ・入力欄と `+N` バッジを元に戻す。
+   * 隠れたままだと入力欄にフォーカスできず、名前で絞り込めない。
+   */
+  const restoreChips = () => {
+    const row = chipsRowRef.current;
+    if (!row) return;
+    row.querySelectorAll<HTMLElement>('[data-chip-el]').forEach((el) => el.removeAttribute('hidden'));
+    row.querySelectorAll<HTMLElement>('[data-overflow-badge-el]').forEach((el) => el.remove());
+    pcInputRef.current?.removeAttribute('hidden');
+  };
+
+  /**
    * 閉じているとき、1 行目に収まらないチップを隠して `+N` バッジを出す。
    * 実際の折り返し位置を測る必要があるため、移植元と同じく描画後の DOM を直接操作する。
    */
@@ -131,12 +147,8 @@ export function ComboboxMulti<T = string>({
     const row = chipsRowRef.current;
     const input = pcInputRef.current;
     if (!row) return;
-    row.querySelectorAll<HTMLElement>('[data-chip-el]').forEach((el) => el.removeAttribute('hidden'));
-    row.querySelectorAll<HTMLElement>('[data-overflow-badge-el]').forEach((el) => el.remove());
-    if (latest.current.isOpen) {
-      if (input) input.removeAttribute('hidden');
-      return;
-    }
+    restoreChips();
+    if (latest.current.isOpen) return;
     const chips = Array.from(row.querySelectorAll<HTMLElement>('[data-chip-el]'));
     if (chips.length === 0) {
       if (input) input.removeAttribute('hidden');
@@ -144,10 +156,12 @@ export function ComboboxMulti<T = string>({
     }
     if (!row.clientWidth) return; // 非表示のコンテナでは測れない
     if (input) input.setAttribute('hidden', '');
-    const firstTop = chips[0].offsetTop;
+    // チップを隠して 1 行に収まると、欄の中で上下中央に寄って位置が変わる。
+    // 最初に測った位置と比べ続けると、2 つ目以降がすべて +N になるため、毎回 1 つ目の今の位置と比べる
+    const wrapped = (el: HTMLElement) => el.offsetTop > chips[0].offsetTop;
     let hiddenCount = 0;
     for (let i = 1; i < chips.length; i++) {
-      if (chips[i].offsetTop > firstTop) {
+      if (wrapped(chips[i])) {
         chips[i].setAttribute('hidden', '');
         hiddenCount++;
       }
@@ -159,7 +173,7 @@ export function ComboboxMulti<T = string>({
       badge.setAttribute('data-overflow-badge-el', '');
       row.insertBefore(badge, input ?? null);
       // バッジ自体が折り返したら、収まるまで末尾のチップを 1 つずつ隠す
-      while (hiddenCount < chips.length && badge.offsetTop > firstTop) {
+      while (hiddenCount < chips.length && wrapped(badge)) {
         let lastVisibleIdx = -1;
         for (let i = chips.length - 1; i >= 0; i--) {
           if (!chips[i].hasAttribute('hidden')) {
@@ -240,8 +254,21 @@ export function ComboboxMulti<T = string>({
     requestAnimationFrame(() => requestAnimationFrame(() => latest.current.positionList()));
   }, [isOpen, isMobile, latest]);
 
+  // 欄の高さに上限を付けている間は、選ぶたびに末尾までスクロールし、一覧を欄の下端に付け直す
+  useEffect(() => {
+    const row = chipsRowRef.current;
+    if (!chipsScrollable || !row) return;
+    // チップは入力欄の前に並ぶため、末尾までスクロールして入力欄が見えるようにする
+    row.scrollTop = row.scrollHeight;
+    // 選んで欄が高くなると一覧が欄に重なるため、欄の下端に付け直す
+    if (!latest.current.isMobile) latest.current.positionList();
+  }, [chipsScrollable, effectiveValue, latest]);
+
   const open = () => {
     if (disabled) return;
+    // 再描画の前なので recalcChipOverflow は使えない（isOpen がまだ false で、また隠してしまう）。
+    // 入力欄を戻してからフォーカスする
+    restoreChips();
     setStaging([...value]);
     setQuery('');
     setListStyle({ opacity: '0' });
@@ -410,7 +437,11 @@ export function ComboboxMulti<T = string>({
           data-cmulti-trigger=""
           onClick={toggle}
         >
-          <div className="combobox-chips-row" ref={chipsRowRef} data-cmulti-chips="">
+          <div
+            className={cx('combobox-chips-row', chipsScrollable && 'max-h-24 overflow-y-auto')}
+            ref={chipsRowRef}
+            data-cmulti-chips=""
+          >
             {selectedOptions.map((opt, index) => (
               <span
                 key={`${String(opt.value)}-${index}`}

@@ -544,7 +544,7 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `className` | `string` | - | ホスト要素に足すクラス |
 
 ```tsx
-// 確定した値だけ受け取る（移植元 group-detail-users と同じ使い方）
+// 確定した値だけ受け取る（移植元 library-edit-settings-dialog と同じ使い方）。名前で絞り込みたい欄は ComboboxMulti を使う
 <MultiSelect options={userOptions} value={selection} onSelectionChange={setSelection} />
 ```
 
@@ -552,7 +552,7 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 
 移植元: `shared/components/combobox-multi/combobox-multi.component.*`
 
-検索で絞り込みながら複数選択し、「決定」で確定する。開いている間の選択は確定まで仮の値として持ち、キャンセル・外側クリック・Esc で捨てる。「すべて選択」は絞り込み中の選択肢だけが対象。閉じているときは 1 行に収まらないチップを隠して `+N` バッジを出す。見た目は `index.css` の `.combobox-*`。
+検索で絞り込みながら複数選択し、「決定」で確定する。開いている間の選択は確定まで仮の値として持ち、キャンセル・外側クリック・Esc で捨てる。「すべて選択」は絞り込み中の選択肢だけが対象。閉じているときは 1 行に収まらないチップを隠して `+N` バッジを出し（毎回 1 つ目のチップの今の位置と比べて判定する）、開くときは隠したチップと入力欄を戻す。見た目は `index.css` の `.combobox-*`。
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -573,6 +573,7 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `disabled` | `boolean` | `false` | 無効 |
 | `filled` | `'active' \| 'inputed'` | - | トリガーの `data-filled` 属性 |
 | `panelSize` | `'default' \| 'big' \| 'full'` | `'default'` | デスクトップのパネル幅（240px / 280px / トリガー幅） |
+| `scrollChipsWhenOpen` | `boolean` | `false` | 一覧を開いている間、選んだチップの欄に高さの上限（`max-h-24`）を付けて中でスクロールさせる。選ぶたびに末尾までスクロールし、一覧を欄の下端に付け直す。大量に選ぶ欄（チーム詳細の所属ユーザー追加）で使う |
 | `testidPrefix` | `string \| null` | `null` | `${prefix}-trigger` / `${prefix}-option` / `${prefix}-confirm-button` |
 | `required` | `boolean` | - | 移植元にあるが描画に使われていない |
 | `className` | `string` | - | ホスト要素（fieldset）に足すクラス |
