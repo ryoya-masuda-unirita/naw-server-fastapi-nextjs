@@ -1,7 +1,7 @@
 """PDF のプロセッサ（移植元 PdfCoreMediaProcessor・PdfRenderingSupport）。
 
-PDFBox の代わりに、テキストと埋め込み画像の取り出しは pypdf、ページの描画は
-pypdfium2（150 DPI。移植元と同じ）で行う。
+PDFBox の代わりに、本文の取り出しとページの描画（150 DPI。移植元と同じ）は pypdfium2、
+暗号化の判定と埋め込み画像の取り出しは pypdf で行う。
 """
 
 import io
@@ -127,6 +127,34 @@ def _page_images(page: pypdf.PageObject) -> list[tuple[str, Image.Image]]:
         raise failure(IMAGE_EXTRACTION_FAILURE, str(e) or type(e).__name__) from e
 
 
+def _extract_text(data: bytes) -> str:
+    """PDF の本文を取り出す（移植元 PDFTextStripper#getText に近い形）。
+
+    pypdf の `extract_text` は、表の 1 行が 1 セルずつの行に分かれ、Chrome などが作った PDF の
+    日本語が康熙部首（例: ⽅・⻑）の文字コードで出るため、検索・埋め込みで本来の文字と一致しない。
+    PDFium（描画で使う pypdfium2）は、同じ行を 1 行にまとめ、通常の漢字で返す。
+
+    Parameters
+    ----------
+    data : bytes
+        PDF の中身。
+
+    Returns
+    -------
+    str
+        本文。ページごとに行を並べ、改行は `\n`。前後の空白は除く。
+    """
+    document = pypdfium2.PdfDocument(data)
+    try:
+        pages = [
+            page.get_textpage().get_text_range().replace("\r\n", "\n")
+            for page in document
+        ]
+    finally:
+        document.close()
+    return "\n".join(pages).strip()
+
+
 class PdfCoreMediaProcessor:
     """PDF を扱うプロセッサ。"""
 
@@ -177,7 +205,7 @@ class PdfCoreMediaProcessor:
                 ENCRYPTED_PDF, f"PDF file is encrypted: {request.source_name}"
             )
         try:
-            text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            text = _extract_text(data)
         except Exception as e:
             raise failure(CORRUPT_FILE, invalid) from e
         explanations: list[CoreImageExplanationEntry] = []
