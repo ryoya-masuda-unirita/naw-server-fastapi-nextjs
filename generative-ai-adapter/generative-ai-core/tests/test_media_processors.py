@@ -6,12 +6,15 @@ PDF・Office の処理器自体のテストは test_media_office.py。
 """
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 from generative_ai_core.chat.models import CoreImageExplanationRequest
 from generative_ai_core.chat.models import CoreImageExplanationResult as ImageResult
 from generative_ai_core.chat.runtime import CoreChatRuntime
 from generative_ai_core.media import (
+    CORRUPT_FILE,
+    PARSER_FAILURE,
     UNSUPPORTED_MIME,
     CoreMediaPreprocessingMode,
     CoreMediaPreprocessingRequest,
@@ -21,6 +24,9 @@ from generative_ai_core.media import (
     PdfCoreMediaProcessor,
     PowerPointCoreMediaProcessor,
     TextCoreMediaProcessor,
+    TikaClient,
+    TikaFileError,
+    TikaUnavailableError,
     WordCoreMediaProcessor,
 )
 from generative_ai_core.media.runtime import default_processors
@@ -255,3 +261,162 @@ def test_runtime_preprocesses_png_end_to_end(tmp_path: Path, png_bytes: bytes) -
     assert result.failure is None
     assert result.mime_type == "image/png"
     assert result.attachment is not None
+
+
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+LEGACY_OFFICE_TYPES = {
+    "a.doc": "application/msword",
+    "a.xls": "application/vnd.ms-excel",
+    "a.ppt": "application/vnd.ms-powerpoint",
+    "a.rtf": "application/rtf",
+    "a.epub": "application/epub+zip",
+}
+
+
+class _StubTika:
+    """Tika のクライアントの代わり。決めた本文を返すか、決めた例外を投げる。"""
+
+    def __init__(self, text: str = "", error: Exception | None = None) -> None:
+        self._text = text
+        self._error = error
+        self.calls: list[tuple[str, str, bytes]] = []
+
+    def extract_text(self, filename: str, mime_type: str, data: bytes) -> str:
+        self.calls.append((filename, mime_type, data))
+        if self._error is not None:
+            raise self._error
+        return self._text
+
+
+def _tika_processor(stub: _StubTika) -> TextCoreMediaProcessor:
+    """偽の Tika を使うテキストのプロセッサを作る。
+
+    Parameters
+    ----------
+    stub : _StubTika
+        偽の Tika。
+
+    Returns
+    -------
+    TextCoreMediaProcessor
+        Tika を使うプロセッサ。
+    """
+    return TextCoreMediaProcessor(cast(TikaClient, stub))
+
+
+def test_text_processor_supports_legacy_office_when_tika_enabled() -> None:
+    """Tika が使えるとき、旧形式の Office・RTF・EPUB が対象になること"""
+    processor = _tika_processor(_StubTika())
+    for name, mime_type in LEGACY_OFFICE_TYPES.items():
+        assert processor.supports(_request(name, mime_type)), name
+
+
+def test_text_processor_excludes_dedicated_formats_when_tika_enabled() -> None:
+    """Tika が使えても、専用のプロセッサが読む形式・octet-stream は対象外であること"""
+    processor = _tika_processor(_StubTika())
+    excluded = [
+        ("a.png", "image/png"),
+        ("a.pdf", "application/pdf"),
+        ("a.docx", DOCX_TYPE),
+        ("a.pptx", PPTX_TYPE),
+        ("a.xlsx", XLSX_TYPE),
+        ("a.bin", "application/octet-stream"),
+    ]
+    for name, mime_type in excluded:
+        assert not processor.supports(_request(name, mime_type)), name
+
+
+def test_text_processor_keeps_text_only_when_tika_disabled() -> None:
+    """Tika が使えないとき、従来どおりテキスト系だけが対象であること"""
+    processor = TextCoreMediaProcessor()
+    assert processor.supports(_request("a.txt", "text/plain"))
+    assert not processor.supports(_request("a.doc", "application/msword"))
+
+
+def test_text_processor_extracts_via_tika(tmp_path: Path) -> None:
+    """Tika の本文の前後の空白を除いた成功の結果になり、MIME とファイル名を渡すこと"""
+    path = tmp_path / "a.doc"
+    path.write_bytes(OLE_MAGIC + b"body")
+    stub = _StubTika(text="\n  本文です\n\n")
+    result = _tika_processor(stub).process(
+        CoreMediaPreprocessingRequest(
+            path, source_name="議事録.doc", detected_mime_type="application/msword"
+        )
+    )
+    assert result.text == "本文です"
+    assert stub.calls == [("議事録.doc", "application/msword", OLE_MAGIC + b"body")]
+
+
+def test_tika_empty_text_is_parser_failure(tmp_path: Path) -> None:
+    """Tika が空の本文を返したとき、前処理の失敗（PARSER_FAILURE）になること"""
+    path = tmp_path / "a.doc"
+    path.write_bytes(OLE_MAGIC + b"body")
+    runtime = CoreMediaPreprocessingRuntime([_tika_processor(_StubTika(text=" \n"))])
+    result = runtime.preprocess(CoreMediaPreprocessingRequest(path))
+    assert result.failure is not None
+    assert result.failure.code == PARSER_FAILURE
+
+
+@pytest.mark.parametrize(
+    ("error", "code"),
+    [
+        (
+            TikaFileError(UNSUPPORTED_MIME, "Tika does not support this format"),
+            UNSUPPORTED_MIME,
+        ),
+        (TikaFileError(CORRUPT_FILE, "Tika could not parse this file"), CORRUPT_FILE),
+    ],
+)
+def test_tika_file_problems_map_to_failure_codes(
+    tmp_path: Path, error: TikaFileError, code: str
+) -> None:
+    """ファイルの問題が、対応する失敗のコードになること"""
+    path = tmp_path / "a.doc"
+    path.write_bytes(OLE_MAGIC + b"body")
+    runtime = CoreMediaPreprocessingRuntime([_tika_processor(_StubTika(error=error))])
+    result = runtime.preprocess(CoreMediaPreprocessingRequest(path))
+    assert result.failure is not None
+    assert result.failure.code == code
+
+
+def test_tika_outage_maps_to_parser_failure_without_content(tmp_path: Path) -> None:
+    """Tika の障害は PARSER_FAILURE になり、要約にファイルの中身が出ないこと"""
+    path = tmp_path / "a.doc"
+    path.write_bytes(OLE_MAGIC + b"SECRET-CONTENT")
+    error = TikaUnavailableError("Tika is unavailable")
+    runtime = CoreMediaPreprocessingRuntime([_tika_processor(_StubTika(error=error))])
+    result = runtime.preprocess(CoreMediaPreprocessingRequest(path))
+    assert result.failure is not None
+    assert result.failure.code == PARSER_FAILURE
+    assert "Tika is unavailable" in result.failure.summary
+    assert "SECRET-CONTENT" not in result.failure.summary
+
+
+def test_octet_stream_stays_unsupported_when_tika_enabled(tmp_path: Path) -> None:
+    """Tika が使えても、判定できないファイルは UNSUPPORTED_MIME のままであること"""
+    path = tmp_path / "a.bin"
+    path.write_bytes(b"\x00\x01\x02\x03" * 64)
+    stub = _StubTika(text="x")
+    runtime = CoreMediaPreprocessingRuntime([_tika_processor(stub)])
+    result = runtime.preprocess(CoreMediaPreprocessingRequest(path))
+    assert result.failure is not None
+    assert result.failure.code == UNSUPPORTED_MIME
+    assert stub.calls == []
+
+
+def test_default_processors_use_tika_only_when_configured(monkeypatch) -> None:
+    """既定のプロセッサは、環境変数があるときだけ Tika を使うこと"""
+    from generative_ai_core.media import shutdown_tika
+
+    monkeypatch.delenv("TIKA_URL", raising=False)
+    monkeypatch.delenv("TIKA_SERVER_JAR", raising=False)
+    shutdown_tika()
+    assert _select("a.doc", "application/msword") is None
+    monkeypatch.setenv("TIKA_URL", "http://tika:9998")
+    shutdown_tika()
+    try:
+        assert isinstance(
+            _select("a.doc", "application/msword"), TextCoreMediaProcessor
+        )
+    finally:
+        shutdown_tika()

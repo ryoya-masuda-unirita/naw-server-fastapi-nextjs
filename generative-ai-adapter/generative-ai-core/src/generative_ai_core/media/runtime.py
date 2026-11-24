@@ -6,8 +6,9 @@ ImageCoreMediaProcessor・CoreMediaProcessorRegistry）。
 
 - MIME 判定: 先頭のバイト（PNG・JPEG・GIF・WebP・BMP・TIFF・PDF・ZIP・OLE）→
   拡張子 → 中身がテキストとして読めるか、の順
-- テキスト抽出: テキスト系の MIME だけを UTF-8（BOM 可）→ CP932 の順で読む。
-  HTML はタグを除いた本文にする
+- テキスト抽出: Tika の設定（TIKA_SERVER_JAR・TIKA_URL）があれば、専用のプロセッサが
+  読まない形式を Tika で取り出す（移植元と同じ。media/tika.py）。設定がなければ、
+  テキスト系の MIME だけを UTF-8（BOM 可）→ CP932 の順で読む。HTML はタグを除いた本文にする
 """
 
 import html.parser
@@ -38,6 +39,12 @@ from generative_ai_core.media.processors_office import (
     WordCoreMediaProcessor,
 )
 from generative_ai_core.media.processors_pdf import PdfCoreMediaProcessor
+from generative_ai_core.media.tika import (
+    TikaClient,
+    TikaFileError,
+    TikaUnavailableError,
+    get_tika_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -359,10 +366,21 @@ class ImageCoreMediaProcessor:
 
 
 class TextCoreMediaProcessor:
-    """テキスト系のファイルを扱うプロセッサ。"""
+    """専用のプロセッサが読まない形式を扱うプロセッサ（移植元は Tika で読む）。"""
+
+    def __init__(self, tika: TikaClient | None = None) -> None:
+        """プロセッサを作る。
+
+        Parameters
+        ----------
+        tika : TikaClient | None
+            Tika のクライアント。None なら Tika を使わず、テキスト系の MIME だけを
+            自前で読む。
+        """
+        self._tika = tika
 
     def supports(self, request: CoreMediaPreprocessingRequest) -> bool:
-        """テキスト系のファイルか判定する。
+        """このプロセッサが読むファイルか判定する。
 
         Parameters
         ----------
@@ -372,7 +390,8 @@ class TextCoreMediaProcessor:
         Returns
         -------
         bool
-            テキストとして読めるなら True。
+            Tika を使うときは、画像・PDF・docx・pptx・xlsx・octet-stream 以外すべて
+            （移植元と同じ）。使わないときは、テキスト系の MIME のとき True。
         """
         mime_type = request.detected_mime_type
         if _mime_starts(mime_type, "image/"):
@@ -381,13 +400,12 @@ class TextCoreMediaProcessor:
             return False
         if mime_type.lower() == OCTET_STREAM:
             return False
-        # 移植元（Tika）は Office の旧形式なども読むが、Python 版はテキスト系だけ
-        return _is_text_mime(mime_type)
+        return self._tika is not None or _is_text_mime(mime_type)
 
     def process(
         self, request: CoreMediaPreprocessingRequest
     ) -> CoreMediaPreprocessingResult:
-        """テキストを抽出する。HTML はタグを除く。
+        """テキストを抽出する。
 
         Parameters
         ----------
@@ -397,13 +415,64 @@ class TextCoreMediaProcessor:
         Returns
         -------
         CoreMediaPreprocessingResult
-            前処理の結果。
+            前処理の結果。Tika を使わないときは、HTML のタグを除いた本文。
+
+        Raises
+        ------
+        CoreMediaPreprocessingError
+            Tika の呼び出しが失敗したとき。
         """
+        if self._tika is not None:
+            return self._process_with_tika(self._tika, request)
         text = _decode_text(request.file_path.read_bytes())
         if request.detected_mime_type.lower().startswith(TEXT_HTML):
             parser = _HtmlText()
             parser.feed(text)
             text = "".join(parser.parts)
+        return CoreMediaPreprocessingResult.success(
+            text.strip(), None, request.detected_mime_type
+        )
+
+    @staticmethod
+    def _process_with_tika(
+        tika: TikaClient, request: CoreMediaPreprocessingRequest
+    ) -> CoreMediaPreprocessingResult:
+        """Tika でテキストを取り出す。
+
+        Parameters
+        ----------
+        tika : TikaClient
+            Tika のクライアント。
+        request : CoreMediaPreprocessingRequest
+            前処理のリクエスト。
+
+        Returns
+        -------
+        CoreMediaPreprocessingResult
+            前処理の結果（前後の空白を除いた本文）。
+
+        Raises
+        ------
+        CoreMediaPreprocessingError
+            ファイルの問題（未対応・解析できない）、または Tika 側の障害のとき。
+        """
+        data = request.file_path.read_bytes()
+        try:
+            text = tika.extract_text(
+                request.source_name, request.detected_mime_type, data
+            )
+        except TikaFileError as error:
+            raise CoreMediaPreprocessingError(
+                CoreMediaPreprocessingFailure.of(
+                    error.code, f"{error}: {request.source_name}"
+                )
+            ) from None
+        except TikaUnavailableError as error:
+            raise CoreMediaPreprocessingError(
+                CoreMediaPreprocessingFailure.of(
+                    PARSER_FAILURE, f"{error}: {request.source_name}"
+                )
+            ) from None
         return CoreMediaPreprocessingResult.success(
             text.strip(), None, request.detected_mime_type
         )
@@ -416,7 +485,13 @@ def default_processors() -> list[CoreMediaProcessor]:
     -------
     list[CoreMediaProcessor]
         移植元 CoreMediaProcessorRegistry#defaults と同じ順序
-        （PDF・Word・PowerPoint・Excel・画像・テキスト）のプロセッサ。
+        （PDF・Word・PowerPoint・Excel・画像・テキスト）のプロセッサ。Tika の設定が
+        あれば、テキストのプロセッサは Tika を使う。
+
+    Raises
+    ------
+    ValueError
+        Tika の設定の値が不正なとき。
     """
     return [
         PdfCoreMediaProcessor(),
@@ -424,7 +499,7 @@ def default_processors() -> list[CoreMediaProcessor]:
         PowerPointCoreMediaProcessor(),
         ExcelCoreMediaProcessor(),
         ImageCoreMediaProcessor(),
-        TextCoreMediaProcessor(),
+        TextCoreMediaProcessor(get_tika_client()),
     ]
 
 
