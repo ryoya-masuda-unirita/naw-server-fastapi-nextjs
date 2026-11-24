@@ -4,6 +4,8 @@
     "NO_DATA": "データがありません",
     "BACK": "戻る",
     "CLOSE": "閉じる",
+    "SHOW_PASSWORD": "パスワードを表示",
+    "HIDE_PASSWORD": "パスワードを隠す",
     "CANCEL": "キャンセル",
     "SAVE": "保存",
     "CREATE": "作成",

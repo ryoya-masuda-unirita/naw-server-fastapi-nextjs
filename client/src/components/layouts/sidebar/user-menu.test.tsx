@@ -50,7 +50,7 @@ describe('UserMenu', () => {
       renderUserMenu();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
 
       expect(screen.getByText('USER_MENU.PASSWORD_SETTINGS')).toBeInTheDocument();
       expect(screen.getByText('USER_MENU.CHECK_CREDIT')).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('UserMenu', () => {
       renderUserMenu({ canShowSwitchRole: false });
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
 
       expect(screen.getByTestId('user-menu-switch-role-button').parentElement).toHaveClass(
         'hidden'
@@ -72,7 +72,7 @@ describe('UserMenu', () => {
       renderUserMenu({ canShowSwitchRole: true });
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
 
       expect(screen.getByTestId('user-menu-switch-role-button').parentElement).not.toHaveClass(
         'hidden'
@@ -83,7 +83,7 @@ describe('UserMenu', () => {
       const { onAction } = renderUserMenu();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByText('USER_MENU.CHECK_CREDIT'));
 
       expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ action: 'check-credit' }));
@@ -94,7 +94,7 @@ describe('UserMenu', () => {
       renderUserMenu();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(document.body);
 
       expect(screen.queryByText('USER_MENU.LOGOUT')).not.toBeInTheDocument();

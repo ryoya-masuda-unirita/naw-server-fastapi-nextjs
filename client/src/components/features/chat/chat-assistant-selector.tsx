@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { dropdownService } from '@/components/shared/dropdown-service';
 import type { Assistant } from '@/types/chat/assistant.type';
 import { ChatInputIcon } from './chat-input-icons';
@@ -41,6 +42,7 @@ export function ChatAssistantSelector({
   selectedAssistant,
   onAssistantSelect,
 }: ChatAssistantSelectorProps) {
+  const { t } = useTranslation();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({
@@ -94,6 +96,8 @@ export function ChatAssistantSelector({
           data-testid="assistant-select-button"
           type="button"
           className={`dl-trigger text-sm! dl-trigger--chat hover:bg-bg-brand-weak!${isOpen ? ' bg-bg-brand-weak!' : ''}`}
+          // アシスタントがまだ選ばれていない（名前が空）ときも、ボタンの名前をなくさない
+          aria-label={selectedAssistant?.name || t('CHAT.INPUT.SELECT_ASSISTANT')}
           aria-expanded={isOpen}
           aria-haspopup="listbox"
           onClick={(event) => {

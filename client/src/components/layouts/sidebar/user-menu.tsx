@@ -82,7 +82,8 @@ export function UserMenu({
 
       <button
         type="button"
-        aria-label="user-menu"
+        // 見える文字（ユーザー名）を名前に含める（axe: label-content-name-mismatch）
+        aria-label={`user-menu ${userName}`}
         data-testid="user-menu-button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={`flex w-56 justify-between rounded-lg py-1.5 transition-all duration-300 hover:bg-bg-brand-weak! md:w-60 ${

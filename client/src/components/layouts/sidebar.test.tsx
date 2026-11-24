@@ -155,7 +155,7 @@ describe('Sidebar', () => {
       expect(screen.queryByAltText('SecuAiGent')).not.toBeInTheDocument();
       expect(screen.queryByText('SIDEBAR.NEW_CHAT')).not.toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: 'user-menu' }).parentElement?.parentElement
+        screen.getByRole('button', { name: /^user-menu/ }).parentElement?.parentElement
       ).toHaveClass('hidden');
     });
 
@@ -247,7 +247,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByTestId('user-menu-switch-role-button'));
 
       expect(currentPath()).toBe('/admin/tenant');
@@ -258,7 +258,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       expect(screen.getByText('USER_MENU.SWITCH_TO_TEAM_MANAGEMENT')).toBeInTheDocument();
       await user.click(screen.getByTestId('user-menu-switch-role-button'));
 
@@ -270,7 +270,7 @@ describe('Sidebar', () => {
       renderSidebar(['/admin/tenant']);
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       const switchButton = screen.getByTestId('user-menu-switch-role-button');
       expect(within(switchButton).getByText('USER_MENU.SWITCH_TO_CHAT')).toBeInTheDocument();
       await user.click(switchButton);
@@ -283,7 +283,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
 
       expect(screen.getByText('USER_MENU.SWITCH_TO_ADMIN')).toBeInTheDocument();
     });
@@ -292,7 +292,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByText('USER_MENU.PASSWORD_SETTINGS'));
 
       expect(currentPath()).toBe('/auth/password/reset');
@@ -302,7 +302,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByText('USER_MENU.CHECK_CREDIT'));
 
       expect(screen.getByRole('dialog', { name: 'USER_MENU.CHECK_CREDIT' })).toBeInTheDocument();
@@ -313,7 +313,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByText('USER_MENU.LOGOUT'));
       expect(screen.getByRole('dialog', { name: 'USER_MENU.LOGOUT_CONFIRM_TITLE' })).toHaveTextContent(
         'USER_MENU.LOGOUT_CONFIRM_MESSAGE'
@@ -329,7 +329,7 @@ describe('Sidebar', () => {
       renderSidebar();
       const user = userEvent.setup();
 
-      await user.click(screen.getByRole('button', { name: 'user-menu' }));
+      await user.click(screen.getByRole('button', { name: /^user-menu/ }));
       await user.click(screen.getByText('USER_MENU.LOGOUT'));
       await user.click(screen.getByTestId('dialog-confirm-button'));
 

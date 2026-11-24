@@ -66,7 +66,7 @@ export function FormTextarea({
             placeholder={placeholder}
             disabled={disabled}
             rows={rows}
-            aria-label={label || undefined}
+            aria-label={label || placeholder || undefined}
             style={areaHeight !== undefined ? { minHeight: `${areaHeight}px` } : undefined}
             className={cx(
               'w-full block px-4 py-3 border border-border rounded-lg text-sm text-text-default placeholder:text-text-lighter leading-[1.7] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all resize-vertical',
