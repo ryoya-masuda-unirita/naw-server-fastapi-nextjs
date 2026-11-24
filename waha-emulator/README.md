@@ -219,6 +219,7 @@ WAHA_AUTHKEY=local-key STREAM_ALLOWED_DIR=../secuaigent-server-local/data/stream
 
 # server-local（別のターミナル。secuaigent-server-local/.env で WAHA_URL=http://localhost:8091/、WAHA_AUTHKEY=local-key）
 cd secuaigent-server-local
+uv run alembic upgrade head   # 初回だけ。ホストで動かすときは SQLite のテーブルを先に作る
 uv run uvicorn app.main:app_factory --factory --port 8090
 ```
 

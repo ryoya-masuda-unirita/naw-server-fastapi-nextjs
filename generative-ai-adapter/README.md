@@ -130,7 +130,7 @@ Claude には埋め込みモデルがないため、回答の生成とは別に�
 
 ## チャット 1 回でどの部品がどの順に動いたかを見る
 
-エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker なら `docker logs naw-waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
+エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker（`onprem/`）なら `cd onprem && docker compose logs waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
 
 server-local から「こんにちは、通しの確認です」（履歴 2 件付き、アシスタント ID `gpt-4o`、Echo）を送ったときの実際のログ（時刻・セッション ID は省略。`←` は説明）:
 
@@ -165,36 +165,28 @@ server-local から「こんにちは、通しの確認です」（履歴 2 件�
 
 ## Docker で server-local → エミュレーター → アダプタを通して確かめる
 
-server-local のコンテナがエミュレーターを呼び、エミュレーターのコンテナの中でアダプタが動く。ストリームファイルは両方のコンテナが同じパス（`/app/data/stream-output`）で見る。ポートが他で使われていたら `*_PORT` を変える（下は 8091・8090）。
+`onprem/` の compose で、server-local のコンテナがエミュレーターを呼び、エミュレーターのコンテナの中でアダプタが動く。ストリームファイルは named volume で、両方のコンテナが同じパス（`/app/data/stream-output`）で見る。ポートが他で使われていたら `onprem/docker-compose.yml` の公開ポートを変える（下は 18090・18091）。
 
 ```bash
-# 0. 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
-mkdir -p secuaigent-server-local/data/stream-output
+# 1. 起動（エミュレーターはアダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
+cd onprem
+docker compose up -d --build server-local   # depends_on でエミュレーターも起動する。ベクトルDB は学習・検索を使うときだけ要る
+docker compose ps                           # healthy になるまで待つ
 
-# 1. エミュレーター（アダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
-cd waha-emulator
-cp .env.example .env     # WAHA_AUTHKEY=local-key にする（LLM_PROVIDER=echo のままでよい）
-docker compose up -d --build
-
-# 2. server-local
-cd ../secuaigent-server-local
-cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=server-key、WAHA_URL=http://host.docker.internal:8091/、WAHA_AUTHKEY=local-key
-docker compose up -d --build
-
-# 3. 通しで確かめる（履歴付き）
-curl -N -H "X-SERVER-AUTH-KEY: server-key" \
+# 2. 通しで確かめる（履歴付き。認証キーの既定は onprem-local-key）
+curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
   -F 'textData={"assistantId":"gpt-4o","messageId":"m-1","userInput":"こんにちは","historyMessages":[{"type":"USER","content":"前の質問"},{"type":"ASSISTANT","content":"前の回答"}]};type=application/json' \
-  http://localhost:8090/api/messages/content
+  http://localhost:18090/api/messages/content
 # → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content（answer が「こんにちは」）
 
-# 4. アダプタの動きを見る
-docker logs naw-waha-emulator           # 上のログ
-ls secuaigent-server-local/data/stream-output/     # 途中経過ファイル
+# 3. アダプタの動きを見る
+docker compose logs waha-emulator                               # 上のログ
+docker compose exec waha-emulator ls /app/data/stream-output    # 途中経過ファイル
 ```
 
-サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`waha-emulator/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して再起動し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
+サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`onprem/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して `docker compose up -d` し直し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
 
-実際の LLM（Azure OpenAI）に向けるときは、`waha-emulator/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
+実際の LLM（Azure OpenAI）に向けるときは、`onprem/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
 
 ## 検索アダプタ（retrieval-adapter, #299）
 
