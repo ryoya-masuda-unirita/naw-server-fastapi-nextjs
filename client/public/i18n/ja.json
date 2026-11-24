@@ -5,6 +5,8 @@
     "BACK": "戻る",
     "CLEAR": "クリア",
     "CLOSE": "閉じる",
+    "SHOW_PASSWORD": "パスワードを表示",
+    "HIDE_PASSWORD": "パスワードを隠す",
     "CANCEL": "キャンセル",
     "SAVE": "保存",
     "CREATE": "作成",

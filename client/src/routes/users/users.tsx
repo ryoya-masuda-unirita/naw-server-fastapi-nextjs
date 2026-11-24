@@ -161,6 +161,7 @@ export function UsersPage() {
             <span className="text-sm text-gray-600">{t('USERS.ITEMS_PER_PAGE')}</span>
             <select
               value={pageSize}
+              aria-label={t('USERS.ITEMS_PER_PAGE')}
               onChange={(event) => setPageSize(Number(event.target.value))}
               className="border border-gray-300 rounded px-3 py-1.5 text-sm"
             >

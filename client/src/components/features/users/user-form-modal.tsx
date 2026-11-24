@@ -115,6 +115,7 @@ export function UserFormModal({ user, onSave, onCancel, onDelete }: UserFormModa
             </p>
             <select
               name="role"
+              aria-label={t('ADMIN_CONSOLE.PERMISSION')}
               value={role}
               onChange={(event) => setRole(event.target.value as FormRole | '')}
               required
@@ -149,6 +150,7 @@ export function UserFormModal({ user, onSave, onCancel, onDelete }: UserFormModa
               <button
                 type="button"
                 onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={t(showPassword ? 'COMMON.HIDE_PASSWORD' : 'COMMON.SHOW_PASSWORD')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
               >
                 {showPassword ? (
@@ -211,7 +213,7 @@ export function UserFormModal({ user, onSave, onCancel, onDelete }: UserFormModa
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
+                className="px-6 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg transition-colors"
               >
                 {t('ADMIN_CONSOLE.SAVE')}
               </button>

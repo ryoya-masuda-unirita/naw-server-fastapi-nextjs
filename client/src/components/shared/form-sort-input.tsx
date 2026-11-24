@@ -141,11 +141,6 @@ export function FormSortInput({
     <div className={cx('app-form-sort-input block relative', className)}>
       <div
         ref={triggerRef}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
-        aria-haspopup="menu"
-        aria-expanded={isMenuOpen}
-        aria-disabled={disabled}
         className={cx(
           'trigger-wrapper relative flex items-center w-full pl-3 pr-4 rounded-lg text-sm transition-all duration-200 overflow-hidden cursor-pointer select-none',
           size === 'md' && 'h-12',
@@ -158,28 +153,34 @@ export function FormSortInput({
         )}
         data-testid={testid('trigger')}
         onClick={handleTriggerClick}
-        onKeyDown={(event) => {
-          // mat-menu のトリガーと同じく Enter / Space で開く
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            handleTriggerClick();
-          }
-        }}
       >
+        {/* クリアボタンを入れ子にしない（axe: nested-interactive）ため、ボタンの役割は中のラベル部分に付ける */}
         <span
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          aria-disabled={disabled}
+          onKeyDown={(event) => {
+            // mat-menu のトリガーと同じく Enter / Space で開く
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              handleTriggerClick();
+            }
+          }}
           className={cx(
             'flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium max-w-70 md:max-w-21',
             size === 'md' && 'text-sm',
             size === 'sm' && 'text-xs',
             selectedField && 'text-text-default',
-            !selectedField && 'text-text-lighter',
+            !selectedField && 'text-text-muted',
             selectedField && !isMenuOpen && 'text-brand-secondary!',
           )}
         >
           {selectedField ? t(activeFieldLabel) : t(placeholder)}
         </span>
         {selectedField && (
-          <button type="button" className="combobox-clear right-10" onClick={handleClear}>
+          <button type="button" aria-label={t('COMMON.CLEAR')} className="combobox-clear right-10" onClick={handleClear}>
             <SvgIcon name="close" className="shrink-0 w-3! h-3! transition-colors! duration-200 text-text-white!" />
           </button>
         )}
