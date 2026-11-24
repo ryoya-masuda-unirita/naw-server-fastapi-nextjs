@@ -159,17 +159,19 @@ class TestGroupAssistantFindPageByGroup:
 
 
 class TestFeedbackRooms:
-    """ルームのフィードバック一覧の並べ替えで列挙型がキャストされることのテスト。"""
+    """ルームのフィードバック一覧の満足度順が、星の数の順になることのテスト。"""
 
-    async def test_rating_sort_casts_to_varchar(self, session: AsyncSession) -> None:
-        """ルームのフィードバック一覧の評価での並べ替えが文字列順になるようキャストされること"""
+    async def test_rating_stars_sort_uses_case_expression(
+        self, session: AsyncSession
+    ) -> None:
+        """満足度順が、列挙名の文字列順ではなく星の数に置き換えた式での並べ替えになること"""
         sql = await _order_by_sql(
             session,
             lambda: RoomRepository.find_feedback_rooms(
                 tenant_id=_TENANT_ID,
                 assistant_id=None,
                 rating=None,
-                sort_column="rating",
+                sort_column="rating_stars",
                 sort_desc=False,
                 page=0,
                 size=20,
@@ -177,7 +179,8 @@ class TestFeedbackRooms:
             ),
         )
 
-        assert sql.startswith("CAST(rooms.rating AS VARCHAR) ASC")
+        assert sql.startswith("CASE rooms.rating WHEN")
+        assert "CAST(rooms.rating" not in sql
 
 
 class TestFeedbackMessages:

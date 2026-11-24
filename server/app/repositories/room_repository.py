@@ -7,9 +7,8 @@ from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import escape_like_pattern
-from app.core.sort import enum_as_string
 from app.models.assistant import Assistant
-from app.models.room import Room, RoomPin, RoomRating
+from app.models.room import ROOM_RATING_STARS, Room, RoomPin, RoomRating
 from app.models.share import ShareRoom
 from app.models.user import User
 
@@ -168,7 +167,7 @@ class RoomRepository:
         rating : RoomRating | None
             評価での絞り込み。None なら条件なし。
         sort_column : str
-            並べ替えの列（"room_name"・"assistant_id"・"rating"、それ以外は更新日時）。
+            並べ替えの列（"room_name"・"assistant_name"（表示名。大文字・小文字を区別しない）・"rating_stars"（星の数）、それ以外は更新日時）。
         sort_desc : bool
             降順にする場合は True。
         page : int
@@ -224,11 +223,12 @@ class RoomRepository:
 
         if sort_column == "room_name":
             order_col = Room.name
-        elif sort_column == "assistant_id":
-            order_col = Room.default_assistant_id
-        elif sort_column == "rating":
-            # 移植元は評価を varchar で持つため、宣言順ではなく文字列順で並べる
-            order_col = enum_as_string(Room.rating)
+        elif sort_column == "assistant_name":
+            # 画面に出すのは表示名なので、内部 ID ではなく表示名で並べる
+            order_col = func.lower(Assistant.name)
+        elif sort_column == "rating_stars":
+            # DB の列挙名の順ではなく、画面に出す星の数の順で並べる
+            order_col = case(ROOM_RATING_STARS, value=Room.rating)
         else:
             order_col = Room.updated_at
 

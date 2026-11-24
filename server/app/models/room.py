@@ -16,6 +16,16 @@ class RoomRating(str, Enum):
     POOR = "POOR"
 
 
+# 画面に表示する星の数。DB には列挙名で保存しているため、並べ替えには星の数に置き換えて使う
+ROOM_RATING_STARS: dict[RoomRating, int] = {
+    RoomRating.EXCELLENT: 5,
+    RoomRating.VERY_GOOD: 4,
+    RoomRating.GOOD: 3,
+    RoomRating.AVERAGE: 2,
+    RoomRating.POOR: 1,
+}
+
+
 class Room(SQLModel, table=True):
     """ルームのテーブル定義。"""
 
