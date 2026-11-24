@@ -1,6 +1,20 @@
-# naw-serverのfastapi化
+# SecuAiGent の FastAPI + React への移植
 
-# secuaigent-clientのnext.js化
+企業向け AI チャット管理 SaaS「SecuAiGent」（旧称 NAW）を、Spring Boot + Angular から **FastAPI（Python）+ React** へ移植するリポジトリ。移植元は GitLab のモノレポ `secuaigent`。
+
+## 目的別の入口
+
+| やりたいこと | 見る場所 |
+|---|---|
+| 画面を見る（デモ環境の起動） | 次の「画面を見る（デモ環境）」 |
+| ローカルで frontend + backend を起動して確かめる | 下の「ローカル疎通確認」 |
+| 社内（オンプレ）側を起動して SECURE アシスタントを通しで動かす | [onprem/README.md](./onprem/README.md) |
+| 移植元の結合テスト項目書どおりに動くか自動で確かめる | [e2e-spec/README.md](./e2e-spec/README.md) |
+| 画面を自動で巡回してバグの疑いを探す | [e2e-explorer/README.md](./e2e-explorer/README.md) |
+| 生成AI・検索・埋め込みのアダプタ | [generative-ai-adapter/README.md](./generative-ai-adapter/README.md) |
+| AWS のインフラ（Terraform）・デプロイ | [secuaigent-infra/README.md](./secuaigent-infra/README.md) |
+| Waha! の代わりのエミュレーター | [waha-emulator/README.md](./waha-emulator/README.md) |
+| オンプレ用サーバー | [secuaigent-server-local/README.md](./secuaigent-server-local/README.md) |
 
 ## 画面を見る（デモ環境）
 
@@ -113,8 +127,10 @@ server-local・Waha! エミュレーター・ベクトルDB・ファイルサー
 | `server/` | FastAPI（移植元 `server/` の移植先） |
 | `client/` | React（Vite + React Router。移植元 `client/` の移植先） |
 | `secuaigent-server-local/` | FastAPI + SQLite（移植元 `secuaigent-server-local/` の移植先） |
+| `generative-ai-adapter/` | Python（Waha! 向けの生成AI・埋め込み・検索アダプター。移植元 `generative-ai-adapter/` の移植先。uv ワークスペース） |
 | `waha-emulator/` | FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト） |
 | `onprem/` | 社内（オンプレ）側をまとめて起動する compose（server-local・Waha! エミュレーター・ベクトルDB など） |
+| `e2e-spec/` | Playwright（TypeScript）。移植元の結合テスト項目書（627 項目）を 1 項目 1 テストにした E2E テスト（移植元にはない独自のもの） |
 | `e2e-explorer/` | Playwright（TypeScript）の E2E 探索ハーネス。画面操作を再帰的にたどり、500・画面の例外・真っ白・表示崩れなどの「バグの疑い」を再現手順付きで一覧にする（移植元にはない独自のもの） |
 | `secuaigent-infra/` | Terraform（AWS インフラ定義） |
 
@@ -134,8 +150,6 @@ npm run explore:all   # 起動 → 巡回 → レポート → 破棄
 
 React（`client/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
 backend の動作確認は、自動テスト（`cd server && uv run pytest`）、または React の移植済み画面で行う。
-
-> `secuaigent/client` のコピーだった `frontend-angular/` は Issue #213 で削除した。
 
 ### 前提
 
