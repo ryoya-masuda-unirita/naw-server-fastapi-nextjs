@@ -2,6 +2,8 @@
 
 企業向け AI チャット管理 SaaS「SecuAiGent」（旧称 NAW）を、Spring Boot + Angular から **FastAPI（Python）+ React** へ移植するリポジトリ。移植元は GitLab のモノレポ `secuaigent`。
 
+SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使う。
+
 ## 目的別の入口
 
 | やりたいこと | 見る場所 |
@@ -10,7 +12,7 @@
 | ローカルで frontend + backend を起動して確かめる | 下の「ローカル疎通確認」 |
 | 社内（オンプレ）側を起動して SECURE アシスタントを通しで動かす | [onprem/README.md](./onprem/README.md) |
 | 移植元の結合テスト項目書どおりに動くか自動で確かめる | [e2e-spec/README.md](./e2e-spec/README.md) |
-| 画面を自動で巡回してバグの疑いを探す | [e2e-explorer/README.md](./e2e-explorer/README.md) |
+| 画面を自動で巡回してバグの疑いを探す（レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md`） | [e2e-explorer/README.md](./e2e-explorer/README.md) |
 | 生成AI・検索・埋め込みのアダプタ | [generative-ai-adapter/README.md](./generative-ai-adapter/README.md) |
 | AWS のインフラ（Terraform）・デプロイ | [secuaigent-infra/README.md](./secuaigent-infra/README.md) |
 | Waha! の代わりのエミュレーター | [waha-emulator/README.md](./waha-emulator/README.md) |
@@ -68,10 +70,6 @@ cd onprem && docker compose up -d --build                                       
 - 失敗したとき: `docker compose -f docker-compose.demo.yml logs <サービス名>`
 - デモデータを入れ直す: `down -v` のあと、もう一度 `up -d --build`
 
-## Codex 運用
-
-`Codex` 用のプロジェクト運用ルールはルートの [AGENTS.md](./AGENTS.md) を参照してください。
-
 ## アシスタントの種類ごとの通信経路
 
 アシスタントには、クラウドで処理する普通のアシスタント（`SAAS_CHAT`・`SAAS_RAG`）と、顧客の社内で処理する SECURE アシスタントがある。SECURE アシスタントは、質問や社内文書を社外に出さないためのもので、**質問はクラウドの server を通らず、ブラウザから社内の server-local に直接送られる**。クラウドの server は、送り先（server-local の URL と API キー）をブラウザに教えるだけで、server-local に通信しない。
@@ -101,24 +99,15 @@ cd onprem && docker compose up -d --build                                       
 | server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `server/` |
 | server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `secuaigent-server-local/` |
 | Waha! | 顧客の社内 | ユニリタの ETL 製品。LLM に渡すまでのワークフロー（エージェント）を Waha! の中で組み立てて実行する。ワークフローは Waha! 側の設定で、どちらのリポジトリにもない | 製品は対象外。代わりに同じ API を持つ `waha-emulator/` を置く（下記） |
-| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | `generative-ai-adapter/` の生成AIアダプタ（チャット・RAG 回答）を移植済み（#298。[generative-ai-adapter/README.md](./generative-ai-adapter/README.md)）。埋め込み・検索は未移植 |
+| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | `generative-ai-adapter/` の生成AI・検索・埋め込みの 3 つのアダプタを移植済み（#298・#299・#300。[generative-ai-adapter/README.md](./generative-ai-adapter/README.md)） |
 
-## Waha! エミュレーター（server-local と組み合わせて SECURE のチャットを動かす）
+## 社内（オンプレ）側と Waha! エミュレーター
 
-Waha! 本体はどちらのリポジトリにもないため、server-local が使う Waha! の servicerun API（`WahaServer/servicerun/api`）だけを同じ形で持つ `waha-emulator/`（FastAPI）を、Waha! の代わりに置く（#274）。ワークフローは、移植した生成AIアダプタ（`generative-ai-adapter/`。通常チャットと RAG 回答）を呼ぶ。サービス ID ごとのアダプタの設定は `WAHA_WORKFLOWS_FILE` の JSON で決め、なければ `echo`（キー不要。質問をそのまま返す。既定）か Azure OpenAI を環境変数で選ぶ。検索・埋め込みのアダプタは後続の Issue で移植してワークフローに差し込む。
+SECURE アシスタントの社内側（server-local・Waha!・アダプタ）は、顧客の社内で動く。Waha! 本体はどちらのリポジトリにもないため、server-local が使う servicerun API（`WahaServer/servicerun/api`）だけを同じ形で持つ `waha-emulator/`（FastAPI）を、Waha! の代わりに置く（#274）。エミュレーターは、移植した生成AI・検索・埋め込みのアダプタ（`generative-ai-adapter/`）を呼ぶ。
 
-組み合わせ方の要点（詳しい手順は [waha-emulator/README.md](./waha-emulator/README.md)）:
-
-| 項目 | 設定 |
-|---|---|
-| Docker | `onprem/` の compose がまとめて起動する（下の「社内（オンプレ）側をまとめて起動する」）。接続先・認証キー・ストリームファイルの共有は設定済み。エミュレーター単体用の compose はない（#483 で廃止） |
-| 接続先（ホストで動かす） | server-local の `WAHA_URL` をエミュレーターに向ける（`http://localhost:8091/`。末尾 `/` 付き） |
-| 認証キー（ホストで動かす） | server-local とエミュレーターの `WAHA_AUTHKEY` を同じ値にする |
-| ストリームファイル（ホストで動かす） | server-local が作り、エミュレーターが途中経過を追記する。同じディレクトリが両方から**同じパス**で見えるようにする（手順は waha-emulator/README.md の「両方ともホストで動かす」） |
-
-## 社内（オンプレ）側をまとめて起動する
-
-server-local・Waha! エミュレーター・ベクトルDB・ファイルサーバーの代わりを、`onprem/` の compose でまとめて起動できる（#301。ポートはルートの compose と衝突しない）。起動・停止とクラウド側（ルートの compose の backend）とのつなぎ方は [onprem/README.md](./onprem/README.md)。
+- 社内側をまとめて起動する（server-local・エミュレーター・ベクトルDB・ファイルサーバーの代わり。#301）、クラウド側とのつなぎ方: [onprem/README.md](./onprem/README.md)
+- エミュレーターの API・ワークフローの設定・ホストでの動かし方: [waha-emulator/README.md](./waha-emulator/README.md)
+- アダプタの構成・プロバイダ・Tika・Bedrock: [generative-ai-adapter/README.md](./generative-ai-adapter/README.md)
 
 ## モノレポ構成
 
@@ -133,18 +122,6 @@ server-local・Waha! エミュレーター・ベクトルDB・ファイルサー
 | `e2e-spec/` | Playwright（TypeScript）。移植元の結合テスト項目書（627 項目）を 1 項目 1 テストにした E2E テスト（移植元にはない独自のもの） |
 | `e2e-explorer/` | Playwright（TypeScript）の E2E 探索ハーネス。画面操作を再帰的にたどり、500・画面の例外・真っ白・表示崩れなどの「バグの疑い」を再現手順付きで一覧にする（移植元にはない独自のもの） |
 | `secuaigent-infra/` | Terraform（AWS インフラ定義） |
-
-## E2E 探索ハーネス（e2e-explorer）
-
-専用の使い捨て環境（docker compose。既存のローカル環境とは名前・ポートが別）で frontend・backend を起動し、権限ごとにログインして画面を自動で巡回し、バグの疑いをレポートにする。
-
-```bash
-cd e2e-explorer
-npm ci && npm run install:browsers
-npm run explore:all   # 起動 → 巡回 → レポート → 破棄
-```
-
-何を見つけられて何を見つけられないか・担当範囲の分け方・レポートの読み方は [e2e-explorer/README.md](e2e-explorer/README.md)、レポートの仕分け（Issue の文案づくり）は `.claude/skills/e2e-explorer-triage/SKILL.md` を参照。
 
 ## ローカル疎通確認（frontend + backend）
 
@@ -235,3 +212,7 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 | 接続拒否     | バックエンドが **8001** で起動しているか、`VITE_API_URL=http://localhost:8001` を付けて起動したか   |
 | CORS エラー | `server/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
 | DB エラー   | `docker compose up -d` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |
+
+## Codex 運用
+
+`Codex` 用のプロジェクト運用ルールはルートの [AGENTS.md](./AGENTS.md) を参照してください。
