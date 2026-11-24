@@ -1,6 +1,6 @@
 # generative-ai-adapter
 
-Waha!（ユニリタの ETL 製品）に組み込む生成AIアダプタの Python 移植（Issue #298）。移植元は `secuaigent/generative-ai-adapter/`（Java。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト）。
+Waha!（ユニリタの ETL 製品）に組み込む、生成AI・検索・埋め込みのアダプタの Python 移植（Issue #298・#299・#300）。移植元は `secuaigent/generative-ai-adapter/`（Java。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト）。
 
 アダプタは**サーバーではなくライブラリ**。`waha-emulator/`（Waha! の代わりのサービス）のワークフローから import して、Waha! の呼び方（`set_property` → `connect` → `before_execute` → `write`）のまま呼ぶ。
 
@@ -13,12 +13,12 @@ uv のワークスペース（このディレクトリがルート）。移植�
 
 | ディレクトリ | パッケージ | 役割 | 状況 |
 |---|---|---|---|
-| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像・PDF・Word・Excel・PowerPoint）、埋め込み（embedding）、ベクトルDB（vector）、Graph Candidate の取り込み（graphrag の ingestion・bootstrap） | chat・provider・network・media・embedding・vector・graphrag（ingestion・bootstrap）を移植。検索側（retrieval・検索で使う graphrag）は #299 |
+| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像・PDF・Word・Excel・PowerPoint）、埋め込み（embedding）、ベクトルDB（vector）、Graph Candidate の取り込み（graphrag の ingestion・bootstrap） | chat・provider・network・media・embedding・vector・graphrag（ingestion・bootstrap）を移植。検索側（retrieval・検索で使う graphrag）は #299 で移植 |
 | `generative-ai-adapter/` | `generative_ai_adapter` | Waha! の生成AIアダプタ本体。通常チャット（出力モード 0・2）と RAG 回答（その他）を core に任せ、`RetrievalAnswer` の JSON を書く | 移植（ログ出力先・HTTP クライアントの互換部分・Office/PDF の薄い層を除く） |
 | `embedding-adapter/` | `embedding_adapter` | Waha! の埋め込みアダプタ本体。入力ファイルを core の前処理でテキストにして分割し、ベクトルDB（PostgreSQL + pgvector / Azure AI Search）に保存・削除する。Graph 書き込みが有効なら Graph Candidate（LLM で候補を抽出して AGE グラフに書く）も行う | 移植（#300）。詳細は下の「埋め込みアダプタ」 |
 | `retrieval-adapter/` | `retrieval_adapter` | Waha! の検索アダプタ本体。質問からベクトル・ハイブリッド（PGroonga）・Graph RAG（AGE）で検索し、`LEGACY_TSV`（出力モード 0）か `RAG_CONTEXT_JSON_V1`（出力モード 1）で書く。core の `retrieval` に任せる | 移植（Docs は docs/issue-299） |
 
-**ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で 2 つのテストを一度に動かせる。エミュレーターは adapter だけをパス依存（`../generative-ai-adapter/generative-ai-adapter`）で入れ、core は adapter の依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして両方をイメージへコピーする（`waha-emulator/Dockerfile`）。
+**ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で複数のパッケージのテストを一度に動かせる。エミュレーターは adapter・retrieval・embedding の 3 つをパス依存（`../generative-ai-adapter/<各ディレクトリ>`）で入れ、core はそれらの依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして各パッケージをイメージへコピーする（`waha-emulator/Dockerfile`）。
 
 ### Waha! 固有の部分の置き換え
 
@@ -211,7 +211,7 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
 
 # アダプタの動きを見る
 docker compose logs waha-emulator                                # 上のログ
-docker compose exec waha-emulator ls /app/data/stream-output     # 途中経過ファイル（メッセージ ID.txt。named volume なのでホストのディレクトリには出ない）
+docker compose exec waha-emulator ls /app/data/stream-output     # 途中経過ファイル（`<応答の message_content の id>.txt`。curl の `messageId` ではない。named volume なのでホストのディレクトリには出ない）
 ```
 
 サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`onprem/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して `docker compose up -d` で作り直し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
