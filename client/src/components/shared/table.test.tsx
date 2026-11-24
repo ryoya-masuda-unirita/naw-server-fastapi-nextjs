@@ -29,7 +29,8 @@ describe('Table', () => {
       render(<Table data={FIXTURE_ROWS} columns={FIXTURE_COLUMNS} />);
       expect(desktop().getByText('ADMIN.NAME')).toBeInTheDocument();
       expect(desktop().getByText('営業')).toBeInTheDocument();
-      expect(desktop().getAllByRole('row')).toHaveLength(2);
+      // 見出しの行 + データ 2 行
+      expect(desktop().getAllByRole('row')).toHaveLength(3);
     });
 
     test('幅を指定した列は shrink-0 と幅クラス、指定しない列は flex-1 になること', () => {
@@ -170,7 +171,7 @@ describe('Table', () => {
     test('選択した行に selectedClass が付くこと', async () => {
       render(<Table data={FIXTURE_ROWS} columns={FIXTURE_COLUMNS} selectable />);
       await userEvent.click(desktop().getAllByRole('checkbox')[1]);
-      expect(desktop().getAllByRole('row')[0]).toHaveClass('bg-secondary', 'hover:bg-bg-brand-weak');
+      expect(desktop().getAllByRole('row')[1]).toHaveClass('bg-secondary', 'hover:bg-bg-brand-weak');
     });
   });
 

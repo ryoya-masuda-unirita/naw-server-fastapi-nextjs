@@ -59,8 +59,8 @@ export class AssistantsPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.assistantTab = page.getByRole('button', { name: ASSISTANT_MESSAGES.tabAssistant, exact: true });
-    this.categoryTab = page.getByRole('button', { name: ASSISTANT_MESSAGES.tabCategory, exact: true });
+    this.assistantTab = page.getByRole('tab', { name: ASSISTANT_MESSAGES.tabAssistant, exact: true });
+    this.categoryTab = page.getByRole('tab', { name: ASSISTANT_MESSAGES.tabCategory, exact: true });
     this.searchInput = page.getByPlaceholder('検索ワードを入力');
     const selects = filterRow(page).locator('.library-filter-selects .app-select');
     this.serverFilter = selects.nth(0);

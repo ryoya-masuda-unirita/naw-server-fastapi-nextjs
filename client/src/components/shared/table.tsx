@@ -192,8 +192,8 @@ export function Table<T extends object>({
       </div>
 
       {/* ===== Desktop View ===== */}
-      <div className="hidden md:flex md:flex-col" data-testid="table-desktop">
-        <div className="flex items-center gap-6 px-2">
+      <div className="hidden md:flex md:flex-col" data-testid="table-desktop" role="table">
+        <div className="flex items-center gap-6 px-2" role="row">
           {selectable && (
             <div className={cx('shrink-0 flex items-center justify-center', selectionWidth)}>{headerCheckbox}</div>
           )}
@@ -251,6 +251,7 @@ export function Table<T extends object>({
             {columns.map((col) => (
               <div
                 key={col.field}
+                role="cell"
                 className={cx(
                   'min-w-0',
                   !col.width && 'flex-1',

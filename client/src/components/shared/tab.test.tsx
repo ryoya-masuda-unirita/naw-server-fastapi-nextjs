@@ -14,7 +14,7 @@ const FIXTURE_TABS: TabItem[] = [
 describe('Tab', () => {
   test('activeTabId がなければ先頭のタブを選択中にすること', () => {
     render(<Tab tabs={FIXTURE_TABS} />);
-    const first = screen.getByRole('button', { name: 'ADMIN.ASSISTANT.TAB' });
+    const first = screen.getByRole('tab', { name: 'ADMIN.ASSISTANT.TAB' });
     expect(first).toHaveAttribute('aria-current', 'page');
     expect(first).toHaveClass('text-brand-primary!');
   });
@@ -22,15 +22,15 @@ describe('Tab', () => {
   test('クリックで選択中が変わり onTabChange が呼ばれること', async () => {
     const onTabChange = vi.fn();
     render(<Tab tabs={FIXTURE_TABS} onTabChange={onTabChange} />);
-    await userEvent.click(screen.getByRole('button', { name: /ADMIN\.CATEGORY\.TAB/ }));
+    await userEvent.click(screen.getByRole('tab', { name: /ADMIN\.CATEGORY\.TAB/ }));
     expect(onTabChange).toHaveBeenCalledWith(FIXTURE_TABS[1]);
-    expect(screen.getByRole('button', { name: /ADMIN\.CATEGORY\.TAB/ })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('tab', { name: /ADMIN\.CATEGORY\.TAB/ })).toHaveAttribute('aria-current', 'page');
   });
 
   test('無効なタブは押せないこと', async () => {
     const onTabChange = vi.fn();
     render(<Tab tabs={FIXTURE_TABS} onTabChange={onTabChange} />);
-    const disabled = screen.getByRole('button', { name: 'ADMIN.DISABLED.TAB' });
+    const disabled = screen.getByRole('tab', { name: 'ADMIN.DISABLED.TAB' });
     expect(disabled).toBeDisabled();
     expect(disabled).toHaveClass('opacity-40');
     await userEvent.click(disabled);
@@ -39,7 +39,7 @@ describe('Tab', () => {
 
   test('activeTabId を指定するとそのタブを選択中にすること', () => {
     render(<Tab tabs={FIXTURE_TABS} activeTabId="category" />);
-    expect(screen.getByRole('button', { name: /ADMIN\.CATEGORY\.TAB/ })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('tab', { name: /ADMIN\.CATEGORY\.TAB/ })).toHaveAttribute('aria-current', 'page');
   });
 
   test('route を持つタブはリンクになること', () => {
@@ -48,11 +48,11 @@ describe('Tab', () => {
         <Tab tabs={[{ id: 'users', label: 'TAB.USERS', route: '/admin/groups/1/users' }]} />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'TAB.USERS' })).toHaveAttribute('href', '/admin/groups/1/users');
+    expect(screen.getByRole('tab', { name: 'TAB.USERS' })).toHaveAttribute('href', '/admin/groups/1/users');
   });
 
   test('fullWidth のときタブを均等幅にすること', () => {
     render(<Tab tabs={FIXTURE_TABS} fullWidth />);
-    expect(screen.getByRole('button', { name: 'ADMIN.ASSISTANT.TAB' })).toHaveClass('flex-1');
+    expect(screen.getByRole('tab', { name: 'ADMIN.ASSISTANT.TAB' })).toHaveClass('flex-1');
   });
 });

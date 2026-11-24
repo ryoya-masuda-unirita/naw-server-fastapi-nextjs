@@ -69,6 +69,8 @@ export function Tab({
                 key={tab.id}
                 to={tab.route}
                 className={itemClass(tab)}
+                role="tab"
+                aria-selected={isActive}
                 aria-current={isActive ? 'page' : undefined}
                 aria-disabled={tab.disabled}
                 onClick={() => handleTabClick(tab)}
@@ -82,6 +84,8 @@ export function Tab({
               key={tab.id}
               type="button"
               className={itemClass(tab)}
+              role="tab"
+              aria-selected={isActive}
               aria-current={isActive ? 'page' : undefined}
               aria-disabled={tab.disabled}
               disabled={tab.disabled}

@@ -79,7 +79,7 @@ describe('PageHeader', () => {
     ];
     const onTabChange = vi.fn();
     renderHeader(<PageHeader title="t" tabs={tabs} activeTabId="api" onTabChange={onTabChange} />);
-    await userEvent.click(screen.getByRole('button', { name: 'TENANT.USAGE' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'TENANT.USAGE' }));
     expect(onTabChange).toHaveBeenCalledWith(tabs[1]);
   });
 
