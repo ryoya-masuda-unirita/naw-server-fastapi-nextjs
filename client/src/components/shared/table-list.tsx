@@ -62,6 +62,7 @@ export function TableListItem({
             checked={checked}
             indeterminate={indeterminate}
             isHeader={isHeader}
+            ariaLabel={isHeader ? 'COMMON.SELECT_ALL' : 'COMMON.SELECT_ROW'}
             onCheckedChange={(value) => onCheckedChange?.(value)}
           />
         </div>

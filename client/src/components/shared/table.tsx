@@ -136,6 +136,7 @@ export function Table<T extends object>({
       checked={isAllSelected}
       indeterminate={hasValue && !isAllSelected}
       isHeader
+      ariaLabel="COMMON.SELECT_ALL"
       onCheckedChange={masterToggle}
     />
   );
@@ -143,7 +144,7 @@ export function Table<T extends object>({
   const rowCheckbox = (row: T) => (
     // 移植元はチェックボックスのクリックを行クリック（rowClick）に伝えない。contents で余計な箱を作らない
     <span className="contents" onClick={(e) => e.stopPropagation()}>
-      <Checkbox checked={isSelected(row)} onCheckedChange={() => toggleSelection(row)} />
+      <Checkbox checked={isSelected(row)} ariaLabel="COMMON.SELECT_ROW" onCheckedChange={() => toggleSelection(row)} />
     </span>
   );
 
