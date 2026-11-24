@@ -20,6 +20,8 @@ import openpyxl  # type: ignore[import-untyped]
 import pptx
 import pypdf
 import pytest
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 from generative_ai_core.chat.models import CoreImageExplanationRequest
 from generative_ai_core.chat.models import CoreImageExplanationResult as ImageResult
 from generative_ai_core.chat.runtime import CoreChatRuntime
@@ -217,6 +219,16 @@ def test_pdf_extracts_text(tmp_path: Path) -> None:
     assert result.image_explanations == ()
 
 
+def test_pdf_joins_text_on_the_same_line_like_pdfbox(tmp_path: Path) -> None:
+    """同じ行に並んだ文字（表の 1 行など）を、1 行にまとめて取り出すこと（移植元 PDFBox と同じ）"""
+    file = tmp_path / "row.pdf"
+    file.write_bytes(_pdf_bytes("Name) Tj 100 0 Td (Qty) Tj 100 0 Td (Price"))
+
+    result = PdfCoreMediaProcessor().process(_request(file, "application/pdf"))
+
+    assert result.text == "Name Qty Price"
+
+
 def test_pdf_full_page_keeps_text_and_adds_page_rendering_explanation(
     tmp_path: Path,
 ) -> None:
@@ -389,6 +401,40 @@ def test_word_skips_blank_paragraphs(tmp_path: Path) -> None:
     result = WordCoreMediaProcessor().process(_request(file, DOCX_TYPE))
 
     assert result.text == "本文\n"
+
+
+def test_word_includes_inserted_text_and_content_controls_but_not_deleted_text(
+    tmp_path: Path,
+) -> None:
+    """変更履歴の挿入・コンテンツコントロールの文字を含め、削除された文字は含めないこと（移植元 POI と同じ）"""
+    document = docx.Document()
+    paragraph = document.add_paragraph("前:")
+    namespaces = nsdecls("w")
+    paragraph._p.append(
+        parse_xml(
+            f"<w:ins {namespaces} w:id='1' w:author='a'>"
+            "<w:r><w:t>挿入</w:t></w:r></w:ins>"
+        )
+    )
+    paragraph._p.append(
+        parse_xml(
+            f"<w:del {namespaces} w:id='2' w:author='a'>"
+            "<w:r><w:delText>削除</w:delText></w:r></w:del>"
+        )
+    )
+    control = document.add_paragraph()
+    control._p.append(
+        parse_xml(
+            f"<w:sdt {namespaces}><w:sdtContent>"
+            "<w:r><w:t>コントロール</w:t></w:r></w:sdtContent></w:sdt>"
+        )
+    )
+    file = tmp_path / "revisions.docx"
+    document.save(str(file))
+
+    result = WordCoreMediaProcessor().process(_request(file, DOCX_TYPE))
+
+    assert result.text == "前:挿入\nコントロール\n"
 
 
 def test_word_embed_mode_explains_pictures_and_keeps_text(
@@ -616,6 +662,20 @@ def test_powerpoint_extracts_text(tmp_path: Path) -> None:
     result = PowerPointCoreMediaProcessor().process(_request(file, PPTX_TYPE))
 
     assert result.text == "PowerPoint本文\n"
+
+
+def test_powerpoint_converts_line_breaks_to_newlines(tmp_path: Path) -> None:
+    """段落内の改行（a:br）を改行（\\n）にすること（移植元 POI と同じ。python-pptx は垂直タブ）"""
+    file = _powerpoint_file(tmp_path / "break.pptx", text="1行目")
+    presentation = pptx.Presentation(str(file))
+    paragraph = presentation.slides[0].shapes[0].text_frame.paragraphs[0]
+    paragraph.add_line_break()
+    paragraph.add_run().text = "2行目"
+    presentation.save(str(file))
+
+    result = PowerPointCoreMediaProcessor().process(_request(file, PPTX_TYPE))
+
+    assert result.text == "1行目\n2行目\n"
 
 
 def test_powerpoint_full_page_returns_rendering_failure(tmp_path: Path) -> None:

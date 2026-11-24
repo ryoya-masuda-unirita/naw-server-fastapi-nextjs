@@ -24,6 +24,7 @@ import docx
 import openpyxl  # type: ignore[import-untyped]
 import pptx
 from docx.opc.exceptions import PackageNotFoundError as DocxPackageNotFoundError
+from docx.text.run import Run
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.exc import PackageNotFoundError as PptxPackageNotFoundError
 
@@ -75,6 +76,48 @@ def _corrupt(kind: str, request: CoreMediaPreprocessingRequest) -> Exception:
         CORRUPT_FILE の前処理例外。
     """
     return failure(CORRUPT_FILE, f"{kind} file is invalid: {request.source_name}")
+
+
+def _paragraph_text(paragraph: Any) -> str:
+    """段落の文字を取り出す（移植元 XWPFParagraph#getText に合わせる）。
+
+    python-docx の `paragraph.text` は、段落の直下の文字と内部リンクだけを返す。POI は、変更履歴の
+    挿入（`w:ins`）・コンテンツコントロール（`w:sdt`）・スマートタグの中の文字も含め、削除された
+    文字（`w:del`）は含めない。
+
+    Parameters
+    ----------
+    paragraph : Any
+        python-docx の段落。
+
+    Returns
+    -------
+    str
+        段落の文字。
+    """
+    runs = paragraph._p.xpath(
+        ".//w:r[not(ancestor::w:del) and not(ancestor::w:txbxContent)"
+        " and not(ancestor::*[local-name()='Fallback'])]"
+    )
+    return "".join(Run(run, paragraph).text for run in runs)
+
+
+def _slide_text(text: str) -> str:
+    """スライドの文字の改行を、POI の `XSLFTextShape#getText` に合わせる。
+
+    python-pptx は段落内の改行（`a:br`）を垂直タブ（`\\x0b`）で返すが、POI は `\\n` で返す。
+
+    Parameters
+    ----------
+    text : str
+        python-pptx が返した文字。
+
+    Returns
+    -------
+    str
+        垂直タブを改行にした文字。
+    """
+    return text.replace("\x0b", "\n")
 
 
 def _part_file_name(part_name: str) -> str:
@@ -143,7 +186,7 @@ class WordCoreMediaProcessor:
         ) as e:
             raise _corrupt("Word", request) from e
         for paragraph in document.paragraphs:
-            text = paragraph.text
+            text = _paragraph_text(paragraph)
             if text.strip():
                 text_content.append(f"{text}\n")
             if request.mode != CoreMediaPreprocessingMode.DISABLED:
@@ -493,7 +536,7 @@ class PowerPointCoreMediaProcessor:
         """
         for shape in slide.shapes:
             if shape.has_text_frame and shape.text_frame.text.strip():
-                text_content.append(f"{shape.text_frame.text}\n")
+                text_content.append(f"{_slide_text(shape.text_frame.text)}\n")
             if request.mode == CoreMediaPreprocessingMode.DISABLED:
                 continue
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:

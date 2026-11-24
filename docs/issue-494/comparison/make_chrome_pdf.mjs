@@ -1,0 +1,4 @@
+import { chromium } from '/Users/pcm23005/Documents/personal/naw-server-fastapi-nextjs/e2e-spec/node_modules/playwright/index.mjs';
+const html = `<html><body style="font-family:sans-serif"><h1>社内規程</h1><p>第1条 この規程は、情報セキュリティの基本方針を定める。第2条 従業員は、これを遵守しなければならない。長い段落を折り返して複数行になることを確かめるための文章をここに続けて書いていきます。長い段落を折り返して複数行になることを確かめるための文章をここに続けて書いていきます。</p><table border=1><tr><th>品目</th><th>数量</th><th>単価</th></tr><tr><td>りんご</td><td>3</td><td>120</td></tr><tr><td>みかん</td><td>10</td><td>80</td></tr></table><ul><li>項目A</li><li>項目B</li></ul><div style="column-count:2"><p>左の列の文章です。左の列の文章です。左の列の文章です。左の列の文章です。</p><p>右の列の文章です。右の列の文章です。右の列の文章です。右の列の文章です。</p></div></body></html>`;
+const b = await chromium.launch(); const p = await b.newPage(); await p.setContent(html);
+await p.pdf({ path: '/tmp/claude-501/ex494/fx/pdf_chrome.pdf', format: 'A4' }); await b.close();
