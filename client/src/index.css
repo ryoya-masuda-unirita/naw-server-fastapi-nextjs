@@ -2053,6 +2053,8 @@
     align-items: center;
     gap: calc(var(--spacing) * 1);
     padding-inline: calc(var(--spacing) * 4);
+    /* 右端の区切り線（right-11）と［▼］にチップ・+N が重ならないように空ける */
+    padding-right: calc(var(--spacing) * 12);
     padding-block: calc(var(--spacing) * 2);
     flex-wrap: wrap;
     flex: 1;

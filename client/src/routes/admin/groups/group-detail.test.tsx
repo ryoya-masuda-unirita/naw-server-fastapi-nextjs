@@ -19,6 +19,10 @@ import type { User } from '@/types/auth';
 
 const GROUP_ID = 'g1';
 
+const ADD_SELECT_TRIGGER = 'admin-groups-add-user-select-trigger';
+const ADD_SELECT_OPTION = 'admin-groups-add-user-select-option';
+const ADD_SELECT_CONFIRM = 'admin-groups-add-user-select-confirm-button';
+
 const DETAIL_PATH = mockPath(API_PATHS.ADMIN.GROUPS.DETAIL(':groupId'));
 const USERS_PATH = mockPath(API_PATHS.ADMIN.GROUPS.USERS(':groupId'));
 const USER_DETAIL_PATH = mockPath(API_PATHS.ADMIN.GROUPS.USER_DETAIL(':groupId', ':userId'));
@@ -97,6 +101,14 @@ const FIXTURE_TEMPLATES = [
     updatedAt: '2026-02-01T10:00:00',
     addedAt: '2026-02-02T10:00:00',
   },
+];
+
+/** 追加ダイアログの候補。ログイン ID は表示名に含めない（絞り込みの対象は表示名だけ） */
+const FIXTURE_CANDIDATE_USERS = [
+  { id: 'u9', loginId: 'new-user', name: '新人', role: 'USER' },
+  { id: 'u10', loginId: 'tanaka-1', name: '田中一郎', role: 'USER' },
+  { id: 'u11', loginId: 'tanaka-2', name: '田中次郎', role: 'USER' },
+  { id: 'u12', loginId: 'dev-sato', name: '佐藤三郎', role: 'USER' },
 ];
 
 interface RequestLog {
@@ -184,9 +196,7 @@ function mockApis(options: { updateFails?: boolean } = {}): RequestLog {
     }),
     http.get(TENANT_USERS_PATH, ({ request }) => {
       log.optionParams.push(new URL(request.url).searchParams);
-      return HttpResponse.json(
-        page([{ id: 'u9', loginId: 'new-user', name: '新人', role: 'USER' }]),
-      );
+      return HttpResponse.json(page(FIXTURE_CANDIDATE_USERS));
     }),
     http.get(TENANT_ASSISTANTS_PATH, ({ request }) => {
       log.optionParams.push(new URL(request.url).searchParams);
@@ -446,13 +456,166 @@ describe('GroupDetailUsersPage', () => {
     // 候補を選ぶまでは追加できない
     expect(within(dialog).getByTestId('dialog-confirm-button')).toBeDisabled();
 
-    await userEvent.click(within(dialog).getByText('GROUPS.MEMBERS_PLACEHOLDER'));
+    // ダイアログは開くと検索欄にフォーカスし、候補の一覧が開く
     await userEvent.click(await screen.findByRole('option', { name: '新人' }));
-    await userEvent.click(screen.getByRole('button', { name: 'COMMON.CONFIRM_SELECTION' }));
+    await userEvent.click(screen.getByTestId(ADD_SELECT_CONFIRM));
     await userEvent.click(within(dialog).getByTestId('dialog-confirm-button'));
 
     await waitFor(() => expect(log.posted).toEqual([{ userIds: ['u9'] }]));
     expect(toastMessages()).toContain('GROUPS.ADD_USER_SUCCESS');
+  });
+
+  describe('ユーザーを追加するダイアログ', () => {
+    /** ダイアログを開く。開くと検索欄にフォーカスし、候補の一覧もそのまま開く */
+    async function openAddUserSelect() {
+      await screen.findAllByTestId('admin-groups-user-row');
+      await userEvent.click(screen.getByTestId('admin-groups-add-user-button'));
+      const dialog = await screen.findByRole('dialog');
+      await screen.findByRole('listbox');
+      return dialog;
+    }
+    const optionLabels = () => screen.queryAllByTestId(ADD_SELECT_OPTION).map((el) => el.textContent);
+    /** ページには検索欄などの combobox が複数あるため、ダイアログの中に絞る */
+    const searchInput = () => within(screen.getByRole('dialog')).getByRole('combobox');
+    const search = (text: string) => userEvent.type(searchInput(), text);
+    const confirmAdd = async (dialog: HTMLElement) => {
+      await userEvent.click(screen.getByTestId(ADD_SELECT_CONFIRM));
+      await userEvent.click(within(dialog).getByTestId('dialog-confirm-button'));
+    };
+
+    test('名前を入力すると、名前に一致するユーザーだけが候補に残ること', async () => {
+      mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+      expect(optionLabels()).toEqual(['新人', '田中一郎', '田中次郎', '佐藤三郎']);
+
+      await search('田中');
+
+      expect(optionLabels()).toEqual(['田中一郎', '田中次郎']);
+    });
+
+    test('ユーザー ID だけが入力した文字を含むユーザーは、候補に出ないこと', async () => {
+      mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+
+      await search('dev-sato');
+
+      expect(optionLabels()).toEqual([]);
+    });
+
+    test('入力した文字を消すと、未所属のユーザーが全員候補に戻ること', async () => {
+      mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+      await search('田中');
+      expect(optionLabels()).toHaveLength(2);
+
+      await userEvent.clear(searchInput());
+
+      expect(optionLabels()).toEqual(['新人', '田中一郎', '田中次郎', '佐藤三郎']);
+    });
+
+    test('入力しても候補を取り直さず、ダイアログを開くときに取得した候補の中で絞り込むこと', async () => {
+      const log = mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+      expect(log.optionParams).toHaveLength(1);
+
+      await search('田中');
+      await userEvent.clear(searchInput());
+      await search('佐藤');
+
+      expect(log.optionParams).toHaveLength(1);
+    });
+
+    test('一致するユーザーがいないときは、候補の一覧に「表示するデータがありません」が出ること', async () => {
+      mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+
+      await search('存在しない名前');
+
+      expect(optionLabels()).toEqual([]);
+      expect(within(screen.getByRole('listbox')).getByText('COMMON.EMPTY_RESULT')).toBeInTheDocument();
+    });
+
+    test('検索欄の下に、ユーザー名で検索できることの補足が出ること', async () => {
+      mockApis();
+      await renderTab('users');
+      await openAddUserSelect();
+
+      expect(within(screen.getByRole('listbox')).getByText('GROUPS.MEMBERS_SEARCH_HINT')).toBeInTheDocument();
+    });
+
+    test('絞り込みを変えながら選んだユーザーを確定して［追加］すると、選んだユーザーが全員追加されること', async () => {
+      const log = mockApis();
+      await renderTab('users');
+      const dialog = await openAddUserSelect();
+
+      await userEvent.click(screen.getByRole('option', { name: '新人' }));
+      await search('田中一郎');
+      await userEvent.click(screen.getByRole('option', { name: '田中一郎' }));
+      await userEvent.clear(searchInput());
+      await search('佐藤');
+      await userEvent.click(screen.getByRole('option', { name: '佐藤三郎' }));
+      await confirmAdd(dialog);
+
+      await waitFor(() => expect(log.posted).toEqual([{ userIds: ['u9', 'u10', 'u12'] }]));
+    });
+
+    test('絞り込んでいる間に「すべて選択」を押すと、表示中のユーザーだけが選ばれ、先に選んだユーザーは残ること', async () => {
+      const log = mockApis();
+      await renderTab('users');
+      const dialog = await openAddUserSelect();
+      await userEvent.click(screen.getByRole('option', { name: '新人' }));
+
+      await search('田中');
+      await userEvent.click(screen.getByRole('button', { name: 'COMMON.SELECT_ALL' }));
+      await confirmAdd(dialog);
+
+      await waitFor(() => expect(log.posted).toEqual([{ userIds: ['u9', 'u10', 'u11'] }]));
+    });
+
+    test('絞り込んでいる間に「すべて解除」を押すと、表示中のユーザーだけが外れ、表示していないユーザーは残ること', async () => {
+      const log = mockApis();
+      await renderTab('users');
+      const dialog = await openAddUserSelect();
+      await userEvent.click(screen.getByRole('button', { name: 'COMMON.SELECT_ALL' }));
+
+      await search('田中');
+      await userEvent.click(screen.getByRole('button', { name: 'COMMON.RELEASE_ALL' }));
+      await confirmAdd(dialog);
+
+      await waitFor(() => expect(log.posted).toEqual([{ userIds: ['u9', 'u12'] }]));
+    });
+
+    test('選んで確定して一覧を閉じた後に、もう一度開いても、名前で絞り込めること', async () => {
+      mockApis();
+      await renderTab('users');
+      const dialog = await openAddUserSelect();
+      await userEvent.click(screen.getByRole('option', { name: '新人' }));
+      await userEvent.click(screen.getByTestId(ADD_SELECT_CONFIRM));
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+
+      await userEvent.click(within(dialog).getByTestId(ADD_SELECT_TRIGGER));
+      await screen.findByRole('listbox');
+      await search('田中');
+
+      expect(optionLabels()).toEqual(['田中一郎', '田中次郎']);
+    });
+
+    test('一覧を開いている間は、選んだユーザーの欄に高さの上限が付き、閉じると外れること', async () => {
+      mockApis();
+      await renderTab('users');
+      const dialog = await openAddUserSelect();
+      const chipsRow = () => dialog.querySelector('[data-cmulti-chips]');
+      expect(chipsRow()).toHaveClass('max-h-24', 'overflow-y-auto');
+
+      await userEvent.click(screen.getByTestId(ADD_SELECT_CONFIRM));
+
+      expect(chipsRow()).not.toHaveClass('max-h-24');
+    });
   });
 });
 

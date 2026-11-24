@@ -155,6 +155,7 @@
     "ADMINS_PLACEHOLDER": "チームの管理者を選択",
     "MEMBERS_LABEL": "所属ユーザー",
     "MEMBERS_PLACEHOLDER": "所属ユーザーを選択",
+    "MEMBERS_SEARCH_HINT": "ユーザー名で検索できます",
     "ASSISTANTS_LABEL": "アシスタント",
     "ASSISTANTS_PLACEHOLDER": "所属アシスタントを選択",
     "TEMPLATES_LABEL": "テンプレート",
