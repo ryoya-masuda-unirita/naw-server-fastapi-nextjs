@@ -175,7 +175,7 @@ Docker では、公開ポート・認証キー・ストリームファイルの�
 
 ## Docker で起動する
 
-エミュレーター単体用の compose はない（#483 で廃止した）。`onprem/` の compose で、エミュレーターだけを指定して起動する（ほかのサービスは起動しない）。
+エミュレーター単体用の compose はない（#483 で廃止した）。起動・停止の全体は [onprem/README.md](../onprem/README.md)。`onprem/` の compose で、エミュレーターだけを指定して起動する（ほかのサービスは起動しない）。
 
 ```bash
 cd onprem
@@ -193,18 +193,7 @@ server-local の `WAHA_URL` をエミュレーターに向け、`WAHA_AUTHKEY` �
 
 ### 両方とも Docker で動かす
 
-`onprem/` の compose で、server-local・エミュレーター・ベクトルDB をまとめて起動する。接続先（`WAHA_URL`）・認証キー・ストリームファイルの共有は設定済み（named volume `stream-output` を、両方のコンテナが `/app/data/stream-output` にマウントする）。
-
-```bash
-cd onprem
-docker compose up -d --build        # すべて healthy になるまで待つ（docker compose ps）
-
-# 確かめる（認証キーの既定は onprem-local-key）
-curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
-  -F 'textData={"assistantId":"onprem-chat","messageId":"m-1","userInput":"こんにちは"};type=application/json' \
-  http://localhost:18090/api/messages/content
-# → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content
-```
+`onprem/` の compose で、server-local・エミュレーター・ベクトルDB をまとめて起動する。起動・停止、基本の質問の `curl`、認証キーの既定値は [onprem/README.md](../onprem/README.md) を参照。接続先（`WAHA_URL`）・認証キー・ストリームファイルの共有は設定済み（named volume `stream-output` を、両方のコンテナが `/app/data/stream-output` にマウントする）。
 
 - 認証キーを変えるときは、`onprem/.env` の `SERVER_LOCAL_AUTH_KEY`・`WAHA_AUTHKEY` を変える
 - 「server-local をホストで動かし、エミュレーターだけ Docker で動かす」構成は、ストリームファイルを共有できないため使えない。ホストで動かすなら、下の「両方ともホストで動かす」にする
