@@ -14,6 +14,7 @@ from app.clients.waha_client import WahaClient
 from app.core.config import (
     MAX_REQUEST_SIZE_BYTES,
     MS_PER_SECOND,
+    SESSION_END_STATUS_HEADER,
     Settings,
     get_settings,
 )
@@ -169,6 +170,8 @@ def create_app(
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # ブラウザから読めるように、登録時の警告のヘッダーを公開する（移植元 SecurityConfig と同じ）
+        expose_headers=[SESSION_END_STATUS_HEADER],
     )
     return app
 

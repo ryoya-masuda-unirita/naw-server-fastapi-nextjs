@@ -1,8 +1,11 @@
 """移植元 FileService（インデックスの学習ファイル管理）の移植。"""
 
 import logging
+import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import delete, update
@@ -213,7 +216,40 @@ async def search_files(
     return page_to_dict(await _with_parts(session, files), page, size, total)
 
 
-def _parse_create_result(tsv_content: str | None) -> tuple[str, list[str]]:
+NON_CRLF_LINE_BREAK = re.compile(r"\r(?!\n)|(?<!\r)\n")
+
+
+class CreateJobKind(StrEnum):
+    """学習ジョブの種類（移植元 RegistrationKind）。"""
+
+    # 通常のファイル登録。出力を確認できたあとのセッション終了の失敗は警告にとどめる
+    NORMAL = "normal"
+    # 差し替え・追加学習。セッション終了の失敗も失敗にする
+    STRICT = "strict"
+
+
+@dataclass(frozen=True)
+class FileRegistrationResult:
+    """通常のファイル登録の結果。"""
+
+    body: dict[str, Any]
+    # Waha! のセッション終了を確認できなかった（登録の出力は確認済みなので、DB には反映済み）
+    session_end_unconfirmed: bool
+
+
+@dataclass(frozen=True)
+class CreateJobResult:
+    """学習ジョブの結果。"""
+
+    file_id: str
+    part_ids: list[str]
+    # Waha! のセッション終了を確認できなかった（登録の出力は確認済み）
+    session_end_unconfirmed: bool = False
+
+
+def _parse_create_result(
+    tsv_content: str | None, *, validate: bool = False
+) -> tuple[str, list[str]]:
     """学習ジョブの結果 TSV から、登録されたファイル ID とパート ID を取り出す。
 
     各行は「ファイル ID<TAB>パート ID」で、ファイル ID はすべての行で同じため
@@ -223,6 +259,9 @@ def _parse_create_result(tsv_content: str | None) -> tuple[str, list[str]]:
     ----------
     tsv_content : str | None
         Waha! の出力スロットから取得した TSV。
+    validate : bool
+        True なら、通常登録の確認として、改行が CRLF 以外（単独の CR・LF）なら失敗にし、
+        ファイル ID が空、行ごとのファイル ID が違う、パート ID が空のときも失敗にする。
 
     Returns
     -------
@@ -232,21 +271,32 @@ def _parse_create_result(tsv_content: str | None) -> tuple[str, list[str]]:
     Raises
     ------
     RuntimeError
-        結果がない・空・列が足りない場合（ファイルの追加に失敗したとみなす）。
+        結果がない・空・列が足りない場合、``validate`` の確認に通らない場合
+        （ファイルの追加に失敗したとみなす）。
     """
     if tsv_content is None:
+        raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
+    if validate and NON_CRLF_LINE_BREAK.search(tsv_content):
         raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
     lines = java_split(_strip_bom(tsv_content), LINE_SEPARATOR)
     if not lines:
         raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
     file_id = ""
     part_ids: list[str] = []
+    file_ids_per_line: list[str] = []
     for line in lines:
         fields = _split_fields(line)
         if len(fields) < 2:
             raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
         file_id = fields[0]
+        file_ids_per_line.append(fields[0])
         part_ids.append(fields[1])
+    if validate and (
+        not file_id.strip()
+        or any(line_file_id != file_id for line_file_id in file_ids_per_line)
+        or any(not part_id.strip() for part_id in part_ids)
+    ):
+        raise RuntimeError(ADD_FILE_FAILED_MESSAGE)
     return file_id, part_ids
 
 
@@ -257,7 +307,8 @@ async def _run_waha_create_job(
     upload: UploadedFile | None,
     split_length: str | None,
     reference: str | None,
-) -> tuple[str, list[str]]:
+    kind: CreateJobKind = CreateJobKind.STRICT,
+) -> CreateJobResult:
     """Waha! の学習ジョブを実行し、登録されたファイル ID とパート ID を返す。
 
     学習ジョブは数分かかることがある。SQLite は書き込みが 1 本しかできないため、
@@ -277,10 +328,13 @@ async def _run_waha_create_job(
     reference : str | None
         Waha! に渡す参照元。
 
+    kind : CreateJobKind
+        通常登録（NORMAL）は、出力を確認したあとのセッション終了の失敗を警告にとどめる。
+
     Returns
     -------
-    tuple[str, list[str]]
-        Waha! に登録されたファイル ID とパート ID の一覧。
+    CreateJobResult
+        Waha! に登録されたファイル ID・パート ID と、セッション終了を確認できたか。
 
     Raises
     ------
@@ -293,7 +347,9 @@ async def _run_waha_create_job(
     # Waha! のセッションを無駄に作らないよう、開始前に確認する
     if upload is None:
         raise BadRequestError(FILE_NOT_SPECIFIED_MESSAGE)
-    async with waha_session(waha, "ファイル登録") as session_id:
+    parsed: tuple[str, list[str]] | None = None
+    async with waha_session(waha, "ファイル登録") as handle:
+        session_id = handle.id
         await waha.upload_file(
             filename=upload.filename or UPLOAD_FALLBACK_FILENAME,
             content=upload.data,
@@ -307,7 +363,13 @@ async def _run_waha_create_job(
         # 完了を確認できなければ例外になり、出力を取得せず、保存もしない
         await waha.get_results(session_id)
         tsv_content = await waha.download_file(session_id, SLOT_OUTPUT)
-    return _parse_create_result(tsv_content)
+        if kind == CreateJobKind.NORMAL:
+            # セッションを終える前に確認する。確認できたあとの終了の失敗は、登録を取り消さない
+            parsed = _parse_create_result(tsv_content, validate=True)
+            handle.mark_output_verified()
+    if parsed is None:
+        parsed = _parse_create_result(tsv_content)
+    return CreateJobResult(parsed[0], parsed[1], handle.end_unconfirmed)
 
 
 async def _save(
@@ -486,7 +548,8 @@ async def _run_waha_delete_job(
         Waha! から削除するパート ID の一覧。
     """
     ids_text = "".join(f"{part_id}\n" for part_id in part_ids)
-    async with waha_session(waha, "削除") as session_id:
+    async with waha_session(waha, "削除") as handle:
+        session_id = handle.id
         await waha.upload_file(
             filename=(
                 f"{DELETE_IDS_FILENAME_PREFIX}{uuid.uuid4().hex}"
@@ -543,7 +606,7 @@ async def create_file(
     upload: UploadedFile | None,
     split_length: str | None,
     tenant_id: str,
-) -> dict[str, Any]:
+) -> "FileRegistrationResult":
     """ファイルを Waha! で学習させ、学習ファイルとして登録する。
 
     Waha! の学習ジョブを先に済ませてから DB に保存する（#251）。
@@ -575,8 +638,9 @@ async def create_file(
 
     Returns
     -------
-    dict[str, Any]
-        登録したファイルのレスポンス（パート ID を含む）。
+    FileRegistrationResult
+        登録したファイルのレスポンス（パート ID を含む）と、Waha! のセッション終了を
+        確認できなかったか（確認できなくても、登録の出力を確認済みなら DB に反映する）。
 
     Raises
     ------
@@ -585,26 +649,28 @@ async def create_file(
     RuntimeError
         学習ジョブの結果を読み取れない場合。
     """
-    file_id, part_ids = await _run_waha_create_job(
+    job = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
         upload=upload,
         split_length=split_length,
         reference=reference,
+        kind=CreateJobKind.NORMAL,
     )
-    return await _save(
+    body = await _save(
         session,
-        file_id=file_id,
+        file_id=job.file_id,
         file_name=name,
         display_name=display_name,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        part_ids=part_ids,
+        part_ids=job.part_ids,
         tenant_id=tenant_id,
         feedback_id=None,
         room_id=None,
     )
+    return FileRegistrationResult(body, job.session_end_unconfirmed)
 
 
 async def update_file(
@@ -697,7 +763,7 @@ async def update_file(
     await _run_waha_delete_job(
         waha, service_name=deletion_service_name, part_ids=old_part_ids
     )
-    new_file_id, new_part_ids = await _run_waha_create_job(
+    job = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
         upload=upload,
@@ -707,13 +773,13 @@ async def update_file(
     await _delete_from_db(session, file_id, physical_delete=True)
     return await _save(
         session,
-        file_id=new_file_id,
+        file_id=job.file_id,
         file_name=name,
         display_name=display_name,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        part_ids=new_part_ids,
+        part_ids=job.part_ids,
         tenant_id=tenant_id,
         feedback_id=None,
         room_id=None,
@@ -845,7 +911,8 @@ async def sync_files(
     files: dict[str, File] = {}
     parts: dict[str, list[str]] = {}
 
-    async with waha_session(waha, "同期") as session_id:
+    async with waha_session(waha, "同期") as handle:
+        session_id = handle.id
         # 移植元はページングのループ構造を持つが、1 回で抜ける実装のため 1 ページ分のみ取得する
         await waha.execute_sync(session_id, sync_service_name or "", 0, SYNC_PAGE_SIZE)
         await waha.get_results(session_id)
@@ -936,7 +1003,7 @@ async def additional_learning(
     else:
         file_name = f"追加学習_ルーム_{room_id}.md"
         reference = f"フィードバック_{room_id}"
-    file_id, part_ids = await _run_waha_create_job(
+    job = await _run_waha_create_job(
         waha,
         service_name=creation_service_name,
         upload=content,
@@ -945,13 +1012,13 @@ async def additional_learning(
     )
     await _save(
         session,
-        file_id=file_id,
+        file_id=job.file_id,
         file_name=file_name,
         display_name=ADDITIONAL_LEARNING_DISPLAY_NAME,
         reference=reference,
         user_id=user_id,
         index_id=index_id,
-        part_ids=part_ids,
+        part_ids=job.part_ids,
         tenant_id=tenant_id,
         feedback_id=feedback_id,
         room_id=room_id,

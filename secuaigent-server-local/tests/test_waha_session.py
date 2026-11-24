@@ -7,8 +7,8 @@ from tests.conftest import FakeWahaClient
 
 async def test_session_ends_after_success(fake_waha: FakeWahaClient) -> None:
     """処理が成功したら、セッションを終了すること"""
-    async with waha_session(fake_waha, "テスト") as session_id:  # type: ignore[arg-type]
-        assert session_id == "session-1"
+    async with waha_session(fake_waha, "テスト") as session:  # type: ignore[arg-type]
+        assert session.id == "session-1"
 
     assert fake_waha.call_names() == ["start_session", "end_session"]
 

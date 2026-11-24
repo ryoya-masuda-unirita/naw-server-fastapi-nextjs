@@ -6,6 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 移植元 application.yml の spring.servlet.multipart に合わせた上限
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024
 MAX_REQUEST_SIZE_BYTES = 215 * 1024 * 1024
+# 登録は済んだが Waha! のセッション終了を確認できなかったときに、応答へ付けるヘッダー（移植元と同じ）
+SESSION_END_STATUS_HEADER = "X-Waha-Session-End-Status"
+SESSION_END_UNCONFIRMED = "unconfirmed"
 # 設定値はミリ秒（移植元の *-ms）で受け取り、asyncio には秒で渡すための換算
 MS_PER_SECOND = 1000
 # 移植元（logging.level）のレベル名のうち、Python の logging にないものの読み替え
