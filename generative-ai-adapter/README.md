@@ -104,6 +104,7 @@ set_property → connect(出力モード) → set_column_information → set_vie
 | 埋め込み画像 | 移植元は、埋め込みの画像を読み飛ばす（`EmbeddedDocumentExtractor`）。Tika のサーバーの設定では再現できなかった。画像のパーサーを除外しても、本文に `[image: ]` と埋め込みのファイル名（`image1.png` など）が出る。画像の中の文字は出ない（OCR なし） |
 | `embedding-adapter/tika-config.xml` | 移植元の中で、この設定ファイルを読み込む箇所が見つからなかったため、再現しない |
 | 失敗のコード | 上の表のとおり、ファイルの問題を `UNSUPPORTED_MIME`・`CORRUPT_FILE` に分ける（移植元はすべて `PARSER_FAILURE`） |
+| MIME の判定 | 移植元は Tika が判定する。Python 版は先頭のバイト・拡張子・中身で判定する（`detect_mime_type`）。RTF（先頭の `{\rtf`）と EPUB（ZIP の先頭＋拡張子 `.epub`）を判定に足した。足さないと、RTF は `text/plain`、EPUB は `application/zip` と判定され、Tika が RTF・EPUB として読まない。**Tika を使わない環境では、RTF・EPUB は `UNSUPPORTED_MIME` になる**（RTF は、これまでは制御語がそのまま本文に入っていた）。`.hwp` など、ほかの形式の判定は足していない |
 | 呼び出しの条件 | Tika に渡すときは、必ず判定済みの MIME を `Content-Type` に付ける（付けないと、200 で本文が空になることがある） |
 
 ### 実 DB での確認
