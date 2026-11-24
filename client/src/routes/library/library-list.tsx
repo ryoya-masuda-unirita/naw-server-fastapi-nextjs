@@ -17,14 +17,18 @@ const TAB_ITEMS: TabItem[] = [
 /** 移植元 `AdminLibraryComponent`（library-list）。ライブラリ一覧（コンテンツ・タグの 2 タブ） */
 export function AdminLibraryPage() {
   const isAdmin = useAuthStore((state) => state.isAdmin);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const tabState = useTabQueryParam<LibraryTab>({ validTabs: LIBRARY_TABS, defaultTab: 'contents' });
   const { onTabChange } = tabState;
 
-  // 一般ユーザーは tags タブに入れない。URL 直指定で入っても表示は contents にし、URL も contents へ正規化する
-  const activeTabId: LibraryTab = tabState.activeTabId === 'tags' && !isAdmin ? 'contents' : tabState.activeTabId;
+  // 一般ユーザーは tags タブに入れない。URL 直指定で入っても表示は contents にし、URL も contents へ正規化する。
+  // ログイン状態を失った（セッション切れ）ときは対象にしない。この書き換えがログイン画面への遷移を打ち消し、
+  // 描画した contents の一覧取得の 401 でトーストが重なるため（移植元 `shouldForceContentsTab`）
+  const shouldForceContentsTab = isAuthenticated && !isAdmin && tabState.activeTabId === 'tags';
+  const activeTabId: LibraryTab = shouldForceContentsTab ? 'contents' : tabState.activeTabId;
   useEffect(() => {
-    if (!isAdmin && tabState.activeTabId === 'tags') onTabChange({ id: 'contents' });
-  }, [isAdmin, tabState.activeTabId, onTabChange]);
+    if (shouldForceContentsTab) onTabChange({ id: 'contents' });
+  }, [shouldForceContentsTab, onTabChange]);
 
   return (
     <div className="block">

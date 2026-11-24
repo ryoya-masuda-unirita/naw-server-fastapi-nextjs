@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { API_PATHS } from '@/lib/constants/api-paths';
@@ -204,6 +204,21 @@ describe('AdminLibraryPage（コンテンツ一覧）', () => {
       await screen.findAllByText('営業報告まとめ');
       expect(screen.queryByText('ADMIN.LIBRARY.TAB_TAGS')).not.toBeInTheDocument();
       await waitFor(() => expect(router.state.location.search).toBe('?tab=contents'));
+    });
+
+    test('管理者のセッションが切れたとき、tags タブを contents に書き換えず、ログイン画面へ遷移できること', async () => {
+      mockApis();
+      const { router } = await renderPage();
+      await userEvent.click(screen.getByText('ADMIN.LIBRARY.TAB_TAGS'));
+      await waitFor(() => expect(router.state.location.search).toBe('?tab=tags'));
+
+      // セッション切れ: ログイン状態を失う（管理者でもなくなる）
+      act(() => setAuthUser(null));
+
+      // 書き換えが入ると、ログイン画面への遷移を打ち消して /library?tab=contents に残る
+      await waitFor(() => expect(router.state.location.pathname).toBe('/auth/login'));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(router.state.location.pathname).toBe('/auth/login');
     });
   });
 
