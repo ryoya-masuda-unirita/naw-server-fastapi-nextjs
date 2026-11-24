@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { persistTenantId, setApiErrorHandler, type ApiErrorContext } from '@/lib/api-client';
 import { API_PATHS } from '@/lib/constants/api-paths';
@@ -206,6 +206,25 @@ describe('deleteLocalFiles', () => {
     await vi.waitFor(() =>
       expect(requests.map((r) => r.url).sort()).toEqual([`${FILES_URL}/f1`, `${FILES_URL}/f3`]),
     );
+  });
+});
+
+describe('deleteLocalFiles waits for every result', () => {
+  test('rejects only after the slower deletions have finished when an earlier one fails', async () => {
+    /** 先に 1 件が失敗しても、残りの削除が終わってから失敗を返す（一覧の読み直しが古い状態を拾わない） */
+    let slowFinished = false;
+    server.use(
+      http.delete(`${FILES_URL}/f1`, () => HttpResponse.json({}, { status: 500 })),
+      http.delete(`${FILES_URL}/f2`, async () => {
+        await delay(100);
+        slowFinished = true;
+        return HttpResponse.json({});
+      }),
+    );
+
+    await expect(deleteLocalFiles(FOLDER, ['f1', 'f2'])).rejects.toThrow();
+
+    expect(slowFinished).toBe(true);
   });
 });
 
