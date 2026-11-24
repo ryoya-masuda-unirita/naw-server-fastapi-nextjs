@@ -178,14 +178,16 @@ describe('Select', () => {
       const user = userEvent.setup();
       const { container } = render(<Select options={FIXTURE_OPTIONS} />);
       const trigger = getTrigger(container);
+      // 開閉の状態は、役割を持つ中のラベル（combobox）に付く
+      const combobox = screen.getByRole('combobox');
       await user.click(trigger);
       // requestAnimationFrame で開き切るのを待ってから選ぶ
-      await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+      await waitFor(() => expect(combobox).toHaveAttribute('aria-expanded', 'true'));
       await user.click(screen.getByRole('option', { name: 'りんご' }));
-      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(combobox).toHaveAttribute('aria-expanded', 'false');
       // 閉じる遅延（300ms）が終わる前に開き直す
       await user.click(trigger);
-      await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+      await waitFor(() => expect(combobox).toHaveAttribute('aria-expanded', 'true'));
       await new Promise((resolve) => setTimeout(resolve, 400));
       expect(screen.getByRole('listbox')).toBeInTheDocument();
     });
