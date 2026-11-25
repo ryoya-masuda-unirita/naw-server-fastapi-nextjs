@@ -8,8 +8,8 @@ SecuAiGent は、企業のテナントごとに、社員が使う AI アシス�
 
 | やりたいこと | 見る場所 |
 |---|---|
-| 画面を見る（デモ環境の起動） | 次の「画面を見る（デモ環境）」 |
-| ローカルで frontend + backend を起動して確かめる | 下の「ローカル疎通確認」 |
+| 画面を見る（`docker compose up` だけで、DB・デモデータ・画面まで起動） | 次の「画面を見る（ローカル環境）」 |
+| frontend・backend をホストで直接動かして開発する（ホットリロード） | 下の「ローカル疎通確認」 |
 | 社内（オンプレ）側を起動して SECURE アシスタントを通しで動かす | [onprem/README.md](./onprem/README.md) |
 | 移植元の結合テスト項目書どおりに動くか自動で確かめる | [e2e-spec/README.md](./e2e-spec/README.md) |
 | 画面を自動で巡回してバグの疑いを探す（レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md`） | [e2e-explorer/README.md](./e2e-explorer/README.md) |
@@ -18,7 +18,7 @@ SecuAiGent は、企業のテナントごとに、社員が使う AI アシス�
 | Waha! の代わりのエミュレーター | [waha-emulator/README.md](./waha-emulator/README.md) |
 | オンプレ用サーバー | [secuaigent-server-local/README.md](./secuaigent-server-local/README.md) |
 
-## 画面を見る（デモ環境）
+## 画面を見る（ローカル環境）
 
 | 項目 | 値 |
 |---|---|
@@ -27,8 +27,8 @@ SecuAiGent は、企業のテナントごとに、社員が使う AI アシス�
 | ユーザー ID・パスワード | `admin` / `admin@1234`（管理者）。一般ユーザーは `tanaka` / `admin@1234` ほか（下記） |
 
 ```bash
-docker compose -f docker-compose.demo.yml up -d --build   # 起動（初回は数分。マイグレーションとデモデータの投入も自動）
-docker compose -f docker-compose.demo.yml down            # 停止（データは残る）。データも消すなら down -v
+docker compose up -d --build   # 起動（初回は数分。マイグレーションとデモデータの投入も自動）
+docker compose down            # 停止（データは残る）。データも消すなら down -v
 ```
 
 起動すると、管理者でログインして次の画面を見られる（デモデータは [server/seed-demo.sql](server/seed-demo.sql)、ログイン用のテナント・ユーザーは [server/seed.sql](server/seed.sql)）。
@@ -59,15 +59,15 @@ docker compose up -d --build   # 公開ポートは既定の 8090（詳細は se
 チャットの送信先（Azure OpenAI など）はダミーなので、画面からの新しい質問には答えが返らない。SECURE アシスタントのチャットは、`onprem/` をつなぐと試せる。
 
 ```bash
-docker compose -f docker-compose.demo.yml exec -T postgres psql -U root -d postgres < onprem/cloud-seed.sql   # SECURE アシスタントと接続先を登録
+docker compose exec -T postgres psql -U root -d postgres < onprem/cloud-seed.sql   # SECURE アシスタントと接続先を登録
 cd onprem && docker compose up -d --build                                                                      # 社内側を起動（詳細は onprem/README.md）
 ```
 
 困ったとき:
 
-- ポートが使われている: `DEMO_FRONTEND_PORT=15173 DEMO_BACKEND_PORT=18001 docker compose -f docker-compose.demo.yml up -d --build` のようにポートを変える（既定は画面 5173・backend 8001。ルートの `docker-compose.yml` の backend も 8001 を使う）
-- 起動の状態: `docker compose -f docker-compose.demo.yml ps -a`（`migrate`・`seed` は終了済みで正常。`backend`・`frontend` が healthy になれば完了）
-- 失敗したとき: `docker compose -f docker-compose.demo.yml logs <サービス名>`
+- ポートが使われている: `.env` で `FRONTEND_PORT`・`BACKEND_PORT` を変える（`cp .env.example .env`。既定は画面 5173・backend 8001。`.env` がなくても既定値で動く）
+- 起動の状態: `docker compose ps -a`（`migrate`・`seed` は終了済みで正常。`backend`・`frontend` が healthy になれば完了）
+- 失敗したとき: `docker compose logs <サービス名>`
 - デモデータを入れ直す: `down -v` のあと、もう一度 `up -d --build`
 
 ## アシスタントの種類ごとの通信経路
@@ -145,8 +145,8 @@ backend の動作確認は、自動テスト（`cd server && uv run pytest`）�
 ### 初回セットアップ
 
 ```bash
-# 1. DB 起動
-docker compose up -d
+# 1. DB 起動（画面・backend は、ホストで直接動かすため起動しない）
+docker compose up -d postgres redis localstack
 
 # 2. バックエンドの依存関係・DB マイグレーション
 cd server
@@ -211,7 +211,7 @@ curl -s -i -X POST http://localhost:8001/auth/login \
 | -------- | -------------------------------------------------------------------------- |
 | 接続拒否     | バックエンドが **8001** で起動しているか、`VITE_API_URL=http://localhost:8001` を付けて起動したか   |
 | CORS エラー | `server/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
-| DB エラー   | `docker compose up -d` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |
+| DB エラー   | `docker compose up -d postgres redis localstack` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |
 
 ## Codex 運用
 

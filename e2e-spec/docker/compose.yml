@@ -1,12 +1,14 @@
-# 手元のブラウザで管理画面を見るためのデモ環境（既存の docker-compose.yml とは別。コンテナ名・ボリュームは naw-demo で分ける）。
-# ホストに公開するのは画面（既定 5173）と backend（既定 8001）だけ。変えるときは DEMO_FRONTEND_PORT・DEMO_BACKEND_PORT。
-name: naw-demo
+# e2e-spec（移植元の結合テスト項目書どおりに動くかを確かめる E2E）の専用環境。
+# `npm run env:up`（src/environment.ts）が、プロジェクト名 naw-e2e-spec・別ポートで、リポジトリのルートを基準に起動する。
+# 手元の開発環境（ルートの docker-compose.yml、naw-fastapi-*）・e2e-explorer には触れない（プロジェクト名・ポート・イメージ名・ボリュームが別）。
+# ルートの compose と違い、backend は本番用のイメージ（server/Dockerfile）で、画面はビルド済みの静的ファイル（nginx）で配信する（#417）。
+name: naw-e2e-spec
 
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://root:root@postgres:5432/postgres
-  SECRET_KEY: demo-secret-not-for-production
+  SECRET_KEY: e2e-spec-secret-not-for-production
   REDIS_URL: redis://redis:6379/0
-  CORS_ALLOWED_ORIGINS: http://localhost:${DEMO_FRONTEND_PORT:-5173}
+  CORS_ALLOWED_ORIGINS: http://localhost:${E2E_SPEC_FRONTEND_PORT:-55273}
   COOKIE_SECURE: "false"
   COOKIE_SAME_SITE: lax
   AWS_ENDPOINT_URL: http://localstack:4566
@@ -62,7 +64,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    image: naw-demo-backend
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
     environment: *backend-env
     command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
     depends_on:
@@ -84,10 +86,10 @@ services:
 
   # FastAPI の backend
   backend:
-    image: naw-demo-backend
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
     environment: *backend-env
     ports:
-      - "127.0.0.1:${DEMO_BACKEND_PORT:-8001}:8000"
+      - "127.0.0.1:${E2E_SPEC_BACKEND_PORT:-58100}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 2s
@@ -101,18 +103,37 @@ services:
       localstack:
         condition: service_healthy
 
-  # React の画面（Vite の開発サーバー）
+  # チャットの回答用の LLM のモック（Azure OpenAI 互換。最後のユーザー発話をエコーする）。
+  # テナントの接続先（tenant_endpoints）を spec-seed.sql でここに向ける。新しいイメージは作らず、backend のイメージ（Python）で動かす
+  llm-mock:
+    image: ${E2E_SPEC_BACKEND_IMAGE:-naw-e2e-spec-backend}
+    command: ["python", "/mock/llm_mock.py"]
+    volumes:
+      - ./e2e-spec/docker/llm_mock.py:/mock/llm_mock.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # 画面は Vite の開発サーバーではなく、ビルド済みの静的ファイルを nginx で配信する（#417）。
+  # ポートは nginx.conf で 5173 を待ち受け、ホストへは E2E_SPEC_FRONTEND_PORT で公開する。
   frontend:
     build:
       context: ./client
-      dockerfile: Dockerfile.dev
-    environment:
-      # ブラウザ（ホスト）から見た backend の URL
-      VITE_API_URL: http://localhost:${DEMO_BACKEND_PORT:-8001}
+      dockerfile: ../e2e-spec/docker/frontend.Dockerfile
+      args:
+        # ブラウザ（ホスト）から見た backend の URL。ビルド時にバンドルへ埋め込まれる
+        VITE_API_URL: http://localhost:${E2E_SPEC_BACKEND_PORT:-58100}
     ports:
-      - "127.0.0.1:${DEMO_FRONTEND_PORT:-5173}:5173"
+      - "127.0.0.1:${E2E_SPEC_FRONTEND_PORT:-55273}:5173"
+    volumes:
+      - ./e2e-spec/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]
       interval: 2s
       timeout: 5s
       retries: 60
