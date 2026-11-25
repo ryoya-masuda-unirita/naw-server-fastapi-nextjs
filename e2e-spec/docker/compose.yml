@@ -52,7 +52,7 @@ services:
       SERVICES: s3,sqs
       DEFAULT_REGION: ap-northeast-1
     volumes:
-      - ./docker-compose/localstack-init:/etc/localstack/init/ready.d
+      - ../../server/localstack-init.sh:/etc/localstack/init/ready.d/init-aws.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 3s

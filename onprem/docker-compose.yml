@@ -41,9 +41,9 @@ services:
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
       # 埋め込みの学習で、filepath で渡されたパスを読んでよいディレクトリ（下の file-server のマウント先）
-      SOURCE_ALLOWED_DIR: /mnt/file-server
+      SOURCE_ALLOWED_DIR: ${SOURCE_ALLOWED_DIR:-/mnt/file-server}
       # 画面（waha-emulator-ui）で組んだワークフローの保存先。設定すると管理用 API（/admin）が有効になる
-      WAHA_STUDIO_DIR: /app/data/workflows
+      WAHA_STUDIO_DIR: ${WAHA_STUDIO_DIR:-/app/data/workflows}
       # サービス ID ごとの設定（/app/config の例、Bedrock の定義など）。Bedrock の拡張とは別に使う
       WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}
       # bedrock-ext: Bedrock で動かすときだけ使う（手順は README の「Bedrock で動かす」）
