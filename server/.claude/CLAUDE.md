@@ -312,11 +312,14 @@ git config --unset core.hooksPath
 
 ## ローカル開発環境のDB
 
-プロジェクトルート（`secuaigent-fastapi-react/`）の `docker-compose.yml` で PostgreSQL を起動する。
+プロジェクトルート（`secuaigent-fastapi-react/`）の `docker-compose.yml` で PostgreSQL などを起動する。
 
 ```bash
-docker compose up -d
+docker compose up -d postgres redis localstack   # DB だけ（backend・画面は、ホストで直接動かすとき）
+docker compose up -d --build                      # マイグレーション・デモデータ・backend（8001）・画面（5173）まで
 ```
+
+`docker compose up -d`（サービスの指定なし）は、backend（8001）と画面（5173）も起動するため、ホストで backend を 8001 で動かすときは、上の DB だけの起動にする。
 
 ```
 コンテナ名: naw-fastapi-postgres

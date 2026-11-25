@@ -439,6 +439,17 @@ describe('テナント管理', () => {
       expect(screen.getByTestId('tenant-api-name-input')).toBeInTheDocument();
     });
 
+    test('行のメニューは名前付きのボタンで開き、項目は menuitem であること', async () => {
+      const user = await renderApi();
+      const row = screen.getAllByTestId('tenant-api-row')[0];
+
+      await user.click(within(row).getByRole('button', { name: 'COMMON.OPEN_MENU' }));
+
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
+      expect(within(menu).queryAllByRole('button')).toHaveLength(0);
+    });
+
     test('編集ダイアログは既存の値で開き、APIキーを作り直すと更新できること', async () => {
       const bodies: Record<string, string>[] = [];
       server.use(

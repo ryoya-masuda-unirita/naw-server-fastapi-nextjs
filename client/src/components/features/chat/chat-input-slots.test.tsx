@@ -98,6 +98,15 @@ describe('アシスタント選択', () => {
     expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ assistantId: 'a3' }));
   });
 
+  test('アシスタントの一覧（listbox）に名前が付くこと', async () => {
+    const { user } = renderInput();
+    await waitForSelectedAssistant();
+
+    await user.click(screen.getByTestId('assistant-select-button'));
+
+    expect(screen.getByRole('listbox', { name: 'CHAT.INPUT.SELECT_ASSISTANT' })).toBeVisible();
+  });
+
   test('外側をクリックすると一覧が閉じること', async () => {
     const { user } = renderInput();
     await waitForSelectedAssistant();

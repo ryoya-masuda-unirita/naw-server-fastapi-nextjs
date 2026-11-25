@@ -129,7 +129,7 @@ GitHub ActionsがAWSを操作するロールは、**用途で2つに分けてい
 
 1. **Environment `infra`を、先に作って保護する**。承認者を付け、対象ブランチを`develop`だけにする（下の例）。初回のインフラのデプロイで自動作成もされるが、その場合は保護が付かない
 2. **ローカルで、管理者権限で**、`terraform.tfvars`に`enable_github_actions_infra_role = true`を足して`terraform apply`する（ロールをCIで作ることはできない。ロールを使うのが、ロールを作るワークフローだから）。`AWS_PROFILE=oic`
-3. 出力`github_actions_infra_role_arn`を、GitHubのSecret `AWS_INFRA_ROLE_ARN`に登録する
+3. 出力`github_actions_infra_role_arn`を、GitHubのSecret `AWS_INFRA_ROLE_ARN`に登録する。あわせて、GitHubのVariable `ENABLE_GITHUB_ACTIONS_INFRA_ROLE`を`true`にする（CIの`terraform plan`・`apply`に、ローカルと同じ`enable_github_actions_infra_role = true`を渡すため。未登録だと既定のfalseになり、CIのplanが、使用中のインフラ用ロール自身を削除してしまう）
 4. `Deploy`を手動実行し、`run_infra=true`にする（Environmentの承認が求められる）
 
 以下は、GitHubのドキュメントに基づく例で、**実行して確認していない**。`<...>`を置き換えること。
@@ -225,6 +225,7 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
 - DBのパスワードは、`DB_PASSWORD`を環境変数で渡さなければ、Secrets Manager（`terraform output backend_secret_name`のシークレット）から自動で取得する（AWS CLIとjqが必要。権限がある`AWS_PROFILE`で実行すること）
 
 - `terraform output`から`rds_endpoint`・`bastion_public_ip`を自動取得し、SSHトンネルの確立→マイグレーション適用→`seed.sql`投入→トンネルの後始末まで1コマンドで行う
+- SSHトンネルのローカルのポートは既定で`15433`（開発用DBの`5433`と重ならない）。変えるときは環境変数`LOCAL_PORT`を指定する
 - CI/CDで既にマイグレーション済みの場合は、`--skip-migrate`を付けてseed投入のみ行うこともできる
 
 ```bash
@@ -258,6 +259,8 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
 ## シークレット（Secrets Manager）
 
 DBの接続文字列とアプリの秘密鍵は、ECSのタスク定義に平文で持たせず、Secrets Managerのシークレット`<プロジェクト名>/backend`に保存する（#386）。ECSは、タスクの起動時に、実行ロールがここから値を取り出して、環境変数（`DATABASE_URL`・`SECRET_KEY`）として注入する。アプリのコード（`server/`）は、これまでどおり環境変数で受け取る。
+
+**Azure の利用料金の取得 API**（`AZURE_APP_*` の 5 つの環境変数が必須。`server/app/core/config.py` の `AzureCostSettings`）は、ECSのタスク定義にこれらを渡していないため、dev・staging では使えない（呼ぶと必須値のエラーになる）。使うときは、Secrets Managerのシークレットに足して、タスク定義の`secrets`に加える。
 
 | キー | 内容 | 使う人 |
 |---|---|---|

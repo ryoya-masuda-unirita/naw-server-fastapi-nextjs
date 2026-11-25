@@ -28,8 +28,8 @@ resource "aws_s3_bucket_public_access_block" "user_import" {
   restrict_public_buckets = true
 }
 
-# DLQ(デッドレターキュー)。maxReceiveCountを超えて処理失敗したメッセージが転送される先。
-# 先にDLQを定義するのは、メインキューのredrive_policyがDLQのarnを参照するため(依存関係の順)。
+// DLQ(デッドレターキュー)。maxReceiveCountを超えて処理失敗したメッセージが転送される先。
+// 先にDLQを定義するのは、メインキューのredrive_policyがDLQのarnを参照するため(依存関係の順)。
 resource "aws_sqs_queue" "user_import_dlq" {
   name = "${var.project_name}-user-import-jobs-queue-dlq"
 
@@ -38,7 +38,7 @@ resource "aws_sqs_queue" "user_import_dlq" {
   }
 }
 
-# メインキュー。backendのUserImportListenerがロングポーリングで受信する。
+// メインキュー。backendのUserImportListenerがロングポーリングで受信する。
 resource "aws_sqs_queue" "user_import" {
   name = "${var.project_name}-user-import-jobs-queue"
 

@@ -3,3 +3,9 @@ allowed_ssh_cidrs   = ["xxx.xxx.xxx.xx/32"]
 allowed_admin_cidrs = ["xxx.xxx.xxx.xx/32"]
 key_pair_name       = "your-key-pair-name"
 tfstate_bucket_name = "naw-fastapi-tfstate-123456789012"
+
+// 以下は任意(省略時の既定値で動く)
+// インフラ用ロール(terraform apply用。広い権限)を作るか。ローカルでtrueにしてapplyしたあと、CIにも同じ値(GitHubのVariable ENABLE_GITHUB_ACTIONS_INFRA_ROLE)を設定すること。詳細はREADME
+// enable_github_actions_infra_role = false
+// OIDCの信頼条件に使うリポジトリ(CIは実行中のリポジトリ名を渡す。ローカルのapplyは、リポジトリ名を変えたときだけ指定する)
+// github_repository = "ryoya-masuda-unirita/secuaigent-fastapi-react"

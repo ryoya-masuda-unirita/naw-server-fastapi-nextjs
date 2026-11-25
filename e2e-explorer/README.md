@@ -291,6 +291,7 @@ npm test
 | `src/page-scripts.ts` | ページの中で動かす関数（要素の列挙・表示崩れ・真っ白・変化の見張り） |
 | `src/auth.ts` | ログイン画面を通したログインと sessionStorage の復元 |
 | `src/inputs.ts` / `src/rng.ts` | 境界値・異常値 / 種付きの乱数 |
+| `src/errors.ts` / `src/types.ts` | エラーの型 / 設定・結果の型 |
 | `src/shared-registry.ts` | 調査済みの一覧（ファイルロック） |
 | `src/scheduler.ts` | 並列実行とまとめ |
 | `src/report.ts` | 指紋・まとめ・JSON / Markdown / HTML の出力 |

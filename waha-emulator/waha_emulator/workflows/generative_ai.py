@@ -83,6 +83,9 @@ QUESTION_MISSING_MESSAGE = (
 )
 OUTPUT_MISSING_MESSAGE = "生成AIアダプタが出力ファイルを書きませんでした"
 RETRIEVAL_OUTPUT_MISSING_MESSAGE = "検索アダプタが出力ファイルを書きませんでした"
+RETRIEVAL_OUTPUT_UNREADABLE_MESSAGE = (
+    "検索アダプタの出力（RAG Context JSON）を読めません"
+)
 ADAPTER_FAILED_PREFIX = "生成AIアダプタの実行に失敗しました"
 RETRIEVAL_FAILED_PREFIX = "検索アダプタの実行に失敗しました"
 RETRIEVAL_COLUMN_NAME = "検索文字列"
@@ -473,6 +476,43 @@ class GenerativeAiWorkflow:
                 raise WorkflowError(OUTPUT_MISSING_MESSAGE)
             return output.read_text(encoding="utf-8")
 
+    def retrieve_into(
+        self, request: WorkflowRequest, query: str, job_dir: Path
+    ) -> Path:
+        """検索アダプターだけを動かし、RAG Context JSON を、ジョブのディレクトリに書かせる。
+
+        生成AI は動かさない。ノードを自由につなぐワークフローの、検索ノードが使う
+        （検索の結果を、あとの生成AI ノードの引用資料や、プロンプトの変数にするため）。
+
+        Parameters
+        ----------
+        request : WorkflowRequest
+            入力（textData があれば、検索アダプターにも渡す）。
+        query : str
+            検索文字列。
+        job_dir : Path
+            書き込み先のディレクトリ（呼び出し側が、使い終わるまで残す）。
+
+        Returns
+        -------
+        Path
+            書かれた RAG Context JSON のパス。
+
+        Raises
+        ------
+        WorkflowError
+            検索アダプターが失敗した・出力がないとき。textData の streamfilepath が許可の外のとき。
+        """
+        text_data = request.inputs.get(SLOT_TEXTDATA)
+        text_data_path: Path | None = None
+        if text_data is not None:
+            _check_text_data_stream_path(text_data, request.stream_allowed_dir)
+            text_data_path = job_dir / TEXT_DATA_FILENAME
+            text_data_path.write_bytes(text_data.data)
+        job = _build_retrieval_job(self.definition, query, job_dir, text_data_path)
+        self._run_retrieval_step(request, job, job_dir)
+        return job_dir / job.view_name
+
     def _run_retrieval_step(
         self, request: WorkflowRequest, retrieval: RetrievalJob, job_dir: Path
     ) -> None:
@@ -510,10 +550,13 @@ class GenerativeAiWorkflow:
         output = job_dir / retrieval.view_name
         if not output.exists():
             raise WorkflowError(RETRIEVAL_OUTPUT_MISSING_MESSAGE)
-        logger.info(
-            "workflow step 1/2 retrieval finished: contexts=%d",
-            len(json.loads(output.read_text(encoding="utf-8"))["contexts"]),
-        )
+        try:
+            contexts_count = len(
+                json.loads(output.read_text(encoding="utf-8"))["contexts"]
+            )
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise WorkflowError(RETRIEVAL_OUTPUT_UNREADABLE_MESSAGE) from e
+        logger.info("workflow step 1/2 retrieval finished: contexts=%d", contexts_count)
         logger.info("workflow step 2/2 generative-ai: serviceId=%s", request.service_id)
 
     def _run_retrieval(self, job: RetrievalJob) -> None:

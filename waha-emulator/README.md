@@ -84,6 +84,110 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - `VENDOR` に `Bedrock`（Python 版だけ。AWS Bedrock の Claude）も書ける。例は [onprem/config/workflows.bedrock.example.json](../onprem/config/workflows.bedrock.example.json)、手順は [onprem/README.md](../onprem/README.md) の「Bedrock で動かす」（`bedrock-ext`）
 - 例は [config/workflows.example.json](./config/workflows.example.json)（`onprem/` の compose では `config/` が `/app/config` に読み取り専用でマウントされる）
 
+### ノードと線で組んだワークフロー（管理用 API）
+
+`WAHA_STUDIO_DIR` を設定すると、ノードと線で組んだワークフローを、管理用 API（`/admin/workflows`）で作成・更新・削除できる（Issue #520。画面は今後）。保存したワークフローは、再起動なしで、そのサービス ID の execute で動く。サービス ID が設定ファイル（`WAHA_WORKFLOWS_FILE`）の定義と同じなら、**保存したワークフローが優先**され、削除すると設定ファイルの定義に戻る。未設定なら管理用 API は載らず、設定ファイルだけで動く。
+
+| API | 内容 |
+|---|---|
+| `GET /admin/workflows` | 一覧（`id`・`name`・`serviceIds`） |
+| `POST /admin/workflows` | 作成（201）。不正は 400、id・サービス ID の重複は 409 |
+| `POST /admin/workflows/validate` | 保存せずに検証する |
+| `GET /admin/workflows/{id}` | 取得（API キーなどは `********` に伏せる） |
+| `PUT /admin/workflows/{id}` | 更新。`********` のままの値は、保存済みの値を引き継ぐ |
+| `DELETE /admin/workflows/{id}` | 削除（204） |
+| `GET /admin/property-catalog` | ノードに書けるプロパティ名の候補（生成AI・検索。秘密の名前に印）。画面の選択肢に使う |
+
+認証はない（検証用の道具）。保存先は 1 ワークフロー = 1 つの JSON ファイル（`<id>.json`）。
+
+```json
+{
+  "version": 1,
+  "id": "assistant-1",
+  "name": "社内QA",
+  "serviceIds": ["assistant-1"],
+  "nodes": [
+    {"id": "start", "type": "start", "position": {"x": 0, "y": 0}},
+    {"id": "gen", "type": "generative-ai", "name": "生成AI", "position": {"x": 300, "y": 0},
+     "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}},
+    {"id": "end", "type": "end", "position": {"x": 600, "y": 0}}
+  ],
+  "edges": [{"source": "start", "target": "gen"}, {"source": "gen", "target": "end"}]
+}
+```
+
+- ノードの種類: `start`・`retrieval`（検索アダプタ）・`generative-ai`（生成AIアダプタ）・`end`。`properties` の書き方は、設定ファイルの `properties`・`retrieval.properties` と同じ（`${環境変数}` も使える）
+- つなぎ方は、`start →（retrieval →）generative-ai → end` の 1 本の鎖だけ。検索ノードがあると RAG（出力モード 1）、なければ通常チャット（0。生成AI ノードの `outputType` に 2 を書くと、回答の本文だけ）
+- 学習・削除・同期は、まだ設定ファイルの定義で動く
+- 失敗理由には、失敗したノードの名前が付く（例: `FAILURE: ノード「検索」: 検索アダプタの実行に失敗しました: …`）
+- 作り変え前の状態には、タグ `waha-emulator-before-studio` で戻せる
+
+#### 版 2（自由なつなぎ方。Issue #530）
+
+`version` を `2` にすると、ノードを自由につなぎ、前のノードの出力を、あとのプロンプトで使えるワークフローを組める（上の版 1 は、これまでどおり動く。同じ保存先に共存する）。画面（`ui/`）は版 2 に対応していて、上の「＋ 生成AI」「＋ 検索」「＋ 条件分岐」などでノードを足し、線を引いて組める。版 1 のワークフローは、画面で開くと版 2 に変換される（保存するまで、保存先は変わらない）。
+
+| ノード | `config` | 役割 |
+|---|---|---|
+| `start` | なし | 質問（`{{question}}`）・会話履歴（`{{history}}`）を持つ |
+| `llm` | `prompt`（必須）・`properties`（接続）・`outputType`（0 か 2。既定 0）・`inheritContext`（既定 false） | プロンプトを埋めて、生成AI を 1 回呼ぶ。出力は `{{ノードID.text}}` |
+| `template` | `text`（必須） | 変数を埋めた文字列を作る。出力は `{{ノードID.text}}` |
+| `retrieval` | `properties`（検索アダプターの接続。`VDB_*` など）・`query`（検索語のテンプレート。既定 `{{question}}`） | 検索し、引用資料の本文を `{{ノードID.contexts_text}}`（空行で区切ってつないだ文字列）にする |
+| `branch` | `variable`（調べる変数。`judge.text` など）・`operator`（`contains`・`equals`・`empty`）・`value`（`empty` では書かない。そのままの文字列で、`{{...}}` は展開しない） | 条件に合えば「はい」（`true`）、合わなければ「いいえ」（`false`）の線をたどる。大文字小文字は区別しない。`contains`・`equals` は、`value` の前後の空白を無視 |
+| `end` | `output`（必須） | 回答にする文字列（`{{...}}` を埋め込める）。**複数置ける**（たどり着いた終了が、回答になる） |
+
+- 変数は `{{question}}`・`{{history}}`・`{{ノードID.text}}`（生成AI・テンプレート）・`{{ノードID.contexts_text}}`（検索）。**そのノードより前に動くノードの出力だけ**使える（保存の時点で、使えない参照は、どのノードのどの項目かを示して 400 になる）
+- `outputType` が 2 のノードは、回答の本文をそのまま、0 のノードは、回答の JSON の `answer` を、`{{ノードID.text}}` にする。途中のノードは 2 がおすすめ
+- `inheritContext` が true のノードにだけ、会話履歴と添付ファイルを渡す（textData は、いつも渡す）
+- `end` の出力が、`{{生成AIノード.text}}` 1 つだけなら、そのノードの出力を、そのまま返す（出力モード 0 なら、引用元つきの回答の JSON、2 なら本文だけ）。**server-local が読むのは回答の JSON なので、最後の生成AI は、出力モード 0 にする**。文字が混ざるときは、埋めた文字列を、`answer` にした JSON にする
+- 生成AI ノードに `retrieval`（検索ノードの ID）を書くと、その検索の結果を引用資料に、RAG（出力モード 1。`outputType` は書けない）で回答する。回答の `references` に、引用元が入る
+- 線は、条件分岐から出る 2 本に `sourceHandle`（`true`・`false`）を付ける。条件分岐は 2 本とも必要で、ほかのノードの線には付けない。**合流（複数の線が入る）・並列・ループは、まだ作れない**。ノードは 50 個まで
+
+```json
+{
+  "version": 2, "id": "polish", "name": "推敲", "serviceIds": ["polish"],
+  "nodes": [
+    {"id": "start", "type": "start", "position": {"x": 0, "y": 0}},
+    {"id": "draft", "type": "llm", "name": "下書き", "position": {"x": 280, "y": 0},
+     "config": {"prompt": "{{question}} に回答してください", "outputType": 2,
+                "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}}},
+    {"id": "polish", "type": "llm", "name": "推敲", "position": {"x": 560, "y": 0},
+     "config": {"prompt": "次の下書きの誤りを直してください:\n{{draft.text}}",
+                "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}}},
+    {"id": "end", "type": "end", "position": {"x": 840, "y": 0}, "config": {"output": "{{polish.text}}"}}
+  ],
+  "edges": [{"source": "start", "target": "draft"}, {"source": "draft", "target": "polish"}, {"source": "polish", "target": "end"}]
+}
+```
+
+**根拠チェック付きの RAG**（検索 → 回答 → 判定 → 条件分岐）は、`start → ret（検索）→ answer（生成AI。`retrieval: ret`）→ judge（生成AI。`outputType: 2`。プロンプトに `{{ret.contexts_text}}` と `{{answer.text}}`）→ check（条件分岐。`judge.text` が `OK` を含むか）→ はい: `end-ok`（`{{answer.text}}`）／いいえ: `end-ng`（固定の文）` と組む（定義の全体は `tests/studio_support.py` の `rag_check_flow_data`）。
+
+`curl -X POST http://127.0.0.1:8091/admin/workflows -H 'content-type: application/json' --data @polish.json` で保存し、サービス ID `polish` で呼ぶ。`Echo` は、質問（プロンプト）をそのまま返すため、2 回目の回答に、1 回目の回答が入って見える。
+
+### ワークフローエディター（画面）
+
+`ui/`（React + React Flow）は、管理用 API を使って、ノードと線でワークフローを組む画面（Issue #522）。左に一覧、中央にキャンバス、右にプロパティを置く。デプロイは対象外で、開発サーバーで動かす。
+
+`onprem/` の docker compose には、画面（`waha-emulator-ui`、http://127.0.0.1:18092）が入っている。`docker compose up` だけで、エミュレーター（`WAHA_STUDIO_DIR` 設定済み。保存したワークフローは名前つきボリュームに残る）と一緒に立ち上がる。手順は [onprem/README.md](../onprem/README.md)。以下は、compose を使わずに、ホストで動かすとき。
+
+```bash
+# エミュレーター（WAHA_STUDIO_DIR を設定する。管理用 API が有効になる）
+cd waha-emulator
+WAHA_AUTHKEY=local-key WAHA_STUDIO_DIR=./data/workflows uv run uvicorn waha_emulator.main:app_factory --factory --port 8091
+
+# 画面（別のターミナル）
+cd waha-emulator/ui
+npm install
+npm run dev        # http://127.0.0.1:5174
+```
+
+- `/admin` は、開発サーバーがエミュレーター（既定は `http://127.0.0.1:8091`。環境変数 `WAHA_URL` で変える）へ中継する。エミュレーターに CORS の設定は要らない
+- 操作: 一覧から開く・`＋ 新規` で作成 → 検索ノードの追加（`＋ 検索ノード`。1 つまで）→ ノードの出力から入力へ線を引く（Delete で消す）→ 右のパネルで名前・プロパティを編集 → `検証`・`保存`（Ctrl/Cmd + S）
+- 線は、開始 →（検索 →）生成AI → 終了の 1 本の鎖だけ引ける。反する線は、引いた時点で理由を出して拒否する（最終判断は保存時のサーバーの検証）
+- プロパティ名は、アダプターの候補（`GET /admin/property-catalog`）から選ぶ。API キー・パスワードは入力中の文字を隠し、保存済みの値は `********` で伏せて「保存済みの値を使います」と表示する（「入れ直す」で変えられる）
+- 未保存の変更があると、移動・閉じる前に確認を出す
+- `npm run lint`・`npm run type-check`・`npm test`・`npm run build`
+- 試し実行（質問を送って回答を見る）・学習・削除・同期のノードは、まだない
+
 ### 検索 → 生成AI（RAG チャット）
 
 `retrieval` があるサービスでは、質問を検索文字列として検索アダプタ（出力モード 1）を動かし、ジョブのディレクトリに RAG Context JSON を書かせてから、生成AIアダプタ（出力モード 1）の列 index 6 にそのパスを渡す。ログ（INFO）は次の順に並ぶ:
@@ -163,6 +267,7 @@ data:{"type":"completed"}
 | `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する。未設定だと、セッションを開ければ（authkey を知っていれば）任意の既存ファイルに追記できるため、ホストで動かすときも設定する |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | `3600` | この時間使われていないセッション（実行中のジョブがないもの）を、次の `startsession` で破棄する。server-local は失敗時に `endsession` を呼ばない経路がある（学習データの同期など）ため |
 | `WAHA_WORKFLOWS_FILE` | 未設定 | サービス ID → ワークフローの JSON（上の「ワークフローの設定」）。空文字列は未設定。Docker では `/app/config/workflows.example.json` など |
+| `WAHA_STUDIO_DIR` | 未設定 | ノードと線で組んだワークフローの保存先。設定すると管理用 API（`/admin/workflows`）が有効になる。空文字列は未設定 |
 | `LLM_PROVIDER` | `echo` | `WAHA_WORKFLOWS_FILE` がないときの既定。`echo` / `azure_openai` |
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の URL のモデル名になる |
 | `TIKA_SERVER_JAR` | Docker では `/opt/tika-server.jar`。ホストでは未設定 | Apache Tika のサーバーの jar。設定があると、旧形式の Office（`.doc`・`.xls`・`.ppt`）・RTF・HTML・EPUB・HWP など（専用のプロセッサが読まない形式）の取り出しに、必要になったとき（遅延起動）に起動して使う。未設定ならテキスト系の形式だけを自前で読む。詳細は [generative-ai-adapter の README](../generative-ai-adapter/README.md#apache-tika-の呼び方移植元との違い) |

@@ -12,7 +12,7 @@
 // このディレクトリのterraform.tfstate(ローカル)は消さないこと。消えた場合はterraform importで復元する。
 
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
@@ -96,7 +96,7 @@ output "state_bucket_name" {
   value = aws_s3_bucket.tfstate.id
 }
 
-// secuaigent-infra/backend.hcl にそのまま保存できる形。CIにはこのバケット名をGitHubのVariable TF_STATE_BUCKETに登録する
+// secuaigent-infra/environments/dev/backend.hcl にそのまま保存できる形。CIにはこのバケット名をGitHubのVariable TF_STATE_BUCKETに登録する
 output "backend_config" {
   value = "bucket = \"${aws_s3_bucket.tfstate.id}\"\n"
 }

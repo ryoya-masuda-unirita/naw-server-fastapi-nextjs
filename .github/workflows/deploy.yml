@@ -13,9 +13,17 @@ on:
         type: boolean
         default: false
 
+# 全体の権限は読み取りだけにする。AWSのロールを引き受けるジョブ(infra・backend・frontend)にだけ、
+# 下のジョブ側で id-token: write を渡す
 permissions:
-  id-token: write
   contents: read
+
+# develop への連続したpushで、デプロイが並走しないようにする(ECSのupdate-service・タスク定義の登録・
+# migrateの実行が競合するため)。実行中のデプロイは止めずに終わらせ、待っている間に積まれたものは
+# 最新だけが残る(最新のコミットが、それまでの変更も含むため)
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
   # このpushでどのディレクトリが変更されたかを判定し、後続ジョブのif条件に使う出力を出す
@@ -49,6 +57,9 @@ jobs:
   # 手動実行はpush以外でパスの変更判定の比較元が定まらないため、判定には頼らない。
   infra:
     if: github.event_name == 'workflow_dispatch' && inputs.run_infra
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/deploy-infra.yml
     secrets: inherit
 
@@ -61,6 +72,9 @@ jobs:
       always() &&
       needs.changes.outputs.backend == 'true' &&
       (needs.infra.result == 'success' || needs.infra.result == 'skipped')
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/deploy-backend.yml
     secrets: inherit
 
@@ -72,5 +86,8 @@ jobs:
       always() &&
       needs.changes.outputs.frontend == 'true' &&
       (needs.infra.result == 'success' || needs.infra.result == 'skipped')
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/deploy-frontend.yml
     secrets: inherit

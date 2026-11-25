@@ -1,9 +1,11 @@
 import pytest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import Response
+from fastapi import HTTPException, Response
 
+from app.core.config import get_settings
 from app.core.security import (
     clear_session_cookie,
     create_access_token,
@@ -12,7 +14,6 @@ from app.core.security import (
     set_session_cookie,
     verify_password,
     verify_password_async,
-    SECRET_KEY,
     ALGORITHM,
 )
 from app.core.session_store import SESSION_COOKIE_NAME
@@ -41,7 +42,7 @@ class TestSecurityUtilities:
             "exp": int((now - timedelta(hours=1)).timestamp()),
             "iat": int(now.timestamp()),
         }
-        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+        token = jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM)
 
         with pytest.raises(Exception):
             decode_token(token)
@@ -72,6 +73,47 @@ class TestSecurityUtilities:
         assert payload["tenantId"] == "tenant-123"
         assert "exp" in payload
         assert "iat" in payload
+
+    def test_token_is_signed_with_the_configured_secret_key(self) -> None:
+        """JWT が、設定の SECRET_KEY で署名されること（設定の鍵で検証できる）"""
+        token = create_access_token("admin", "tenant-123")
+
+        payload = jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM])
+
+        assert payload["sub"] == "admin"
+
+    def test_token_signed_with_old_hardcoded_key_is_rejected(self) -> None:
+        """以前ソースに直書きしていた鍵で署名した JWT は、受け付けないこと"""
+        now = datetime.now(timezone.utc)
+        payload = {
+            "sub": "attacker",
+            "tenantId": "test-tenant",
+            "exp": int((now + timedelta(hours=5)).timestamp()),
+            "iat": int(now.timestamp()),
+        }
+        forged = jwt.encode(
+            payload, "your-secret-key-change-in-production", algorithm=ALGORITHM
+        )
+
+        with pytest.raises(HTTPException) as error:
+            decode_token(forged)
+
+        assert error.value.status_code == 401
+
+    def test_changing_secret_key_invalidates_existing_tokens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SECRET_KEY を変えると、変える前に作った JWT は、検証に通らなくなること"""
+        token = create_access_token("admin", "tenant-123")
+        monkeypatch.setattr(
+            "app.core.security.get_settings",
+            lambda: SimpleNamespace(secret_key="another-secret-key-for-test-purposes"),
+        )
+
+        with pytest.raises(HTTPException) as error:
+            decode_token(token)
+
+        assert error.value.status_code == 401
 
     def test_hash_and_verify_correct_password(self) -> None:
         """bcrypt ハッシュ・検証"""

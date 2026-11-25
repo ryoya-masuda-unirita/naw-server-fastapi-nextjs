@@ -12,7 +12,8 @@ from uuid import uuid4
 import fakeredis.aioredis
 import jwt
 
-from app.core.security import hash_password, create_access_token, SECRET_KEY, ALGORITHM
+from app.core.config import get_settings
+from app.core.security import hash_password, create_access_token, ALGORITHM
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
 from collections.abc import AsyncIterator
@@ -78,7 +79,7 @@ def expired_jwt_token(test_user: User) -> str:
         "exp": int((now - timedelta(hours=1)).timestamp()),
         "iat": int(now.timestamp()),
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM)
 
 
 @pytest.fixture

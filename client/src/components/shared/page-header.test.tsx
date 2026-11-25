@@ -15,6 +15,13 @@ beforeEach(() => {
 });
 
 describe('PageHeader', () => {
+  test('タイトルの編集ボタン（鉛筆）に名前が付き、押すと onRenameClick が呼ばれること', async () => {
+    const onRenameClick = vi.fn();
+    renderHeader(<PageHeader title="ワークスペース" showTitleEdit onRenameClick={onRenameClick} />);
+    await userEvent.click(screen.getByRole('button', { name: 'COMMON.EDIT_NAME' }));
+    expect(onRenameClick).toHaveBeenCalledTimes(1);
+  });
+
   test('タイトルを表示し、titleKey があれば翻訳キーを優先すること', () => {
     const { rerender } = renderHeader(<PageHeader title="ユーザー管理" />);
     expect(screen.getByRole('heading', { name: 'ユーザー管理' })).toBeInTheDocument();

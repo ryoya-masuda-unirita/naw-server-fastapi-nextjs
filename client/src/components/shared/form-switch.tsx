@@ -83,6 +83,7 @@ export function FormSwitch({
           <span className="contents" data-testid={dataTestid}>
             <Switch
               label={switchLabel}
+              ariaLabel={label}
               disabled={disabled}
               size={size}
               showIcon={showIcon}

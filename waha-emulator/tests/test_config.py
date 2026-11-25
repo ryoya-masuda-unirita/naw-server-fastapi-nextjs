@@ -39,9 +39,18 @@ def test_unknown_provider_is_rejected() -> None:
         make_settings(LLM_PROVIDER="unknown")
 
 
-def test_blank_workflows_file_is_unset() -> None:
+def test_blank_path_is_unset() -> None:
     """WAHA_WORKFLOWS_FILE が空文字列（compose の未設定）なら未設定になること"""
     assert make_settings(WAHA_WORKFLOWS_FILE="").workflows_file is None
     assert make_settings(WAHA_WORKFLOWS_FILE="/app/config/w.json").workflows_file == (
         Path("/app/config/w.json")
+    )
+
+
+def test_studio_dir_is_unset_by_default_and_blank_is_unset() -> None:
+    """ワークフローの保存先は、未設定・空文字列のとき None（管理用 API を載せない）であること"""
+    assert make_settings().studio_dir is None
+    assert make_settings(WAHA_STUDIO_DIR="").studio_dir is None
+    assert make_settings(WAHA_STUDIO_DIR="/data/workflows").studio_dir == Path(
+        "/data/workflows"
     )

@@ -20,4 +20,10 @@ resource "aws_instance" "bastion" {
   tags = {
     Name = "${var.project_name}-bastion"
   }
+
+  // AMIは most_recent で引くため、新しいAMIが出るたびにplanが踏み台の再作成を出す。
+  // 踏み台は、使い捨ての中継用なので、AMIの更新では作り直さない(作り直したいときは terraform taint)
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }

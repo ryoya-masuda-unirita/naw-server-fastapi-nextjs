@@ -2,7 +2,8 @@
 # それを呼ぶ Waha! エミュレーター（waha-emulator/）のテスト・Ruff・mypy を検証するワークフロー。
 # 書き方は server-local-tests.yml に揃えている。
 # エミュレーターはアダプタをパス依存で使い、結合テストで server-local のコードも読み込むため、
-# どれかを変更した PR・push で両方を流す。
+# どれかを変更した PR・push で両方を流す（secuaigent-server-local/ の変更でも流れるのは、このためで、
+# server-local 自身のテストは、別の server-local-tests.yml）。
 
 name: 生成AIアダプタ・エミュレーターのテスト
 
@@ -103,3 +104,43 @@ jobs:
 
       - name: 型を検査
         run: uv run mypy
+
+  # Waha! エミュレーターのワークフローエディター（waha-emulator/ui/。React）。
+  # lint・型チェック・単体テスト・ビルドを 1 ジョブで行う（ジョブを分けると npm ci が重なるため）。
+  emulator-ui:
+    name: Waha!エミュレーター画面
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: waha-emulator/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: waha-emulator/ui/package-lock.json
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: リンターを実行
+        run: npm run lint
+
+      - name: 型を検査
+        run: npm run type-check
+
+      - name: テストを実行
+        run: npm test
+
+      - name: ビルド
+        run: npm run build
+
+      # onprem/docker-compose.yml の waha-emulator-ui と同じイメージ。Dockerfile・nginx の設定の誤りを、
+      # compose を手で動かす前に見つける。中継先は、名前を引かない設計（resolver）のため、仮の値でよい
+      - name: Docker イメージをビルドし、nginx の設定を検証
+        run: |
+          docker build -t waha-emulator-ui .
+          docker run --rm -e WAHA_UPSTREAM=http://waha-emulator:8080 waha-emulator-ui nginx -t

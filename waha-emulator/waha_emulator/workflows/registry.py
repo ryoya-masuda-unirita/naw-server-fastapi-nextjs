@@ -43,6 +43,46 @@ class WorkflowRegistry:
         self._by_service_id: dict[str, Workflow] = dict(by_service_id or {})
         self._templates: dict[str, Callable[[str], Workflow]] = {}
         self._template_workflows: dict[str, Workflow] = {}
+        # 管理用 API で保存したワークフロー。設定ファイルの定義より優先し、
+        # 外すと設定ファイルの定義に戻る
+        self._dynamic: dict[str, Workflow] = {}
+
+    def set_dynamic(self, service_id: str, workflow: Workflow) -> None:
+        """管理用 API で保存したワークフローを、サービス ID に登録する。
+
+        Parameters
+        ----------
+        service_id : str
+            サービス ID。
+        workflow : Workflow
+            ワークフロー。
+        """
+        self._dynamic[service_id] = workflow
+
+    def remove_dynamic(self, service_id: str) -> None:
+        """管理用 API で保存したワークフローの登録を外す。なければ何もしない。
+
+        Parameters
+        ----------
+        service_id : str
+            サービス ID。
+        """
+        self._dynamic.pop(service_id, None)
+
+    def has_registered(self, service_id: str) -> bool:
+        """設定ファイルで、サービス ID に定義が登録されているかを返す。
+
+        Parameters
+        ----------
+        service_id : str
+            サービス ID。
+
+        Returns
+        -------
+        bool
+            登録されていれば True。
+        """
+        return service_id in self._by_service_id
 
     def register(self, service_id: str, workflow: Workflow) -> None:
         """サービス ID にワークフローを登録する。
@@ -115,7 +155,7 @@ class WorkflowRegistry:
         return workflow
 
     def resolve(self, service_id: str, params: Mapping[str, str]) -> Workflow:
-        """ワークフローを選ぶ（登録 → ひな形 → 学習 → 同期 → 既定の順）。
+        """ワークフローを選ぶ（保存 → 登録 → ひな形 → 学習 → 同期 → 既定の順）。
 
         Parameters
         ----------
@@ -129,6 +169,9 @@ class WorkflowRegistry:
         Workflow
             ワークフロー。
         """
+        dynamic = self._dynamic.get(service_id)
+        if dynamic is not None:
+            return dynamic
         registered = self._by_service_id.get(service_id)
         if registered is not None:
             return registered

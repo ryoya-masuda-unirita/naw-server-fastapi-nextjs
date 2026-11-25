@@ -55,7 +55,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-// privateルートテーブル
+// privateサブネット(ルートテーブルは、下のaws_route_table.privateで割り当てる)
 resource "aws_subnet" "private" {
   for_each          = { for i, az in local.az_suffixes : az => cidrsubnet(var.vpc_cidr, 8, i + 10) }
   vpc_id            = aws_vpc.main.id
@@ -173,7 +173,7 @@ resource "aws_security_group" "ecs" {
   }
 }
 
-// ECSのEC2はECR/ECS API/CloudWatch LogsなどAWSサービスへの通信が必須。
+// ECS(Fargate)のタスクは、ECR/ECS API/CloudWatch LogsなどAWSサービスへの通信が必須。
 // エンドポイントの範囲が広く変わりうるため、絞らず全egressを許可する。
 resource "aws_security_group_rule" "ecs_all_out" {
   type              = "egress"

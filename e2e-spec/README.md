@@ -22,7 +22,8 @@ Issue: #316
 
 ## 準備（初回だけ）
 
-- Docker（compose v2.24 以上。`docker/compose.override.yml` が `!reset` を使う）と Node.js 22.18 以上
+- Docker（compose v2）と Node.js 22.18 以上
+- カテゴリ 20〜22（Waha!・オンプレ側）を流すときは、さらに [uv](https://docs.astral.sh/uv/)（ホストで `waha-emulator/` を `uv run uvicorn` で起動する）が要り、初回は、`onprem/vector-db` のイメージのビルド（Apache AGE のコンパイル。上限 900 秒）が長い
 
 ```bash
 cd e2e-spec
@@ -75,22 +76,22 @@ npm run env:down                     # 破棄（データごと）
 | `E2E_SPEC_REPORT_DIR` | `reports/latest` | 集計・スクリーンショット・trace の出力先 |
 | `E2E_SPEC_PROJECT` | `naw-e2e-spec` | compose のプロジェクト名（ネットワーク・ボリューム・backend のイメージ名が分かれる） |
 
-**同じマシンで専用環境を同時に 2 つ以上動かすとき**（別のワークツリー・別のエージェントなど）は、`E2E_SPEC_PROJECT`・`E2E_SPEC_FRONTEND_PORT`・`E2E_SPEC_BACKEND_PORT` を環境ごとに変える。同じモジュールのディレクトリで同時に流すなら `E2E_SPEC_REPORT_DIR` も変える。
+**同じマシンで専用環境を同時に 2 つ以上動かすとき**（別のワークツリー・別のエージェントなど）は、`E2E_SPEC_PROJECT`・`E2E_SPEC_FRONTEND_PORT`・`E2E_SPEC_BACKEND_PORT` を環境ごとに変える。同じモジュールのディレクトリで同時に流すなら `E2E_SPEC_REPORT_DIR` も変える。Waha! のエミュレーターのポートは、画面のポートの +1〜+5（既定は 55274〜55278）になるため、**画面のポートは、10 以上離す**（先頭は `E2E_SPEC_WAHA_PORT` で変えられる）。
 
 ```bash
-E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55274 E2E_SPEC_BACKEND_PORT=58101 E2E_SPEC_REPORT_DIR=reports/b npm run spec:all
+E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55283 E2E_SPEC_BACKEND_PORT=58101 E2E_SPEC_REPORT_DIR=reports/b npm run spec:all
 ```
 
 ## 専用環境
 
-ルートの `docker-compose.demo.yml`（backend・frontend・PostgreSQL・Redis・LocalStack、`server/seed.sql` + `server/seed-demo.sql` のデモデータ入り）を、**別のプロジェクト名 `naw-e2e-spec`・別ポート**で起動します。
+`docker/compose.yml`（backend・frontend・PostgreSQL・Redis・LocalStack・LLM のモック、`server/seed.sql` + `server/seed-demo.sql` のデモデータ入り）を、**別のプロジェクト名 `naw-e2e-spec`・別ポート**で起動します。
 
-- 既存の開発用コンテナ（`naw-fastapi-*`）・手元のデモ（`naw-demo`。5173/8001）・`e2e-explorer`（55173/58000）には触れません。ネットワーク・ボリューム・イメージ名（`docker/compose.override.yml` で `naw-e2e-spec-backend` に変更）も別です
+- 既存の開発用コンテナ（`naw-fastapi-*`）・`e2e-explorer`（55173/58000）には触れません。ネットワーク・ボリューム・イメージ名（`naw-e2e-spec-backend`）も別です
 - ホストに公開するのは画面（`127.0.0.1:55273`）と backend（`127.0.0.1:58100`）だけです
-- `env:up` は、demo の seed に無いシステム管理者（`system-admin`、`docker/spec-seed.sql`）を追加します
+- `env:up` は、標準の seed に無いシステム管理者（`system-admin`、`docker/spec-seed.sql`）を追加します
 - **安全策**: 実行先の URL がローカル（`localhost`・`127.0.0.1`・`::1`）以外のときは起動もテストも拒否します（テストはデータを作成・削除します）
 - frontend は今の `client/` を `npm run build` でビルドし、nginx で静的に配信します（`docker/frontend.Dockerfile`・`docker/nginx.conf`。本番の CloudFront + S3 に近い形）。Vite の開発サーバーは通し実行中にアイドルでも CPU・メモリを大きく使い、並列実行で画面の応答が遅れて負荷による NG が出たため、やめました（#417）。画面を直したら再度 `env:up`（イメージの再ビルド）が要ります
-- backend の URL はビルド時に画面へ埋め込みます（`docker/compose.override.yml` のビルド引数 `VITE_API_URL`）。`E2E_SPEC_BACKEND_PORT` を変えたときも、`env:up` でビルドし直されます
+- backend の URL はビルド時に画面へ埋め込みます（`docker/compose.yml` の frontend のビルド引数 `VITE_API_URL`）。`E2E_SPEC_BACKEND_PORT` を変えたときも、`env:up` でビルドし直されます
 
 ### ログインできるユーザー（`src/users.ts`）
 
@@ -207,7 +208,7 @@ npm test -- tests/NN-xxx.spec.ts     # 自分のカテゴリを実際に流し�
 ```
 e2e-spec/
 ├── docker/
-│   ├── compose.override.yml   # demo の compose に重ねる（イメージ名を専用にする・画面を静的配信にする）
+│   ├── compose.yml            # 専用環境の compose（本番用イメージの backend・画面の静的配信・LLM のモック）
 │   ├── frontend.Dockerfile    # 画面のビルドと nginx での配信
 │   ├── nginx.conf             # 画面（SPA）の配信設定
 │   └── spec-seed.sql          # システム管理者の追加

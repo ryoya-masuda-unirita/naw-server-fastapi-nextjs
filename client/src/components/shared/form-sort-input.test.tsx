@@ -113,9 +113,22 @@ describe('FormSortInput', () => {
       const user = userEvent.setup();
       render(<Harness />);
       await user.click(screen.getByTestId('sort-trigger'));
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      // デスクトップのメニュー（背景つき）は出さず、ドロワーで選ぶ
+      expect(screen.queryByTestId('sort-backdrop')).not.toBeInTheDocument();
       await user.click(await screen.findByRole('menuitemradio', { name: '用語順' }));
       expect(screen.getByTestId('sort-trigger')).toHaveTextContent('用語順');
+    });
+
+    test('ドロワーの選択肢（項目・並び順）は、すべて menu の中にあること（axe の aria-required-parent）', async () => {
+      setViewportWidth(MOBILE_WIDTH);
+      const user = userEvent.setup();
+      render(<Harness />);
+      await user.click(screen.getByTestId('sort-trigger'));
+      const radios = await screen.findAllByRole('menuitemradio');
+      expect(radios.length).toBeGreaterThan(2);
+      for (const radio of radios) {
+        expect(radio.closest('[role="menu"]')).not.toBeNull();
+      }
     });
   });
 });

@@ -19,6 +19,7 @@ export function UserListMenu({ onEdit, onDelete }: UserListMenuProps) {
           <>
             <div className="flex flex-col gap-1">
               <button
+                role="menuitem"
                 type="button"
                 data-testid="admin-users-edit-button"
                 className="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-secondary transition-colors w-full text-left"
@@ -39,6 +40,7 @@ export function UserListMenu({ onEdit, onDelete }: UserListMenuProps) {
 
             <div className="flex flex-col gap-1">
               <button
+                role="menuitem"
                 type="button"
                 data-testid="admin-users-delete-button"
                 className="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-error transition-colors w-full text-left"

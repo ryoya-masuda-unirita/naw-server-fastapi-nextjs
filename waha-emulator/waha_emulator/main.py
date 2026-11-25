@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,8 +11,13 @@ from generative_ai_core.retrieval.runtime import CoreRetrievalRuntime
 
 from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
-from waha_emulator.routers import servicerun
+from waha_emulator.routers import admin, servicerun
 from waha_emulator.sessions import SessionStore
+from waha_emulator.studio.engine import FlowWorkflow
+from waha_emulator.studio.flow import FlowDefinition
+from waha_emulator.studio.graph_workflow import GraphWorkflow
+from waha_emulator.studio.service import Definition, Plan, StudioService
+from waha_emulator.studio.store import GraphStore
 from waha_emulator.workflow_config import (
     ADAPTER_EMBEDDING,
     WorkflowConfig,
@@ -233,7 +238,78 @@ def create_app(
     app.state.workflow_registry = registry
     register_exception_handlers(app)
     app.include_router(servicerun.router)
+    if settings.studio_dir is not None:
+        app.state.studio = _build_studio(
+            settings.studio_dir,
+            registry,
+            chat_runtime_factory,
+            retrieval_runtime_factory,
+        )
+        app.include_router(admin.router)
+        app.include_router(admin.catalog_router)
     return app
+
+
+def _build_studio(
+    directory: Path,
+    registry: WorkflowRegistry,
+    chat_runtime_factory: ChatRuntimeFactory | None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None,
+) -> StudioService:
+    """保存したワークフローの管理を作り、保存済みのものをレジストリに登録する。
+
+    Parameters
+    ----------
+    directory : Path
+        ワークフローの保存先。
+    registry : WorkflowRegistry
+        サービス ID → ワークフロー。
+    chat_runtime_factory : ChatRuntimeFactory | None
+        core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで差し替える）。
+
+    Returns
+    -------
+    StudioService
+        ワークフローの管理。
+    """
+
+    def workflow_factory(definition: Definition, plan: Plan) -> Workflow:
+        """定義から、ノードと線で組んだワークフロー（版 1 は鎖、版 2 は自由なつなぎ方）を作る。
+
+        Parameters
+        ----------
+        definition : Definition
+            ワークフローの定義（版 1 か版 2）。
+        plan : Plan
+            アダプターを動かす定義（版 1 は 1 つ、版 2 は生成AI ノードごと）。
+
+        Returns
+        -------
+        Workflow
+            ワークフロー。
+
+        Raises
+        ------
+        TypeError
+            定義と、アダプターを動かす定義の版が合わないとき。
+        """
+        if isinstance(definition, FlowDefinition):
+            if not isinstance(plan, Mapping):
+                raise TypeError("版 2 の定義には、ノードごとの定義が要ります")
+            return FlowWorkflow(
+                definition, plan, chat_runtime_factory, retrieval_runtime_factory
+            )
+        if not isinstance(plan, WorkflowDefinition):
+            raise TypeError("版 1 の定義には、1 つの定義が要ります")
+        return GraphWorkflow(
+            definition, plan, chat_runtime_factory, retrieval_runtime_factory
+        )
+
+    studio = StudioService(GraphStore(directory), registry, workflow_factory)
+    studio.load()
+    return studio
 
 
 def app_factory() -> FastAPI:
