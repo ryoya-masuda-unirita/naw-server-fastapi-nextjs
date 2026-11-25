@@ -69,7 +69,7 @@ services:
       - "4566:4566"
     volumes:
       - naw_fastapi_localstack_data:/var/lib/localstack
-      - ./docker-compose/localstack-init:/etc/localstack/init/ready.d
+      - ./server/localstack-init.sh:/etc/localstack/init/ready.d/init-aws.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s
