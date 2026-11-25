@@ -33,6 +33,9 @@ FILE_UNIQUE_ID_METADATA_KEY = "fileUniqueId"
 # Spring AI `SearchRequest` のデフォルトtop-k値を踏襲する。
 DEFAULT_TOP_K = 4
 
+# ベクトルの次元数。埋め込みを作る側（Bedrock の Titan G1）と、保存する側（pgvector の列）で同じ値にする
+EMBEDDING_DIMENSIONS = 1536
+
 # 移植元 `IndexNotFoundTolerantVectorStore` と同じ判定値。
 _HTTP_NOT_FOUND = 404
 _SEARCH_INDEXES_PATH = "/indexes"

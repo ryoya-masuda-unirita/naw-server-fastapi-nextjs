@@ -15,10 +15,10 @@ from urllib.parse import quote
 import httpx
 
 from app.core.llm_client import EmbeddingResult
+from app.core.vector_store import EMBEDDING_DIMENSIONS
 
 # Titan G1。1536 次元（Titan V2 は次元数が合わないため使えない）
 BEDROCK_EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
-EMBEDDING_DIMENSIONS = 1536
 REQUEST_TIMEOUT_SECONDS = 30.0
 
 

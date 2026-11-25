@@ -26,12 +26,15 @@ from urllib.parse import parse_qs, unquote, urlparse
 import asyncpg  # type: ignore[import-untyped]
 from fastapi import HTTPException, status
 
-from app.core.vector_store import DEFAULT_TOP_K, VectorSearchResult
+from app.core.vector_store import (
+    DEFAULT_TOP_K,
+    EMBEDDING_DIMENSIONS,
+    VectorSearchResult,
+)
 
 logger = logging.getLogger(__name__)
 
 PGVECTOR_SCHEMES = ("postgresql://", "postgres://")
-EMBEDDING_DIMENSIONS = 1536
 CONNECT_TIMEOUT_SECONDS = 10.0
 DEFAULT_POSTGRES_PORT = 5432
 TABLE_PREFIX = "docs_"
