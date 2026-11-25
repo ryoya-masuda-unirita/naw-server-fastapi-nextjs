@@ -128,6 +128,22 @@ describe('PropertyPanel', () => {
     expect(select).toHaveValue('1');
   });
 
+  it('検索ノードがなければ、出力モードの選択肢に RAG（1）を出さない', () => {
+    setup(nodeOf('gen'), false);
+
+    const values = screen.getAllByRole('option', { name: /^\d:/ }).map((o) => o.getAttribute('value'));
+
+    expect(values).toEqual(['0', '2']);
+  });
+
+  it('検索ノードがあるときは、RAG（1）だけを固定で出す', () => {
+    setup(nodeOf('gen'), true);
+
+    const values = screen.getAllByRole('option', { name: /^\d:/ }).map((o) => o.getAttribute('value'));
+
+    expect(values).toEqual(['1']);
+  });
+
   it('検索ノードがなければ、出力モードを 0 と 2 から選べる', async () => {
     const onChange = setup(nodeOf('gen'), false);
 

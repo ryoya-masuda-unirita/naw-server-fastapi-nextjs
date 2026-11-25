@@ -75,6 +75,24 @@ describe('App', () => {
     expect(screen.queryByText('● 未保存')).not.toBeInTheDocument();
   });
 
+  it('Ctrl+S を続けて押しても、保存の要求は 1 回だけ送る', async () => {
+    let finish: (graph: typeof SAVED) => void = () => {};
+    mocked.updateWorkflow.mockImplementation(
+      () => new Promise((resolve) => (finish = resolve as typeof finish)),
+    );
+    render(<App />);
+    await openFirst();
+    await userEvent.type(screen.getByLabelText('名前'), 'x');
+
+    await userEvent.keyboard('{Control>}s{/Control}');
+    await userEvent.keyboard('{Control>}s{/Control}');
+    await waitFor(() => expect(mocked.updateWorkflow).toHaveBeenCalledTimes(1));
+    finish({ ...SAVED, name: '社内QAx' });
+
+    await screen.findByText('保存しました');
+    expect(mocked.updateWorkflow).toHaveBeenCalledTimes(1);
+  });
+
   it('検証が失敗したら、サーバーの理由を出し、保存しない。編集内容は残る', async () => {
     mocked.validateWorkflow.mockRejectedValue(new api.ApiError(400, 'つなぎ方が不正です'));
     render(<App />);

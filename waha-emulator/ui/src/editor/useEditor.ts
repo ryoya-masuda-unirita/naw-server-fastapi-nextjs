@@ -5,7 +5,7 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from '@xyflow/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import * as api from '../api/client';
 import { ApiError } from '../api/client';
@@ -51,6 +51,19 @@ export function useEditor() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [message, setMessage] = useState<Message | null>(null);
   const [busy, setBusy] = useState<Busy>('idle');
+  // 再描画の前に続けて呼ばれても、二重に送らないよう、state とは別に持つ
+  const busyRef = useRef<Busy>('idle');
+
+  const begin = useCallback((kind: Exclude<Busy, 'idle'>) => {
+    if (busyRef.current !== 'idle') return false;
+    busyRef.current = kind;
+    setBusy(kind);
+    return true;
+  }, []);
+  const end = useCallback(() => {
+    busyRef.current = 'idle';
+    setBusy('idle');
+  }, []);
 
   const current = useMemo<GraphData | null>(
     () => (saved ? fromFlow({ id: saved.id, name, serviceIds }, nodes, edges) : null),
@@ -128,21 +141,19 @@ export function useEditor() {
   );
 
   const validate = useCallback(async () => {
-    if (!current) return;
-    setBusy('validating');
+    if (!current || !begin('validating')) return;
     try {
       await api.validateWorkflow(current);
       setMessage({ kind: 'success', text: VALID_TEXT });
     } catch (error) {
       setMessage(toMessage(error));
     } finally {
-      setBusy('idle');
+      end();
     }
-  }, [current]);
+  }, [current, begin, end]);
 
   const save = useCallback(async () => {
-    if (!current || !saved) return;
-    setBusy('saving');
+    if (!current || !saved || !begin('saving')) return;
     try {
       await api.validateWorkflow(current);
       const result = isNew
@@ -154,9 +165,9 @@ export function useEditor() {
     } catch (error) {
       setMessage(toMessage(error));
     } finally {
-      setBusy('idle');
+      end();
     }
-  }, [current, saved, isNew, selectedNode, apply, refreshList]);
+  }, [current, saved, isNew, selectedNode, apply, refreshList, begin, end]);
 
   const onNodesChange = useCallback<OnNodesChange<FlowNode>>(
     (changes) => setNodes((previous) => changes.applyTo(previous)),

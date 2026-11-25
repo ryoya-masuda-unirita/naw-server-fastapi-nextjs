@@ -87,6 +87,8 @@ export function fromFlow(
   nodes: FlowNode[],
   edges: Edge[],
 ): GraphData {
+  // 検索ノードがあるときの出力モードは RAG で固定のため、サーバーには送らない（送ると 400 になる）
+  const retrievalPresent = hasRetrieval(nodes);
   return {
     version: GRAPH_VERSION,
     id: base.id,
@@ -102,7 +104,7 @@ export function fromFlow(
         // 動かしたときの小数で、未保存の判定が揺れないよう、整数にそろえる
         position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
         ...(hasProperties ? { properties: { ...properties } } : {}),
-        ...(nodeType === 'generative-ai' && outputType !== undefined
+        ...(nodeType === 'generative-ai' && outputType !== undefined && !retrievalPresent
           ? { outputType }
           : {}),
       };

@@ -78,6 +78,16 @@ describe('toFlow / fromFlow', () => {
     expect(fromFlow(graph, nodes, edges).nodes[1].outputType).toBe(2);
   });
 
+  it('検索ノードがあるときは、生成AI の出力モードをサーバーへ送らない（送ると 400 になる）', () => {
+    const graph = withRetrieval(newGraph('wf-1', 'x', ['svc']));
+    graph.nodes[1].outputType = 2;
+    const { nodes, edges } = flowOf(graph);
+
+    const result = fromFlow(graph, nodes, edges);
+
+    expect(result.nodes.find((n) => n.id === 'gen')).not.toHaveProperty('outputType');
+  });
+
   it('開始・終了・生成AI は削除できず、検索だけ削除できる', () => {
     const { nodes } = flowOf(withRetrieval(newGraph('wf-1', 'x', ['svc'])));
     const deletable = Object.fromEntries(nodes.map((n) => [n.id, n.deletable]));

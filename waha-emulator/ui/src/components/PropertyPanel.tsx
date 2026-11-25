@@ -4,6 +4,7 @@ import { MASK, type PropertyCandidate, type PropertyCatalog } from '../api/types
 import { NODE_LABELS, type FlowNode, type FlowNodeData } from '../editor/model';
 
 const OUTPUT_TYPE_CHAT = 0;
+const OUTPUT_TYPE_RAG = 1;
 const OUTPUT_TYPE_PLAIN = 2;
 
 interface Props {
@@ -23,8 +24,6 @@ function candidatesFor(node: FlowNode, catalog: PropertyCatalog | null): Propert
 
 export function PropertyPanel({ node, catalog, hasRetrieval, onChange }: Props) {
   const [toAdd, setToAdd] = useState('');
-  // 伏せた値を「入れ直す」と選んだ項目（保存済みの値を使わず、新しい値を入れる）
-  const [reentering, setReentering] = useState<Set<string>>(new Set());
 
   if (!node) {
     return (
@@ -72,14 +71,19 @@ export function PropertyPanel({ node, catalog, hasRetrieval, onChange }: Props) 
         <label className="block">
           出力モード
           <select
-            value={hasRetrieval ? 1 : (node.data.outputType ?? OUTPUT_TYPE_CHAT)}
+            value={hasRetrieval ? OUTPUT_TYPE_RAG : (node.data.outputType ?? OUTPUT_TYPE_CHAT)}
             disabled={hasRetrieval}
             onChange={(event) => onChange(node.id, { outputType: Number(event.target.value) })}
             className="mt-0.5 w-full rounded border px-2 py-1 disabled:bg-slate-100"
           >
-            <option value={OUTPUT_TYPE_CHAT}>0: チャット用_回答</option>
-            <option value={1}>1: RAG（検索あり）</option>
-            <option value={OUTPUT_TYPE_PLAIN}>2: 回答の本文だけ</option>
+            {hasRetrieval ? (
+              <option value={OUTPUT_TYPE_RAG}>1: RAG（検索あり）</option>
+            ) : (
+              <>
+                <option value={OUTPUT_TYPE_CHAT}>0: チャット用_回答</option>
+                <option value={OUTPUT_TYPE_PLAIN}>2: 回答の本文だけ</option>
+              </>
+            )}
           </select>
           {hasRetrieval && (
             <span className="text-xs text-slate-500">検索ノードがあるため、RAG で固定です</span>
@@ -92,7 +96,8 @@ export function PropertyPanel({ node, catalog, hasRetrieval, onChange }: Props) 
           <h3 className="font-semibold">プロパティ</h3>
           {Object.entries(properties).map(([name, value]) => {
             const secret = secretNames.has(name);
-            const masked = value === MASK && !reentering.has(name);
+            // 伏せ字かどうかは値だけで決める（「入れ直す」で値が空になれば、入力欄になる）
+            const masked = value === MASK;
             return (
               <div key={name} className="space-y-0.5">
                 <div className="flex items-center justify-between">
@@ -111,10 +116,7 @@ export function PropertyPanel({ node, catalog, hasRetrieval, onChange }: Props) 
                     <span className="flex-1 text-slate-500">保存済みの値を使います</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setReentering(new Set(reentering).add(name));
-                        setProperty(name, '');
-                      }}
+                      onClick={() => setProperty(name, '')}
                       className="text-blue-600"
                     >
                       入れ直す

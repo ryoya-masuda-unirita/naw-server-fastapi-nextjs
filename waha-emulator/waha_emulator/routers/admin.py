@@ -21,7 +21,7 @@ ADMIN_PATH = "/admin/workflows"
 NOT_FOUND_MESSAGE = "ワークフローがありません"
 
 router = APIRouter(prefix=ADMIN_PATH)
-# ワークフローの {id} のパスと衝突しないよう、別のルーターにする
+# 候補は /admin/workflows の下ではないため、別のルーターにする
 catalog_router = APIRouter(prefix="/admin")
 
 # 定義の形の検証は parse_graph に任せるため、本文は何でも受け取る
