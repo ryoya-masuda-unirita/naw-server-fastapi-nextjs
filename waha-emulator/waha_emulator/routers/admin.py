@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 
+from waha_emulator.studio.catalog import property_catalog
 from waha_emulator.studio.graph import GraphError
 from waha_emulator.studio.service import (
     StudioConflictError,
@@ -20,6 +21,8 @@ ADMIN_PATH = "/admin/workflows"
 NOT_FOUND_MESSAGE = "ワークフローがありません"
 
 router = APIRouter(prefix=ADMIN_PATH)
+# 候補は /admin/workflows の下ではないため、別のルーターにする
+catalog_router = APIRouter(prefix="/admin")
 
 # 定義の形の検証は parse_graph に任せるため、本文は何でも受け取る
 DefinitionBody = Annotated[Any, Body()]
@@ -249,3 +252,15 @@ def delete_workflow(request: Request, graph_id: str) -> Response:
     except StudioNotFoundError as e:
         raise _not_found() from e
     return Response(status_code=HTTPStatus.NO_CONTENT)
+
+
+@catalog_router.get("/property-catalog")
+def get_property_catalog() -> dict[str, list[dict[str, Any]]]:
+    """ノードに書けるプロパティ名の候補を返す（画面の選択肢に使う）。
+
+    Returns
+    -------
+    dict[str, list[dict[str, Any]]]
+        `generativeAi`（生成AI ノード）と `retrieval`（検索ノード）の候補。
+    """
+    return property_catalog()

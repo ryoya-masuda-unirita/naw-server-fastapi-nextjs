@@ -96,6 +96,7 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 | `GET /admin/workflows/{id}` | 取得（API キーなどは `********` に伏せる） |
 | `PUT /admin/workflows/{id}` | 更新。`********` のままの値は、保存済みの値を引き継ぐ |
 | `DELETE /admin/workflows/{id}` | 削除（204） |
+| `GET /admin/property-catalog` | ノードに書けるプロパティ名の候補（生成AI・検索。秘密の名前に印）。画面の選択肢に使う |
 
 認証はない（検証用の道具）。保存先は 1 ワークフロー = 1 つの JSON ファイル（`<id>.json`）。
 
@@ -120,6 +121,29 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - 学習・削除・同期は、まだ設定ファイルの定義で動く
 - 失敗理由には、失敗したノードの名前が付く（例: `FAILURE: ノード「検索」: 検索アダプタの実行に失敗しました: …`）
 - 作り変え前の状態には、タグ `waha-emulator-before-studio` で戻せる
+
+### ワークフローエディター（画面）
+
+`ui/`（React + React Flow）は、管理用 API を使って、ノードと線でワークフローを組む画面（Issue #522）。左に一覧、中央にキャンバス、右にプロパティを置く。デプロイは対象外で、開発サーバーで動かす。
+
+```bash
+# エミュレーター（WAHA_STUDIO_DIR を設定する。管理用 API が有効になる）
+cd waha-emulator
+WAHA_AUTHKEY=local-key WAHA_STUDIO_DIR=./data/workflows uv run uvicorn waha_emulator.main:app_factory --factory --port 8091
+
+# 画面（別のターミナル）
+cd waha-emulator/ui
+npm install
+npm run dev        # http://127.0.0.1:5174
+```
+
+- `/admin` は、開発サーバーがエミュレーター（既定は `http://127.0.0.1:8091`。環境変数 `WAHA_URL` で変える）へ中継する。エミュレーターに CORS の設定は要らない
+- 操作: 一覧から開く・`＋ 新規` で作成 → 検索ノードの追加（`＋ 検索ノード`。1 つまで）→ ノードの出力から入力へ線を引く（Delete で消す）→ 右のパネルで名前・プロパティを編集 → `検証`・`保存`（Ctrl/Cmd + S）
+- 線は、開始 →（検索 →）生成AI → 終了の 1 本の鎖だけ引ける。反する線は、引いた時点で理由を出して拒否する（最終判断は保存時のサーバーの検証）
+- プロパティ名は、アダプターの候補（`GET /admin/property-catalog`）から選ぶ。API キー・パスワードは入力中の文字を隠し、保存済みの値は `********` で伏せて「保存済みの値を使います」と表示する（「入れ直す」で変えられる）
+- 未保存の変更があると、移動・閉じる前に確認を出す
+- `npm run lint`・`npm run type-check`・`npm test`・`npm run build`
+- 試し実行（質問を送って回答を見る）・学習・削除・同期のノードは、まだない
 
 ### 検索 → 生成AI（RAG チャット）
 

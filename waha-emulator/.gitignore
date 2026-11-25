@@ -1,2 +1,4 @@
 .venv/
 .env
+# 管理用 API で保存したワークフロー（WAHA_STUDIO_DIR の例）
+data/
