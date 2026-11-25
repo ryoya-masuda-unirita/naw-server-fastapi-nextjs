@@ -18,6 +18,11 @@ describe('FormSwitch', () => {
       expect(screen.getByRole('switch', { name: '履歴の送信' })).toHaveAttribute('aria-checked', 'true');
     });
 
+    test('switchLabel がなければ、ラベルをスイッチの横に二重に表示しないこと', () => {
+      render(<FormSwitch label="履歴の送信" />);
+      expect(screen.getAllByText('履歴の送信')).toHaveLength(1);
+    });
+
     test('switchLabel があれば、ラベルより優先してスイッチの名前になること', () => {
       render(<FormSwitch label="履歴の送信" switchLabel="ON" />);
       expect(screen.getByRole('switch', { name: 'ON' })).toBeInTheDocument();
