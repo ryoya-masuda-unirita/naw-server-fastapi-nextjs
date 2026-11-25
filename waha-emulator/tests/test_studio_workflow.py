@@ -15,8 +15,9 @@ from tests.conftest import (
     start_session,
     upload,
 )
-from tests.studio_support import graph_data
+from tests.studio_support import flow_data, graph_data
 from tests.test_retrieval_workflow import FakeSearchClient, _runtime_factory
+from tests.test_studio_engine import SequenceProvider
 from waha_emulator.main import create_app
 from waha_emulator.studio.graph import compile_graph, parse_graph
 from waha_emulator.studio.graph_workflow import GraphWorkflow
@@ -284,3 +285,37 @@ async def test_retrieval_output_missing_is_attributed_to_retrieval_node() -> Non
         assert str(e) == f"ノード「検索」: {RETRIEVAL_OUTPUT_MISSING_MESSAGE}"
     else:
         raise AssertionError("WorkflowError が起きませんでした")
+
+
+async def test_execute_runs_saved_flow_workflow_with_two_llm_calls(
+    tmp_path: Path,
+) -> None:
+    """保存した版 2（推敲）を、server-local と同じ execute で動かすと、2 回目のプロンプトに 1 回目の回答が入り、最終回答が返ること"""
+    provider = SequenceProvider(answers=["下書きの本文", "推敲した回答"])
+    settings = make_settings(WAHA_STUDIO_DIR=str(tmp_path))
+    async with running_emulator(settings, provider=provider) as (_, client):
+        created = await client.post(
+            ADMIN, json=flow_data("polish", service_ids=["polish-svc"])
+        )
+        executed, output = await _ask(client, "polish-svc")
+
+    assert created.status_code == 201
+    assert executed == "SUCCESS"
+    assert json.loads(output)["answer"] == "推敲した回答"
+    first, second = provider.received
+    assert first.last_user_text() == f"{QUESTION} に回答してください"
+    assert "下書きの本文" in second.last_user_text()
+
+
+async def test_execute_flow_failure_names_the_failed_node(tmp_path: Path) -> None:
+    """版 2 の生成AI が失敗したとき、失敗理由に、ノードの名前が付くこと"""
+    provider = ScriptedProvider(reasoning=[], error=RuntimeError("boom"))
+    settings = make_settings(WAHA_STUDIO_DIR=str(tmp_path))
+    async with running_emulator(settings, provider=provider) as (_, client):
+        await client.post(ADMIN, json=flow_data("polish", service_ids=["polish-svc"]))
+
+        executed, _ = await _ask(client, "polish-svc")
+
+    assert executed.startswith(
+        "FAILURE: ノード「下書き」: 生成AIアダプタの実行に失敗しました"
+    )

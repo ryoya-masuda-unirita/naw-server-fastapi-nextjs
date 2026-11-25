@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from tests.conftest import make_settings, running_emulator
-from tests.studio_support import graph_data
+from tests.studio_support import flow_data, graph_data
 
 ADMIN = "/admin/workflows"
 
@@ -205,3 +205,36 @@ async def test_every_catalog_name_is_accepted_by_validation(
             response = await admin.post("/admin/workflows/validate", json=data)
             detail = response.json().get("detail", "")
             assert unknown not in detail, (node_type, entry["name"], detail)
+
+
+async def test_create_flow_workflow_returns_201_and_masks_secrets(
+    admin: httpx.AsyncClient,
+) -> None:
+    """版 2 の作成が 201 になり、取得で、config.properties の API キーが伏せられること"""
+    properties = {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "real-secret",
+        "MODEL_NAME": "echo",
+    }
+
+    created = await admin.post(ADMIN, json=flow_data("polish", properties=properties))
+    fetched = await admin.get(f"{ADMIN}/polish")
+
+    assert created.status_code == 201
+    assert "real-secret" not in created.text
+    assert "real-secret" not in fetched.text
+    assert fetched.json()["version"] == 2
+
+
+async def test_create_flow_with_unusable_reference_returns_400(
+    admin: httpx.AsyncClient,
+) -> None:
+    """版 2 で使えない変数を参照すると、400 になり、どのノードかが detail に入ること"""
+    data = flow_data("polish")
+    data["nodes"][1]["config"]["prompt"] = "{{polish.text}}"
+
+    response = await admin.post(ADMIN, json=data)
+
+    assert response.status_code == 400
+    assert "ノード「draft」" in response.json()["detail"]

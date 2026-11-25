@@ -9,11 +9,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import * as api from '../api/client';
 import { ApiError } from '../api/client';
-import type {
-  GraphData,
-  NodeType,
-  PropertyCatalog,
-  WorkflowSummary,
+import {
+  GRAPH_VERSION,
+  type GraphData,
+  type NodeType,
+  type PropertyCatalog,
+  type WorkflowSummary,
 } from '../api/types';
 import {
   canAddNode,
@@ -33,6 +34,8 @@ export type Busy = 'idle' | 'validating' | 'saving';
 
 const SAVED_TEXT = '保存しました';
 const VALID_TEXT = '検証しました。問題ありません';
+const UNSUPPORTED_VERSION_TEXT =
+  'このワークフローは、版 2 の形式です。この画面は、まだ版 2 に対応していないため、開けません（API で編集してください）';
 
 function toMessage(error: unknown): Message {
   const text = error instanceof ApiError ? error.message : '予期しないエラーが起きました';
@@ -97,16 +100,31 @@ export function useEditor() {
     setEdges(flow.edges);
   }, []);
 
+  const close = useCallback(() => {
+    setSaved(null);
+    setIsNew(false);
+    setNodes([]);
+    setEdges([]);
+  }, []);
+
   const open = useCallback(
     async (id: string) => {
       try {
-        apply(await api.getWorkflow(id), false);
+        const graph = await api.getWorkflow(id);
+        // 画面は、まだ版 1（鎖）だけに対応している。版 2 は、開かずに、理由を出す
+        if (graph.version !== GRAPH_VERSION) {
+          // 前に開いていたワークフローを、画面に残さない（別のものと取り違えて、編集・削除しないため）
+          close();
+          setMessage({ kind: 'error', text: UNSUPPORTED_VERSION_TEXT });
+          return;
+        }
+        apply(graph, false);
         setMessage(null);
       } catch (error) {
         setMessage(toMessage(error));
       }
     },
-    [apply],
+    [apply, close],
   );
 
   const createNew = useCallback(
@@ -116,13 +134,6 @@ export function useEditor() {
     },
     [apply],
   );
-
-  const close = useCallback(() => {
-    setSaved(null);
-    setIsNew(false);
-    setNodes([]);
-    setEdges([]);
-  }, []);
 
   const remove = useCallback(
     async (id: string) => {

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,9 +13,10 @@ from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
 from waha_emulator.routers import admin, servicerun
 from waha_emulator.sessions import SessionStore
-from waha_emulator.studio.graph import GraphDefinition
+from waha_emulator.studio.engine import FlowWorkflow
+from waha_emulator.studio.flow import FlowDefinition
 from waha_emulator.studio.graph_workflow import GraphWorkflow
-from waha_emulator.studio.service import StudioService
+from waha_emulator.studio.service import Definition, Plan, StudioService
 from waha_emulator.studio.store import GraphStore
 from waha_emulator.workflow_config import (
     ADAPTER_EMBEDDING,
@@ -274,12 +275,36 @@ def _build_studio(
         ワークフローの管理。
     """
 
-    def workflow_factory(
-        graph: GraphDefinition, definition: WorkflowDefinition
-    ) -> Workflow:
-        """定義から、ノードと線で組んだワークフローを作る。"""
+    def workflow_factory(definition: Definition, plan: Plan) -> Workflow:
+        """定義から、ノードと線で組んだワークフロー（版 1 は鎖、版 2 は自由なつなぎ方）を作る。
+
+        Parameters
+        ----------
+        definition : Definition
+            ワークフローの定義（版 1 か版 2）。
+        plan : Plan
+            アダプターを動かす定義（版 1 は 1 つ、版 2 は生成AI ノードごと）。
+
+        Returns
+        -------
+        Workflow
+            ワークフロー。
+
+        Raises
+        ------
+        TypeError
+            定義と、アダプターを動かす定義の版が合わないとき。
+        """
+        if isinstance(definition, FlowDefinition):
+            if not isinstance(plan, Mapping):
+                raise TypeError("版 2 の定義には、ノードごとの定義が要ります")
+            return FlowWorkflow(
+                definition, plan, chat_runtime_factory, retrieval_runtime_factory
+            )
+        if not isinstance(plan, WorkflowDefinition):
+            raise TypeError("版 1 の定義には、1 つの定義が要ります")
         return GraphWorkflow(
-            graph, definition, chat_runtime_factory, retrieval_runtime_factory
+            definition, plan, chat_runtime_factory, retrieval_runtime_factory
         )
 
     studio = StudioService(GraphStore(directory), registry, workflow_factory)

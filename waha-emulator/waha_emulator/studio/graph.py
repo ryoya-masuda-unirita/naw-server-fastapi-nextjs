@@ -5,11 +5,18 @@
 """
 
 import os
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from waha_emulator.studio.validation import (
+    GRAPH_ID_PATTERN,
+    MAX_NAME_LENGTH,
+    GraphError,
+    number_value,
+    service_ids_value,
+    text_value,
+)
 from waha_emulator.workflow_config import (
     NORMAL_CHAT_OUTPUT_TYPE,
     PLAIN_ANSWER_OUTPUT_TYPE,
@@ -28,18 +35,10 @@ NODE_END = "end"
 NODE_TYPES = frozenset({NODE_START, NODE_RETRIEVAL, NODE_GENERATIVE_AI, NODE_END})
 # プロパティを持つノード
 NODE_TYPES_WITH_PROPERTIES = frozenset({NODE_RETRIEVAL, NODE_GENERATIVE_AI})
-# 保存先のファイル名になるため、安全な文字だけにする
-GRAPH_ID_PATTERN = re.compile(r"^[a-z0-9_-]{1,64}$")
-MAX_NAME_LENGTH = 100
-MAX_SERVICE_ID_LENGTH = 200
 ROOT_KEYS = frozenset({"version", "id", "name", "serviceIds", "nodes", "edges"})
 NODE_KEYS = frozenset({"id", "type", "name", "position", "properties", "outputType"})
 EDGE_KEYS = frozenset({"source", "target"})
 DEFAULT_NODE_POSITION = (0.0, 0.0)
-
-
-class GraphError(ValueError):
-    """ワークフローの定義が不正。メッセージに、どのノード・項目かを含める。"""
 
 
 @dataclass(frozen=True)
@@ -146,58 +145,6 @@ class GraphDefinition:
         return next((n for n in self.nodes if n.type == node_type), None)
 
 
-def _text(raw: Any, where: str, max_length: int) -> str:
-    """1〜max_length 文字の文字列を取り出す。
-
-    Parameters
-    ----------
-    raw : Any
-        JSON の値。
-    where : str
-        エラーメッセージに出す場所。
-    max_length : int
-        文字数の上限。
-
-    Returns
-    -------
-    str
-        文字列。
-
-    Raises
-    ------
-    GraphError
-        文字列でない・空・長すぎるとき。
-    """
-    if not isinstance(raw, str) or not raw.strip() or len(raw) > max_length:
-        raise GraphError(f"{where} は 1〜{max_length} 文字の文字列にしてください")
-    return raw
-
-
-def _number(raw: Any, where: str) -> float:
-    """数値を取り出す（真偽値は数値として扱わない）。
-
-    Parameters
-    ----------
-    raw : Any
-        JSON の値。
-    where : str
-        エラーメッセージに出す場所。
-
-    Returns
-    -------
-    float
-        数値。
-
-    Raises
-    ------
-    GraphError
-        数値でないとき。
-    """
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        raise GraphError(f"{where} は数値にしてください")
-    return float(raw)
-
-
 def _node(raw: Any, index: int) -> GraphNode:
     """JSON の 1 つのノードを読む。
 
@@ -224,19 +171,19 @@ def _node(raw: Any, index: int) -> GraphNode:
     unknown = set(raw) - NODE_KEYS
     if unknown:
         raise GraphError(f"{where}: 未知の項目です: {sorted(unknown)}")
-    node_id = _text(raw.get("id"), f"{where}.id", MAX_NAME_LENGTH)
+    node_id = text_value(raw.get("id"), f"{where}.id", MAX_NAME_LENGTH)
     where = f"ノード「{node_id}」"
     node_type = raw.get("type")
     if node_type not in NODE_TYPES:
         raise GraphError(f"{where}: type は {sorted(NODE_TYPES)} のどれかです")
-    name = _text(raw.get("name", node_id), f"{where}.name", MAX_NAME_LENGTH)
+    name = text_value(raw.get("name", node_id), f"{where}.name", MAX_NAME_LENGTH)
     x, y = DEFAULT_NODE_POSITION
     if "position" in raw:
         position = raw["position"]
         if not isinstance(position, dict) or set(position) != {"x", "y"}:
             raise GraphError(f"{where}: position は x と y を持つオブジェクトです")
-        x = _number(position["x"], f"{where}.position.x")
-        y = _number(position["y"], f"{where}.position.y")
+        x = number_value(position["x"], f"{where}.position.x")
+        y = number_value(position["y"], f"{where}.position.y")
     properties = raw.get("properties", {})
     if not isinstance(properties, dict):
         raise GraphError(f"{where}: properties はオブジェクトにしてください")
@@ -283,35 +230,6 @@ def _edge(raw: Any, index: int) -> GraphEdge:
     if not isinstance(source, str) or not isinstance(target, str):
         raise GraphError(f"{where}: source と target は文字列にしてください")
     return GraphEdge(source, target)
-
-
-def _service_ids(raw: Any) -> tuple[str, ...]:
-    """サービス ID の一覧を読む。
-
-    Parameters
-    ----------
-    raw : Any
-        JSON の `serviceIds`。
-
-    Returns
-    -------
-    tuple[str, ...]
-        サービス ID。
-
-    Raises
-    ------
-    GraphError
-        空・重複・不正な値のとき。
-    """
-    if not isinstance(raw, list) or not raw:
-        raise GraphError("serviceIds は 1 つ以上の配列にしてください")
-    ids = tuple(
-        _text(item, f"serviceIds[{i}]", MAX_SERVICE_ID_LENGTH)
-        for i, item in enumerate(raw)
-    )
-    if len(set(ids)) != len(ids):
-        raise GraphError("serviceIds に重複があります")
-    return ids
 
 
 def _check_structure(
@@ -401,12 +319,12 @@ def parse_graph(data: Any) -> GraphDefinition:
     if unknown:
         raise GraphError(f"未知の項目です: {sorted(unknown)}")
     if data.get("version") != GRAPH_VERSION or isinstance(data.get("version"), bool):
-        raise GraphError(f"未対応の version です（対応: {GRAPH_VERSION}）")
+        raise GraphError("未対応の version です（対応: 1・2）")
     graph_id = data.get("id")
     if not isinstance(graph_id, str) or GRAPH_ID_PATTERN.fullmatch(graph_id) is None:
         raise GraphError("id は英小文字・数字・-・_ の 1〜64 文字にしてください")
-    name = _text(data.get("name"), "name", MAX_NAME_LENGTH)
-    service_ids = _service_ids(data.get("serviceIds"))
+    name = text_value(data.get("name"), "name", MAX_NAME_LENGTH)
+    service_ids = service_ids_value(data.get("serviceIds"))
     raw_nodes, raw_edges = data.get("nodes"), data.get("edges")
     if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
         raise GraphError("nodes と edges は配列にしてください")

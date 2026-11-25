@@ -8,13 +8,19 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from waha_emulator.studio.flow import (
+    FLOW_VERSION,
+    FlowDefinition,
+    compile_flow,
+    parse_flow,
+)
 from waha_emulator.studio.graph import (
     GraphDefinition,
-    GraphError,
     compile_graph,
     parse_graph,
 )
 from waha_emulator.studio.store import GraphStore
+from waha_emulator.studio.validation import GraphError
 from waha_emulator.workflow_config import WorkflowDefinition
 from waha_emulator.workflows.base import Workflow
 from waha_emulator.workflows.registry import WorkflowRegistry
@@ -27,7 +33,11 @@ SECRET_NAME_SUFFIXES = ("API_KEY", "PASSWORD", "SECRET", "TOKEN")
 # 値が環境変数の参照 1 つだけのときは、秘密そのものではないので伏せない
 ENV_REFERENCE_ONLY = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}")
 
-WorkflowFactory = Callable[[GraphDefinition, WorkflowDefinition], Workflow]
+# 版 1（鎖）と版 2（自由なつなぎ方）のどちらの定義か。id・name・service_ids を持つ
+Definition = GraphDefinition | FlowDefinition
+# 版 1 は、アダプターを動かす定義 1 つ。版 2 は、生成AI ノードの ID → 定義
+Plan = WorkflowDefinition | Mapping[str, WorkflowDefinition]
+WorkflowFactory = Callable[[Definition, Plan], Workflow]
 
 
 class StudioNotFoundError(LookupError):
@@ -74,6 +84,36 @@ def _is_secret_value(name: str, value: Any) -> bool:
     return ENV_REFERENCE_ONLY.fullmatch(str(value)) is None
 
 
+# ノードの中の、プロパティ（接続の設定）の場所。版 1 はノード直下、版 2 は config の中
+PROPERTY_PATHS: tuple[tuple[str, ...], ...] = (
+    ("properties",),
+    ("config", "properties"),
+)
+
+
+def _property_map(node: Any, path: tuple[str, ...]) -> dict[str, Any] | None:
+    """ノードの中の、指定した場所のプロパティを返す。
+
+    Parameters
+    ----------
+    node : Any
+        ノード（JSON の値）。
+    path : tuple[str, ...]
+        ノードの中のキーの道すじ。
+
+    Returns
+    -------
+    dict[str, Any] | None
+        プロパティ。その場所になければ（オブジェクトでなければ）None。
+    """
+    current = node
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current if isinstance(current, dict) else None
+
+
 def mask_secrets(data: Mapping[str, Any]) -> dict[str, Any]:
     """定義の中の秘密情報を伏せたコピーを返す。
 
@@ -89,10 +129,13 @@ def mask_secrets(data: Mapping[str, Any]) -> dict[str, Any]:
     """
     masked = copy.deepcopy(dict(data))
     for node in masked.get("nodes", []):
-        properties = node.get("properties", {})
-        for name, value in properties.items():
-            if _is_secret_value(name, value):
-                properties[name] = MASK
+        for path in PROPERTY_PATHS:
+            properties = _property_map(node, path)
+            if properties is None:
+                continue
+            for name, value in properties.items():
+                if _is_secret_value(name, value):
+                    properties[name] = MASK
     return masked
 
 
@@ -128,23 +171,24 @@ def restore_masked_values(data: Any, stored: Mapping[str, Any]) -> Any:
         if isinstance(n, dict) and isinstance(n.get("id"), str)
     }
     for node in restored["nodes"]:
-        properties = node.get("properties") if isinstance(node, dict) else None
-        if not isinstance(properties, dict):
-            continue
-        node_id = node.get("id")
-        previous = (
-            stored_nodes.get(node_id, {}).get("properties", {})
-            if isinstance(node_id, str)
-            else {}
-        )
-        for name, value in properties.items():
-            if value != MASK:
+        node_id = node.get("id") if isinstance(node, dict) else None
+        for path in PROPERTY_PATHS:
+            properties = _property_map(node, path)
+            if properties is None:
                 continue
-            if name not in previous:
-                raise GraphError(
-                    f"ノード「{node_id}」: {name} は伏せた値のままです。値を入れてください"
-                )
-            properties[name] = previous[name]
+            previous = (
+                _property_map(stored_nodes.get(node_id), path)
+                if isinstance(node_id, str)
+                else None
+            ) or {}
+            for name, value in properties.items():
+                if value != MASK:
+                    continue
+                if name not in previous:
+                    raise GraphError(
+                        f"ノード「{node_id}」: {name} は伏せた値のままです。値を入れてください"
+                    )
+                properties[name] = previous[name]
     return restored
 
 
@@ -180,7 +224,7 @@ class StudioService:
         self._environ = os.environ if environ is None else environ
         self._lock = threading.Lock()
         self._raw: dict[str, dict[str, Any]] = {}
-        self._graphs: dict[str, GraphDefinition] = {}
+        self._graphs: dict[str, Definition] = {}
 
     def load(self) -> None:
         """保存されたワークフローを読み、登録する。
@@ -368,8 +412,10 @@ class StudioService:
         stored = self._raw.get(graph_id, {}) if isinstance(graph_id, str) else {}
         return restore_masked_values(data, stored)
 
-    def _build(self, data: Any) -> tuple[GraphDefinition, WorkflowDefinition]:
+    def _build(self, data: Any) -> tuple[Definition, Plan]:
         """定義を検証し、アダプターを動かす定義にする。
+
+        `version` が 2 なら版 2（自由なつなぎ方）、それ以外は版 1（鎖）として読む。
 
         Parameters
         ----------
@@ -378,7 +424,7 @@ class StudioService:
 
         Returns
         -------
-        tuple[GraphDefinition, WorkflowDefinition]
+        tuple[Definition, Plan]
             ワークフローの定義と、アダプターを動かす定義。
 
         Raises
@@ -386,10 +432,13 @@ class StudioService:
         GraphError
             定義が不正なとき。
         """
+        if isinstance(data, dict) and data.get("version") == FLOW_VERSION:
+            flow = parse_flow(data)
+            return flow, compile_flow(flow, self._environ)
         graph = parse_graph(data)
         return graph, compile_graph(graph, self._environ)
 
-    def _check_service_ids(self, graph: GraphDefinition) -> None:
+    def _check_service_ids(self, graph: Definition) -> None:
         """サービス ID が、他のワークフローと重ならないことを確かめる。
 
         Parameters
@@ -412,7 +461,7 @@ class StudioService:
                 )
 
     def _activate(
-        self, graph: GraphDefinition, workflow: Workflow, data: dict[str, Any]
+        self, graph: Definition, workflow: Workflow, data: dict[str, Any]
     ) -> None:
         """ワークフローを覚え、サービス ID に登録する（失敗しない処理だけ）。
 

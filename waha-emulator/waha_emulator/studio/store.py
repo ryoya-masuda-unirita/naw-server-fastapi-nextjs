@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from waha_emulator.studio.graph import GRAPH_ID_PATTERN
+from waha_emulator.studio.validation import GRAPH_ID_PATTERN
 
 logger = logging.getLogger(__name__)
 

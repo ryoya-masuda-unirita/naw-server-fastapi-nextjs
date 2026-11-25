@@ -122,6 +122,42 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - 失敗理由には、失敗したノードの名前が付く（例: `FAILURE: ノード「検索」: 検索アダプタの実行に失敗しました: …`）
 - 作り変え前の状態には、タグ `waha-emulator-before-studio` で戻せる
 
+#### 版 2（自由なつなぎ方。Issue #530）
+
+`version` を `2` にすると、ノードを自由につなぎ、前のノードの出力を、あとのプロンプトで使えるワークフローを組める（上の版 1 は、これまでどおり動く。同じ保存先に共存する）。画面は、まだ版 1 だけに対応していて、版 2 は API で作る（画面は、今後）。
+
+| ノード | `config` | 役割 |
+|---|---|---|
+| `start` | なし | 質問（`{{question}}`）・会話履歴（`{{history}}`）を持つ |
+| `llm` | `prompt`（必須）・`properties`（接続）・`outputType`（0 か 2。既定 0）・`inheritContext`（既定 false） | プロンプトを埋めて、生成AI を 1 回呼ぶ。出力は `{{ノードID.text}}` |
+| `template` | `text`（必須） | 変数を埋めた文字列を作る。出力は `{{ノードID.text}}` |
+| `end` | `output`（必須） | 回答にする文字列（`{{...}}` を埋め込める） |
+
+- 変数は `{{question}}`・`{{history}}`・`{{ノードID.text}}`。**そのノードより前に動くノードの出力だけ**使える（保存の時点で、使えない参照は、どのノードのどの項目かを示して 400 になる）
+- `outputType` が 2 のノードは、回答の本文をそのまま、0 のノードは、回答の JSON の `answer` を、`{{ノードID.text}}` にする。途中のノードは 2 がおすすめ
+- `inheritContext` が true のノードにだけ、会話履歴と添付ファイルを渡す（textData は、いつも渡す）
+- `end` の出力が、`{{生成AIノード.text}}` 1 つだけなら、そのノードの出力を、そのまま返す（出力モード 0 なら、引用元つきの回答の JSON、2 なら本文だけ）。**server-local が読むのは回答の JSON なので、最後の生成AI は、出力モード 0 にする**。文字が混ざるときは、埋めた文字列を、`answer` にした JSON にする
+- 今は、1 本の道（分岐・合流・並列なし）。ノードは 50 個まで
+
+```json
+{
+  "version": 2, "id": "polish", "name": "推敲", "serviceIds": ["polish"],
+  "nodes": [
+    {"id": "start", "type": "start", "position": {"x": 0, "y": 0}},
+    {"id": "draft", "type": "llm", "name": "下書き", "position": {"x": 280, "y": 0},
+     "config": {"prompt": "{{question}} に回答してください", "outputType": 2,
+                "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}}},
+    {"id": "polish", "type": "llm", "name": "推敲", "position": {"x": 560, "y": 0},
+     "config": {"prompt": "次の下書きの誤りを直してください:\n{{draft.text}}",
+                "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}}},
+    {"id": "end", "type": "end", "position": {"x": 840, "y": 0}, "config": {"output": "{{polish.text}}"}}
+  ],
+  "edges": [{"source": "start", "target": "draft"}, {"source": "draft", "target": "polish"}, {"source": "polish", "target": "end"}]
+}
+```
+
+`curl -X POST http://127.0.0.1:8091/admin/workflows -H 'content-type: application/json' --data @polish.json` で保存し、サービス ID `polish` で呼ぶ。`Echo` は、質問（プロンプト）をそのまま返すため、2 回目の回答に、1 回目の回答が入って見える。
+
 ### ワークフローエディター（画面）
 
 `ui/`（React + React Flow）は、管理用 API を使って、ノードと線でワークフローを組む画面（Issue #522）。左に一覧、中央にキャンバス、右にプロパティを置く。デプロイは対象外で、開発サーバーで動かす。

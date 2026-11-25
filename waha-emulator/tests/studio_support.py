@@ -76,3 +76,70 @@ def graph_data(
         "nodes": nodes,
         "edges": [{"source": a, "target": b} for a, b in itertools.pairwise(order)],
     }
+
+
+def flow_data(
+    flow_id: str = "polish",
+    *,
+    service_ids: list[str] | None = None,
+    properties: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """版 2 の、推敲のワークフロー（開始 → 下書き → 推敲 → 終了）の定義を作る。
+
+    Parameters
+    ----------
+    flow_id : str
+        ワークフローの ID。
+    service_ids : list[str] | None
+        サービス ID。None なら ID と同じ名前 1 つ。
+    properties : dict[str, str] | None
+        生成AI ノードの接続のプロパティ。None なら echo。
+
+    Returns
+    -------
+    dict[str, Any]
+        保存の形（JSON の値）の定義。
+    """
+    connection = dict(properties or ECHO_PROPERTIES)
+    return {
+        "version": 2,
+        "id": flow_id,
+        "name": f"推敲 {flow_id}",
+        "serviceIds": service_ids or [flow_id],
+        "nodes": [
+            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}},
+            {
+                "id": "draft",
+                "type": "llm",
+                "name": "下書き",
+                "position": {"x": 280, "y": 0},
+                "config": {
+                    "prompt": "{{question}} に回答してください",
+                    "outputType": 2,
+                    "properties": dict(connection),
+                },
+            },
+            {
+                "id": "polish",
+                "type": "llm",
+                "name": "推敲",
+                "position": {"x": 560, "y": 0},
+                "config": {
+                    "prompt": "次の下書きの誤りを直してください:\n{{draft.text}}",
+                    "properties": dict(connection),
+                },
+            },
+            {
+                "id": "end",
+                "type": "end",
+                "name": "終了",
+                "position": {"x": 840, "y": 0},
+                "config": {"output": "{{polish.text}}"},
+            },
+        ],
+        "edges": [
+            {"source": "start", "target": "draft"},
+            {"source": "draft", "target": "polish"},
+            {"source": "polish", "target": "end"},
+        ],
+    }
