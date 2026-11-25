@@ -100,6 +100,12 @@ jobs:
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
           TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
           TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+          # OIDCの信頼条件(repo:<この値>:ref:refs/heads/develop)に使う。実行中のリポジトリ名をそのまま渡す
+          TF_VAR_github_repository: ${{ github.repository }}
+          # ローカルでインフラ用ロールを作った(enable_github_actions_infra_role=true)あとは、Variable
+          # ENABLE_GITHUB_ACTIONS_INFRA_ROLE を true にする。渡さないと既定のfalseとなり、planが使用中の
+          # ロール自身を削除してしまう(未登録なら false = ロールを作らない)
+          TF_VAR_enable_github_actions_infra_role: ${{ vars.ENABLE_GITHUB_ACTIONS_INFRA_ROLE || 'false' }}
         run: terraform plan -out=tfplan
       
       - name: Terraform Apply
@@ -109,4 +115,10 @@ jobs:
           TF_VAR_key_pair_name: ${{ vars.KEY_PAIR_NAME }}
           TF_VAR_tfstate_bucket_name: ${{ vars.TF_STATE_BUCKET }}
           TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+          # OIDCの信頼条件(repo:<この値>:ref:refs/heads/develop)に使う。実行中のリポジトリ名をそのまま渡す
+          TF_VAR_github_repository: ${{ github.repository }}
+          # ローカルでインフラ用ロールを作った(enable_github_actions_infra_role=true)あとは、Variable
+          # ENABLE_GITHUB_ACTIONS_INFRA_ROLE を true にする。渡さないと既定のfalseとなり、planが使用中の
+          # ロール自身を削除してしまう(未登録なら false = ロールを作らない)
+          TF_VAR_enable_github_actions_infra_role: ${{ vars.ENABLE_GITHUB_ACTIONS_INFRA_ROLE || 'false' }}
         run: terraform apply -auto-approve tfplan

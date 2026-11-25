@@ -43,7 +43,7 @@ variable "enable_github_actions_infra_role" {
 
 variable "github_repository" {
   type        = string
-  default     = "ryoya-masuda-unirita/naw-server-fastapi-nextjs"
+  default     = "ryoya-masuda-unirita/secuaigent-fastapi-react"
   description = "OIDCの信頼条件に使うGitHubリポジトリ(<オーナー>/<リポジトリ>)。このリポジトリのdevelopブランチだけがCIロールを引き受けられる"
 }
 

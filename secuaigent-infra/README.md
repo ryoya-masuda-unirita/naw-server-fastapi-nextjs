@@ -129,7 +129,7 @@ GitHub ActionsがAWSを操作するロールは、**用途で2つに分けてい
 
 1. **Environment `infra`を、先に作って保護する**。承認者を付け、対象ブランチを`develop`だけにする（下の例）。初回のインフラのデプロイで自動作成もされるが、その場合は保護が付かない
 2. **ローカルで、管理者権限で**、`terraform.tfvars`に`enable_github_actions_infra_role = true`を足して`terraform apply`する（ロールをCIで作ることはできない。ロールを使うのが、ロールを作るワークフローだから）。`AWS_PROFILE=oic`
-3. 出力`github_actions_infra_role_arn`を、GitHubのSecret `AWS_INFRA_ROLE_ARN`に登録する
+3. 出力`github_actions_infra_role_arn`を、GitHubのSecret `AWS_INFRA_ROLE_ARN`に登録する。あわせて、GitHubのVariable `ENABLE_GITHUB_ACTIONS_INFRA_ROLE`を`true`にする（CIの`terraform plan`・`apply`に、ローカルと同じ`enable_github_actions_infra_role = true`を渡すため。未登録だと既定のfalseになり、CIのplanが、使用中のインフラ用ロール自身を削除してしまう）
 4. `Deploy`を手動実行し、`run_infra=true`にする（Environmentの承認が求められる）
 
 以下は、GitHubのドキュメントに基づく例で、**実行して確認していない**。`<...>`を置き換えること。
