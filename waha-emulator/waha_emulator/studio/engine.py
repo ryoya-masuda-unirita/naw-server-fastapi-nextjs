@@ -20,7 +20,6 @@ from waha_emulator.sessions import (
     SlotFile,
 )
 from waha_emulator.studio.flow import (
-    MAX_NODES,
     NODE_END,
     NODE_LLM,
     NODE_TEMPLATE,
@@ -49,7 +48,7 @@ TEXT_CONTENT_TYPE = "text/plain"
 ANSWER_KEY = "answer"
 NOT_UTF8_MESSAGE = "{name} が UTF-8 ではありません"
 ANSWER_UNREADABLE_MESSAGE = "生成AIの出力から answer を読めません"
-STEP_LIMIT_MESSAGE = "ノードの実行回数が上限（{limit}）を超えました"
+NO_END_MESSAGE = "終了ノードに着く前に、線がなくなりました"
 
 
 def _decode(slot: SlotFile, name: str) -> str:
@@ -183,9 +182,8 @@ class FlowWorkflow:
         variables = self._initial_variables(request)
         raw_outputs: dict[str, str] = {}
         current = self.flow.next_id(self.flow.start().id)
-        for _ in range(MAX_NODES):
-            if current is None:
-                break
+        # 定義は、輪がなく、すべての道が終了に着くことを、保存の時点で確かめてある
+        while current is not None:
             node = self.flow.node(current)
             try:
                 if node.type == NODE_END:
@@ -199,7 +197,8 @@ class FlowWorkflow:
                     f"ノード「{node.name}」: 変数 {e.args[0]} がありません"
                 ) from e
             current = self.flow.next_id(node.id)
-        raise WorkflowError(STEP_LIMIT_MESSAGE.format(limit=MAX_NODES))
+        # 終了ノードに着かずに、線が尽きた（検証済みの定義では起きない）
+        raise WorkflowError(NO_END_MESSAGE)
 
     def _initial_variables(self, request: WorkflowRequest) -> dict[str, str]:
         """開始ノードが持つ変数（質問・会話履歴）を作る。
@@ -307,7 +306,9 @@ class FlowWorkflow:
         """終了ノードの出力を作る。
 
         出力が、生成AI ノードの `{{ノードID.text}}` 1 つだけなら、そのノードの出力（生）を
-        そのまま返す（引用元などを失わない）。それ以外は、埋めた文字列を回答の JSON にする。
+        そのまま返す（引用元などを失わない）。そのため、返る形は、そのノードの出力モードによる
+        （0 は回答の JSON、2 は本文だけ。版 1 の出力モード 2 と同じ）。それ以外は、
+        埋めた文字列を回答の JSON にする。
 
         Parameters
         ----------

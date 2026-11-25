@@ -114,6 +114,7 @@ def _invalid_cases() -> list[tuple[Any, str]]:
         ("not an object", "オブジェクト"),
         (_edit(base, version=1), "version"),
         (_edit(base, version=True), "version"),
+        (_edit(base, version=2.0), "version"),
         (_edit(base, unknown=1), "未知の項目"),
         (_edit(base, id="Upper"), "id は"),
         (_edit(base, name=""), "name"),

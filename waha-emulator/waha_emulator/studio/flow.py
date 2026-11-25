@@ -397,7 +397,6 @@ def _check_structure(
         raise GraphError("end ノードは 1 つ以上必要です")
     known = set(ids)
     outgoing: dict[str, list[str]] = {node_id: [] for node_id in ids}
-    incoming: dict[str, int] = {node_id: 0 for node_id in ids}
     by_id = {node.id: node for node in nodes}
     for edge in edges:
         if edge.source not in known or edge.target not in known:
@@ -409,7 +408,6 @@ def _check_structure(
         if by_id[edge.source].type == NODE_END:
             raise GraphError("end ノードから出る線は引けません")
         outgoing[edge.source].append(edge.target)
-        incoming[edge.target] += 1
     for node_id, targets in outgoing.items():
         if len(targets) > MAX_OUTGOING_EDGES:
             raise GraphError(
@@ -447,7 +445,18 @@ def _check_acyclic(ids: list[str], outgoing: Mapping[str, list[str]]) -> None:
     state: dict[str, int] = {}  # 0 未訪問 / 1 たどり中 / 2 済み
 
     def visit(node_id: str) -> None:
-        """深さ優先で、たどり中のノードに戻ったら輪とする。"""
+        """深さ優先で、たどり中のノードに戻ったら輪とする。
+
+        Parameters
+        ----------
+        node_id : str
+            たどるノードの ID。
+
+        Raises
+        ------
+        GraphError
+            たどり中のノードに戻る線（輪）があるとき。
+        """
         state[node_id] = 1
         for target in outgoing[node_id]:
             current = state.get(target, 0)
@@ -589,7 +598,9 @@ def parse_flow(data: Any) -> FlowDefinition:
     unknown = set(data) - ROOT_KEYS
     if unknown:
         raise GraphError(f"未知の項目です: {sorted(unknown)}")
-    if data.get("version") != FLOW_VERSION or isinstance(data.get("version"), bool):
+    version = data.get("version")
+    # 2.0 や True を、2 として通さない（bool は int の仲間のため、型で確かめる）
+    if type(version) is not int or version != FLOW_VERSION:
         raise GraphError(f"未対応の version です（このデータは {FLOW_VERSION}）")
     flow_id = data.get("id")
     if not isinstance(flow_id, str) or GRAPH_ID_PATTERN.fullmatch(flow_id) is None:

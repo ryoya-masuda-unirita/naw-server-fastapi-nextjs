@@ -100,12 +100,21 @@ export function useEditor() {
     setEdges(flow.edges);
   }, []);
 
+  const close = useCallback(() => {
+    setSaved(null);
+    setIsNew(false);
+    setNodes([]);
+    setEdges([]);
+  }, []);
+
   const open = useCallback(
     async (id: string) => {
       try {
         const graph = await api.getWorkflow(id);
         // 画面は、まだ版 1（鎖）だけに対応している。版 2 は、開かずに、理由を出す
         if (graph.version !== GRAPH_VERSION) {
+          // 前に開いていたワークフローを、画面に残さない（別のものと取り違えて、編集・削除しないため）
+          close();
           setMessage({ kind: 'error', text: UNSUPPORTED_VERSION_TEXT });
           return;
         }
@@ -115,7 +124,7 @@ export function useEditor() {
         setMessage(toMessage(error));
       }
     },
-    [apply],
+    [apply, close],
   );
 
   const createNew = useCallback(
@@ -125,13 +134,6 @@ export function useEditor() {
     },
     [apply],
   );
-
-  const close = useCallback(() => {
-    setSaved(null);
-    setIsNew(false);
-    setNodes([]);
-    setEdges([]);
-  }, []);
 
   const remove = useCallback(
     async (id: string) => {

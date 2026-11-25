@@ -151,6 +151,22 @@ async def test_run_returns_last_llm_output_as_is_when_end_is_single_reference() 
     }
 
 
+async def test_run_returns_plain_text_when_end_references_plain_answer_node() -> None:
+    """終了が、出力モード 2 のノードを直接参照するときは、そのノードの本文だけを返すこと（版 1 の出力モード 2 と同じ）"""
+    data = flow_data()
+    _node(data, "end")["config"]["output"] = "{{draft.text}}"
+    data["nodes"] = [n for n in data["nodes"] if n["id"] != "polish"]
+    data["edges"] = [
+        {"source": "start", "target": "draft"},
+        {"source": "draft", "target": "end"},
+    ]
+    provider = SequenceProvider(answers=["下書きの本文"])
+
+    output = await _workflow(data, provider).run(_request())
+
+    assert output == "下書きの本文"
+
+
 async def test_run_builds_answer_json_when_end_output_is_composed_text() -> None:
     """終了の出力に文字が混ざるときは、埋めた文字列を、回答の JSON にすること"""
     data = flow_data()

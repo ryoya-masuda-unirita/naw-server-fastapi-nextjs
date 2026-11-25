@@ -276,13 +276,33 @@ def _build_studio(
     """
 
     def workflow_factory(definition: Definition, plan: Plan) -> Workflow:
-        """定義から、ノードと線で組んだワークフロー（版 1 は鎖、版 2 は自由なつなぎ方）を作る。"""
+        """定義から、ノードと線で組んだワークフロー（版 1 は鎖、版 2 は自由なつなぎ方）を作る。
+
+        Parameters
+        ----------
+        definition : Definition
+            ワークフローの定義（版 1 か版 2）。
+        plan : Plan
+            アダプターを動かす定義（版 1 は 1 つ、版 2 は生成AI ノードごと）。
+
+        Returns
+        -------
+        Workflow
+            ワークフロー。
+
+        Raises
+        ------
+        TypeError
+            定義と、アダプターを動かす定義の版が合わないとき。
+        """
         if isinstance(definition, FlowDefinition):
-            assert isinstance(plan, Mapping)
+            if not isinstance(plan, Mapping):
+                raise TypeError("版 2 の定義には、ノードごとの定義が要ります")
             return FlowWorkflow(
                 definition, plan, chat_runtime_factory, retrieval_runtime_factory
             )
-        assert isinstance(plan, WorkflowDefinition)
+        if not isinstance(plan, WorkflowDefinition):
+            raise TypeError("版 1 の定義には、1 つの定義が要ります")
         return GraphWorkflow(
             definition, plan, chat_runtime_factory, retrieval_runtime_factory
         )
