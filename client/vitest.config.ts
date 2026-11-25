@@ -8,6 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // テストは、ローカルの .env（git に入れない）に頼らず、同じ値で動かす
+    env: { VITE_API_URL: 'http://localhost:8000' },
   },
   resolve: {
     alias: {

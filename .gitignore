@@ -237,3 +237,6 @@ server/data/
 
 # onprem: Bedrock 用のワークフロー定義（例から作る。bedrock-ext）
 onprem/config/workflows.json
+
+# ローカルの設定（雛形は .env.example）
+client/.env
