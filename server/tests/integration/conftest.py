@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.core.login_key import hash_login_key
-from app.core.security import ALGORITHM, SECRET_KEY, create_access_token, hash_password
+from app.core.config import get_settings
+from app.core.security import ALGORITHM, create_access_token, hash_password
 from app.core.database import Base, get_session
 from app.core.redis_client import get_redis_client
 from app.main import app
@@ -265,7 +266,7 @@ def expired_jwt_token(test_user: User, test_tenant: Tenant) -> str:
         "exp": 1,
         "iat": 0,
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM)
 
 
 @pytest.fixture
