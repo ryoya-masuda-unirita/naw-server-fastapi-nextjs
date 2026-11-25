@@ -93,6 +93,16 @@ describe('App', () => {
     expect(mocked.updateWorkflow).toHaveBeenCalledTimes(1);
   });
 
+  it('版 2 のワークフローは開かず、対応していない理由を出す', async () => {
+    mocked.getWorkflow.mockResolvedValue({ ...structuredClone(SAVED), version: 2 });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /^社内QA\s*assistant-1/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('版 2 の形式です');
+    expect(screen.queryByLabelText('名前')).not.toBeInTheDocument();
+  });
+
   it('検証が失敗したら、サーバーの理由を出し、保存しない。編集内容は残る', async () => {
     mocked.validateWorkflow.mockRejectedValue(new api.ApiError(400, 'つなぎ方が不正です'));
     render(<App />);

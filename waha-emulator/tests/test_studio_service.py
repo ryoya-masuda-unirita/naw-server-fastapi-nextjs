@@ -1,20 +1,25 @@
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tests.studio_support import graph_data
-from waha_emulator.studio.graph import GraphDefinition, GraphError
+from tests.studio_support import flow_data, graph_data
+from waha_emulator.studio.engine import FlowWorkflow
+from waha_emulator.studio.flow import FlowDefinition
 from waha_emulator.studio.graph_workflow import GraphWorkflow
 from waha_emulator.studio.service import (
     MASK,
+    Definition,
+    Plan,
     StudioConflictError,
     StudioNotFoundError,
     StudioService,
     mask_secrets,
 )
 from waha_emulator.studio.store import GraphStore
+from waha_emulator.studio.validation import GraphError
 from waha_emulator.workflow_config import WorkflowDefinition
 from waha_emulator.workflows.base import Workflow
 from waha_emulator.workflows.registry import WorkflowRegistry
@@ -49,14 +54,14 @@ class _Fixed:
         return self.name
 
 
-def _factory(graph: GraphDefinition, definition: WorkflowDefinition) -> Workflow:
-    """テスト用に、定義から GraphWorkflow を作る。
+def _factory(definition: Definition, plan: Plan) -> Workflow:
+    """テスト用に、定義から、版 1 は GraphWorkflow、版 2 は FlowWorkflow を作る。
 
     Parameters
     ----------
-    graph : GraphDefinition
+    definition : Definition
         ワークフローの定義。
-    definition : WorkflowDefinition
+    plan : Plan
         アダプターを動かす定義。
 
     Returns
@@ -64,7 +69,11 @@ def _factory(graph: GraphDefinition, definition: WorkflowDefinition) -> Workflow
     Workflow
         ワークフロー。
     """
-    return GraphWorkflow(graph, definition)
+    if isinstance(definition, FlowDefinition):
+        assert isinstance(plan, Mapping)
+        return FlowWorkflow(definition, plan)
+    assert isinstance(plan, WorkflowDefinition)
+    return GraphWorkflow(definition, plan)
 
 
 def _service(
@@ -379,11 +388,11 @@ def test_service_update_is_atomic_when_workflow_build_fails(tmp_path: Path) -> N
     registry = WorkflowRegistry(_Fixed("default"))
     calls: list[int] = []
 
-    def flaky(graph: GraphDefinition, definition: WorkflowDefinition) -> Workflow:
+    def flaky(definition: Definition, plan: Plan) -> Workflow:
         calls.append(1)
         if len(calls) > 1:
             raise RuntimeError("build failed")
-        return GraphWorkflow(graph, definition)
+        return _factory(definition, plan)
 
     service = StudioService(GraphStore(tmp_path), registry, flaky, {})
     service.create(graph_data("wf-1", service_ids=["svc"]))
@@ -426,3 +435,95 @@ def test_service_warns_when_saved_workflow_shadows_config(
         service.create(graph_data("wf-1", service_ids=["shared"]))
 
     assert "shadows a configured service" in caplog.text
+
+
+def test_service_create_registers_flow_workflow(tmp_path: Path) -> None:
+    """版 2（自由なつなぎ方）を作成すると、サービス ID で FlowWorkflow が選ばれ、一覧に出ること"""
+    service, registry = _service(tmp_path)
+
+    service.create(flow_data("polish", service_ids=["polish-svc"]))
+
+    assert isinstance(_resolved(registry, "polish-svc"), FlowWorkflow)
+    assert service.list_workflows() == [
+        {"id": "polish", "name": "推敲 polish", "serviceIds": ["polish-svc"]}
+    ]
+
+
+def test_service_runs_version1_and_version2_side_by_side(tmp_path: Path) -> None:
+    """版 1 と版 2 が、同じ保存先・同じレジストリで共存し、それぞれの実行経路が選ばれること"""
+    service, registry = _service(tmp_path)
+
+    service.create(graph_data("chain", service_ids=["chain-svc"]))
+    service.create(flow_data("polish", service_ids=["polish-svc"]))
+
+    assert isinstance(_resolved(registry, "chain-svc"), GraphWorkflow)
+    assert isinstance(_resolved(registry, "polish-svc"), FlowWorkflow)
+    assert [w["id"] for w in service.list_workflows()] == ["chain", "polish"]
+
+
+def test_service_rejects_duplicate_service_id_across_versions(tmp_path: Path) -> None:
+    """版 1 と版 2 の間でも、同じサービス ID は競合になること"""
+    service, _ = _service(tmp_path)
+    service.create(graph_data("chain", service_ids=["svc"]))
+
+    with pytest.raises(StudioConflictError, match="svc"):
+        service.create(flow_data("polish", service_ids=["svc"]))
+
+
+def test_service_rejects_unsupported_version(tmp_path: Path) -> None:
+    """版 1・2 以外の version は、未対応として弾くこと"""
+    service, _ = _service(tmp_path)
+    data = flow_data("polish")
+    data["version"] = 3
+
+    with pytest.raises(GraphError, match="version"):
+        service.create(data)
+
+
+def test_service_masks_flow_secrets_in_config_properties(tmp_path: Path) -> None:
+    """版 2 の config.properties の API キーも、取得で伏せられ、伏せた値のまま更新しても保存済みの値が残ること"""
+    service, _ = _service(tmp_path)
+    properties = {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "real-secret",
+        "MODEL_NAME": "echo",
+    }
+    created = service.create(flow_data("polish", properties=properties))
+    draft = next(n for n in service.get("polish")["nodes"] if n["id"] == "draft")
+    assert created["nodes"][1]["config"]["properties"]["API_KEY"] == MASK
+    assert draft["config"]["properties"]["API_KEY"] == MASK
+    assert draft["config"]["properties"]["URL"] == "http://echo.invalid"
+
+    masked = service.get("polish")
+    masked["name"] = "改名"
+    service.update("polish", masked)
+
+    stored = (tmp_path / "polish.json").read_text(encoding="utf-8")
+    assert stored.count("real-secret") == 2
+    assert "改名" in stored
+
+
+def test_service_create_flow_rejects_masked_value(tmp_path: Path) -> None:
+    """版 2 でも、取得の応答（伏せた値）をそのまま作成に送ると、保存せずに弾くこと"""
+    service, _ = _service(tmp_path)
+    service.create(flow_data("polish"))
+    copied = service.get("polish")
+    copied["id"] = "polish2"
+    copied["serviceIds"] = ["polish2"]
+
+    with pytest.raises(GraphError, match="伏せた値のまま"):
+        service.create(copied)
+
+    assert [p.name for p in tmp_path.iterdir()] == ["polish.json"]
+
+
+def test_service_load_registers_saved_flow_workflows(tmp_path: Path) -> None:
+    """起動時の読み込みで、保存済みの版 2 も呼べるようになること"""
+    first, _ = _service(tmp_path)
+    first.create(flow_data("polish", service_ids=["polish-svc"]))
+
+    second, registry = _service(tmp_path)
+    second.load()
+
+    assert isinstance(_resolved(registry, "polish-svc"), FlowWorkflow)

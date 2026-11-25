@@ -10,12 +10,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 
 from waha_emulator.studio.catalog import property_catalog
-from waha_emulator.studio.graph import GraphError
 from waha_emulator.studio.service import (
     StudioConflictError,
     StudioNotFoundError,
     StudioService,
 )
+from waha_emulator.studio.validation import GraphError
 
 ADMIN_PATH = "/admin/workflows"
 NOT_FOUND_MESSAGE = "ワークフローがありません"

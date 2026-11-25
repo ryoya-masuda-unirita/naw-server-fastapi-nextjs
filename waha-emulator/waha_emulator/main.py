@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,9 +13,10 @@ from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
 from waha_emulator.routers import admin, servicerun
 from waha_emulator.sessions import SessionStore
-from waha_emulator.studio.graph import GraphDefinition
+from waha_emulator.studio.engine import FlowWorkflow
+from waha_emulator.studio.flow import FlowDefinition
 from waha_emulator.studio.graph_workflow import GraphWorkflow
-from waha_emulator.studio.service import StudioService
+from waha_emulator.studio.service import Definition, Plan, StudioService
 from waha_emulator.studio.store import GraphStore
 from waha_emulator.workflow_config import (
     ADAPTER_EMBEDDING,
@@ -274,12 +275,16 @@ def _build_studio(
         ワークフローの管理。
     """
 
-    def workflow_factory(
-        graph: GraphDefinition, definition: WorkflowDefinition
-    ) -> Workflow:
-        """定義から、ノードと線で組んだワークフローを作る。"""
+    def workflow_factory(definition: Definition, plan: Plan) -> Workflow:
+        """定義から、ノードと線で組んだワークフロー（版 1 は鎖、版 2 は自由なつなぎ方）を作る。"""
+        if isinstance(definition, FlowDefinition):
+            assert isinstance(plan, Mapping)
+            return FlowWorkflow(
+                definition, plan, chat_runtime_factory, retrieval_runtime_factory
+            )
+        assert isinstance(plan, WorkflowDefinition)
         return GraphWorkflow(
-            graph, definition, chat_runtime_factory, retrieval_runtime_factory
+            definition, plan, chat_runtime_factory, retrieval_runtime_factory
         )
 
     studio = StudioService(GraphStore(directory), registry, workflow_factory)

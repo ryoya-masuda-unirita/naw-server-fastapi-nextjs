@@ -7,11 +7,8 @@ from generative_ai_adapter.constants import PropertyIds
 from retrieval_adapter.constants import RetrievalPropertyIds
 
 from tests.studio_support import graph_data
-from waha_emulator.studio.graph import (
-    GraphError,
-    compile_graph,
-    parse_graph,
-)
+from waha_emulator.studio.graph import compile_graph, parse_graph
+from waha_emulator.studio.validation import GraphError
 from waha_emulator.workflow_config import (
     ECHO_PROPERTIES,
     NORMAL_CHAT_OUTPUT_TYPE,
