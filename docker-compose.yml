@@ -1,24 +1,15 @@
 # ローカル開発用。`docker compose up -d --build` で、DB のマイグレーション・ログイン用データ・デモデータ・画面まで立ち上がる
 # （画面 http://localhost:5173、テナント test-tenant、admin / admin@1234）。
-# 環境変数は、すべて .env で変えられる（既定値は、この ${名前:-既定値} の既定値。例は .env.example）。変えたい値は、このディレクトリの .env で指定する（例は .env.example。.env がなくても動く）。
+# 環境変数の既定値は .env.example にある。変えたい値は、このディレクトリの .env で指定する（例は .env.example。.env がなくても動く）。
 # 必要なサービスだけを起動してもよい（例: docker compose up -d postgres redis localstack）。
 
-# backend と migrate が共有する、アプリの環境変数（値は .env から。なければ、ローカルの既定値）
+# backend と migrate が共有する、アプリの環境変数。値は .env.example に書いてある（既定値）。
+# 変えたい値は、.env に書く（.env.example より、あとに読むので、.env が勝つ。.env がなくても動く）
 x-backend-env: &backend-env
-  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://root:root@postgres:5432/postgres}
-  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://localstack:4566}
-  AWS_REGION: ${AWS_REGION:-ap-northeast-1}
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
-  AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-secuaigent-user-import-jobs-dev-local}
-  AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/secuaigent-user-import-jobs-queue-dev-local}
-  SECRET_KEY: ${SECRET_KEY:-dev-secret-not-for-production}
-  # 画面（別のポート）から backend を呼べるようにする
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173}}
-  # ローカルは HTTP のため、Cookie に Secure を付けない
-  COOKIE_SECURE: ${COOKIE_SECURE:-false}
-  COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+  env_file:
+    - .env.example
+    - path: .env
+      required: false
 
 # backend と migrate が共有する、イメージとソースのバインドマウント（ソースは ./server を /app に載せる）
 x-backend-build: &backend-build
@@ -105,8 +96,7 @@ services:
 
   # DB のテーブルを作る（alembic のマイグレーション）。終わったら終了する
   migrate:
-    <<: *backend-build
-    environment: *backend-env
+    <<: [*backend-build, *backend-env]
     command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
     restart: "no"
     depends_on:
@@ -129,9 +119,8 @@ services:
 
   # FastAPI の backend
   backend:
-    <<: *backend-build
+    <<: [*backend-build, *backend-env]
     container_name: naw-fastapi-backend
-    environment: *backend-env
     ports:
       # ログイン用のデータ（admin / admin@1234）が入るため、既定はホストの 127.0.0.1 だけに公開する（BACKEND_HOST で変える）
       - "${BACKEND_HOST:-127.0.0.1}:${BACKEND_PORT:-8001}:8000"
