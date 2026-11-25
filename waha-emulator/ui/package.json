@@ -1,0 +1,42 @@
+{
+  "name": "waha-emulator-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xyflow/react": "13.0.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tailwindcss/postcss": "4.3.2",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "^24.19.4",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@typescript-eslint/eslint-plugin": "8.62.1",
+    "@typescript-eslint/parser": "8.62.1",
+    "@vitejs/plugin-react": "6.0.3",
+    "autoprefixer": "10.5.2",
+    "eslint": "10.6.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.3",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
+    "postcss": "8.5.16",
+    "tailwindcss": "4.3.2",
+    "typescript": "6.0.3",
+    "vite": "8.1.2",
+    "vitest": "4.1.9"
+  }
+}
