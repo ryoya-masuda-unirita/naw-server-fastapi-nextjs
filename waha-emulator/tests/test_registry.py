@@ -235,7 +235,6 @@ def test_dynamic_workflow_takes_precedence_over_registered() -> None:
     registry.set_dynamic("svc", dynamic)
 
     assert registry.resolve("svc", {}) is dynamic
-    assert registry.has_dynamic("svc")
 
 
 def test_removing_dynamic_workflow_restores_registered() -> None:
@@ -248,7 +247,6 @@ def test_removing_dynamic_workflow_restores_registered() -> None:
     registry.remove_dynamic("svc")
 
     assert registry.resolve("svc", {}) is registered
-    assert not registry.has_dynamic("svc")
 
 
 def test_dynamic_workflow_takes_precedence_over_learning_params() -> None:

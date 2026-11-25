@@ -139,3 +139,17 @@ async def test_responses_mask_secrets(admin: httpx.AsyncClient) -> None:
 
     assert "real-secret" not in created.text
     assert "real-secret" not in fetched.text
+
+
+@pytest.mark.parametrize("body", [[], {"nodes": 5}, {"id": [1]}])
+async def test_malformed_body_returns_400_not_500(
+    admin: httpx.AsyncClient, body: object
+) -> None:
+    """形が壊れた本文は、作成・更新・検証のどれでも 500 でなく 400 になること"""
+    await admin.post(ADMIN, json=graph_data("wf-1"))
+
+    post = await admin.post(ADMIN, json=body)
+    put = await admin.put(f"{ADMIN}/wf-1", json=body)
+    validate = await admin.post(f"{ADMIN}/validate", json=body)
+
+    assert (post.status_code, put.status_code, validate.status_code) == (400, 400, 400)

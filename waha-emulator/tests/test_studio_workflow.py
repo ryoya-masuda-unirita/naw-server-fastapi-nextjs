@@ -18,6 +18,10 @@ from tests.conftest import (
 from tests.studio_support import graph_data
 from tests.test_retrieval_workflow import FakeSearchClient, _runtime_factory
 from waha_emulator.main import create_app
+from waha_emulator.studio.graph import compile_graph, parse_graph
+from waha_emulator.studio.graph_workflow import GraphWorkflow
+from waha_emulator.workflows.base import WorkflowError, WorkflowRequest
+from waha_emulator.workflows.generative_ai import RETRIEVAL_OUTPUT_MISSING_MESSAGE
 from waha_emulator.workflows.registry import WorkflowRegistry
 
 ADMIN = "/admin/workflows"
@@ -245,3 +249,38 @@ async def test_execute_failure_prefixes_retrieval_node_name(tmp_path: Path) -> N
     assert executed.startswith(
         "FAILURE: ノード「検索」: 検索アダプタの実行に失敗しました"
     )
+
+
+async def test_retrieval_output_missing_is_attributed_to_retrieval_node() -> None:
+    """検索アダプターが出力を書かなかった失敗は、検索ノードの名前が付くこと"""
+
+    class _Failing:
+        """検索の出力がないという失敗を投げる。"""
+
+        async def run(self, request: WorkflowRequest) -> str:
+            """必ず失敗する。
+
+            Parameters
+            ----------
+            request : WorkflowRequest
+                使わない。
+
+            Raises
+            ------
+            WorkflowError
+                常に。
+            """
+            raise WorkflowError(RETRIEVAL_OUTPUT_MISSING_MESSAGE)
+
+    graph = parse_graph(graph_data("rag", retrieval=True))
+    workflow = GraphWorkflow(graph, compile_graph(graph, {}))
+    workflow._workflow = _Failing()  # type: ignore[assignment]
+
+    try:
+        await workflow.run(
+            WorkflowRequest(service_id="rag", params={}, inputs={}, stream=None)
+        )
+    except WorkflowError as e:
+        assert str(e) == f"ノード「検索」: {RETRIEVAL_OUTPUT_MISSING_MESSAGE}"
+    else:
+        raise AssertionError("WorkflowError が起きませんでした")

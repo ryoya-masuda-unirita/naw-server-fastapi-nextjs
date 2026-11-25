@@ -69,8 +69,8 @@ class WorkflowRegistry:
         """
         self._dynamic.pop(service_id, None)
 
-    def has_dynamic(self, service_id: str) -> bool:
-        """管理用 API で保存したワークフローが登録されているかを返す。
+    def has_registered(self, service_id: str) -> bool:
+        """設定ファイルで、サービス ID に定義が登録されているかを返す。
 
         Parameters
         ----------
@@ -82,7 +82,7 @@ class WorkflowRegistry:
         bool
             登録されていれば True。
         """
-        return service_id in self._dynamic
+        return service_id in self._by_service_id
 
     def register(self, service_id: str, workflow: Workflow) -> None:
         """サービス ID にワークフローを登録する。

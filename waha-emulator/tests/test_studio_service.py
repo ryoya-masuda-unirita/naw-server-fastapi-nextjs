@@ -12,6 +12,7 @@ from waha_emulator.studio.service import (
     StudioConflictError,
     StudioNotFoundError,
     StudioService,
+    mask_secrets,
 )
 from waha_emulator.studio.store import GraphStore
 from waha_emulator.workflow_config import WorkflowDefinition
@@ -130,7 +131,7 @@ def test_service_create_rejects_invalid_definition(tmp_path: Path) -> None:
 
     assert service.list_workflows() == []
     assert list(tmp_path.iterdir()) == []
-    assert not registry.has_dynamic("wf-1")
+    assert not isinstance(_resolved(registry, "wf-1"), GraphWorkflow)
 
 
 def test_service_rejects_duplicate_id(tmp_path: Path) -> None:
@@ -289,7 +290,7 @@ def test_service_validate_does_not_save(tmp_path: Path) -> None:
         service.validate(graph_data("wf-2", service_ids=["svc"]))
 
     assert [p.name for p in tmp_path.iterdir()] == ["wf-1.json"]
-    assert not registry.has_dynamic("wf-2")
+    assert not isinstance(_resolved(registry, "wf-2"), GraphWorkflow)
 
 
 def test_service_validate_accepts_own_service_ids(tmp_path: Path) -> None:
@@ -332,3 +333,96 @@ def test_service_load_skips_invalid_and_duplicates(
     assert "b-broken" in caplog.text
     assert "c-mismatch" in caplog.text
     assert "d-dup" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        "text",
+        {"nodes": 5},
+        {"nodes": [{"id": [1], "properties": {"API_KEY": "********"}}]},
+        {"id": [1]},
+    ],
+)
+def test_service_rejects_malformed_body_with_graph_error(
+    tmp_path: Path, body: Any
+) -> None:
+    """形が壊れた本文は、更新・検証・作成のどれでも、内部エラーでなく定義の不正として弾くこと"""
+    service, _ = _service(tmp_path)
+    service.create(graph_data("wf-1"))
+
+    with pytest.raises(GraphError):
+        service.update("wf-1", body)
+    with pytest.raises(GraphError):
+        service.validate(body)
+    with pytest.raises(GraphError):
+        service.create(body)
+
+
+def test_service_create_rejects_masked_value(tmp_path: Path) -> None:
+    """取得の応答（伏せた値）をそのまま作成に送ると、伏せた値を鍵として保存せずに弾くこと"""
+    service, _ = _service(tmp_path)
+    service.create(graph_data("wf-1"))
+    copied = service.get("wf-1")
+    copied["id"] = "wf-2"
+    copied["serviceIds"] = ["wf-2"]
+
+    with pytest.raises(GraphError, match="伏せた値のまま"):
+        service.create(copied)
+
+    assert [p.name for p in tmp_path.iterdir()] == ["wf-1.json"]
+
+
+def test_service_update_is_atomic_when_workflow_build_fails(tmp_path: Path) -> None:
+    """更新でワークフローの組み立てに失敗しても、元の保存・登録・一覧が残ること"""
+    registry = WorkflowRegistry(_Fixed("default"))
+    calls: list[int] = []
+
+    def flaky(graph: GraphDefinition, definition: WorkflowDefinition) -> Workflow:
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("build failed")
+        return GraphWorkflow(graph, definition)
+
+    service = StudioService(GraphStore(tmp_path), registry, flaky, {})
+    service.create(graph_data("wf-1", service_ids=["svc"]))
+
+    with pytest.raises(RuntimeError, match="build failed"):
+        service.update("wf-1", graph_data("wf-1", service_ids=["new"]))
+
+    assert service.get("wf-1")["serviceIds"] == ["svc"]
+    assert isinstance(_resolved(registry, "svc"), GraphWorkflow)
+    assert not isinstance(_resolved(registry, "new"), GraphWorkflow)
+    stored = (tmp_path / "wf-1.json").read_text(encoding="utf-8")
+    assert '"svc"' in stored
+
+
+def test_mask_secrets_by_name_suffix_and_full_reference() -> None:
+    """名前が API_KEY などで終わる値だけ伏せ（MAX_TOKENS は伏せない）、参照以外が混ざる値も伏せること"""
+    data = graph_data(
+        properties={
+            "VENDOR": "Echo",
+            "URL": "http://echo.invalid",
+            "API_KEY": "${PREFIX}sk-real${SUFFIX}",
+            "MODEL_NAME": "echo",
+            "MAX_TOKENS": "1024",
+        }
+    )
+
+    gen = next(n for n in mask_secrets(data)["nodes"] if n["id"] == "gen")
+
+    assert gen["properties"]["API_KEY"] == MASK
+    assert gen["properties"]["MAX_TOKENS"] == "1024"
+
+
+def test_service_warns_when_saved_workflow_shadows_config(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """設定ファイルと同じサービス ID を保存すると、上書きすることを警告ログに出すこと"""
+    service, _ = _service(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        service.create(graph_data("wf-1", service_ids=["shared"]))
+
+    assert "shadows a configured service" in caplog.text

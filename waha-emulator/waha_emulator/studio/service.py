@@ -3,6 +3,7 @@
 import copy
 import logging
 import os
+import re
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -21,9 +22,10 @@ from waha_emulator.workflows.registry import WorkflowRegistry
 logger = logging.getLogger(__name__)
 
 MASK = "********"
-# 名前にこれらを含むプロパティの値は、応答で伏せる
-SECRET_NAME_PARTS = ("API_KEY", "PASSWORD", "SECRET", "TOKEN")
-ENV_REFERENCE_ONLY_PREFIX = "${"
+# 名前がこれらで終わるプロパティの値は、応答で伏せる（`MAX_TOKENS` のような設定値は伏せない）
+SECRET_NAME_SUFFIXES = ("API_KEY", "PASSWORD", "SECRET", "TOKEN")
+# 値が環境変数の参照 1 つだけのときは、秘密そのものではないので伏せない
+ENV_REFERENCE_ONLY = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}")
 
 WorkflowFactory = Callable[[GraphDefinition, WorkflowDefinition], Workflow]
 
@@ -51,11 +53,9 @@ def _is_secret_value(name: str, value: Any) -> bool:
     bool
         伏せるなら True。
     """
-    if not any(part in name.upper() for part in SECRET_NAME_PARTS):
+    if not name.upper().endswith(SECRET_NAME_SUFFIXES):
         return False
-    text = str(value)
-    is_reference = text.startswith(ENV_REFERENCE_ONLY_PREFIX) and text.endswith("}")
-    return not is_reference
+    return ENV_REFERENCE_ONLY.fullmatch(str(value)) is None
 
 
 def mask_secrets(data: Mapping[str, Any]) -> dict[str, Any]:
@@ -80,21 +80,22 @@ def mask_secrets(data: Mapping[str, Any]) -> dict[str, Any]:
     return masked
 
 
-def restore_masked_values(
-    data: dict[str, Any], stored: Mapping[str, Any]
-) -> dict[str, Any]:
+def restore_masked_values(data: Any, stored: Mapping[str, Any]) -> Any:
     """`********` のまま送られた値を、保存済みの値に戻す。
+
+    定義の形が不正（オブジェクトでない・`nodes` が配列でないなど）なときは、
+    何もせずそのまま返す（形の誤りは、`parse_graph` が 400 にする）。
 
     Parameters
     ----------
-    data : dict[str, Any]
-        更新で送られた定義。
+    data : Any
+        送られた定義。
     stored : Mapping[str, Any]
-        保存済みの定義。
+        保存済みの定義。保存済みのものがなければ空。
 
     Returns
     -------
-    dict[str, Any]
+    Any
         伏せた値を保存済みの値に戻した定義のコピー。
 
     Raises
@@ -102,21 +103,30 @@ def restore_masked_values(
     GraphError
         伏せた値のまま送られたが、引き継ぐ保存済みの値がないとき。
     """
+    if not isinstance(data, dict) or not isinstance(data.get("nodes"), list):
+        return data
     restored = copy.deepcopy(data)
     stored_nodes = {
-        n.get("id"): n for n in stored.get("nodes", []) if isinstance(n, dict)
+        n["id"]: n
+        for n in stored.get("nodes", [])
+        if isinstance(n, dict) and isinstance(n.get("id"), str)
     }
-    for node in restored.get("nodes", []):
+    for node in restored["nodes"]:
         properties = node.get("properties") if isinstance(node, dict) else None
         if not isinstance(properties, dict):
             continue
+        node_id = node.get("id")
+        previous = (
+            stored_nodes.get(node_id, {}).get("properties", {})
+            if isinstance(node_id, str)
+            else {}
+        )
         for name, value in properties.items():
             if value != MASK:
                 continue
-            previous = stored_nodes.get(node.get("id"), {}).get("properties", {})
             if name not in previous:
                 raise GraphError(
-                    f"ノード「{node.get('id')}」: {name} は伏せた値のままです。値を入れてください"
+                    f"ノード「{node_id}」: {name} は伏せた値のままです。値を入れてください"
                 )
             properties[name] = previous[name]
     return restored
@@ -170,10 +180,11 @@ class StudioService:
                             f"id（{graph.id}）がファイル名（{graph_id}）と違います"
                         )
                     self._check_service_ids(graph)
+                    workflow = self._factory(graph, definition)
                 except (GraphError, StudioConflictError) as e:
                     logger.warning("Workflow skipped: id=%s, error=%s", graph_id, e)
                     continue
-                self._activate(graph, definition, data)
+                self._activate(graph, workflow, data)
 
     def list_workflows(self) -> list[dict[str, Any]]:
         """ワークフローの一覧を返す。
@@ -253,13 +264,17 @@ class StudioService:
             id・サービス ID が他と重なるとき。
         """
         with self._lock:
-            graph, definition = self._build(data)
+            # 作成では引き継ぐ保存済みの値がないため、伏せた値のままの定義は弾く
+            checked = restore_masked_values(data, {})
+            graph, definition = self._build(checked)
             if graph.id in self._graphs or self._store.exists(graph.id):
                 raise StudioConflictError(f"id「{graph.id}」は、すでにあります")
             self._check_service_ids(graph)
-            self._store.write(graph.id, data)
-            self._activate(graph, definition, data)
-            return mask_secrets(data)
+            # 失敗しうる処理（ワークフローの組み立て・保存）を、登録を変える前に済ませる
+            workflow = self._factory(graph, definition)
+            self._store.write(graph.id, checked)
+            self._activate(graph, workflow, checked)
+            return mask_secrets(checked)
 
     def update(self, graph_id: str, data: Any) -> dict[str, Any]:
         """ワークフローを更新し、すぐ反映する。
@@ -293,9 +308,12 @@ class StudioService:
             if graph.id != graph_id:
                 raise GraphError("本文の id が、パスの id と違います")
             self._check_service_ids(graph)
+            # 失敗しうる処理（ワークフローの組み立て・保存）を、登録を変える前に済ませる。
+            # 途中で失敗しても、元の保存と登録が残る
+            workflow = self._factory(graph, definition)
             self._store.write(graph_id, restored)
             self._deactivate(graph_id)
-            self._activate(graph, definition, restored)
+            self._activate(graph, workflow, restored)
             return mask_secrets(restored)
 
     def delete(self, graph_id: str) -> None:
@@ -330,9 +348,9 @@ class StudioService:
         Any
             戻した定義。保存済みの定義がなければ、そのまま。
         """
-        if isinstance(data, dict) and data.get("id") in self._raw:
-            return restore_masked_values(data, self._raw[data["id"]])
-        return data
+        graph_id = data.get("id") if isinstance(data, dict) else None
+        stored = self._raw.get(graph_id, {}) if isinstance(graph_id, str) else {}
+        return restore_masked_values(data, stored)
 
     def _build(self, data: Any) -> tuple[GraphDefinition, WorkflowDefinition]:
         """定義を検証し、アダプターを動かす定義にする。
@@ -378,24 +396,26 @@ class StudioService:
                 )
 
     def _activate(
-        self,
-        graph: GraphDefinition,
-        definition: WorkflowDefinition,
-        data: dict[str, Any],
+        self, graph: GraphDefinition, workflow: Workflow, data: dict[str, Any]
     ) -> None:
-        """ワークフローを覚え、サービス ID に登録する。
+        """ワークフローを覚え、サービス ID に登録する（失敗しない処理だけ）。
 
         Parameters
         ----------
         graph : GraphDefinition
             ワークフローの定義。
-        definition : WorkflowDefinition
-            アダプターを動かす定義。
+        workflow : Workflow
+            組み立て済みのワークフロー。
         data : dict[str, Any]
             保存した定義（JSON の値）。
         """
-        workflow = self._factory(graph, definition)
         for service_id in graph.service_ids:
+            if self._registry.has_registered(service_id):
+                logger.warning(
+                    "Saved workflow shadows a configured service: id=%s, serviceId=%s",
+                    graph.id,
+                    service_id,
+                )
             self._registry.set_dynamic(service_id, workflow)
         self._graphs[graph.id] = graph
         self._raw[graph.id] = data

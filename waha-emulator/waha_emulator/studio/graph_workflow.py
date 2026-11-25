@@ -14,6 +14,7 @@ from waha_emulator.workflow_config import WorkflowDefinition
 from waha_emulator.workflows.base import WorkflowError, WorkflowRequest
 from waha_emulator.workflows.generative_ai import (
     RETRIEVAL_FAILED_PREFIX,
+    RETRIEVAL_OUTPUT_MISSING_MESSAGE,
     GenerativeAiWorkflow,
 )
 
@@ -71,11 +72,11 @@ class GraphWorkflow:
         try:
             return await self._workflow.run(request)
         except WorkflowError as e:
-            node_type = (
-                NODE_RETRIEVAL
-                if str(e).startswith(RETRIEVAL_FAILED_PREFIX)
-                else NODE_GENERATIVE_AI
+            message = str(e)
+            is_retrieval = message.startswith(RETRIEVAL_FAILED_PREFIX) or (
+                message == RETRIEVAL_OUTPUT_MISSING_MESSAGE
             )
+            node_type = NODE_RETRIEVAL if is_retrieval else NODE_GENERATIVE_AI
             node = self.graph.node_of_type(node_type)
             label = node.name if node is not None else node_type
             raise WorkflowError(f"ノード「{label}」: {e}") from e
