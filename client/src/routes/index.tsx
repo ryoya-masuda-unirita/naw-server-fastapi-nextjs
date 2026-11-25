@@ -49,10 +49,6 @@ const FeedbackPreviewPage = lazyNamed(
 );
 const AdminLibraryPage = lazyNamed(() => import('./library/library-list'), 'AdminLibraryPage');
 const LibraryDetailPage = lazyNamed(() => import('./library/library-detail'), 'LibraryDetailPage');
-const UsersPage = lazyNamed(() => import('./users/users'), 'UsersPage');
-const UserFormPage = lazyNamed(() => import('./users/user-form'), 'UserFormPage');
-const UserDetailPage = lazyNamed(() => import('./users/user-detail'), 'UserDetailPage');
-const ReportsPage = lazyNamed(() => import('./reports/reports'), 'ReportsPage');
 const AdminSettingsPage = lazyNamed(() => import('./settings/settings'), 'AdminSettingsPage');
 const AdminUserListPage = lazyNamed(() => import('./admin/users/user-list'), 'AdminUserListPage');
 const GroupListPage = lazyNamed(() => import('./admin/groups/group-list'), 'GroupListPage');
@@ -154,11 +150,6 @@ export const routes: RouteObject[] = [
       { path: APP_PATHS.DASHBOARD, element: page(ChatNewPage) },
 
       // 旧ユーザー管理・レポート・設定（adminGuard）
-      { path: APP_PATHS.USERS, element: adminPage(UsersPage) },
-      { path: APP_PATHS.USERS_NEW, element: adminPage(UserFormPage) },
-      { path: APP_PATHS.USERS_DETAIL, element: adminPage(UserDetailPage) },
-      { path: APP_PATHS.USERS_EDIT, element: adminPage(UserFormPage) },
-      { path: APP_PATHS.REPORTS, element: adminPage(ReportsPage) },
       { path: APP_PATHS.SETTINGS, element: adminPage(AdminSettingsPage) },
 
       // 管理コンソール（adminConsoleGuard）
