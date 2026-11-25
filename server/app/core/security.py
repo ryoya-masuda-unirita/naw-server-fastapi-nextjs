@@ -15,8 +15,8 @@ from app.models.user import User, UserRole
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.user_repository import UserRepository
 
-# JWT 設定（Authorizationヘッダーによるbearer認証のフォールバック経路用）
-SECRET_KEY = "your-secret-key-change-in-production"
+# JWT 設定（Authorizationヘッダーによるbearer認証のフォールバック経路用）。
+# 署名鍵は、環境変数 SECRET_KEY（Settings.secret_key）から読む（ソースに書かない）
 ALGORITHM = "HS512"
 ACCESS_TOKEN_EXPIRE_HOURS = 5
 
@@ -70,14 +70,14 @@ def create_access_token(login_id: str, tenant_id: str) -> str:
         "exp": int(expire.timestamp()),
         "iat": int(now.timestamp()),
     }
-    encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 def decode_token(token: str) -> dict:
     """JWT トークンをデコード"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
