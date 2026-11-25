@@ -4,6 +4,8 @@ set -euo pipefail
 
 OWNER="ryoya-masuda-unirita"
 PROJECT_NUMBER="3"
+# ボードの項目数（完了したものも含む）より、十分大きくする。小さいと、新しい Issue の項目が取得から外れる
+PROJECT_ITEM_LIMIT="1000"
 REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/secuaigent-fastapi-react}"
 
 usage() {
@@ -113,7 +115,7 @@ fi
 
 for current_issue in "${issue_numbers[@]}"; do
   item_id="$(
-    gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit 200 \
+    gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit "$PROJECT_ITEM_LIMIT" \
       --jq ".items[] | select(.content.number==$current_issue) | .id" \
       | head -n 1
   )"
@@ -122,7 +124,7 @@ for current_issue in "${issue_numbers[@]}"; do
     issue_url="https://github.com/$REPO/issues/$current_issue"
     gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$issue_url" >/dev/null
     item_id="$(
-      gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit 200 \
+      gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit "$PROJECT_ITEM_LIMIT" \
         --jq ".items[] | select(.content.number==$current_issue) | .id" \
         | head -n 1
     )"
