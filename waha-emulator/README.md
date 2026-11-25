@@ -131,13 +131,16 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 | `start` | なし | 質問（`{{question}}`）・会話履歴（`{{history}}`）を持つ |
 | `llm` | `prompt`（必須）・`properties`（接続）・`outputType`（0 か 2。既定 0）・`inheritContext`（既定 false） | プロンプトを埋めて、生成AI を 1 回呼ぶ。出力は `{{ノードID.text}}` |
 | `template` | `text`（必須） | 変数を埋めた文字列を作る。出力は `{{ノードID.text}}` |
-| `end` | `output`（必須） | 回答にする文字列（`{{...}}` を埋め込める） |
+| `retrieval` | `properties`（検索アダプターの接続。`VDB_*` など）・`query`（検索語のテンプレート。既定 `{{question}}`） | 検索し、引用資料の本文を `{{ノードID.contexts_text}}`（空行で区切ってつないだ文字列）にする |
+| `branch` | `variable`（調べる変数。`judge.text` など）・`operator`（`contains`・`equals`・`empty`）・`value`（`empty` では書かない。そのままの文字列で、`{{...}}` は展開しない） | 条件に合えば「はい」（`true`）、合わなければ「いいえ」（`false`）の線をたどる。大文字小文字は区別しない。`contains`・`equals` は、`value` の前後の空白を無視 |
+| `end` | `output`（必須） | 回答にする文字列（`{{...}}` を埋め込める）。**複数置ける**（たどり着いた終了が、回答になる） |
 
-- 変数は `{{question}}`・`{{history}}`・`{{ノードID.text}}`。**そのノードより前に動くノードの出力だけ**使える（保存の時点で、使えない参照は、どのノードのどの項目かを示して 400 になる）
+- 変数は `{{question}}`・`{{history}}`・`{{ノードID.text}}`（生成AI・テンプレート）・`{{ノードID.contexts_text}}`（検索）。**そのノードより前に動くノードの出力だけ**使える（保存の時点で、使えない参照は、どのノードのどの項目かを示して 400 になる）
 - `outputType` が 2 のノードは、回答の本文をそのまま、0 のノードは、回答の JSON の `answer` を、`{{ノードID.text}}` にする。途中のノードは 2 がおすすめ
 - `inheritContext` が true のノードにだけ、会話履歴と添付ファイルを渡す（textData は、いつも渡す）
 - `end` の出力が、`{{生成AIノード.text}}` 1 つだけなら、そのノードの出力を、そのまま返す（出力モード 0 なら、引用元つきの回答の JSON、2 なら本文だけ）。**server-local が読むのは回答の JSON なので、最後の生成AI は、出力モード 0 にする**。文字が混ざるときは、埋めた文字列を、`answer` にした JSON にする
-- 今は、1 本の道（分岐・合流・並列なし）。ノードは 50 個まで
+- 生成AI ノードに `retrieval`（検索ノードの ID）を書くと、その検索の結果を引用資料に、RAG（出力モード 1。`outputType` は書けない）で回答する。回答の `references` に、引用元が入る
+- 線は、条件分岐から出る 2 本に `sourceHandle`（`true`・`false`）を付ける。条件分岐は 2 本とも必要で、ほかのノードの線には付けない。**合流（複数の線が入る）・並列・ループは、まだ作れない**。ノードは 50 個まで
 
 ```json
 {
@@ -155,6 +158,8 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
   "edges": [{"source": "start", "target": "draft"}, {"source": "draft", "target": "polish"}, {"source": "polish", "target": "end"}]
 }
 ```
+
+**根拠チェック付きの RAG**（検索 → 回答 → 判定 → 条件分岐）は、`start → ret（検索）→ answer（生成AI。`retrieval: ret`）→ judge（生成AI。`outputType: 2`。プロンプトに `{{ret.contexts_text}}` と `{{answer.text}}`）→ check（条件分岐。`judge.text` が `OK` を含むか）→ はい: `end-ok`（`{{answer.text}}`）／いいえ: `end-ng`（固定の文）` と組む（定義の全体は `tests/studio_support.py` の `rag_check_flow_data`）。
 
 `curl -X POST http://127.0.0.1:8091/admin/workflows -H 'content-type: application/json' --data @polish.json` で保存し、サービス ID `polish` で呼ぶ。`Echo` は、質問（プロンプト）をそのまま返すため、2 回目の回答に、1 回目の回答が入って見える。
 

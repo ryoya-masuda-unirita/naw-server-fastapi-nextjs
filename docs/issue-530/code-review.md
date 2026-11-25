@@ -35,3 +35,31 @@
 ### 6・7. docstring・`assert`（🔵 提案）→ 対応済み
 
 入れ子の `visit` と `workflow_factory` に、NumPy 形式の docstring を付けた。`assert` を、`TypeError` を投げる確認に変えた。
+
+
+---
+
+# code-review 結果（PR 2）
+
+`/code-review medium`（`develop` との差分）の結果。
+
+| # | 重大度 | ファイル | 指摘内容 | 対応 |
+|---|---|---|---|---|
+| 1 | 🔴 致命的 | `studio/flow.py` | `sourceHandle` が配列・オブジェクトのとき、集合の検索で `TypeError` になり、400 でなく 500 になる | 対応済み |
+| 2 | 🔴 致命的 | `studio/flow.py` | 条件分岐の `operator` が配列・オブジェクトのとき、同じく `TypeError` | 対応済み |
+| 3 | 🔵 提案 | `studio/engine.py` | `contains` だけ、前後の空白を無視しない。`value` に `{{...}}` を書いても展開されない | 対応済み（空白を無視。`value` は、そのままの文字列と明記） |
+| 4 | 🔵 提案 | `workflows/generative_ai.py` | 検索の出力に `contexts` がないと、ログ出力の中で素の `KeyError` になり、ノード名が付かない | 対応済み |
+
+## 詳細
+
+### 1・2. 配列・オブジェクトでの `TypeError`（🔴 致命的）→ 対応済み
+
+`handle not in BRANCH_HANDLES`・`operator not in OPERATORS` は、frozenset の検索で、値がハッシュできないと `TypeError` になる。先に `isinstance(..., str)` で型を確かめてから、集合の検索をするようにした。テスト: `test_parse_flow_rejects_invalid_rag_workflow` に、`sourceHandle=[]`・`{"x": 1}`・`operator=["contains"]` を追加。
+
+### 3. `contains` の空白（🔵 提案）→ 対応済み
+
+`contains` も、`value` の前後の空白を無視するようにした（`equals` と揃える）。`value` が、`{{...}}` を展開しないことを、README と `_evaluate` の docstring に書いた。テスト: `("contains", "OK", "OK ", True)`。
+
+### 4. 検索の出力が読めないとき（🔵 提案）→ 対応済み
+
+出力の件数を数える処理を `try` に入れ、読めないときは、`WorkflowError`（`検索アダプタの出力（RAG Context JSON）を読めません`）にした。エンジンが、検索ノードの名前を付ける。テスト: `test_run_retrieval_with_unreadable_output_names_retrieval_node`。

@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from tests.conftest import make_settings, running_emulator
-from tests.studio_support import flow_data, graph_data
+from tests.studio_support import flow_data, graph_data, rag_check_flow_data
 
 ADMIN = "/admin/workflows"
 
@@ -238,3 +238,24 @@ async def test_create_flow_with_unusable_reference_returns_400(
 
     assert response.status_code == 400
     assert "ノード「draft」" in response.json()["detail"]
+
+
+async def test_create_rag_check_flow_returns_201(admin: httpx.AsyncClient) -> None:
+    """検索・条件分岐・2 つの終了を持つ版 2 を、作成できること"""
+    response = await admin.post(ADMIN, json=rag_check_flow_data())
+
+    assert response.status_code == 201
+    assert response.json()["version"] == 2
+
+
+async def test_create_flow_with_branch_missing_false_edge_returns_400(
+    admin: httpx.AsyncClient,
+) -> None:
+    """条件分岐の「いいえ」の線がない定義は、400 になり、理由が detail に入ること"""
+    data = rag_check_flow_data()
+    data["edges"].pop()
+
+    response = await admin.post(ADMIN, json=data)
+
+    assert response.status_code == 400
+    assert "1 本ずつ" in response.json()["detail"]

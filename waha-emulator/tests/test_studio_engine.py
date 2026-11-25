@@ -1,12 +1,14 @@
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
 from generative_ai_core.chat.models import CoreChatRequest, CoreChatResult
 
 from tests.conftest import ScriptedProvider
-from tests.studio_support import flow_data
+from tests.studio_support import flow_data, rag_check_flow_data
+from tests.test_retrieval_workflow import FakeSearchClient, _runtime_factory
 from waha_emulator.sessions import (
     SLOT_ATTACHMENT,
     SLOT_HISTORY,
@@ -14,7 +16,7 @@ from waha_emulator.sessions import (
     SLOT_TEXTDATA,
     SlotFile,
 )
-from waha_emulator.studio.engine import FlowWorkflow
+from waha_emulator.studio.engine import FlowWorkflow, _evaluate
 from waha_emulator.studio.flow import compile_flow, parse_flow
 from waha_emulator.workflows.base import WorkflowError, WorkflowRequest
 
@@ -87,8 +89,12 @@ def _request(inputs: dict[str, SlotFile] | None = None) -> WorkflowRequest:
     )
 
 
-def _workflow(data: dict[str, Any], provider: ScriptedProvider) -> FlowWorkflow:
-    """定義から、偽のプロバイダで動くワークフローを作る。
+def _workflow(
+    data: dict[str, Any],
+    provider: ScriptedProvider,
+    search: FakeSearchClient | None = None,
+) -> FlowWorkflow:
+    """定義から、偽のプロバイダ（と、あれば偽の検索）で動くワークフローを作る。
 
     Parameters
     ----------
@@ -96,6 +102,8 @@ def _workflow(data: dict[str, Any], provider: ScriptedProvider) -> FlowWorkflow:
         版 2 の定義。
     provider : ScriptedProvider
         偽のプロバイダ。
+    search : FakeSearchClient | None
+        偽のベクトル検索。None なら、検索を使わない。
 
     Returns
     -------
@@ -103,7 +111,12 @@ def _workflow(data: dict[str, Any], provider: ScriptedProvider) -> FlowWorkflow:
         ワークフロー。
     """
     flow = parse_flow(data)
-    return FlowWorkflow(flow, compile_flow(flow, {}), provider.chat_runtime_factory)
+    return FlowWorkflow(
+        flow,
+        compile_flow(flow, {}),
+        provider.chat_runtime_factory,
+        None if search is None else _runtime_factory(search),
+    )
 
 
 def _node(data: dict[str, Any], node_id: str) -> dict[str, Any]:
@@ -401,3 +414,185 @@ async def test_run_fails_when_json_answer_is_unreadable(
         WorkflowError, match=r"ノード「下書き」: 生成AIの出力から answer を読めません"
     ):
         await workflow.run(_request())
+
+
+async def test_run_rag_check_returns_answer_with_references_when_judge_says_ok() -> (
+    None
+):
+    """根拠チェック: 判定が OK なら、引用元つきの回答が返り、判定のプロンプトに、検索した本文と回答が入ること"""
+    provider = SequenceProvider(answers=["精算は5営業日以内です", "OK"])
+    search = FakeSearchClient()
+
+    output = await _workflow(rag_check_flow_data(), provider, search).run(_request())
+
+    body = json.loads(output)
+    assert body["answer"] == "精算は5営業日以内です"
+    assert len(body["references"]) == 2
+    assert len(search.calls) == 1
+    judge_prompt = provider.received[1].last_user_text()
+    assert "出張終了後5営業日以内に申請する" in judge_prompt
+    assert "精算は5営業日以内です" in judge_prompt
+
+
+async def test_run_rag_check_returns_fixed_text_when_judge_says_ng() -> None:
+    """根拠チェック: 判定が NG なら、「いいえ」の終了の固定の文が、回答になること（引用元は付かない）"""
+    provider = SequenceProvider(answers=["根拠のない回答", "NG"])
+
+    output = await _workflow(rag_check_flow_data(), provider, FakeSearchClient()).run(
+        _request()
+    )
+
+    assert json.loads(output) == {
+        "answer": "根拠となる文書が見つからず、お答えできません",
+        "filepaths": [],
+        "references": [],
+        "imageExplanations": [],
+    }
+    assert len(provider.received) == 2
+
+
+async def test_run_branch_contains_ignores_case_and_surrounding_text() -> None:
+    """条件分岐の「含む」は、大文字小文字を区別せず、前後に文字があっても「はい」になること"""
+    provider = SequenceProvider(answers=["回答", "結論: ok です"])
+
+    output = await _workflow(rag_check_flow_data(), provider, FakeSearchClient()).run(
+        _request()
+    )
+
+    assert json.loads(output)["answer"] == "回答"
+
+
+async def test_run_retrieval_variable_joins_contents_with_blank_line() -> None:
+    """検索ノードの `{{ret.contexts_text}}` が、引用資料の本文を、空行で区切ってつないだ文字列になること"""
+    data = rag_check_flow_data()
+    end_ok = next(n for n in data["nodes"] if n["id"] == "end-ok")
+    end_ok["config"]["output"] = "{{ret.contexts_text}}"
+    provider = SequenceProvider(answers=["回答", "OK"])
+
+    output = await _workflow(data, provider, FakeSearchClient()).run(_request())
+
+    answer = json.loads(output)["answer"]
+    first, second = answer.split("\n\n")
+    assert "5営業日以内" in first
+    assert second == "就業規則の抜粋。"
+
+
+async def test_run_retrieval_failure_names_retrieval_node() -> None:
+    """検索アダプターが失敗したら、検索ノードの名前が付いた失敗になり、生成AI は動かないこと"""
+
+    class _BrokenSearch(FakeSearchClient):
+        """検索で失敗する偽の DB。"""
+
+        def search(self, *args: object, **kwargs: object) -> list:  # type: ignore[type-arg]
+            """必ず失敗する。
+
+            Parameters
+            ----------
+            *args : object
+                使わない。
+            **kwargs : object
+                使わない。
+
+            Raises
+            ------
+            RuntimeError
+                常に。
+            """
+            raise RuntimeError("db down")
+
+    provider = SequenceProvider(answers=["a", "b"])
+
+    with pytest.raises(
+        WorkflowError, match=r"^ノード「検索」: 検索アダプタの実行に失敗しました"
+    ):
+        await _workflow(rag_check_flow_data(), provider, _BrokenSearch()).run(
+            _request()
+        )
+
+    assert provider.received == []
+
+
+async def test_run_branch_on_empty_variable_takes_true_side() -> None:
+    """演算子 empty は、変数が空のとき（会話履歴がない `{{history}}`）「はい」になること"""
+    data = flow_data()
+    data["nodes"] = [n for n in data["nodes"] if n["id"] not in ("draft", "polish")]
+    data["nodes"][1:1] = [
+        # 会話履歴がないとき {{history}} は空の文字列になる
+        {"id": "blank", "type": "template", "config": {"text": "{{history}}"}},
+        {
+            "id": "check",
+            "type": "branch",
+            "config": {"variable": "blank.text", "operator": "empty"},
+        },
+        {"id": "end-yes", "type": "end", "config": {"output": "空でした"}},
+    ]
+    end = next(n for n in data["nodes"] if n["id"] == "end")
+    end["config"]["output"] = "空ではありません"
+    data["edges"] = [
+        {"source": "start", "target": "blank"},
+        {"source": "blank", "target": "check"},
+        {"source": "check", "target": "end-yes", "sourceHandle": "true"},
+        {"source": "check", "target": "end", "sourceHandle": "false"},
+    ]
+
+    output = await _workflow(data, SequenceProvider()).run(_request())
+
+    assert json.loads(output)["answer"] == "空でした"
+
+
+@pytest.mark.parametrize(
+    ("operator", "actual", "expected", "result"),
+    [
+        ("contains", "結論は OK です", "ok", True),
+        ("contains", "NG", "OK", False),
+        ("contains", "OK", "OK ", True),
+        ("equals", " ok \n", "OK", True),
+        ("equals", "OK です", "OK", False),
+        ("empty", "", "", True),
+        ("empty", " \n ", "", True),
+        ("empty", "x", "", False),
+    ],
+)
+def test_evaluate_conditions(
+    operator: str, actual: str, expected: str, result: bool
+) -> None:
+    """条件の判定: 含む・等しいは大文字小文字を区別せず、等しいは前後の空白を無視し、empty は空白だけも空とすること"""
+    assert _evaluate(operator, actual, expected) is result
+
+
+def test_evaluate_rejects_unknown_operator() -> None:
+    """未対応の演算子は、失敗にすること（検証済みの定義では起きない）"""
+    with pytest.raises(WorkflowError, match="未対応の演算子"):
+        _evaluate("starts", "a", "b")
+
+
+async def test_run_retrieval_with_unreadable_output_names_retrieval_node(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """検索アダプターの出力に contexts がないとき、素の KeyError ではなく、検索ノードの名前つきの失敗になること"""
+
+    def write_broken_output(self: object, job: Any) -> None:
+        """contexts のない出力を書く（検索アダプターの代わり）。
+
+        Parameters
+        ----------
+        self : object
+            使わない。
+        job : Any
+            検索アダプターの入力（出力先とビュー名を持つ）。
+        """
+        output_dir = next(v for v in job.properties.values() if v.startswith("/"))
+        (Path(output_dir) / job.view_name).write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "waha_emulator.workflows.generative_ai.GenerativeAiWorkflow._run_retrieval",
+        write_broken_output,
+    )
+    provider = SequenceProvider(answers=["a", "b"])
+
+    with pytest.raises(WorkflowError, match=r"^ノード「検索」: 検索アダプタの出力"):
+        await _workflow(rag_check_flow_data(), provider, FakeSearchClient()).run(
+            _request()
+        )
+
+    assert provider.received == []

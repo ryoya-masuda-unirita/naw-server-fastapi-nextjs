@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from tests.studio_support import flow_data, graph_data
+from tests.studio_support import flow_data, graph_data, rag_check_flow_data
 from waha_emulator.studio.engine import FlowWorkflow
 from waha_emulator.studio.flow import FlowDefinition
 from waha_emulator.studio.graph_workflow import GraphWorkflow
@@ -527,3 +527,21 @@ def test_service_load_registers_saved_flow_workflows(tmp_path: Path) -> None:
     second.load()
 
     assert isinstance(_resolved(registry, "polish-svc"), FlowWorkflow)
+
+
+def test_service_masks_retrieval_node_password_in_config_properties(
+    tmp_path: Path,
+) -> None:
+    """版 2 の検索ノードの VDB のパスワードも、取得で伏せられ、伏せた値のまま更新しても保存済みの値が残ること"""
+    service, _ = _service(tmp_path)
+    created = service.create(rag_check_flow_data())
+    ret = next(n for n in created["nodes"] if n["id"] == "ret")
+    assert ret["config"]["properties"]["VDB_PASSWORD"] == MASK
+    assert ret["config"]["properties"]["VDB_URL"] == "db.invalid:5432"
+
+    masked = service.get("rag-check")
+    masked["name"] = "改名"
+    service.update("rag-check", masked)
+
+    stored = (tmp_path / "rag-check.json").read_text(encoding="utf-8")
+    assert '"VDB_PASSWORD": "password"' in stored

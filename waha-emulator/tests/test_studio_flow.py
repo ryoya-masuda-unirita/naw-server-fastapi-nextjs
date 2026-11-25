@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from generative_ai_adapter.constants import PropertyIds
 
-from tests.studio_support import flow_data
+from tests.studio_support import flow_data, rag_check_flow_data
 from waha_emulator.studio.flow import (
     compile_flow,
     parse_flow,
@@ -132,7 +132,7 @@ def _invalid_cases() -> list[tuple[Any, str]]:
     cases += [
         (variant(lambda d: d["nodes"][1].update(id="bad id")), "英数字"),
         (variant(lambda d: d["nodes"][1].update(id="a" * 65)), "英数字"),
-        (variant(lambda d: d["nodes"][1].update(type="retrieval")), "type は"),
+        (variant(lambda d: d["nodes"][1].update(type="agent")), "type は"),
         (variant(lambda d: d["nodes"][1].update(extra=1)), "未知の項目"),
         (
             variant(
@@ -218,11 +218,15 @@ def _invalid_cases() -> list[tuple[Any, str]]:
             "複数の線は出せません",
         ),
     ]
+    # 合流（複数の線が入る）は弾くため、輪は、開始から離れた 2 つのノードの間にしか作れない
     cycle = variant(lambda d: None)
-    cycle["edges"] = [
-        {"source": "start", "target": "draft"},
-        {"source": "draft", "target": "polish"},
-        {"source": "polish", "target": "draft"},
+    cycle["nodes"] += [
+        {"id": "loop-a", "type": "template", "config": {"text": "a"}},
+        {"id": "loop-b", "type": "template", "config": {"text": "b"}},
+    ]
+    cycle["edges"] += [
+        {"source": "loop-a", "target": "loop-b"},
+        {"source": "loop-b", "target": "loop-a"},
     ]
     cases.append((cycle, "輪"))
     unreachable = variant(
@@ -258,11 +262,11 @@ def test_parse_flow_rejects_invalid_definition(data: Any, message: str) -> None:
             "draft",
             "prompt",
             "{{answer}}",
-            "使えるのは question・history・ノードID.text",
+            "使えるのは question・history・ノードID.変数名",
         ),
         ("draft", "prompt", "{{start.text}}", "出力を持たない"),
         ("end", "output", "{{end.text}}", "出力を持たない"),
-        ("end", "output", "{{polish.answer}}", "使えるのは"),
+        ("end", "output", "{{polish.answer}}", "変数は polish.text です"),
     ],
 )
 def test_parse_flow_rejects_unusable_reference(
@@ -345,3 +349,231 @@ def test_references_and_single_reference() -> None:
     assert single_reference("{{a}} {{b}}") is None
     assert single_reference("前 {{a}}") is None
     assert single_reference("固定") is None
+
+
+def _rag(**changes: Any) -> dict[str, Any]:
+    """根拠チェック付きの RAG の定義のコピーを作り、トップレベルの項目を差し替える。
+
+    Parameters
+    ----------
+    **changes : Any
+        差し替える項目。
+
+    Returns
+    -------
+    dict[str, Any]
+        定義。
+    """
+    return {**copy.deepcopy(rag_check_flow_data()), **changes}
+
+
+def test_parse_flow_accepts_rag_check_workflow() -> None:
+    """根拠チェック付きの RAG（検索・分岐・2 つの終了）を読め、終了が 2 つあること"""
+    flow = parse_flow(rag_check_flow_data())
+
+    assert [n.type for n in flow.nodes].count("end") == 2
+    assert flow.next_id("check", "true") == "end-ok"
+    assert flow.next_id("check", "false") == "end-ng"
+    assert flow.next_id("check") is None
+    assert flow.node("answer").config["outputType"] == 1
+    assert flow.node("answer").config["retrieval"] == "ret"
+    assert flow.node("ret").config["query"] == "{{question}}"
+
+
+def test_compile_flow_builds_definitions_for_retrieval_and_rag_nodes() -> None:
+    """検索ノードは検索アダプターの設定を持つ定義に、検索を紐づけた生成AI は RAG（出力モード 1）になること"""
+    plans = compile_flow(parse_flow(rag_check_flow_data()), {})
+
+    assert set(plans) == {"ret", "answer", "judge"}
+    assert plans["ret"].retrieval is not None
+    assert plans["answer"].output_type == 1
+    assert plans["judge"].output_type == PLAIN_ANSWER_OUTPUT_TYPE
+
+
+def _only_on_true_branch(data: dict[str, Any]) -> None:
+    """「はい」の枝にだけテンプレートのノードを足し、「いいえ」の終了が、その出力を参照するようにする。
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        根拠チェックの定義（この関数が書き換える）。
+    """
+    data["nodes"].append(
+        {"id": "ok-only", "type": "template", "config": {"text": "OK でした"}}
+    )
+    data["edges"][4] = {"source": "check", "target": "ok-only", "sourceHandle": "true"}
+    data["edges"].append({"source": "ok-only", "target": "end-ok"})
+    end_ng = next(n for n in data["nodes"] if n["id"] == "end-ng")
+    end_ng["config"]["output"] = "{{ok-only.text}}"
+
+
+def _rag_edit(mutate: Any) -> dict[str, Any]:
+    """根拠チェックの定義のコピーに、変更を加える。
+
+    Parameters
+    ----------
+    mutate : Any
+        コピーを受け取って変更する関数。
+
+    Returns
+    -------
+    dict[str, Any]
+        変更した定義。
+    """
+    copied = copy.deepcopy(rag_check_flow_data())
+    mutate(copied)
+    return copied
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda d: d["edges"].pop(),
+            "「はい」（true）と「いいえ」（false）の線を 1 本ずつ",
+        ),
+        (
+            lambda d: d["edges"][-1].update(sourceHandle="true"),
+            "「はい」（true）と「いいえ」（false）の線を 1 本ずつ",
+        ),
+        (lambda d: d["edges"][-1].pop("sourceHandle"), "1 本ずつ"),
+        (lambda d: d["edges"][-1].update(sourceHandle="maybe"), "sourceHandle は"),
+        (lambda d: d["edges"][-1].update(sourceHandle=[]), "sourceHandle は"),
+        (lambda d: d["edges"][-1].update(sourceHandle={"x": 1}), "sourceHandle は"),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(operator=["contains"]),
+            "operator は",
+        ),
+        (
+            lambda d: d["edges"][0].update(sourceHandle="true"),
+            "sourceHandle は書けません",
+        ),
+        (
+            lambda d: d["edges"].append({"source": "ret", "target": "end-ok"}),
+            "複数の線は出せません",
+        ),
+        (
+            lambda d: d["edges"].__setitem__(
+                5, {"source": "check", "target": "end-ok", "sourceHandle": "false"}
+            ),
+            "複数の線が入っています",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "answer")[
+                "config"
+            ].update(outputType=2),
+            "retrieval があるとき outputType は書けません",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "answer")[
+                "config"
+            ].update(retrieval="judge"),
+            "検索ノードではありません",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "answer")[
+                "config"
+            ].update(retrieval="none"),
+            "検索ノードではありません",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "answer")[
+                "config"
+            ].update(retrieval="bad id"),
+            "検索ノードの ID",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(operator="starts"),
+            "operator は",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")["config"].pop(
+                "value"
+            ),
+            "config.value が必要",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")["config"].pop(
+                "variable"
+            ),
+            "config.variable が必要",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(operator="empty"),
+            "value は書けません",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(variable="end-ok.text"),
+            "出力を持たない",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(variable="ret.text"),
+            "変数は ret.contexts_text です",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "ret")["config"].update(
+                query="{{answer.text}}"
+            ),
+            "より前に動きません",
+        ),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "ret")["config"].update(
+                query=""
+            ),
+            "query",
+        ),
+        (
+            # 「はい」の枝にだけあるノードの出力は、「いいえ」の枝の終了からは使えない
+            lambda d: _only_on_true_branch(d),
+            "ノード「ok-only」は、このノードより前に動きません",
+        ),
+    ],
+)
+def test_parse_flow_rejects_invalid_rag_workflow(mutate: Any, message: str) -> None:
+    """検索・条件分岐・複数の終了まわりの不正な定義を、どのノードのどこかを示して弾くこと"""
+    with pytest.raises(GraphError, match=re.escape(message)):
+        parse_flow(_rag_edit(mutate))
+
+
+def test_parse_flow_accepts_branch_variable_written_with_braces() -> None:
+    """条件分岐の変数は、`{{judge.text}}` のように波括弧つきで書いても、変数の名前として読むこと"""
+    data = _rag_edit(
+        lambda d: next(n for n in d["nodes"] if n["id"] == "check")["config"].update(
+            variable="{{judge.text}}"
+        )
+    )
+
+    flow = parse_flow(data)
+
+    assert flow.node("check").config["variable"] == "judge.text"
+
+
+def test_parse_flow_accepts_empty_operator_without_value() -> None:
+    """演算子 empty は、value なしで書け、value は空の文字列として持つこと"""
+    data = _rag_edit(
+        lambda d: next(n for n in d["nodes"] if n["id"] == "check")["config"].update(
+            operator="empty"
+        )
+    )
+    del next(n for n in data["nodes"] if n["id"] == "check")["config"]["value"]
+
+    flow = parse_flow(data)
+
+    assert flow.node("check").config["value"] == ""
+
+
+def test_parse_flow_accepts_retrieval_variable_in_later_prompt() -> None:
+    """検索ノードの `{{ret.contexts_text}}` を、あとの生成AI のプロンプトで使えること（判定のプロンプトで確認済み）"""
+    flow = parse_flow(rag_check_flow_data())
+
+    assert "{{ret.contexts_text}}" in flow.node("judge").config["prompt"]

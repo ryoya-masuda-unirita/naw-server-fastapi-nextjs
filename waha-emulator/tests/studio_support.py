@@ -143,3 +143,90 @@ def flow_data(
             {"source": "polish", "target": "end"},
         ],
     }
+
+
+def rag_check_flow_data(
+    flow_id: str = "rag-check", *, service_ids: list[str] | None = None
+) -> dict[str, Any]:
+    """版 2 の、根拠チェック付きの RAG（検索 → 回答 → 判定 → 条件分岐 → 2 つの終了）の定義を作る。
+
+    Parameters
+    ----------
+    flow_id : str
+        ワークフローの ID。
+    service_ids : list[str] | None
+        サービス ID。None なら ID と同じ名前 1 つ。
+
+    Returns
+    -------
+    dict[str, Any]
+        保存の形（JSON の値）の定義。
+    """
+    return {
+        "version": 2,
+        "id": flow_id,
+        "name": f"根拠チェック {flow_id}",
+        "serviceIds": service_ids or [flow_id],
+        "nodes": [
+            {"id": "start", "type": "start"},
+            {
+                "id": "ret",
+                "type": "retrieval",
+                "name": "検索",
+                "config": {"properties": dict(RETRIEVAL_PROPERTIES)},
+            },
+            {
+                "id": "answer",
+                "type": "llm",
+                "name": "回答",
+                "config": {
+                    "prompt": "{{question}}",
+                    "retrieval": "ret",
+                    "properties": dict(ECHO_PROPERTIES),
+                },
+            },
+            {
+                "id": "judge",
+                "type": "llm",
+                "name": "判定",
+                "config": {
+                    "prompt": (
+                        "次の回答が、文書に書いてあれば OK、なければ NG とだけ答えてください。\n"
+                        "文書:\n{{ret.contexts_text}}\n回答:\n{{answer.text}}"
+                    ),
+                    "outputType": 2,
+                    "properties": dict(ECHO_PROPERTIES),
+                },
+            },
+            {
+                "id": "check",
+                "type": "branch",
+                "name": "判定は OK か",
+                "config": {
+                    "variable": "judge.text",
+                    "operator": "contains",
+                    "value": "OK",
+                },
+            },
+            {
+                "id": "end-ok",
+                "type": "end",
+                "name": "回答する",
+                "config": {"output": "{{answer.text}}"},
+            },
+            {
+                "id": "end-ng",
+                "type": "end",
+                "name": "回答できない",
+                "config": {"output": "根拠となる文書が見つからず、お答えできません"},
+            },
+        ],
+        "edges": [
+            {"source": "start", "target": "ret"},
+            {"source": "ret", "target": "answer"},
+            {"source": "answer", "target": "judge"},
+            {"source": "judge", "target": "check"},
+            {"source": "check", "target": "end-ok", "sourceHandle": "true"},
+            {"source": "check", "target": "end-ng", "sourceHandle": "false"},
+        ],
+    }

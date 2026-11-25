@@ -15,7 +15,7 @@ from tests.conftest import (
     start_session,
     upload,
 )
-from tests.studio_support import flow_data, graph_data
+from tests.studio_support import flow_data, graph_data, rag_check_flow_data
 from tests.test_retrieval_workflow import FakeSearchClient, _runtime_factory
 from tests.test_studio_engine import SequenceProvider
 from waha_emulator.main import create_app
@@ -318,4 +318,31 @@ async def test_execute_flow_failure_names_the_failed_node(tmp_path: Path) -> Non
 
     assert executed.startswith(
         "FAILURE: ノード「下書き」: 生成AIアダプタの実行に失敗しました"
+    )
+
+
+async def test_execute_runs_saved_rag_check_flow_for_both_branches(
+    tmp_path: Path,
+) -> None:
+    """保存した根拠チェック（検索・判定・条件分岐）を execute で動かし、判定が OK なら引用元つきの回答、NG なら固定の文が返ること"""
+    search = FakeSearchClient()
+    ok_provider = SequenceProvider(answers=["精算は5営業日以内です", "OK"])
+    async with _emulator_with_retrieval(tmp_path, ok_provider, search) as client:
+        created = await client.post(
+            ADMIN, json=rag_check_flow_data(service_ids=["rag-check-svc"])
+        )
+        ok_executed, ok_output = await _ask(client, "rag-check-svc")
+
+    ng_provider = SequenceProvider(answers=["根拠のない回答", "NG"])
+    async with _emulator_with_retrieval(tmp_path, ng_provider, search) as client:
+        ng_executed, ng_output = await _ask(client, "rag-check-svc")
+
+    assert created.status_code == 201
+    assert ok_executed == "SUCCESS"
+    assert json.loads(ok_output)["answer"] == "精算は5営業日以内です"
+    assert len(json.loads(ok_output)["references"]) == 2
+    assert ng_executed == "SUCCESS"
+    assert (
+        json.loads(ng_output)["answer"]
+        == "根拠となる文書が見つからず、お答えできません"
     )
