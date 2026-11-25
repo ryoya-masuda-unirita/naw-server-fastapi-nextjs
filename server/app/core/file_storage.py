@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
@@ -136,11 +135,6 @@ class LocalFileStorage:
         if not storage_url.startswith("file://"):
             raise ValueError(f"未対応のstorage_urlです: {storage_url}")
         return Path(storage_url.removeprefix("file://"))
-
-
-def cleanup_storage_root(root: Path) -> None:
-    """ストレージのルートディレクトリを丸ごと削除する（テスト用ユーティリティ）。"""
-    shutil.rmtree(root, ignore_errors=True)
 
 
 def get_file_storage() -> FileStorage:

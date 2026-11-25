@@ -195,16 +195,6 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(key=session_store.SESSION_COOKIE_NAME)
 
 
-def get_tenant_id_from_header(x_tenant_id: str) -> str:
-    """X-Tenant-ID ヘッダーを検証"""
-    if not x_tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Tenant-ID header is required",
-        )
-    return x_tenant_id
-
-
 async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
