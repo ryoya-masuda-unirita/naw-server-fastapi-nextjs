@@ -38,6 +38,22 @@ class StudioConflictError(ValueError):
     """ワークフローの id、またはサービス ID が、他と重なっている。"""
 
 
+def is_secret_name(name: str) -> bool:
+    """プロパティの名前が、秘密情報（API キー・パスワードなど）のものかを返す。
+
+    Parameters
+    ----------
+    name : str
+        プロパティの名前。
+
+    Returns
+    -------
+    bool
+        秘密情報なら True。
+    """
+    return name.upper().endswith(SECRET_NAME_SUFFIXES)
+
+
 def _is_secret_value(name: str, value: Any) -> bool:
     """伏せる値かを判定する（環境変数の参照だけの値は伏せない）。
 
@@ -53,7 +69,7 @@ def _is_secret_value(name: str, value: Any) -> bool:
     bool
         伏せるなら True。
     """
-    if not name.upper().endswith(SECRET_NAME_SUFFIXES):
+    if not is_secret_name(name):
         return False
     return ENV_REFERENCE_ONLY.fullmatch(str(value)) is None
 

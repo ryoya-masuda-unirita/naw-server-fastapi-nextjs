@@ -153,3 +153,55 @@ async def test_malformed_body_returns_400_not_500(
     validate = await admin.post(f"{ADMIN}/validate", json=body)
 
     assert (post.status_code, put.status_code, validate.status_code) == (400, 400, 400)
+
+
+async def test_property_catalog_lists_names_for_both_nodes(
+    admin: httpx.AsyncClient,
+) -> None:
+    """プロパティ名の候補が、生成AI・検索ごとに返り、秘密の名前に印が付くこと"""
+    response = await admin.get("/admin/property-catalog")
+
+    body = response.json()
+    generative = {e["name"]: e["secret"] for e in body["generativeAi"]}
+    retrieval = {e["name"]: e["secret"] for e in body["retrieval"]}
+    assert response.status_code == 200
+    assert generative["API_KEY"] is True
+    assert generative["MODEL_NAME"] is False
+    assert retrieval["VDB_PASSWORD"] is True
+    assert "VDB_TABLE_NAME" in retrieval
+
+
+async def test_property_catalog_excludes_reserved_names(
+    admin: httpx.AsyncClient,
+) -> None:
+    """エミュレーターがジョブごとに決める名前は、候補に入らないこと"""
+    body = (await admin.get("/admin/property-catalog")).json()
+
+    generative = {e["name"] for e in body["generativeAi"]}
+    retrieval = {e["name"] for e in body["retrieval"]}
+    assert not generative & {
+        "OUTPUT_DIR",
+        "REASONING_OUTPUT_PATH",
+        "TEXT_DATA_JSON_FILE_PATH",
+    }
+    assert not retrieval & {"OUTPUT_DIR", "TEXT_DATA_JSON_FILE_PATH"}
+
+
+async def test_every_catalog_name_is_accepted_by_validation(
+    admin: httpx.AsyncClient,
+) -> None:
+    """候補に出る名前は、検証で未知のプロパティとして弾かれないこと（候補と検証が食い違わない）"""
+    body = (await admin.get("/admin/property-catalog")).json()
+    unknown = "未知のプロパティ"
+
+    for node_type, key in (
+        ("generative-ai", "generativeAi"),
+        ("retrieval", "retrieval"),
+    ):
+        for entry in body[key]:
+            data = graph_data("wf-1", retrieval=node_type == "retrieval")
+            node = next(n for n in data["nodes"] if n["type"] == node_type)
+            node["properties"][entry["name"]] = "x"
+            response = await admin.post("/admin/workflows/validate", json=data)
+            detail = response.json().get("detail", "")
+            assert unknown not in detail, (node_type, entry["name"], detail)

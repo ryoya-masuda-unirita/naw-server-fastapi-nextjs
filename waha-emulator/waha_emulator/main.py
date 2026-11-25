@@ -245,6 +245,7 @@ def create_app(
             retrieval_runtime_factory,
         )
         app.include_router(admin.router)
+        app.include_router(admin.catalog_router)
     return app
 
 
