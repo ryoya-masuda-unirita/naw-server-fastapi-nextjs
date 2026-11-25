@@ -225,6 +225,7 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
 - DBのパスワードは、`DB_PASSWORD`を環境変数で渡さなければ、Secrets Manager（`terraform output backend_secret_name`のシークレット）から自動で取得する（AWS CLIとjqが必要。権限がある`AWS_PROFILE`で実行すること）
 
 - `terraform output`から`rds_endpoint`・`bastion_public_ip`を自動取得し、SSHトンネルの確立→マイグレーション適用→`seed.sql`投入→トンネルの後始末まで1コマンドで行う
+- SSHトンネルのローカルのポートは既定で`15433`（開発用DBの`5433`と重ならない）。変えるときは環境変数`LOCAL_PORT`を指定する
 - CI/CDで既にマイグレーション済みの場合は、`--skip-migrate`を付けてseed投入のみ行うこともできる
 
 ```bash

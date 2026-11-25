@@ -9,6 +9,7 @@
 #   PEM_KEY_PATH  bastion接続用のSSH秘密鍵のパス
 #
 # 任意の環境変数:
+#   LOCAL_PORT    SSHトンネルのローカルのポート（既定 15433。開発用DBの5433と重ならない値）
 #   DB_PASSWORD   RDSのマスターパスワード。未指定（空文字列を含む）なら、Secrets Manager（terraform output の backend_secret_name）から取得する
 #                 （パスワードはTerraformが自動生成するため、通常は指定不要。AWS CLIとjqが必要）
 #
@@ -30,14 +31,16 @@ INFRA_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(dirname "${INFRA_DIR}")"
 # terraform output は、Terraformを実行する環境のディレクトリで取る(#382でmodules/environments構成に分けた)
 ENV_DIR="${INFRA_DIR}/environments/dev"
-BACKEND_DIR="${REPO_ROOT}/backend"
+# backend/ は server/ に改名した(#399)
+SERVER_DIR="${REPO_ROOT}/server"
 
 if [ -f "${SCRIPT_DIR}/.env" ]; then
   # shellcheck disable=SC1091
   source "${SCRIPT_DIR}/.env"
 fi
 
-LOCAL_PORT=5433
+# ローカルの開発用DB(ルートのdocker-compose.ymlのPostgreSQL)が5433を使うため、重ならないポートにする
+LOCAL_PORT="${LOCAL_PORT:-15433}"
 SSH_USER="ec2-user"
 SKIP_MIGRATE=0
 
@@ -114,7 +117,7 @@ fi
 if [ "${SKIP_MIGRATE}" -eq 0 ]; then
   echo "==> マイグレーションを適用しています..."
   (
-    cd "${BACKEND_DIR}"
+    cd "${SERVER_DIR}"
     DATABASE_URL="postgresql+asyncpg://root:${DB_PASSWORD}@localhost:${LOCAL_PORT}/postgres" \
       uv run alembic upgrade head
   )
@@ -123,7 +126,7 @@ else
 fi
 
 echo "==> シードデータを投入しています..."
-PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres < "${BACKEND_DIR}/seed.sql"
+PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${LOCAL_PORT}" -U root -d postgres < "${SERVER_DIR}/seed.sql"
 
 if [ -n "${AZURE_OPENAI_API_KEY:-}" ]; then
   echo "==> AZURE_OPENAI_API_KEYが設定されているため、AIエンドポイントのapi_keyを実際の値で上書きします..."
