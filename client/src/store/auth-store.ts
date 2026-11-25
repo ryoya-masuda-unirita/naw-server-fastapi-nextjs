@@ -126,7 +126,7 @@ export const useAuthStore = create<AuthStore>((set) => {
           password,
         });
       } catch (e) {
-        // 誤ったテナントIDを残さない。frontend-angular は 401 のときだけ消すが、
+        // 誤ったテナントIDを残さない。移植元（Angular）は 401 のときだけ消すが、
         // 次回のログイン送信で入力値が保存し直されるため、失敗理由を問わず消してよい
         clearTenantId();
         throw e;

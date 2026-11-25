@@ -102,7 +102,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   // CloudFrontは既定で5xxを短時間キャッシュするため、S3の一時的な503がその間すべての閲覧者に返り、
-  // 画面のチャンク読み込み失敗時の自動リロード(client の chunk-reload.initializer.ts)でも回復できない(NAW-1338)。
+  // 画面のチャンク読み込み失敗時の自動リロード(移植元 Angular の chunk-reload.initializer.ts。React の client には、同じ仕組みはない)でも回復できない(NAW-1338)。
   // 5xxはキャッシュせず毎回オリジンへ取りに行かせる。response_code・response_page_path は指定しないので、
   // エラー応答の中身は置き換えない(上の #240 の理由で使えない「応答の置き換え」とは別物)。
   // この設定はディストリビューション全体に効くため、ALBの5xx(/api/*・/backend/auth/*)も毎回オリジンへ取りに行く。
