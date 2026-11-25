@@ -3,14 +3,6 @@
 # 環境変数の既定値は .env.example にある。変えたい値は、このディレクトリの .env で指定する（例は .env.example。.env がなくても動く）。
 # 必要なサービスだけを起動してもよい（例: docker compose up -d postgres redis localstack）。
 
-# backend と migrate が共有する、アプリの環境変数。値は .env.example に書いてある（既定値）。
-# 変えたい値は、.env に書く（.env.example より、あとに読むので、.env が勝つ。.env がなくても動く）
-x-backend-env: &backend-env
-  env_file:
-    - .env.example
-    - path: .env
-      required: false
-
 # backend と migrate が共有する、イメージとソースのバインドマウント（ソースは ./server を /app に載せる）
 x-backend-build: &backend-build
   build:
@@ -96,7 +88,12 @@ services:
 
   # DB のテーブルを作る（alembic のマイグレーション）。終わったら終了する
   migrate:
-    <<: [*backend-build, *backend-env]
+    <<: *backend-build
+    # 値は .env.example（既定値）。変えたい値は .env に書く（あとに読むので勝つ。.env がなくても動く）
+    env_file:
+      - .env.example
+      - path: .env
+        required: false
     command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
     restart: "no"
     depends_on:
@@ -119,7 +116,12 @@ services:
 
   # FastAPI の backend
   backend:
-    <<: [*backend-build, *backend-env]
+    <<: *backend-build
+    # 値は .env.example（既定値）。変えたい値は .env に書く（あとに読むので勝つ。.env がなくても動く）
+    env_file:
+      - .env.example
+      - path: .env
+        required: false
     container_name: naw-fastapi-backend
     ports:
       # ログイン用のデータ（admin / admin@1234）が入るため、既定はホストの 127.0.0.1 だけに公開する（BACKEND_HOST で変える）
