@@ -91,3 +91,7 @@ export function validateWorkflow(graph: GraphData): Promise<{ ok: boolean }> {
 export function getPropertyCatalog(): Promise<PropertyCatalog> {
   return request(CATALOG_PATH);
 }
+
+export function runWorkflow(id: string, question: string): Promise<{ output: string }> {
+  return request(`${BASE_PATH}/${encodeURIComponent(id)}/run`, jsonInit('POST', { question }));
+}

@@ -13,6 +13,7 @@ from waha_emulator.studio.catalog import property_catalog
 from waha_emulator.studio.service import (
     StudioConflictError,
     StudioNotFoundError,
+    StudioRunError,
     StudioService,
 )
 from waha_emulator.studio.validation import GraphError
@@ -252,6 +253,44 @@ def delete_workflow(request: Request, graph_id: str) -> Response:
     except StudioNotFoundError as e:
         raise _not_found() from e
     return Response(status_code=HTTPStatus.NO_CONTENT)
+
+
+@router.post("/{graph_id}/run")
+async def run_workflow(
+    request: Request, graph_id: str, body: DefinitionBody
+) -> dict[str, str]:
+    """保存したワークフローを、質問 1 つで 1 回動かす（画面の試し実行）。
+
+    Parameters
+    ----------
+    request : Request
+        FastAPI のリクエスト。
+    graph_id : str
+        ワークフローの ID。
+    body : Any
+        `{"question": "..."}`。
+
+    Returns
+    -------
+    dict[str, str]
+        `{"output": outputfile の中身}`。
+
+    Raises
+    ------
+    HTTPException
+        本文が不正・質問が空か長い（400）、ワークフローがない（404）、
+        ワークフローが失敗（502）、時間切れ（504）。
+    """
+    question = body.get("question") if isinstance(body, dict) else None
+    if not isinstance(question, str):
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "question（文字列）が必要です")
+    try:
+        output = await _service(request).run(graph_id, question)
+    except StudioNotFoundError as e:
+        raise _not_found() from e
+    except StudioRunError as e:
+        raise HTTPException(e.status, str(e)) from e
+    return {"output": output}
 
 
 @catalog_router.get("/property-catalog")

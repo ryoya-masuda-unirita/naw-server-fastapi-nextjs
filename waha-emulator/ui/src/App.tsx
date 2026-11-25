@@ -3,6 +3,7 @@ import { useCallback, useEffect } from 'react';
 import { Canvas } from './components/Canvas';
 import { Header } from './components/Header';
 import { PropertyPanel } from './components/PropertyPanel';
+import { RunPanel } from './components/RunPanel';
 import { WorkflowList } from './components/WorkflowList';
 import { useEditor } from './editor/useEditor';
 
@@ -76,6 +77,7 @@ export function App() {
                 onAddNode={editor.addNodeOfType}
               />
             </div>
+            <RunPanel key={openId} graphId={openId} dirty={dirty} />
           </>
         ) : (
           <div className="p-6 text-slate-500">
@@ -94,6 +96,7 @@ export function App() {
                 「保存」を押す。<b>サービス ID</b>
                 （SecuAiGent のアシスタント ID と同じ値）で呼ばれると、このワークフローが動く
               </li>
+              <li>下の「試し実行」に質問を入れて送ると、保存したワークフローの回答をその場で見られる</li>
             </ol>
             <p className="mt-3 text-xs">
               プロンプトの中では、<code>{'{{question}}'}</code>（質問）や、前のノードの出力

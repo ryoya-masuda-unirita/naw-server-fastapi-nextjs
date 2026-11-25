@@ -1,13 +1,16 @@
 """ワークフローの作成・更新・削除と、サービス ID への登録。"""
 
+import asyncio
 import copy
 import logging
 import os
 import re
 import threading
 from collections.abc import Callable, Mapping
+from http import HTTPStatus
 from typing import Any
 
+from waha_emulator.sessions import SLOT_QUESTION, SlotFile
 from waha_emulator.studio.flow import (
     FLOW_VERSION,
     FlowDefinition,
@@ -22,10 +25,14 @@ from waha_emulator.studio.graph import (
 from waha_emulator.studio.store import GraphStore
 from waha_emulator.studio.validation import GraphError
 from waha_emulator.workflow_config import WorkflowDefinition
-from waha_emulator.workflows.base import Workflow
+from waha_emulator.workflows.base import Workflow, WorkflowError, WorkflowRequest
 from waha_emulator.workflows.registry import WorkflowRegistry
 
 logger = logging.getLogger(__name__)
+
+# 画面の試し実行の上限（検証用の道具が、長い質問・長い待ちで詰まらないように）
+RUN_QUESTION_MAX_LENGTH = 4000
+RUN_TIMEOUT_SECONDS = 120
 
 MASK = "********"
 # 名前がこれらで終わるプロパティの値は、応答で伏せる（`MAX_TOKENS` のような設定値は伏せない）
@@ -42,6 +49,23 @@ WorkflowFactory = Callable[[Definition, Plan], Workflow]
 
 class StudioNotFoundError(LookupError):
     """指定したワークフローがない。"""
+
+
+class StudioRunError(ValueError):
+    """試し実行ができない（質問が不正・時間切れ・ワークフローの失敗）。"""
+
+    def __init__(self, status: int, message: str) -> None:
+        """HTTP の状態と、画面に出すメッセージを持つ。
+
+        Parameters
+        ----------
+        status : int
+            HTTP の状態コード。
+        message : str
+            画面に出す理由。
+        """
+        super().__init__(message)
+        self.status = status
 
 
 class StudioConflictError(ValueError):
@@ -283,6 +307,65 @@ class StudioService:
             if raw is None:
                 raise StudioNotFoundError(graph_id)
             return mask_secrets(raw)
+
+    async def run(self, graph_id: str, question: str) -> str:
+        """保存したワークフローを、質問 1 つで 1 回動かす（画面の試し実行）。
+
+        server-local を通さず、サービス ID で呼ばれたときと同じワークフローを動かす。
+        未保存の編集内容は動かさない（保存済みのものだけ）。
+
+        Parameters
+        ----------
+        graph_id : str
+            ワークフローの ID。
+        question : str
+            質問。
+
+        Returns
+        -------
+        str
+            outputfile の中身。
+
+        Raises
+        ------
+        StudioNotFoundError
+            ワークフローがないとき。
+        StudioRunError
+            質問が空・長すぎるとき、時間切れのとき、ワークフローが失敗したとき。
+        """
+        text = question.strip()
+        if not text:
+            raise StudioRunError(HTTPStatus.BAD_REQUEST, "質問を入力してください")
+        if len(text) > RUN_QUESTION_MAX_LENGTH:
+            raise StudioRunError(
+                HTTPStatus.BAD_REQUEST,
+                f"質問は {RUN_QUESTION_MAX_LENGTH} 文字までです",
+            )
+        with self._lock:
+            graph = self._graphs.get(graph_id)
+        if graph is None:
+            raise StudioNotFoundError(graph_id)
+        workflow = self._registry.resolve(graph.service_ids[0], {})
+        request = WorkflowRequest(
+            service_id=graph.service_ids[0],
+            params={},
+            inputs={
+                SLOT_QUESTION: SlotFile(
+                    "question.txt", "text/plain", text.encode("utf-8")
+                )
+            },
+            stream=None,
+        )
+        try:
+            async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
+                return await workflow.run(request)
+        except TimeoutError as e:
+            raise StudioRunError(
+                HTTPStatus.GATEWAY_TIMEOUT,
+                f"{RUN_TIMEOUT_SECONDS} 秒以内に終わりませんでした",
+            ) from e
+        except WorkflowError as e:
+            raise StudioRunError(HTTPStatus.BAD_GATEWAY, str(e)) from e
 
     def validate(self, data: Any) -> None:
         """保存せずに、定義が正しいかを確かめる。

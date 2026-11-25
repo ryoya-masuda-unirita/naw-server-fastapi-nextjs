@@ -259,3 +259,54 @@ async def test_create_flow_with_branch_missing_false_edge_returns_400(
 
     assert response.status_code == 400
     assert "1 本ずつ" in response.json()["detail"]
+
+
+async def test_run_returns_the_answer_of_the_saved_workflow(
+    admin: httpx.AsyncClient,
+) -> None:
+    """保存したワークフローを、質問で試し実行して、回答が返ること"""
+    await admin.post(ADMIN, json=flow_data("polish"))
+
+    response = await admin.post(f"{ADMIN}/polish/run", json={"question": "旅費は？"})
+
+    assert response.status_code == 200
+    assert "旅費は？" in response.json()["output"]
+
+
+async def test_run_unknown_workflow_returns_404(admin: httpx.AsyncClient) -> None:
+    """ないワークフローの試し実行は 404 になること"""
+    response = await admin.post(f"{ADMIN}/none/run", json={"question": "x"})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"question": "   "}, {"question": "あ" * 4001}, {"question": 1}, {}, [1]],
+)
+async def test_run_rejects_invalid_question_with_400(
+    admin: httpx.AsyncClient, body: object
+) -> None:
+    """空・長すぎる・文字列でない質問は、動かさずに 400 になること"""
+    await admin.post(ADMIN, json=flow_data("polish"))
+
+    response = await admin.post(f"{ADMIN}/polish/run", json=body)
+
+    assert response.status_code == 400
+
+
+async def test_run_response_never_contains_the_api_key(
+    admin: httpx.AsyncClient,
+) -> None:
+    """試し実行の応答に、APIキーが出ないこと"""
+    properties = {
+        "VENDOR": "Echo",
+        "URL": "http://echo.invalid",
+        "API_KEY": "real-secret",
+        "MODEL_NAME": "echo",
+    }
+    await admin.post(ADMIN, json=flow_data("polish", properties=properties))
+
+    response = await admin.post(f"{ADMIN}/polish/run", json={"question": "x"})
+
+    assert "real-secret" not in response.text
