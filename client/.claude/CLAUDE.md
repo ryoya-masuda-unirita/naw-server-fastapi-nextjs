@@ -205,7 +205,7 @@ src/
 
 ### ルート・ガード・サイドバーの前提（#277 で定義済み）
 
-- **全画面のパス・ルートの枠・ガードは `src/routes/index.tsx` に定義済み**。未移植の画面は `src/routes/**` の仮ファイル（`NotPortedPage` で「未移植: 〇〇Component（#Issue番号）」を表示）になっている
+- **全画面のパス・ルートの枠・ガードは `src/routes/index.tsx` に定義済み**。画面の移植は完了しており、仮画面（`NotPortedPage`）は削除した
 - ルート定数は `src/lib/constants/routes.ts` の `ROUTES`（移植元 `routes.config.ts` と同じ名前・同じ値）。遷移先は文字列を直書きせず `ROUTES.APP.ADMIN_GROUP_DETAIL(id)` 等を使う
 - ガードの割り当ては移植元と同じ（`/admin/*` は `RequireAdminConsole`、テナント管理者だけの画面は `RequireTenantAdmin`、グループ詳細は `RequireGroupAccess`、旧ユーザー管理・レポート・設定は `RequireAdmin`）。画面の中で権限を見たいときは `useAuthStore` の `isAdmin`・`isGroupAdminOnly`・`adminGroupIds` 等を使う
 - サイドバー（`src/components/layouts/sidebar.tsx`）のナビ項目・管理メニュー（権限別）・ユーザーメニューは定義済み。モード（通常・管理・戻る）は URL から決まる（`sidebar-mode.ts`）
@@ -213,7 +213,7 @@ src/
   - 新しいチャット: `src/components/features/chat/new-chat-dialog.tsx`（#284）
   - チャット検索: `src/components/features/chat/chat-search-modal.tsx`（#287）
   - クレジット確認: `src/components/layouts/usage-dialog.tsx`（担当未定）
-- モバイルでサイドバーを開くボタンは移植元どおり `PageHeader`（`components/shared/page-header.tsx`）が持つ（`AdminLayout` の仮のボタンは #278 で削除した）。未移植の仮画面（`NotPortedPage`）も `PageHeader` を出す。本物の画面に置き換えるときは `AdminPageShell` の `header` に `PageHeader` を渡す
+- モバイルでサイドバーを開くボタンは移植元どおり `PageHeader`（`components/shared/page-header.tsx`）が持つ（`AdminLayout` の仮のボタンは #278 で削除した）。画面を作るときは `AdminPageShell` の `header` に `PageHeader` を渡す
 - サイドバーは `/dashboard`・`/chat/new` へ移るたびに TanStack Query の `['assistants']`・`['prompt-templates']` を無効化する（移植元と同じ）。アシスタント一覧・テンプレート一覧の query key はこの 2 つを先頭にする
 - 用語集（`/glossary` 配下）・データソースは移植元で非表示にした機能のため、ルートもサイドバー項目も作らない
 - i18n 辞書（`public/i18n/ja.json`・`en.json`）は移植元を丸ごと移植済み。**画面の移植でキーを足さない**（移植元にないキーが必要なら、移植元の最新を確認し、辞書ごと移植元に揃える）。React 独自のキーは `AUTH.LOGIN.TENANT_ID_*` だけ
@@ -238,7 +238,6 @@ src/
 5. 子ルートを持つ画面（グループ詳細のタブ）は、親の画面に `<Outlet />` を置く（子ルートは定義済み）
 6. テストはページと同じ場所に `*.test.tsx` を置く。ガード・レイアウト込みで描画したいときは `src/test/render-app.tsx` の `renderApp(path)` と `setAuthUser(FIXTURE_TENANT_ADMIN)` 等を使う。`src/routes/index.test.tsx`・`guards.test.tsx` は画面の中身に依存しない（パスの一致と遷移先 URL だけを見る）ため直さなくてよい。ただし画面が描画時に API を呼ぶ場合、`guards.test.tsx` で MSW の未定義リクエストのエラーが出ることがあるので、そのときは `src/mocks/handlers/` に自分の API のハンドラーのファイルを足す（自動で登録される）
 
-全画面の移植が終わったら `src/components/layouts/not-ported.tsx` とそのテストを消す。
 
 ---
 
