@@ -31,3 +31,9 @@ variable "backup_retention_period" {
   default     = 7
   description = "自動バックアップの保持日数"
 }
+
+variable "enable_keepalive_schedule" {
+  type        = bool
+  default     = false
+  description = "RDSを毎日09:00に起動・09:10に停止するスケジュールを作る(手動停止の7日後の自動再起動を避ける)。09:10に作業中でも止まるため、既定では作らない"
+}

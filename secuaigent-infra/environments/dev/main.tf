@@ -63,6 +63,8 @@ module "rds" {
   project_name       = var.project_name
   private_subnet_ids = module.network.private_subnet_ids
   rds_sg_id          = module.network.rds_sg_id
+
+  enable_keepalive_schedule = var.enable_rds_keepalive_schedule
 }
 
 // backendの機密情報(DB接続文字列・秘密鍵)をSecrets Managerに保存する。ECSは、起動時にここから注入する
