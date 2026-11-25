@@ -15,10 +15,10 @@
       "Bash(rtk psql *)",
       "Bash(/usr/local/bin/psql -h localhost -p 5433 -U root -d postgres -c \"\\\\d password_histories\")",
       "Bash(git reset *)",
-      "Bash(rm -rf /Users/pcm23005/Documents/naw-server-fastapi-nextjs/server/tests/conftest.py /Users/pcm23005/Documents/naw-server-fastapi-nextjs/server/tests/unit/test_*.py /Users/pcm23005/Documents/naw-server-fastapi-nextjs/server/tests/integration/test_auth.py)"
+      "Bash(rm -rf /Users/pcm23005/Documents/secuaigent-fastapi-react/server/tests/conftest.py /Users/pcm23005/Documents/secuaigent-fastapi-react/server/tests/unit/test_*.py /Users/pcm23005/Documents/secuaigent-fastapi-react/server/tests/integration/test_auth.py)"
     ],
     "additionalDirectories": [
-      "/Users/pcm23005/Documents/naw-server-fastapi-nextjs/server/tests/unit"
+      "/Users/pcm23005/Documents/secuaigent-fastapi-react/server/tests/unit"
     ]
   }
 }
