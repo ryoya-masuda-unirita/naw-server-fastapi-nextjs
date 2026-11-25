@@ -1,0 +1,22 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    # 管理用 API だけを、エミュレーターへ中継する。servicerun（/WahaServer/...）は中継しない。
+    # URI をそのまま渡すため、proxy_pass には URI を付けない
+    location /admin/ {
+        proxy_pass ${WAHA_UPSTREAM};
+    }
+
+    # ハッシュ付きのファイルは、変わらないため、長くキャッシュしてよい
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # 画面の中のパスは 1 つのため、見つからないパスも、画面のトップを返す。
+    # トップは、ビルドのたびに中身（読み込むファイル名）が変わるため、キャッシュさせない
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri /index.html;
+    }
+}

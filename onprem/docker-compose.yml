@@ -43,6 +43,8 @@ services:
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
       # 埋め込みの学習で、filepath で渡されたパスを読んでよいディレクトリ（下の file-server のマウント先）
       SOURCE_ALLOWED_DIR: /mnt/file-server
+      # 画面（waha-emulator-ui）で組んだワークフローの保存先。設定すると管理用 API（/admin）が有効になる
+      WAHA_STUDIO_DIR: /app/data/workflows
       # サービス ID ごとの設定（/app/config の例、Bedrock の定義など）。Bedrock の拡張とは別に使う
       WAHA_WORKFLOWS_FILE: ${WAHA_WORKFLOWS_FILE:-}
       # bedrock-ext: Bedrock で動かすときだけ使う（手順は README の「Bedrock で動かす」）
@@ -51,6 +53,7 @@ services:
       TZ: Asia/Tokyo
     volumes:
       - stream-output:/app/data/stream-output
+      - waha-workflows:/app/data/workflows
       - ./file-server:/mnt/file-server:ro
       # ワークフロー定義の例（workflows.example.json など）。WAHA_WORKFLOWS_FILE=/app/config/... で指定する
       - ../waha-emulator/config:/app/config:ro
@@ -60,6 +63,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # ワークフローエディター（画面）。ブラウザでノードと線を組み、保存したワークフローを、
+  # サービス ID で server-local から呼べる。管理用 API（/admin）だけをエミュレーターへ中継する
+  waha-emulator-ui:
+    build: ../waha-emulator/ui
+    ports:
+      # 認証のない管理用 API を中継するため、ホストの 127.0.0.1 だけに公開する
+      - "127.0.0.1:18092:80"
+    environment:
+      WAHA_UPSTREAM: http://waha-emulator:8080
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      waha-emulator:
+        condition: service_healthy
 
   # アダプタが使うベクトルDB（PostgreSQL + pgvector + PGroonga + Apache AGE）
   vector-db:
@@ -83,4 +104,5 @@ services:
 volumes:
   server-local-data:
   stream-output:
+  waha-workflows:
   vector-db-data:

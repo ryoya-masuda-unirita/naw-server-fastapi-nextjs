@@ -126,6 +126,8 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 
 `ui/`（React + React Flow）は、管理用 API を使って、ノードと線でワークフローを組む画面（Issue #522）。左に一覧、中央にキャンバス、右にプロパティを置く。デプロイは対象外で、開発サーバーで動かす。
 
+`onprem/` の docker compose には、画面（`waha-emulator-ui`、http://127.0.0.1:18092）が入っている。`docker compose up` だけで、エミュレーター（`WAHA_STUDIO_DIR` 設定済み。保存したワークフローは名前つきボリュームに残る）と一緒に立ち上がる。手順は [onprem/README.md](../onprem/README.md)。以下は、compose を使わずに、ホストで動かすとき。
+
 ```bash
 # エミュレーター（WAHA_STUDIO_DIR を設定する。管理用 API が有効になる）
 cd waha-emulator

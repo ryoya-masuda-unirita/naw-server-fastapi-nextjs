@@ -39,9 +39,11 @@ RUN uv sync --no-dev --frozen
 COPY waha-emulator/waha_emulator/ ./waha_emulator/
 
 # root で動かさないための実行ユーザー（server-local と同じ uid 1000）。
-# ストリームファイルは server-local が作り、こちらは追記するだけ
+# ストリームファイルは server-local が作り、こちらは追記するだけ。
+# /app/data/workflows は、管理用 API で保存したワークフローの置き場（compose で名前つきボリュームにする。
+# ボリュームは、ここで付けた持ち主を引き継ぐ）
 RUN useradd --uid 1000 --create-home app \
-    && mkdir -p /app/data/stream-output \
+    && mkdir -p /app/data/stream-output /app/data/workflows \
     && chown -R app:app /app/data
 
 ENV PATH="/app/waha-emulator/.venv/bin:$PATH" \
