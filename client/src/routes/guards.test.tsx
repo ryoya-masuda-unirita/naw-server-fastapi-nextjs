@@ -91,8 +91,8 @@ describe('権限ガード', () => {
     });
   });
 
-  describe('旧ユーザー管理・レポート・設定', () => {
-    test.each(['/users', '/users/new', '/users/u1', '/users/u1/edit', '/reports', '/settings'])(
+  describe('設定', () => {
+    test.each(['/settings'])(
       '一般ユーザーが %s を開くと画面を出さないこと',
       async (path) => {
         setAuthUser(FIXTURE_GENERAL_USER);
@@ -106,7 +106,7 @@ describe('権限ガード', () => {
     );
 
     test('テナント管理者は開けること', async () => {
-      await expectAllowed(FIXTURE_TENANT_ADMIN, '/reports');
+      await expectAllowed(FIXTURE_TENANT_ADMIN, '/settings');
     });
   });
 });

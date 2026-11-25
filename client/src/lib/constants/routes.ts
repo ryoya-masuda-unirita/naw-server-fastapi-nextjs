@@ -16,11 +16,6 @@ export const AUTH_PATHS = {
 
 export const APP_PATHS = {
   DASHBOARD: 'dashboard',
-  USERS: 'users',
-  USERS_NEW: 'users/new',
-  USERS_DETAIL: 'users/:id',
-  USERS_EDIT: 'users/:id/edit',
-  REPORTS: 'reports',
   SETTINGS: 'settings',
   LIBRARY: 'library',
   LIBRARY_DETAIL: 'library/:id',
@@ -64,11 +59,6 @@ export const ROUTES = {
   APP: {
     ROOT: '/',
     DASHBOARD: `/${APP_PATHS.DASHBOARD}`,
-    USERS: `/${APP_PATHS.USERS}`,
-    USERS_NEW: `/${APP_PATHS.USERS_NEW}`,
-    USERS_DETAIL: (id: string) => `/users/${id}`,
-    USERS_EDIT: (id: string) => `/users/${id}/edit`,
-    REPORTS: `/${APP_PATHS.REPORTS}`,
     SETTINGS: `/${APP_PATHS.SETTINGS}`,
     LIBRARY: `/${APP_PATHS.LIBRARY}`,
     LIBRARY_DETAIL: (id: string) => `/library/${id}`,

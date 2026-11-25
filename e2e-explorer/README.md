@@ -98,7 +98,7 @@ npm run explore:all
 | `account` | `/auth/password/reset` | `^/auth/password/reset$` | 未ログイン・管理者・一般 |
 | `chat` | `/dashboard` | `/`・`/dashboard`・`/chat/…`・`/chat-shared-history/…`・`/feedback-preview/…`（サイドバーもここで調べる） | 管理者・一般 |
 | `library` | `/library` | `^/library(/\|$)` | 管理者・一般 |
-| `legacy-admin` | `/users` | `/users`・`/reports`・`/settings` 配下（テナント管理者だけ。一般ユーザーには何も表示されない） | 管理者・一般 |
+| `legacy-admin` | `/settings` | `/settings` 配下（テナント管理者だけ。一般ユーザーには何も表示されない） | 管理者・一般 |
 | `admin-people` | `/admin/users` | `/admin/users`・`/admin/groups` 配下（一般ユーザーは管理コンソールに入れず戻される。権限ガードの確認を兼ねる） | 管理者・一般 |
 | `admin-assistants` | `/admin/assistants` | `/admin/assistants`・`templates`・`training-data` 配下 | 管理者 |
 | `admin-history` | `/admin/chat-history` | `/admin/chat-history`・`feedback` 配下 | 管理者 |

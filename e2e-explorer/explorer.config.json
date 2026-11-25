@@ -178,10 +178,10 @@
     },
     {
       "id": "legacy-admin",
-      "description": "旧ユーザー管理・レポート・設定（テナント管理者だけ。一般ユーザーは何も表示されない）",
-      "startPath": "/users",
+      "description": "設定（テナント管理者だけ。一般ユーザーは何も表示されない）",
+      "startPath": "/settings",
       "include": [
-        "^/(users|reports|settings)(/|$)"
+        "^/settings(/|$)"
       ],
       "roles": [
         "admin",
