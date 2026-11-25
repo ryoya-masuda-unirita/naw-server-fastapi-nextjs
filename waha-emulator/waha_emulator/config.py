@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     )
     # 設定すると、streamfilepath をこのディレクトリの中だけに制限する
     stream_allowed_dir: Path | None = Field(default=None, alias="STREAM_ALLOWED_DIR")
-    # server-local が endsession を呼ばずに終わったセッションを破棄するまでの時間
     # 埋め込みの学習で、execute の filepath に渡されたパスを読んでよいディレクトリ。
     # 未設定だと filepath による学習は失敗にする（任意のファイルを読ませないため）
     source_allowed_dir: Path | None = Field(default=None, alias="SOURCE_ALLOWED_DIR")
+    # server-local が endsession を呼ばずに終わったセッションを破棄するまでの時間
     session_idle_timeout_seconds: float = Field(
         default=DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS,
         alias="SESSION_IDLE_TIMEOUT_SECONDS",
@@ -48,13 +48,13 @@ class Settings(BaseSettings):
         "workflows_file", "source_allowed_dir", "studio_dir", mode="before"
     )
     @classmethod
-    def blank_workflows_file_is_unset(cls, v: object) -> object:
+    def blank_path_is_unset(cls, v: object) -> object:
         """空文字列（compose が未設定を空で渡す）は未設定として扱う。
 
         Parameters
         ----------
         v : object
-            WAHA_WORKFLOWS_FILE の値。
+            WAHA_WORKFLOWS_FILE・SOURCE_ALLOWED_DIR・WAHA_STUDIO_DIR のいずれかの値。
 
         Returns
         -------
