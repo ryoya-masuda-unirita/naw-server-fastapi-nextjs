@@ -1,6 +1,6 @@
 # generative-ai-adapter
 
-Waha!（ユニリタの ETL 製品）に組み込む生成AIアダプタの Python 移植（Issue #298）。移植元は `secuaigent/generative-ai-adapter/`（Java。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト）。
+Waha!（ユニリタの ETL 製品）に組み込む、生成AI・検索・埋め込みのアダプタの Python 移植（Issue #298・#299・#300）。移植元は `secuaigent/generative-ai-adapter/`（Java。`generative-ai-core`・`generative-ai-adapter`・`embedding-adapter`・`retrieval-adapter` の 4 プロジェクト）。
 
 アダプタは**サーバーではなくライブラリ**。`waha-emulator/`（Waha! の代わりのサービス）のワークフローから import して、Waha! の呼び方（`set_property` → `connect` → `before_execute` → `write`）のまま呼ぶ。
 
@@ -9,16 +9,16 @@ Waha!（ユニリタの ETL 製品）に組み込む生成AIアダプタの Pyth
 
 ## 構成
 
-uv のワークスペース（このディレクトリがルート）。移植元と同じ 4 つの分け方にし、いま移植したのは上 2 つ。
+uv のワークスペース（このディレクトリがルート）。移植元と同じ 4 つの分け方で、4 つとも移植済み。
 
 | ディレクトリ | パッケージ | 役割 | 状況 |
 |---|---|---|---|
-| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像・PDF・Word・Excel・PowerPoint）、埋め込み（embedding）、ベクトルDB（vector）、Graph Candidate の取り込み（graphrag の ingestion・bootstrap） | chat・provider・network・media・embedding・vector・graphrag（ingestion・bootstrap）を移植。検索側（retrieval・検索で使う graphrag）は #299 |
+| `generative-ai-core/` | `generative_ai_core` | Waha! に依存しない共通 runtime。chat・RAG・画像説明、プロバイダ（OpenAI・Azure OpenAI・SecuAiGent など）、ネットワーク（プロキシ・SSL・タイムアウト）、ファイル前処理（テキスト・画像・PDF・Word・Excel・PowerPoint）、埋め込み（embedding）、ベクトルDB（vector）、Graph Candidate の取り込み（graphrag の ingestion・bootstrap） | chat・provider・network・media・embedding・vector・graphrag（ingestion・bootstrap）を移植。検索側（retrieval・検索で使う graphrag）は #299 で移植 |
 | `generative-ai-adapter/` | `generative_ai_adapter` | Waha! の生成AIアダプタ本体。通常チャット（出力モード 0・2）と RAG 回答（その他）を core に任せ、`RetrievalAnswer` の JSON を書く | 移植（ログ出力先・HTTP クライアントの互換部分・Office/PDF の薄い層を除く） |
 | `embedding-adapter/` | `embedding_adapter` | Waha! の埋め込みアダプタ本体。入力ファイルを core の前処理でテキストにして分割し、ベクトルDB（PostgreSQL + pgvector / Azure AI Search）に保存・削除する。Graph 書き込みが有効なら Graph Candidate（LLM で候補を抽出して AGE グラフに書く）も行う | 移植（#300）。詳細は下の「埋め込みアダプタ」 |
 | `retrieval-adapter/` | `retrieval_adapter` | Waha! の検索アダプタ本体。質問からベクトル・ハイブリッド（PGroonga）・Graph RAG（AGE）で検索し、`LEGACY_TSV`（出力モード 0）か `RAG_CONTEXT_JSON_V1`（出力モード 1）で書く。core の `retrieval` に任せる | 移植（Docs は docs/issue-299） |
 
-**ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で 2 つのテストを一度に動かせる。エミュレーターは adapter だけをパス依存（`../generative-ai-adapter/generative-ai-adapter`）で入れ、core は adapter の依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして両方をイメージへコピーする（`waha-emulator/Dockerfile`）。
+**ワークスペースにした理由**: core と adapter を別パッケージ（移植元の Maven プロジェクトと同じ依存の向き: adapter → core）にしたまま、`uv run pytest` で複数のパッケージのテストを一度に動かせる。エミュレーターは adapter・retrieval・embedding の 3 つをパス依存（`../generative-ai-adapter/<各ディレクトリ>`）で入れ、core はそれらの依存として一緒に入る。Docker ビルドは、ルートをビルドコンテキストにして各パッケージをイメージへコピーする（`waha-emulator/Dockerfile`）。
 
 ### Waha! 固有の部分の置き換え
 
@@ -162,7 +162,7 @@ Claude には埋め込みモデルがないため、回答の生成とは別に�
 
 ## チャット 1 回でどの部品がどの順に動いたかを見る
 
-エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker なら `docker logs naw-waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
+エミュレーターは起動時に `LOG_LEVEL=INFO`（既定）で、チャット 1 回の流れを部品ごとのログに出す。ログの `[]` の中が部品（ロガー名）で、上から順に動いた順。Docker なら `onprem/` で `docker compose logs waha-emulator`（ホスト実行なら標準出力）。`LOG_LEVEL=DEBUG` で HTTP の詳細も見られる。
 
 server-local から「こんにちは、通しの確認です」（履歴 2 件付き、アシスタント ID `gpt-4o`、Echo）を送ったときの実際のログ（時刻・セッション ID は省略。`←` は説明）:
 
@@ -197,36 +197,26 @@ server-local から「こんにちは、通しの確認です」（履歴 2 件�
 
 ## Docker で server-local → エミュレーター → アダプタを通して確かめる
 
-server-local のコンテナがエミュレーターを呼び、エミュレーターのコンテナの中でアダプタが動く。ストリームファイルは両方のコンテナが同じパス（`/app/data/stream-output`）で見る。ポートが他で使われていたら `*_PORT` を変える（下は 8091・8090）。
+起動・停止と、基本の質問の `curl` は [onprem/README.md](../onprem/README.md) に書いてある（server-local・エミュレーター・ベクトルDB をまとめて起動する。接続先・認証キー・ストリームファイルの共有は設定済み）。ここには、アダプタの確認に固有のことだけを書く。
 
 ```bash
-# 0. 共有するディレクトリを先に作る（Docker に作らせると root 所有になる）
-mkdir -p secuaigent-server-local/data/stream-output
+cd onprem
+docker compose up -d --build   # すべて healthy になるまで待つ（docker compose ps）
 
-# 1. エミュレーター（アダプタを含めてビルドされる。ビルドコンテキストはリポジトリのルート）
-cd waha-emulator
-cp .env.example .env     # WAHA_AUTHKEY=local-key にする（LLM_PROVIDER=echo のままでよい）
-docker compose up -d --build
+# 履歴付きの質問（onprem の既定の値: ポート 18090、キー onprem-local-key）
+curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
+  -F 'textData={"assistantId":"onprem-chat","messageId":"m-1","userInput":"こんにちは","historyMessages":[{"type":"USER","content":"前の質問"},{"type":"ASSISTANT","content":"前の回答"}]};type=application/json' \
+  http://localhost:18090/api/messages/content
+# → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content（LLM が echo のとき、answer が「こんにちは」。Bedrock などに向けているときは、LLM の答えが入る）
 
-# 2. server-local
-cd ../secuaigent-server-local
-cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=server-key、WAHA_URL=http://host.docker.internal:8091/、WAHA_AUTHKEY=local-key
-docker compose up -d --build
-
-# 3. 通しで確かめる（履歴付き）
-curl -N -H "X-SERVER-AUTH-KEY: server-key" \
-  -F 'textData={"assistantId":"gpt-4o","messageId":"m-1","userInput":"こんにちは","historyMessages":[{"type":"USER","content":"前の質問"},{"type":"ASSISTANT","content":"前の回答"}]};type=application/json' \
-  http://localhost:8090/api/messages/content
-# → data:{"type":"reasoning_delta","text":"こんにちは"} … text_delta … message_stop … message_content（answer が「こんにちは」）
-
-# 4. アダプタの動きを見る
-docker logs naw-waha-emulator           # 上のログ
-ls secuaigent-server-local/data/stream-output/     # 途中経過ファイル
+# アダプタの動きを見る
+docker compose logs waha-emulator                                # 上のログ
+docker compose exec waha-emulator ls /app/data/stream-output     # 途中経過ファイル（`<応答の message_content の id>.txt`。curl の `messageId` ではない。named volume なのでホストのディレクトリには出ない）
 ```
 
-サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`waha-emulator/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して再起動し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
+サービス ID ごとにアダプタの設定を変える（RAG・回答本文だけの出力・Azure OpenAI など）には、`onprem/.env` に `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して `docker compose up -d` で作り直し、`assistantId` を `echo-rag`（RAG 回答。RAG Context JSON の内容が `context`・`referencePaths` に入る）にして送る。`echo-plain` は回答の本文だけを返す設定（出力モード 2）で、server-local は回答を JSON として読むためエラーになる（エミュレーターの API を直接呼ぶ確認用）。形式は [waha-emulator/README.md](../waha-emulator/README.md) の「ワークフローの設定」を参照。
 
-実際の LLM（Azure OpenAI）に向けるときは、`waha-emulator/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する。
+実際の LLM（Azure OpenAI）に向けるときは、`onprem/.env` の `LLM_PROVIDER=azure_openai` と `AZURE_OPENAI_*`、または `WAHA_WORKFLOWS_FILE` の定義の `VENDOR`・`URL`・`API_KEY`（`${環境変数}` で参照）・`MODEL_NAME` を設定する（`onprem/.env.example` に項目がある）。
 
 ## 検索アダプタ（retrieval-adapter, #299）
 

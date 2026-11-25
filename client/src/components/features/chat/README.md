@@ -2,7 +2,7 @@
 
 チャット画面の中核（#284 以降）が使う部品。移植元は `client/src/app/features/chat/` の `services`・`utils` と `shared` の Markdown・チャート描画。
 
-> このディレクトリ（`src/features/chat/`）には、この README だけを置く。部品の実体は下の表のとおり、`client/.claude/CLAUDE.md` のディレクトリ構成（`components/` `hooks/` `store/` `lib/`）に従って置いている。
+> この README は、チャットの画面の部品の置き場所（`components/features/chat/`）にある。チャットの部品は、下の表のとおり、`client/.claude/CLAUDE.md` のディレクトリ構成（`components/` `hooks/` `store/` `lib/`）に従って、`src/` の下の複数の場所に分かれて置いている（表のパスは `src/` から）。
 
 | 部品 | 場所 | 移植元 |
 |---|---|---|

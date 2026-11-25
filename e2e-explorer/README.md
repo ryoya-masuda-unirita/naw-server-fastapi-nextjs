@@ -2,10 +2,8 @@
 
 ## このリポジトリは何のプロジェクトか
 
-このリポジトリ（`secuaigent-fastapi-react`）は、ユニリタの企業向け AI チャット管理 SaaS **「SecuAiGent」**（旧称 NAW）を、**Spring Boot（Java）+ Angular から FastAPI（Python）+ React へ移植する**プロジェクトです。
+SecuAiGent（旧称 NAW）を Spring Boot + Angular から FastAPI + React へ移植するプロジェクトです。概要は [ルート README](../README.md) を参照してください。
 
-- SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS です。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使います
-- 移植元は GitLab のモノレポ `secuaigent`（`server/` = Spring Boot、`client/` = Angular など）。このリポジトリでは `server/`（FastAPI）・`client/`（React）・`secuaigent-server-local/` などに移植しています
 - 移植は画面・API の単位で少しずつ進んでおり、**移植済みの画面が日々増えていきます**
 
 ## このハーネスは何のためにあるか
