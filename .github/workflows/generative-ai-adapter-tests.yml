@@ -2,7 +2,8 @@
 # それを呼ぶ Waha! エミュレーター（waha-emulator/）のテスト・Ruff・mypy を検証するワークフロー。
 # 書き方は server-local-tests.yml に揃えている。
 # エミュレーターはアダプタをパス依存で使い、結合テストで server-local のコードも読み込むため、
-# どれかを変更した PR・push で両方を流す。
+# どれかを変更した PR・push で両方を流す（secuaigent-server-local/ の変更でも流れるのは、このためで、
+# server-local 自身のテストは、別の server-local-tests.yml）。
 
 name: 生成AIアダプタ・エミュレーターのテスト
 

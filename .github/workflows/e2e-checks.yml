@@ -1,0 +1,81 @@
+# e2e-spec/・e2e-explorer/（Playwright の E2E）の PR 用 CI。
+# 本物の環境（compose・ブラウザ）は起動せず、lint・型検査と、ブラウザを使わない単体テストだけを流す
+# （E2E の通し実行は、手元で行う。e2e-spec/README.md・e2e-explorer/README.md）。
+
+name: E2E ハーネス検証
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - "e2e-spec/**"
+      - "e2e-explorer/**"
+      - ".github/workflows/e2e-checks.yml"
+  push:
+    branches:
+      - develop
+    paths:
+      - "e2e-spec/**"
+      - "e2e-explorer/**"
+      - ".github/workflows/e2e-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [e2e-spec, e2e-explorer]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # e2e-spec は Node.js 22.18 以上（型を除去してそのまま実行する）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: リンターを実行
+        run: npm run lint
+
+      - name: 型を検査
+        run: npm run typecheck
+
+  explorer-unit:
+    name: e2e-explorer の単体テスト（設定）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e-explorer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: e2e-explorer/package-lock.json
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      # ブラウザを使わないテストだけ（巡回のテスト crawler.test.ts は、ブラウザが要るため、手元で流す）
+      - name: テストを実行
+        run: npx playwright test tests/config.test.ts
