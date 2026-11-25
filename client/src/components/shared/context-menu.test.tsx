@@ -18,6 +18,39 @@ afterEach(() => {
 });
 
 describe('ContextMenu', () => {
+  describe('トリガーの名前', () => {
+    test('既定のトリガーに、メニューを開く名前が付くこと', () => {
+      render(<ContextMenu menu={<span>項目</span>} />);
+      expect(screen.getByRole('button', { name: 'COMMON.OPEN_MENU' })).toBeInTheDocument();
+    });
+
+    test('triggerLabel で名前を上書きできること', () => {
+      render(<ContextMenu triggerLabel="山田さんの操作" menu={<span>項目</span>} />);
+      expect(screen.getByRole('button', { name: '山田さんの操作' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'COMMON.OPEN_MENU' })).not.toBeInTheDocument();
+    });
+
+    test('開閉に合わせて aria-expanded が変わること', async () => {
+      const user = userEvent.setup();
+      render(<ContextMenu menu={<span>項目</span>} />);
+      const trigger = screen.getByRole('button', { name: 'COMMON.OPEN_MENU' });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      await user.click(trigger);
+      await screen.findByRole('menu');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      await user.click(screen.getByTestId('context-menu-backdrop'));
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('customTrigger を渡したときは、既定のボタンも、メニューを開く名前も付けないこと', () => {
+      render(<ContextMenu customTrigger={<span>独自</span>} menu={<span>項目</span>} />);
+      expect(screen.getByText('独自')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'COMMON.OPEN_MENU' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('デスクトップ', () => {
     test('トリガーで開き、項目をクリックすると閉じること', async () => {
       const onEdit = vi.fn();

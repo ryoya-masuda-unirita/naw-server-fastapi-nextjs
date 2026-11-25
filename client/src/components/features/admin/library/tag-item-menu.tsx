@@ -21,6 +21,7 @@ export function TagItemMenu({ item, onEditSettings, onDeleteItem }: TagItemMenuP
         <>
           <div className="flex flex-col gap-1">
             <button
+              role="menuitem"
               type="button"
               className="flex items-center gap-2 p-2 rounded-lg hover:bg-bg-brand-weak transition-colors w-full text-left"
               onClick={(event) => {
@@ -42,6 +43,7 @@ export function TagItemMenu({ item, onEditSettings, onDeleteItem }: TagItemMenuP
 
           <div className="flex flex-col gap-1">
             <button
+              role="menuitem"
               type="button"
               className="flex items-center gap-2 p-2 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
               onClick={(event) => {

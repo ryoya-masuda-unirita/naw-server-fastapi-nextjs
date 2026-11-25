@@ -286,7 +286,7 @@ export function FormSortInput({
             )}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="py-4">
+            <div className="py-4" role="menu">
               {fields.map((field) => (
                 <button
                   key={field.value}
@@ -321,7 +321,7 @@ export function FormSortInput({
               ))}
             </div>
             <div className="w-full h-px bg-text-lighter/30" />
-            <div className="py-4">
+            <div className="py-4" role="menu">
               {orders.map((order) => (
                 <button
                   key={order.value}

@@ -87,6 +87,7 @@ export function TemplateListItems({
                   <>
                     <div className="flex flex-col gap-1">
                       <button
+                        role="menuitem"
                         type="button"
                         className="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-secondary transition-colors w-full text-left"
                         onClick={() => {
@@ -103,6 +104,7 @@ export function TemplateListItems({
                     <hr className="border-border-weak my-1" />
                     <div className="flex flex-col gap-1">
                       <button
+                        role="menuitem"
                         type="button"
                         className="flex items-center gap-2 h-9 px-2 py-1 rounded-lg hover:bg-bg-error transition-colors w-full text-left"
                         onClick={() => {

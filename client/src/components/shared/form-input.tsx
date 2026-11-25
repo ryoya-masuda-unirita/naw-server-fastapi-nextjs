@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type ReactNode } from 'react';
+import { useId, useState, type ChangeEvent, type ReactNode } from 'react';
 import './form-input.css';
 import { cx } from './class-names';
 import { AppMatIcon } from './icons/app-mat-icon';
@@ -76,7 +76,9 @@ export function FormInput({
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const resolvedId = inputId ?? id ?? '';
+  // label と input を必ず結ぶため、id の指定がなければ一意な id を補う
+  const generatedId = useId();
+  const resolvedId = inputId ?? id ?? generatedId;
   const inputType = type === 'password' && showPassword ? 'text' : type;
   const hasValue = Boolean(value) && !isFocused;
   const errorTestid = dataTestid ? `${dataTestid}-error` : undefined;

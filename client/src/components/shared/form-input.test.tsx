@@ -30,6 +30,25 @@ describe('FormInput', () => {
       expect(screen.getByLabelText(/名前/)).toHaveAttribute('id', 'name');
     });
 
+    test('inputId がなくても、ラベルから入力欄を辿れること', () => {
+      render(<Harness label="名前" />);
+      const input = screen.getByLabelText(/名前/);
+      expect(input.tagName).toBe('INPUT');
+      expect(input.id).not.toBe('');
+    });
+
+    test('inputId がない入力欄を複数描画しても、id が重ならず、それぞれのラベルから辿れること', () => {
+      render(
+        <>
+          <Harness label="名前" />
+          <Harness label="部署" />
+        </>,
+      );
+      const name = screen.getByLabelText(/名前/);
+      const dept = screen.getByLabelText(/部署/);
+      expect(name.id).not.toBe(dept.id);
+    });
+
     test('既存呼び出し互換の id と onChange で入力できること', async () => {
       const onChange = vi.fn();
       render(<FormInput label="ID" id="legacy" value="" onChange={onChange} />);

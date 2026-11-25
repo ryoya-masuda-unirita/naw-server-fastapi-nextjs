@@ -246,6 +246,7 @@ export function AccuracyTab() {
                 menu={({ close }) => (
                   <div className="flex flex-col gap-1">
                     <button
+                      role="menuitem"
                       type="button"
                       className="flex items-center h-9 gap-2 p-2 rounded-lg hover:bg-bg-brand-weak transition-colors text-left"
                       onClick={() => {

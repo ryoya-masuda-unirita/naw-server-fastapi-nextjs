@@ -13,6 +13,8 @@ interface SwitchProps {
   checked?: boolean;
   /** 表示文言（移植元も翻訳せずそのまま出す） */
   label?: string;
+  /** 見た目には出さず、スクリーンリーダーが読む名前だけを付ける（label が空のとき） */
+  ariaLabel?: string;
   disabled?: boolean;
   size?: SwitchSize;
   showIcon?: boolean;
@@ -24,6 +26,7 @@ interface SwitchProps {
 export function Switch({
   checked = false,
   label = '',
+  ariaLabel,
   disabled = false,
   size = 'md',
   showIcon = true,
@@ -46,7 +49,7 @@ export function Switch({
       role="switch"
       aria-checked={checked}
       aria-disabled={disabled}
-      aria-label={label || undefined}
+      aria-label={label || ariaLabel || undefined}
       onClick={toggle}
     >
       <div

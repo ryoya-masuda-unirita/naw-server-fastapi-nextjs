@@ -148,6 +148,7 @@ export function PageHeader({
               <button
                 type="button"
                 className="mt-1 p-1 rounded hover:bg-slate-100 text-text-lighter"
+                aria-label={t('COMMON.EDIT_NAME')}
                 onClick={() => onRenameClick?.()}
               >
                 <MatIcon name="edit" size={16} />
