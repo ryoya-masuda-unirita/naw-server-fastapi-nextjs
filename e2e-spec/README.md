@@ -23,6 +23,7 @@ Issue: #316
 ## 準備（初回だけ）
 
 - Docker（compose v2）と Node.js 22.18 以上
+- カテゴリ 20〜22（Waha!・オンプレ側）を流すときは、さらに [uv](https://docs.astral.sh/uv/)（ホストで `waha-emulator/` を `uv run uvicorn` で起動する）が要り、初回は、`onprem/vector-db` のイメージのビルド（Apache AGE のコンパイル。上限 900 秒）が長い
 
 ```bash
 cd e2e-spec
@@ -75,10 +76,10 @@ npm run env:down                     # 破棄（データごと）
 | `E2E_SPEC_REPORT_DIR` | `reports/latest` | 集計・スクリーンショット・trace の出力先 |
 | `E2E_SPEC_PROJECT` | `naw-e2e-spec` | compose のプロジェクト名（ネットワーク・ボリューム・backend のイメージ名が分かれる） |
 
-**同じマシンで専用環境を同時に 2 つ以上動かすとき**（別のワークツリー・別のエージェントなど）は、`E2E_SPEC_PROJECT`・`E2E_SPEC_FRONTEND_PORT`・`E2E_SPEC_BACKEND_PORT` を環境ごとに変える。同じモジュールのディレクトリで同時に流すなら `E2E_SPEC_REPORT_DIR` も変える。
+**同じマシンで専用環境を同時に 2 つ以上動かすとき**（別のワークツリー・別のエージェントなど）は、`E2E_SPEC_PROJECT`・`E2E_SPEC_FRONTEND_PORT`・`E2E_SPEC_BACKEND_PORT` を環境ごとに変える。同じモジュールのディレクトリで同時に流すなら `E2E_SPEC_REPORT_DIR` も変える。Waha! のエミュレーターのポートは、画面のポートの +1〜+5（既定は 55274〜55278）になるため、**画面のポートは、10 以上離す**（先頭は `E2E_SPEC_WAHA_PORT` で変えられる）。
 
 ```bash
-E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55274 E2E_SPEC_BACKEND_PORT=58101 E2E_SPEC_REPORT_DIR=reports/b npm run spec:all
+E2E_SPEC_PROJECT=naw-e2e-spec-b E2E_SPEC_FRONTEND_PORT=55283 E2E_SPEC_BACKEND_PORT=58101 E2E_SPEC_REPORT_DIR=reports/b npm run spec:all
 ```
 
 ## 専用環境

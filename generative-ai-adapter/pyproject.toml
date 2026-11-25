@@ -62,7 +62,7 @@ convention = "numpy"
 [tool.mypy]
 # 標準実行コマンド（core と adapter の tests に同名の conftest.py があるため、別々に実行する）:
 #   cd generative-ai-adapter && uv run mypy generative-ai-core && uv run mypy generative-ai-adapter \
-#     && uv run mypy retrieval-adapter
+#     && uv run mypy retrieval-adapter && uv run mypy embedding-adapter
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true

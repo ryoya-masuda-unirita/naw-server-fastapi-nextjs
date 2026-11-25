@@ -40,7 +40,6 @@ services:
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
       # 埋め込みの学習で、filepath で渡されたパスを読んでよいディレクトリ（下の file-server のマウント先）
       SOURCE_ALLOWED_DIR: /mnt/file-server
       # 画面（waha-emulator-ui）で組んだワークフローの保存先。設定すると管理用 API（/admin）が有効になる
