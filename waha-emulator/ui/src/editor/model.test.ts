@@ -1,44 +1,39 @@
 import type { Edge } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
-import type { GraphData } from '../api/types';
+import type { GraphData, LegacyGraphData } from '../api/types';
 import {
   addNode,
+  availableVariables,
   canAddNode,
   canConnect,
+  convertLegacy,
   fromFlow,
-  insertRetrieval,
+  insertVariable,
   isDirty,
   newGraph,
   normalize,
   toFlow,
+  upstreamRetrievalNodes,
   type FlowNode,
 } from './model';
 
-function withRetrieval(graph: GraphData): GraphData {
-  return {
-    ...graph,
-    nodes: [
-      ...graph.nodes,
-      {
-        id: 'retrieval',
-        type: 'retrieval',
-        name: '検索',
-        position: { x: 100, y: 0 },
-        properties: { VDB_TABLE_NAME: 'vectors' },
-      },
-    ],
-  };
-}
+const edge = (source: string, target: string, sourceHandle?: string): Edge => ({
+  id: `${source}${sourceHandle ? `:${sourceHandle}` : ''}->${target}`,
+  source,
+  target,
+  sourceHandle: sourceHandle ?? null,
+});
 
-function flowOf(graph: GraphData): { nodes: FlowNode[]; edges: Edge[] } {
-  return toFlow(graph);
+function node(id: string, type: string): FlowNode {
+  const added = addNode([], type as never);
+  return { ...added, id };
 }
 
 describe('toFlow / fromFlow', () => {
   it('キャンバスを経由しても、定義の内容が変わらない', () => {
     const graph = normalize(newGraph('wf-1', '社内QA', ['svc']));
-    const { nodes, edges } = flowOf(graph);
+    const { nodes, edges } = toFlow(graph);
 
     expect(fromFlow(graph, nodes, edges)).toEqual(graph);
   });
@@ -55,58 +50,113 @@ describe('toFlow / fromFlow', () => {
 
   it('動かした位置の小数を、整数にそろえて定義に戻す', () => {
     const graph = newGraph('wf-1', 'x', ['svc']);
-    const { nodes, edges } = flowOf(graph);
+    const { nodes, edges } = toFlow(graph);
     nodes[0].position = { x: 10.4, y: 20.6 };
 
     expect(fromFlow(graph, nodes, edges).nodes[0].position).toEqual({ x: 10, y: 21 });
   });
 
-  it('開始・終了ノードには properties を付けない', () => {
+  it('検索を使う生成AI は、出力モードを送らない（送ると 400 になる）', () => {
     const graph = newGraph('wf-1', 'x', ['svc']);
-    const { nodes, edges } = flowOf(graph);
-    const result = fromFlow(graph, nodes, edges);
+    const { nodes, edges } = toFlow(graph);
+    const llm = nodes.find((n) => n.id === 'answer') as FlowNode;
+    llm.data.config = { ...llm.data.config, retrieval: 'search', outputType: 2 };
 
-    expect(result.nodes.find((n) => n.type === 'start')).not.toHaveProperty('properties');
-    expect(result.nodes.find((n) => n.type === 'end')).not.toHaveProperty('properties');
+    const result = fromFlow(graph, nodes, edges).nodes.find((n) => n.id === 'answer');
+
+    expect(result?.config).toHaveProperty('retrieval', 'search');
+    expect(result?.config).not.toHaveProperty('outputType');
   });
 
-  it('生成AI の出力モードを持ち回る', () => {
+  it('条件分岐の「空」では、値を送らない', () => {
     const graph = newGraph('wf-1', 'x', ['svc']);
-    graph.nodes[1].outputType = 2;
-    const { nodes, edges } = flowOf(graph);
+    const { nodes, edges } = toFlow(graph);
+    const branch = node('judge', 'branch');
+    branch.data.config = { variable: 'question', operator: 'empty', value: 'x' };
 
-    expect(fromFlow(graph, nodes, edges).nodes[1].outputType).toBe(2);
+    const result = fromFlow(graph, [...nodes, branch], edges).nodes.find((n) => n.id === 'judge');
+
+    expect(result?.config).toEqual({ variable: 'question', operator: 'empty' });
   });
 
-  it('検索ノードがあるときは、生成AI の出力モードをサーバーへ送らない（送ると 400 になる）', () => {
-    const graph = withRetrieval(newGraph('wf-1', 'x', ['svc']));
-    graph.nodes[1].outputType = 2;
-    const { nodes, edges } = flowOf(graph);
+  it('分岐の線は、出口（sourceHandle）を持ち回り、「はい」「いいえ」の名前が付く', () => {
+    const graph = newGraph('wf-1', 'x', ['svc']);
+    graph.edges = [{ source: 'start', target: 'answer', sourceHandle: 'true' }];
 
-    const result = fromFlow(graph, nodes, edges);
+    const flow = toFlow(graph);
 
-    expect(result.nodes.find((n) => n.id === 'gen')).not.toHaveProperty('outputType');
+    expect(flow.edges[0].label).toBe('はい');
+    expect(fromFlow(graph, flow.nodes, flow.edges).edges[0].sourceHandle).toBe('true');
   });
 
-  it('開始・終了・生成AI は削除できず、検索だけ削除できる', () => {
-    const { nodes } = flowOf(withRetrieval(newGraph('wf-1', 'x', ['svc'])));
-    const deletable = Object.fromEntries(nodes.map((n) => [n.id, n.deletable]));
+  it('開始ノードだけ削除できない', () => {
+    const { nodes } = toFlow(newGraph('wf-1', 'x', ['svc']));
 
-    expect(deletable).toEqual({ start: false, gen: false, end: false, retrieval: true });
+    expect(Object.fromEntries(nodes.map((n) => [n.id, n.deletable]))).toEqual({
+      start: false,
+      answer: true,
+      end: true,
+    });
   });
 });
 
 describe('newGraph', () => {
-  it('開始 → 生成AI → 終了の鎖になる', () => {
+  it('開始 → 生成AI → 終了の鎖になる（版 2）', () => {
     const graph = newGraph('wf-1', '名前', ['a', 'b']);
 
-    expect(graph.version).toBe(1);
+    expect(graph.version).toBe(2);
     expect(graph.serviceIds).toEqual(['a', 'b']);
-    expect(graph.nodes.map((n) => n.type)).toEqual(['start', 'generative-ai', 'end']);
+    expect(graph.nodes.map((n) => n.type)).toEqual(['start', 'llm', 'end']);
+    expect(graph.nodes[2].config).toEqual({ output: '{{answer.text}}' });
     expect(graph.edges).toEqual([
+      { source: 'start', target: 'answer' },
+      { source: 'answer', target: 'end' },
+    ]);
+  });
+});
+
+describe('convertLegacy', () => {
+  const legacy: LegacyGraphData = {
+    version: 1,
+    id: 'wf-1',
+    name: '旧',
+    serviceIds: ['svc'],
+    nodes: [
+      { id: 'start', type: 'start', position: { x: 0, y: 0 } },
+      { id: 'gen', type: 'generative-ai', position: { x: 1, y: 0 }, outputType: 2, properties: { A: 'b' } },
+      { id: 'end', type: 'end', position: { x: 2, y: 0 } },
+    ],
+    edges: [
       { source: 'start', target: 'gen' },
       { source: 'gen', target: 'end' },
-    ]);
+    ],
+  };
+
+  it('生成AI を llm にし、終了の出力を、その回答にする', () => {
+    const graph = convertLegacy(legacy);
+
+    expect(graph.version).toBe(2);
+    expect(graph.nodes[1]).toMatchObject({
+      type: 'llm',
+      config: { prompt: '{{question}}', inheritContext: true, outputType: 2, properties: { A: 'b' } },
+    });
+    expect(graph.nodes[2].config).toEqual({ output: '{{gen.text}}' });
+  });
+
+  it('検索ノードがあれば、llm の retrieval に結び、出力モードは持たない', () => {
+    const withRetrieval: LegacyGraphData = {
+      ...legacy,
+      nodes: [
+        ...legacy.nodes,
+        { id: 'ret', type: 'retrieval', position: { x: 1, y: 1 }, properties: { T: 'v' } },
+      ],
+    };
+
+    const graph = convertLegacy(withRetrieval);
+
+    expect(graph.nodes[1].config).toMatchObject({ retrieval: 'ret' });
+    expect(graph.nodes[1].config).not.toHaveProperty('outputType');
+    expect(graph.nodes[3]).toMatchObject({ type: 'retrieval', config: { query: '{{question}}' } });
   });
 });
 
@@ -126,15 +176,11 @@ describe('isDirty', () => {
     ['サービス ID', { ...base, serviceIds: ['svc', 'x'] }],
     ['線', { ...base, edges: [] }],
     [
-      '位置',
-      { ...base, nodes: base.nodes.map((n, i) => (i ? n : { ...n, position: { x: 99, y: 0 } })) },
-    ],
-    [
-      'プロパティ',
+      '設定',
       {
         ...base,
         nodes: base.nodes.map((n) =>
-          n.type === 'generative-ai' ? { ...n, properties: { ...n.properties, MODEL_NAME: 'x' } } : n,
+          n.type === 'llm' ? { ...n, config: { ...n.config, prompt: '変えた' } } : n,
         ),
       },
     ],
@@ -144,128 +190,110 @@ describe('isDirty', () => {
 });
 
 describe('canAddNode / addNode', () => {
-  const { nodes } = flowOf(newGraph('wf-1', 'x', ['svc']));
-
-  it('検索ノードを足せる', () => {
-    expect(canAddNode(nodes, 'retrieval')).toEqual({ ok: true });
+  it.each(['llm', 'retrieval', 'branch', 'template', 'end'] as const)('%s は足せる', (type) => {
+    expect(canAddNode(type)).toEqual({ ok: true });
   });
 
-  it('検索ノードは 1 つまで', () => {
-    const added = [...nodes, addNode(nodes, 'retrieval')];
-
-    expect(canAddNode(added, 'retrieval')).toEqual({
-      ok: false,
-      reason: '検索ノードは 1 つまでです',
-    });
+  it('開始は足せない', () => {
+    expect(canAddNode('start').ok).toBe(false);
   });
 
-  it.each(['start', 'generative-ai', 'end'] as const)('%s は足せない', (type) => {
-    expect(canAddNode(nodes, type).ok).toBe(false);
+  it('同じ種類を足しても、ID が重ならない', () => {
+    const first = addNode([], 'llm');
+    const second = addNode([first], 'llm');
+
+    expect(first.id).toBe('llm');
+    expect(second.id).toBe('llm-2');
   });
 
-  it('足した検索ノードは、削除でき、検索の初期プロパティを持つ', () => {
-    const node = addNode(nodes, 'retrieval');
+  it('足した検索ノードは、検索の初期設定を持つ', () => {
+    const added = addNode([], 'retrieval');
 
-    expect(node.deletable).toBe(true);
-    expect(node.data.properties.VDB_TABLE_NAME).toBe('vectors');
-  });
-
-  it('ノードの ID が既存と重ならない', () => {
-    const first = addNode(nodes, 'retrieval');
-    const second = addNode([...nodes, first], 'retrieval');
-
-    expect(second.id).not.toBe(first.id);
+    expect(added.data.config.query).toBe('{{question}}');
+    expect(added.data.config.properties?.VDB_TABLE_NAME).toBe('vectors');
   });
 });
 
 describe('canConnect', () => {
-  const chain = flowOf(withRetrieval(newGraph('wf-1', 'x', ['svc'])));
-  const nodes = chain.nodes;
-  const noEdges: Edge[] = [];
-  const edge = (source: string, target: string): Edge => ({
-    id: `${source}->${target}`,
-    source,
-    target,
+  const nodes = ['start', 'a', 'b', 'judge', 'end'].map((id) =>
+    node(id, id === 'start' ? 'end' : id === 'judge' ? 'branch' : id === 'end' ? 'end' : 'llm'),
+  );
+  nodes[0].data.nodeType = 'start';
+
+  it('普通の線は引ける', () => {
+    expect(canConnect(nodes, [], { source: 'start', target: 'a' })).toEqual({ ok: true });
   });
 
   it.each([
-    ['start', 'retrieval'],
-    ['retrieval', 'gen'],
-    ['gen', 'end'],
-  ])('%s → %s は引ける', (source, target) => {
-    expect(canConnect(nodes, noEdges, { source, target })).toEqual({ ok: true });
-  });
-
-  it('検索がなければ 開始 → 生成AI を引ける', () => {
-    const plain = flowOf(newGraph('wf-1', 'x', ['svc'])).nodes;
-
-    expect(canConnect(plain, noEdges, { source: 'start', target: 'gen' })).toEqual({
-      ok: true,
-    });
-  });
-
-  it('検索があるとき 開始 → 生成AI は引けない', () => {
-    const result = canConnect(nodes, noEdges, { source: 'start', target: 'gen' });
-
-    expect(result).toMatchObject({ ok: false });
-    expect(result.ok === false && result.reason).toContain('開始 → 検索 → 生成AI');
-  });
-
-  it.each([
-    ['自分自身', 'gen', 'gen', '自分自身'],
-    ['終了から', 'end', 'gen', '終了ノードから'],
-    ['開始へ', 'gen', 'start', '開始ノードへ'],
-    ['逆向き', 'gen', 'retrieval', '順につないでください'],
-    ['順序の飛ばし', 'retrieval', 'end', '順につないでください'],
-    ['存在しないノード', 'gen', 'none', '存在しない'],
+    ['自分自身', 'a', 'a', '自分自身'],
+    ['終了から', 'end', 'a', '終了ノードから'],
+    ['開始へ', 'a', 'start', '開始ノードへ'],
+    ['存在しないノード', 'a', 'none', '存在しない'],
   ])('%s は拒否する', (_label, source, target, reason) => {
-    const result = canConnect(nodes, noEdges, { source, target });
+    const result = canConnect(nodes, [], { source, target });
 
-    expect(result.ok).toBe(false);
     expect(result.ok === false && result.reason).toContain(reason);
   });
 
-  it('1 つのノードから 2 本目の線は出せない', () => {
-    const result = canConnect(nodes, [edge('start', 'retrieval')], {
-      source: 'start',
-      target: 'gen',
-    });
+  it('合流（1 つのノードへ 2 本）は拒否する', () => {
+    const result = canConnect(nodes, [edge('start', 'b')], { source: 'a', target: 'b' });
+
+    expect(result.ok === false && result.reason).toContain('複数の線は入れません');
+  });
+
+  it('普通のノードから 2 本目は拒否する', () => {
+    const result = canConnect(nodes, [edge('a', 'b')], { source: 'a', target: 'end' });
 
     expect(result.ok === false && result.reason).toContain('複数の線は出せません');
   });
 
-  it('1 つのノードへ 2 本目の線は入れない', () => {
-    const result = canConnect(nodes, [edge('retrieval', 'gen')], {
-      source: 'start',
-      target: 'gen',
-    });
+  it('輪（ループ）になる線は拒否する', () => {
+    const result = canConnect(nodes, [edge('a', 'b')], { source: 'b', target: 'a' });
 
-    expect(result.ok === false && result.reason).toContain('複数の線は入れません');
+    expect(result.ok === false && result.reason).toContain('ループ');
+  });
+
+  it('条件分岐は、出口を選ばない線を拒否し、「はい」「いいえ」を 1 本ずつ引ける', () => {
+    expect(canConnect(nodes, [], { source: 'judge', target: 'a' }).ok).toBe(false);
+    expect(canConnect(nodes, [], { source: 'judge', target: 'a', sourceHandle: 'true' }).ok).toBe(true);
+    const used = [edge('judge', 'a', 'true')];
+
+    expect(canConnect(nodes, used, { source: 'judge', target: 'b', sourceHandle: 'true' }).ok).toBe(false);
+    expect(canConnect(nodes, used, { source: 'judge', target: 'b', sourceHandle: 'false' }).ok).toBe(true);
+  });
+
+  it('条件分岐ではないノードに、出口は指定できない', () => {
+    const result = canConnect(nodes, [], { source: 'a', target: 'b', sourceHandle: 'true' });
+
+    expect(result.ok).toBe(false);
   });
 });
 
-describe('insertRetrieval', () => {
-  const { nodes } = flowOf(newGraph('wf-1', 'x', ['svc']));
+describe('変数', () => {
+  const nodes = [node('start', 'end'), node('search', 'retrieval'), node('answer', 'llm'), node('later', 'llm')];
+  const edges = [edge('start', 'search'), edge('search', 'answer'), edge('answer', 'later')];
 
-  it('検索ノードを生成AI の位置に入れ、生成AI と終了を右へずらす', () => {
-    const result = insertRetrieval(nodes);
-    const position = (id: string) => result.find((n) => n.id === id)?.position;
+  it('前のノードの出力だけを使える。自分と後ろのノードは出ない', () => {
+    const tokens = availableVariables(nodes, edges, 'answer').map((v) => v.token);
 
-    expect(position('retrieval')).toEqual({ x: 280, y: 80 });
-    expect(position('gen')).toEqual({ x: 560, y: 80 });
-    expect(position('end')).toEqual({ x: 840, y: 80 });
-    expect(position('start')).toEqual({ x: 0, y: 80 });
+    expect(tokens).toEqual(['question', 'history', 'search.contexts_text']);
   });
 
-  it('入れたあとの 4 つのノードが、同じ x に重ならない', () => {
-    const xs = insertRetrieval(nodes).map((n) => n.position.x);
+  it('後ろのノードからは、前の生成AI の出力も使える', () => {
+    const tokens = availableVariables(nodes, edges, 'later').map((v) => v.token);
 
-    expect(new Set(xs).size).toBe(4);
+    expect(tokens).toContain('answer.text');
   });
 
-  it('生成AI がなくても、検索ノードを足す', () => {
-    const result = insertRetrieval(nodes.filter((n) => n.id !== 'gen'));
+  it('引用資料にできる検索ノードは、前にあるものだけ', () => {
+    expect(upstreamRetrievalNodes(nodes, edges, 'answer').map((n) => n.id)).toEqual(['search']);
+    expect(upstreamRetrievalNodes(nodes, edges, 'search')).toEqual([]);
+  });
 
-    expect(result.map((n) => n.id)).toContain('retrieval');
+  it('カーソルの位置（選択範囲）に、変数を差し込む', () => {
+    expect(insertVariable('abXXcd', 2, 4, 'question')).toEqual({
+      value: 'ab{{question}}cd',
+      cursor: 14,
+    });
   });
 });

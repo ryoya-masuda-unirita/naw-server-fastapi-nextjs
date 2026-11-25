@@ -2,6 +2,12 @@ import { useState, type KeyboardEvent } from 'react';
 
 import type { Busy, Message } from '../editor/useEditor';
 
+const MESSAGE_COLORS = {
+  error: 'text-red-600',
+  success: 'text-emerald-700',
+  info: 'text-sky-700',
+} as const;
+
 interface Props {
   name: string;
   serviceIds: string[];
@@ -102,7 +108,7 @@ export function Header({
       {message && (
         <p
           role={message.kind === 'error' ? 'alert' : 'status'}
-          className={`text-sm ${message.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}`}
+          className={`text-sm ${MESSAGE_COLORS[message.kind]}`}
         >
           {message.text}
         </p>

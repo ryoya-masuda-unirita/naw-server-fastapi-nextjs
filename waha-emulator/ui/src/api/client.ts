@@ -1,5 +1,6 @@
 import type {
   GraphData,
+  LegacyGraphData,
   PropertyCatalog,
   WorkflowSummary,
 } from './types';
@@ -67,7 +68,7 @@ export function listWorkflows(): Promise<WorkflowSummary[]> {
   return request(BASE_PATH);
 }
 
-export function getWorkflow(id: string): Promise<GraphData> {
+export function getWorkflow(id: string): Promise<GraphData | LegacyGraphData> {
   return request(`${BASE_PATH}/${encodeURIComponent(id)}`);
 }
 

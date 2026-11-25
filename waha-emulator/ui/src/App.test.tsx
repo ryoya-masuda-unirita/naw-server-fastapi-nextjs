@@ -93,27 +93,44 @@ describe('App', () => {
     expect(mocked.updateWorkflow).toHaveBeenCalledTimes(1);
   });
 
-  it('版 2 のワークフローは開かず、対応していない理由を出す', async () => {
-    mocked.getWorkflow.mockResolvedValue({ ...structuredClone(SAVED), version: 2 });
+  it('版 3 以降のワークフローは開かず、対応していない理由を出す', async () => {
+    mocked.getWorkflow.mockResolvedValue({ ...structuredClone(SAVED), version: 3 } as never);
     render(<App />);
 
     await userEvent.click(await screen.findByRole('button', { name: /^社内QA\s*assistant-1/ }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('版 2 の形式です');
+    expect(await screen.findByRole('alert')).toHaveTextContent('version: 3');
     expect(screen.queryByLabelText('名前')).not.toBeInTheDocument();
   });
 
-  it('版 1 を開いたあとに版 2 を選ぶと、前に開いていたものを画面から外す', async () => {
-    mocked.getWorkflow.mockResolvedValueOnce(structuredClone(SAVED));
-    mocked.getWorkflow.mockResolvedValueOnce({ ...structuredClone(SAVED), id: 'wf-2', version: 2 });
+  it('版 1 のワークフローは、版 2 に変換して開き、未保存にする', async () => {
+    mocked.getWorkflow.mockResolvedValue({
+      version: 1,
+      id: 'wf-1',
+      name: '社内QA',
+      serviceIds: ['assistant-1'],
+      nodes: [
+        { id: 'start', type: 'start', position: { x: 0, y: 0 } },
+        { id: 'gen', type: 'generative-ai', position: { x: 1, y: 0 }, properties: {} },
+        { id: 'end', type: 'end', position: { x: 2, y: 0 } },
+      ],
+      edges: [
+        { source: 'start', target: 'gen' },
+        { source: 'gen', target: 'end' },
+      ],
+    } as never);
     render(<App />);
-    await openFirst();
 
-    await userEvent.click(screen.getByRole('button', { name: /^別\s*other/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^社内QA\s*assistant-1/ }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('版 2 の形式です');
-    expect(screen.queryByLabelText('名前')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument();
+    expect(await screen.findByText(/版 2 に変換して開きました/)).toBeInTheDocument();
+    expect(screen.getByText('● 未保存')).toBeInTheDocument();
+  });
+
+  it('ワークフローを開いていないときは、使い方を出す', async () => {
+    render(<App />);
+
+    expect(await screen.findByText('使い方')).toBeInTheDocument();
   });
 
   it('検証が失敗したら、サーバーの理由を出し、保存しない。編集内容は残る', async () => {

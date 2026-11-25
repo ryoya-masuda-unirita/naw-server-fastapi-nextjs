@@ -4,7 +4,6 @@ import { Canvas } from './components/Canvas';
 import { Header } from './components/Header';
 import { PropertyPanel } from './components/PropertyPanel';
 import { WorkflowList } from './components/WorkflowList';
-import { hasRetrieval } from './editor/model';
 import { useEditor } from './editor/useEditor';
 
 const DISCARD_CONFIRMATION = '未保存の変更があります。破棄して移動しますか？';
@@ -74,7 +73,7 @@ export function App() {
                 onNodesChange={editor.onNodesChange}
                 onEdgesChange={editor.onEdgesChange}
                 onConnect={editor.connect}
-                onAddRetrieval={() => editor.addNodeOfType('retrieval')}
+                onAddNode={editor.addNodeOfType}
               />
             </div>
           </>
@@ -85,16 +84,32 @@ export function App() {
                 {editor.message.text}
               </p>
             )}
-            左の一覧からワークフローを選ぶか、新規に作成してください。
+            <h2 className="mb-2 text-base font-semibold text-slate-700">使い方</h2>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>左の「＋ 新規」で、ワークフローを作る（ID・名前・サービス ID）。すでにあるものは、一覧から選ぶ</li>
+              <li>
+                上の「＋ 生成AI」などで、ノードを足し、ノードの右の点から、次のノードの左の点へ、線を引く。ノードを選ぶと、右で、プロンプトなどを設定できる
+              </li>
+              <li>
+                「保存」を押す。<b>サービス ID</b>
+                （SecuAiGent のアシスタント ID と同じ値）で呼ばれると、このワークフローが動く
+              </li>
+            </ol>
+            <p className="mt-3 text-xs">
+              プロンプトの中では、<code>{'{{question}}'}</code>（質問）や、前のノードの出力
+              <code>{'{{ノードID.text}}'}</code> を使えます（右の「変数を挿入」から選べます）。
+            </p>
           </div>
         )}
       </main>
       <div className="row-start-2 min-h-0">
         <PropertyPanel
           node={editor.selectedNode}
+          nodes={editor.nodes}
+          edges={editor.edges}
           catalog={editor.catalog}
-          hasRetrieval={hasRetrieval(editor.nodes)}
-          onChange={editor.updateNodeData}
+          onLabelChange={editor.updateNodeLabel}
+          onConfigChange={editor.updateNodeConfig}
         />
       </div>
     </div>
