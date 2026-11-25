@@ -1,0 +1,69 @@
+# secuaigent-infra/（Terraform）の PR 用 CI。
+# terraform fmt・validate と、CloudFront Functions のテストを、PR の段階で確かめる
+# （deploy-infra.yml が同じ検査をするのは手動実行のときだけで、マージ前には走らない）。
+# AWS の資格情報は使わない（init は -backend=false。plan・apply はしない）。
+
+name: インフラ検証
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - "secuaigent-infra/**"
+      - ".github/workflows/infra-checks.yml"
+  push:
+    branches:
+      - develop
+    paths:
+      - "secuaigent-infra/**"
+      - ".github/workflows/infra-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  terraform:
+    name: Terraform の検証
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # deploy-infra.yml と同じ版に揃える
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - name: フォーマットを検証
+        # modules/ 配下にほとんどのHCLがあるため、-recursive で secuaigent-infra/ 全体を検査する
+        run: terraform fmt -check -diff -recursive secuaigent-infra
+
+      - name: 検証（dev）
+        working-directory: secuaigent-infra/environments/dev
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: 検証（bootstrap）
+        working-directory: secuaigent-infra/bootstrap
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  cloudfront-functions:
+    name: CloudFront Functions のテスト
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: テストを実行
+        run: node --test secuaigent-infra/modules/frontend/functions/functions.test.mjs
