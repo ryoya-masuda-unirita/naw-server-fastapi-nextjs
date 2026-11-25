@@ -136,3 +136,10 @@ jobs:
 
       - name: ビルド
         run: npm run build
+
+      # onprem/docker-compose.yml の waha-emulator-ui と同じイメージ。Dockerfile・nginx の設定の誤りを、
+      # compose を手で動かす前に見つける。中継先は、名前を引かない設計（resolver）のため、仮の値でよい
+      - name: Docker イメージをビルドし、nginx の設定を検証
+        run: |
+          docker build -t waha-emulator-ui .
+          docker run --rm -e WAHA_UPSTREAM=http://waha-emulator:8080 waha-emulator-ui nginx -t

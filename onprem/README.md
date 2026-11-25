@@ -17,6 +17,7 @@ docker compose down            # 停止（データも消すなら down -v）
 |---|---|---|
 | server-local | 18090 | 社内の SECURE の窓口（`secuaigent-server-local/`）。認証キーは `onprem-local-key` |
 | waha-emulator | 18091 | Waha!（とアダプタ）の代わり（`waha-emulator/`）。LLM は既定で echo |
+| waha-emulator-ui | 18092 | ワークフローエディター（画面。`waha-emulator/ui/`）。ブラウザで http://127.0.0.1:18092 を開き、ノードと線でワークフローを組む。管理用 API（`/admin`）だけを、エミュレーターへ中継する |
 | vector-db | 15432 | アダプタが使うベクトルDB（pgvector + PGroonga + Apache AGE）。DB・ユーザー `onprem_vector`、パスワード `onprem_vector_password` |
 | `file-server/` | - | 顧客のファイルサーバーの代わり（サンプル文書）。エミュレーターの `/mnt/file-server` に読み取り専用で見える（ベクトルDB とともに、アダプタの取り込み後に使う） |
 
@@ -31,6 +32,23 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
   -F 'textData={"assistantId":"onprem-chat","messageId":"m-1","userInput":"こんにちは"};type=application/json' \
   http://localhost:18090/api/messages/content
 ```
+
+### 画面で組んだワークフローを、server-local から呼ぶ
+
+1. http://127.0.0.1:18092 を開き、`＋ 新規` で ID・名前・サービス ID（例: `my-chat`）を入れて作成し、`保存` する（検索ノードや、生成AI のプロパティも、画面で編集できる）
+2. server-local の `assistantId` に、そのサービス ID を指定して呼ぶ。保存したワークフローが、再起動なしで、そのサービス ID で動く
+
+```bash
+curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
+  -F 'textData={"assistantId":"my-chat","messageId":"m-2","userInput":"こんにちは"};type=application/json' \
+  http://localhost:18090/api/messages/content
+```
+
+- 保存したワークフローは、名前つきボリューム（`waha-workflows`）に残る。`docker compose down` では残り、`down -v` で消える
+- 画面と管理用 API には、認証がない。ホストの `127.0.0.1` だけに公開し、別のサイトのページからの書き込み（`Origin` が画面と違うリクエスト）は、画面のサーバー（nginx）が 403 にする。`curl` など `Origin` を付けないものは通る
+- エミュレーターを作り直しても（`docker compose up -d --build waha-emulator` など）、画面の再起動は要らない
+- 設定ファイル（`WAHA_WORKFLOWS_FILE`）と同じサービス ID を保存すると、保存したワークフローが優先される（削除すると、設定ファイルの定義に戻る）。詳細は [waha-emulator の README](../waha-emulator/README.md#ノードと線で組んだワークフロー管理用-api)
+- 画面だけを起動するときは `docker compose up -d --build waha-emulator-ui`（`depends_on` で、エミュレーターも起動する）
 
 ## クラウド側とつなぐ
 
