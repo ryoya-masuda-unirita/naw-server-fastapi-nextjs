@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -544,6 +545,7 @@ async def test_run_branch_on_empty_variable_takes_true_side() -> None:
     [
         ("contains", "結論は OK です", "ok", True),
         ("contains", "NG", "OK", False),
+        ("contains", "OK", "OK ", True),
         ("equals", " ok \n", "OK", True),
         ("equals", "OK です", "OK", False),
         ("empty", "", "", True),
@@ -562,3 +564,35 @@ def test_evaluate_rejects_unknown_operator() -> None:
     """未対応の演算子は、失敗にすること（検証済みの定義では起きない）"""
     with pytest.raises(WorkflowError, match="未対応の演算子"):
         _evaluate("starts", "a", "b")
+
+
+async def test_run_retrieval_with_unreadable_output_names_retrieval_node(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """検索アダプターの出力に contexts がないとき、素の KeyError ではなく、検索ノードの名前つきの失敗になること"""
+
+    def write_broken_output(self: object, job: Any) -> None:
+        """contexts のない出力を書く（検索アダプターの代わり）。
+
+        Parameters
+        ----------
+        self : object
+            使わない。
+        job : Any
+            検索アダプターの入力（出力先とビュー名を持つ）。
+        """
+        output_dir = next(v for v in job.properties.values() if v.startswith("/"))
+        (Path(output_dir) / job.view_name).write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "waha_emulator.workflows.generative_ai.GenerativeAiWorkflow._run_retrieval",
+        write_broken_output,
+    )
+    provider = SequenceProvider(answers=["a", "b"])
+
+    with pytest.raises(WorkflowError, match=r"^ノード「検索」: 検索アダプタの出力"):
+        await _workflow(rag_check_flow_data(), provider, FakeSearchClient()).run(
+            _request()
+        )
+
+    assert provider.received == []

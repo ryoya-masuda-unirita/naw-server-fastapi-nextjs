@@ -182,7 +182,8 @@ def _evaluate(operator: str, actual: str, expected: str) -> bool:
     actual : str
         調べる変数の値。
     expected : str
-        比べる値（`empty` では使わない）。
+        比べる値（`empty` では使わない。そのままの文字列で、`{{...}}` は展開しない。
+        前後の空白は無視する）。
 
     Returns
     -------
@@ -197,7 +198,7 @@ def _evaluate(operator: str, actual: str, expected: str) -> bool:
     if operator == OPERATOR_EMPTY:
         return not actual.strip()
     if operator == OPERATOR_CONTAINS:
-        return expected.lower() in actual.lower()
+        return expected.strip().lower() in actual.lower()
     if operator == OPERATOR_EQUALS:
         return actual.strip().lower() == expected.strip().lower()
     raise WorkflowError(f"未対応の演算子です: {operator}")

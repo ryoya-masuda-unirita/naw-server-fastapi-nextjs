@@ -132,7 +132,7 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 | `llm` | `prompt`（必須）・`properties`（接続）・`outputType`（0 か 2。既定 0）・`inheritContext`（既定 false） | プロンプトを埋めて、生成AI を 1 回呼ぶ。出力は `{{ノードID.text}}` |
 | `template` | `text`（必須） | 変数を埋めた文字列を作る。出力は `{{ノードID.text}}` |
 | `retrieval` | `properties`（検索アダプターの接続。`VDB_*` など）・`query`（検索語のテンプレート。既定 `{{question}}`） | 検索し、引用資料の本文を `{{ノードID.contexts_text}}`（空行で区切ってつないだ文字列）にする |
-| `branch` | `variable`（調べる変数。`judge.text` など）・`operator`（`contains`・`equals`・`empty`）・`value`（`empty` では書かない） | 条件に合えば「はい」（`true`）、合わなければ「いいえ」（`false`）の線をたどる。大文字小文字は区別しない。`equals` は前後の空白を無視 |
+| `branch` | `variable`（調べる変数。`judge.text` など）・`operator`（`contains`・`equals`・`empty`）・`value`（`empty` では書かない。そのままの文字列で、`{{...}}` は展開しない） | 条件に合えば「はい」（`true`）、合わなければ「いいえ」（`false`）の線をたどる。大文字小文字は区別しない。`contains`・`equals` は、`value` の前後の空白を無視 |
 | `end` | `output`（必須） | 回答にする文字列（`{{...}}` を埋め込める）。**複数置ける**（たどり着いた終了が、回答になる） |
 
 - 変数は `{{question}}`・`{{history}}`・`{{ノードID.text}}`（生成AI・テンプレート）・`{{ノードID.contexts_text}}`（検索）。**そのノードより前に動くノードの出力だけ**使える（保存の時点で、使えない参照は、どのノードのどの項目かを示して 400 になる）

@@ -438,6 +438,14 @@ def _rag_edit(mutate: Any) -> dict[str, Any]:
         ),
         (lambda d: d["edges"][-1].pop("sourceHandle"), "1 本ずつ"),
         (lambda d: d["edges"][-1].update(sourceHandle="maybe"), "sourceHandle は"),
+        (lambda d: d["edges"][-1].update(sourceHandle=[]), "sourceHandle は"),
+        (lambda d: d["edges"][-1].update(sourceHandle={"x": 1}), "sourceHandle は"),
+        (
+            lambda d: next(n for n in d["nodes"] if n["id"] == "check")[
+                "config"
+            ].update(operator=["contains"]),
+            "operator は",
+        ),
         (
             lambda d: d["edges"][0].update(sourceHandle="true"),
             "sourceHandle は書けません",

@@ -367,7 +367,7 @@ def _branch_config(raw: dict[str, Any], where: str) -> dict[str, Any]:
     # {{judge.text}} のように、波括弧つきで書かれても、変数の名前として読む
     variable = single_reference(variable) or variable
     operator = raw.get("operator")
-    if operator not in OPERATORS:
+    if not isinstance(operator, str) or operator not in OPERATORS:
         raise GraphError(
             f"{where}: config.operator は {sorted(OPERATORS)} のどれかです"
         )
@@ -509,7 +509,10 @@ def _edge(raw: Any, index: int) -> FlowEdge:
     if not isinstance(source, str) or not isinstance(target, str):
         raise GraphError(f"{where}: source と target は文字列にしてください")
     handle = raw.get("sourceHandle")
-    if handle is not None and handle not in BRANCH_HANDLES:
+    # 文字列でない値（配列・オブジェクト）は、集合の検索で TypeError になるため、先に型で弾く
+    if handle is not None and (
+        not isinstance(handle, str) or handle not in BRANCH_HANDLES
+    ):
         raise GraphError(
             f"{where}: sourceHandle は {sorted(BRANCH_HANDLES)} のどちらかです"
         )

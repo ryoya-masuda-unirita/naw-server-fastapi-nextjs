@@ -83,6 +83,9 @@ QUESTION_MISSING_MESSAGE = (
 )
 OUTPUT_MISSING_MESSAGE = "生成AIアダプタが出力ファイルを書きませんでした"
 RETRIEVAL_OUTPUT_MISSING_MESSAGE = "検索アダプタが出力ファイルを書きませんでした"
+RETRIEVAL_OUTPUT_UNREADABLE_MESSAGE = (
+    "検索アダプタの出力（RAG Context JSON）を読めません"
+)
 ADAPTER_FAILED_PREFIX = "生成AIアダプタの実行に失敗しました"
 RETRIEVAL_FAILED_PREFIX = "検索アダプタの実行に失敗しました"
 RETRIEVAL_COLUMN_NAME = "検索文字列"
@@ -547,10 +550,13 @@ class GenerativeAiWorkflow:
         output = job_dir / retrieval.view_name
         if not output.exists():
             raise WorkflowError(RETRIEVAL_OUTPUT_MISSING_MESSAGE)
-        logger.info(
-            "workflow step 1/2 retrieval finished: contexts=%d",
-            len(json.loads(output.read_text(encoding="utf-8"))["contexts"]),
-        )
+        try:
+            contexts_count = len(
+                json.loads(output.read_text(encoding="utf-8"))["contexts"]
+            )
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise WorkflowError(RETRIEVAL_OUTPUT_UNREADABLE_MESSAGE) from e
+        logger.info("workflow step 1/2 retrieval finished: contexts=%d", contexts_count)
         logger.info("workflow step 2/2 generative-ai: serviceId=%s", request.service_id)
 
     def _run_retrieval(self, job: RetrievalJob) -> None:
