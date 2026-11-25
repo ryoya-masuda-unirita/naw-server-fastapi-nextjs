@@ -133,7 +133,8 @@ services:
     container_name: naw-fastapi-backend
     environment: *backend-env
     ports:
-      - "${BACKEND_PORT:-8001}:8000"
+      # ログイン用のデータ（admin / admin@1234）が入るため、既定はホストの 127.0.0.1 だけに公開する（BACKEND_HOST で変える）
+      - "${BACKEND_HOST:-127.0.0.1}:${BACKEND_PORT:-8001}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s

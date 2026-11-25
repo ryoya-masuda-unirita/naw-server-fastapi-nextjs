@@ -52,12 +52,10 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
 
 ## クラウド側とつなぐ
 
-1. ルートの compose（backend は 8001）を起動し、マイグレーションと seed を流す
+1. ルートの compose（backend は 8001）を起動し、SECURE アシスタントの seed を流す（マイグレーションと `server/seed.sql`・デモデータは、compose が自動で流す）
 
    ```bash
-   docker compose up -d                      # リポジトリのルートで
-   docker exec naw-fastapi-backend uv run alembic upgrade head
-   docker exec -i naw-fastapi-postgres psql -U root -d postgres < server/seed.sql
+   docker compose up -d --build              # リポジトリのルートで
    docker exec -i naw-fastapi-postgres psql -U root -d postgres < onprem/cloud-seed.sql
    ```
 

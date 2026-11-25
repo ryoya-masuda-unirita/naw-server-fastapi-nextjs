@@ -67,7 +67,7 @@ cd onprem && docker compose up -d --build                                       
 
 - ポートが使われている: `.env` で `FRONTEND_PORT`・`BACKEND_PORT` を変える（`cp .env.example .env`。既定は画面 5173・backend 8001。`.env` がなくても既定値で動く）
 - 起動の状態: `docker compose ps -a`（`migrate`・`seed` は終了済みで正常。`backend`・`frontend` が healthy になれば完了）
-- 失敗したとき: `docker compose logs <サービス名>`
+- 失敗したとき: `docker compose logs <サービス名>`。`migrate`・`seed` が失敗すると、backend・画面が起動しないため、まず `docker compose logs migrate seed` を見る
 - デモデータを入れ直す: `down -v` のあと、もう一度 `up -d --build`
 
 ## アシスタントの種類ごとの通信経路
