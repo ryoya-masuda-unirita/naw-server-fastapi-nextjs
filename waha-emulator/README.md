@@ -84,6 +84,43 @@ Waha!（ユニリタの ETL 製品）の servicerun API を真似る、Python（
 - `VENDOR` に `Bedrock`（Python 版だけ。AWS Bedrock の Claude）も書ける。例は [onprem/config/workflows.bedrock.example.json](../onprem/config/workflows.bedrock.example.json)、手順は [onprem/README.md](../onprem/README.md) の「Bedrock で動かす」（`bedrock-ext`）
 - 例は [config/workflows.example.json](./config/workflows.example.json)（`onprem/` の compose では `config/` が `/app/config` に読み取り専用でマウントされる）
 
+### ノードと線で組んだワークフロー（管理用 API）
+
+`WAHA_STUDIO_DIR` を設定すると、ノードと線で組んだワークフローを、管理用 API（`/admin/workflows`）で作成・更新・削除できる（Issue #520。画面は今後）。保存したワークフローは、再起動なしで、そのサービス ID の execute で動く。サービス ID が設定ファイル（`WAHA_WORKFLOWS_FILE`）の定義と同じなら、**保存したワークフローが優先**され、削除すると設定ファイルの定義に戻る。未設定なら管理用 API は載らず、設定ファイルだけで動く。
+
+| API | 内容 |
+|---|---|
+| `GET /admin/workflows` | 一覧（`id`・`name`・`serviceIds`） |
+| `POST /admin/workflows` | 作成（201）。不正は 400、id・サービス ID の重複は 409 |
+| `POST /admin/workflows/validate` | 保存せずに検証する |
+| `GET /admin/workflows/{id}` | 取得（API キーなどは `********` に伏せる） |
+| `PUT /admin/workflows/{id}` | 更新。`********` のままの値は、保存済みの値を引き継ぐ |
+| `DELETE /admin/workflows/{id}` | 削除（204） |
+
+認証はない（検証用の道具）。保存先は 1 ワークフロー = 1 つの JSON ファイル（`<id>.json`）。
+
+```json
+{
+  "version": 1,
+  "id": "assistant-1",
+  "name": "社内QA",
+  "serviceIds": ["assistant-1"],
+  "nodes": [
+    {"id": "start", "type": "start", "position": {"x": 0, "y": 0}},
+    {"id": "gen", "type": "generative-ai", "name": "生成AI", "position": {"x": 300, "y": 0},
+     "properties": {"VENDOR": "Echo", "URL": "http://echo.invalid", "API_KEY": "echo", "MODEL_NAME": "echo"}},
+    {"id": "end", "type": "end", "position": {"x": 600, "y": 0}}
+  ],
+  "edges": [{"source": "start", "target": "gen"}, {"source": "gen", "target": "end"}]
+}
+```
+
+- ノードの種類: `start`・`retrieval`（検索アダプタ）・`generative-ai`（生成AIアダプタ）・`end`。`properties` の書き方は、設定ファイルの `properties`・`retrieval.properties` と同じ（`${環境変数}` も使える）
+- つなぎ方は、`start →（retrieval →）generative-ai → end` の 1 本の鎖だけ。検索ノードがあると RAG（出力モード 1）、なければ通常チャット（0。生成AI ノードの `outputType` に 2 を書くと、回答の本文だけ）
+- 学習・削除・同期は、まだ設定ファイルの定義で動く
+- 失敗理由には、失敗したノードの名前が付く（例: `FAILURE: ノード「検索」: 検索アダプタの実行に失敗しました: …`）
+- 作り変え前の状態には、タグ `waha-emulator-before-studio` で戻せる
+
 ### 検索 → 生成AI（RAG チャット）
 
 `retrieval` があるサービスでは、質問を検索文字列として検索アダプタ（出力モード 1）を動かし、ジョブのディレクトリに RAG Context JSON を書かせてから、生成AIアダプタ（出力モード 1）の列 index 6 にそのパスを渡す。ログ（INFO）は次の順に並ぶ:
@@ -163,6 +200,7 @@ data:{"type":"completed"}
 | `STREAM_ALLOWED_DIR` | 未設定（Docker では `/app/data/stream-output`） | 設定すると `streamfilepath` をこのディレクトリの中だけに制限する。未設定だと、セッションを開ければ（authkey を知っていれば）任意の既存ファイルに追記できるため、ホストで動かすときも設定する |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | `3600` | この時間使われていないセッション（実行中のジョブがないもの）を、次の `startsession` で破棄する。server-local は失敗時に `endsession` を呼ばない経路がある（学習データの同期など）ため |
 | `WAHA_WORKFLOWS_FILE` | 未設定 | サービス ID → ワークフローの JSON（上の「ワークフローの設定」）。空文字列は未設定。Docker では `/app/config/workflows.example.json` など |
+| `WAHA_STUDIO_DIR` | 未設定 | ノードと線で組んだワークフローの保存先。設定すると管理用 API（`/admin/workflows`）が有効になる。空文字列は未設定 |
 | `LLM_PROVIDER` | `echo` | `WAHA_WORKFLOWS_FILE` がないときの既定。`echo` / `azure_openai` |
 | `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | 空 | `azure_openai` のとき必須。デプロイ名は chat completions の URL のモデル名になる |
 | `TIKA_SERVER_JAR` | Docker では `/opt/tika-server.jar`。ホストでは未設定 | Apache Tika のサーバーの jar。設定があると、旧形式の Office（`.doc`・`.xls`・`.ppt`）・RTF・HTML・EPUB・HWP など（専用のプロセッサが読まない形式）の取り出しに、必要になったとき（遅延起動）に起動して使う。未設定ならテキスト系の形式だけを自前で読む。詳細は [generative-ai-adapter の README](../generative-ai-adapter/README.md#apache-tika-の呼び方移植元との違い) |

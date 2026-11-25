@@ -11,8 +11,12 @@ from generative_ai_core.retrieval.runtime import CoreRetrievalRuntime
 
 from waha_emulator.config import Settings, get_settings
 from waha_emulator.errors import register_exception_handlers
-from waha_emulator.routers import servicerun
+from waha_emulator.routers import admin, servicerun
 from waha_emulator.sessions import SessionStore
+from waha_emulator.studio.graph import GraphDefinition
+from waha_emulator.studio.graph_workflow import GraphWorkflow
+from waha_emulator.studio.service import StudioService
+from waha_emulator.studio.store import GraphStore
 from waha_emulator.workflow_config import (
     ADAPTER_EMBEDDING,
     WorkflowConfig,
@@ -233,7 +237,53 @@ def create_app(
     app.state.workflow_registry = registry
     register_exception_handlers(app)
     app.include_router(servicerun.router)
+    if settings.studio_dir is not None:
+        app.state.studio = _build_studio(
+            settings.studio_dir,
+            registry,
+            chat_runtime_factory,
+            retrieval_runtime_factory,
+        )
+        app.include_router(admin.router)
     return app
+
+
+def _build_studio(
+    directory: Path,
+    registry: WorkflowRegistry,
+    chat_runtime_factory: ChatRuntimeFactory | None,
+    retrieval_runtime_factory: Callable[[], CoreRetrievalRuntime] | None,
+) -> StudioService:
+    """保存したワークフローの管理を作り、保存済みのものをレジストリに登録する。
+
+    Parameters
+    ----------
+    directory : Path
+        ワークフローの保存先。
+    registry : WorkflowRegistry
+        サービス ID → ワークフロー。
+    chat_runtime_factory : ChatRuntimeFactory | None
+        core の chat を作る処理（テストでプロバイダを差し替える）。
+    retrieval_runtime_factory : Callable[[], CoreRetrievalRuntime] | None
+        core の検索を作る処理（テストで差し替える）。
+
+    Returns
+    -------
+    StudioService
+        ワークフローの管理。
+    """
+
+    def workflow_factory(
+        graph: GraphDefinition, definition: WorkflowDefinition
+    ) -> Workflow:
+        """定義から、ノードと線で組んだワークフローを作る。"""
+        return GraphWorkflow(
+            graph, definition, chat_runtime_factory, retrieval_runtime_factory
+        )
+
+    studio = StudioService(GraphStore(directory), registry, workflow_factory)
+    studio.load()
+    return studio
 
 
 def app_factory() -> FastAPI:

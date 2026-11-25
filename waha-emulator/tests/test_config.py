@@ -45,3 +45,12 @@ def test_blank_workflows_file_is_unset() -> None:
     assert make_settings(WAHA_WORKFLOWS_FILE="/app/config/w.json").workflows_file == (
         Path("/app/config/w.json")
     )
+
+
+def test_studio_dir_is_unset_by_default_and_blank_is_unset() -> None:
+    """ワークフローの保存先は、未設定・空文字列のとき None（管理用 API を載せない）であること"""
+    assert make_settings().studio_dir is None
+    assert make_settings(WAHA_STUDIO_DIR="").studio_dir is None
+    assert make_settings(WAHA_STUDIO_DIR="/data/workflows").studio_dir == Path(
+        "/data/workflows"
+    )
