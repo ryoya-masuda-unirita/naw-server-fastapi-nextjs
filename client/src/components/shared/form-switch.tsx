@@ -82,7 +82,7 @@ export function FormSwitch({
           {/* 移植元は app-switch のホスト要素に data-testid を付ける。Switch は data-testid を受けないので外側で包む */}
           <span className="contents" data-testid={dataTestid}>
             <Switch
-              label={switchLabel}
+              label={switchLabel || label}
               disabled={disabled}
               size={size}
               showIcon={showIcon}

@@ -9,6 +9,7 @@ import {
   type Ref,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import './cdk-overlay.css';
 import { cx } from './class-names';
 import { AppMatIcon } from './icons/app-mat-icon';
@@ -82,6 +83,8 @@ interface ContextMenuProps {
   /** 既定トリガーのアイコン（material-symbols 名）。省略すると歯車の SVG アイコン */
   triggerIcon?: string;
   triggerTestid?: string;
+  /** 既定トリガーの名前（スクリーンリーダーが読む）。省略すると「メニューを開く」。行ごとに区別したいときに渡す */
+  triggerLabel?: string;
   menuMinWidth?: string;
   /** メニューのパネルに付けるクラス */
   panelClass?: string;
@@ -100,6 +103,7 @@ export function ContextMenu({
   customTrigger,
   triggerIcon,
   triggerTestid,
+  triggerLabel,
   menuMinWidth = 'min-w-60',
   panelClass = 'bg-bg-primary flex flex-col gap-1 p-4 rounded-lg shadow-default text-xs font-medium',
   closeOnContentClick = true,
@@ -108,6 +112,7 @@ export function ContextMenu({
   className,
   ref,
 }: ContextMenuProps) {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   // isVisible は DOM に置くか、isOpen は開いた見た目にするか（閉じるトランジションのため 2 段にしている）
   const [isVisible, setIsVisible] = useState(false);
@@ -180,6 +185,8 @@ export function ContextMenu({
           ref={(el) => void (triggerRef.current = el)}
           type="button"
           data-testid={triggerTestid}
+          aria-label={triggerLabel ?? t('COMMON.OPEN_MENU')}
+          aria-expanded={isOpen}
           className={cx(
             'flex items-center justify-center p-1 rounded-full hover:bg-bg-brand-weak transition-colors',
             hasPaddingButton && 'md:p-2!',

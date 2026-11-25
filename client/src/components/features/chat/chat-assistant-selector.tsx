@@ -112,6 +112,7 @@ export function ChatAssistantSelector({
         <div
           className="dl-panel dl-panel--up dl-panel--chat-fixed"
           role="listbox"
+          aria-label={t('CHAT.INPUT.SELECT_ASSISTANT')}
           hidden={!isOpen}
           style={panelStyle}
         >
