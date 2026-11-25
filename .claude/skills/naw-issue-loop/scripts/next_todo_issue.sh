@@ -7,11 +7,13 @@ set -euo pipefail
 
 OWNER="ryoya-masuda-unirita"
 PROJECT_NUMBER="3"
+# ボードの項目数（完了したものも含む）より、十分大きくする。小さいと、新しい Issue の項目が取得から外れる
+PROJECT_ITEM_LIMIT="1000"
 REPO="${GITHUB_REPOSITORY:-ryoya-masuda-unirita/secuaigent-fastapi-react}"
 
 frontend_numbers_json="$(gh issue list --repo "$REPO" --label "frontend-port" --state all --json number --limit 200 --jq '[.[].number]')"
 
-todo_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit 200 \
+todo_json="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --limit "$PROJECT_ITEM_LIMIT" \
   --jq '[.items[] | select(.status=="Todo" and .content.type=="Issue") | .content.number]')"
 
 jq -n --argjson todo "$todo_json" --argjson frontend "$frontend_numbers_json" \
