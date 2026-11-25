@@ -1,4 +1,7 @@
 terraform {
+  // backend "s3" の use_lockfile(S3ネイティブロック)は Terraform 1.10 以上が必要
+  required_version = ">= 1.10"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
