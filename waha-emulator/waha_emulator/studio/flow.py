@@ -1,7 +1,8 @@
 """版 2（ノードと線で自由に組む）の保存形式の検証と、変数のテンプレート。
 
-版 1（鎖に固定。`graph.py`）と共存する。ノードは `start`・`llm`・`template`・`end`。
-ノードの出力は、`{{ノードID.text}}` で、あとのノードのテンプレートに埋め込める。
+版 1（鎖に固定。`graph.py`）と共存する。ノードは `start`・`llm`・`template`・`retrieval`・
+`branch`・`end`。ノードの出力は、`{{ノードID.text}}`（検索は `{{ノードID.contexts_text}}`）で、
+あとのノードのテンプレートに埋め込める。条件分岐は、「はい」「いいえ」の 2 つの出口を持つ。
 """
 
 import re
@@ -30,14 +31,29 @@ FLOW_VERSION = 2
 NODE_START = "start"
 NODE_LLM = "llm"
 NODE_TEMPLATE = "template"
+NODE_RETRIEVAL = "retrieval"
+NODE_BRANCH = "branch"
 NODE_END = "end"
-NODE_TYPES = frozenset({NODE_START, NODE_LLM, NODE_TEMPLATE, NODE_END})
-# 出力を `ノードID.text` の変数にできるノード
-NODES_WITH_TEXT_OUTPUT = frozenset({NODE_LLM, NODE_TEMPLATE})
+NODE_TYPES = frozenset(
+    {NODE_START, NODE_LLM, NODE_TEMPLATE, NODE_RETRIEVAL, NODE_BRANCH, NODE_END}
+)
+# ノードが出す変数の名前（`ノードID.変数名` で、あとのノードから参照できる）
+OUTPUT_VARIABLES: Mapping[str, str] = {
+    NODE_LLM: "text",
+    NODE_TEMPLATE: "text",
+    NODE_RETRIEVAL: "contexts_text",
+}
 MAX_NODES = 50
 MAX_TEXT_LENGTH = 20000
-# 1 つのノードから出せる線の数（条件分岐が入るまでは 1 本）
-MAX_OUTGOING_EDGES = 1
+HANDLE_TRUE = "true"
+HANDLE_FALSE = "false"
+BRANCH_HANDLES = frozenset({HANDLE_TRUE, HANDLE_FALSE})
+OPERATOR_CONTAINS = "contains"
+OPERATOR_EQUALS = "equals"
+OPERATOR_EMPTY = "empty"
+OPERATORS = frozenset({OPERATOR_CONTAINS, OPERATOR_EQUALS, OPERATOR_EMPTY})
+# 検索ノードの質問（検索語）の既定。利用者の質問をそのまま使う
+DEFAULT_RETRIEVAL_QUERY = "{{question}}"
 NODE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # {{...}} の参照（中の空白は無視する）
 REFERENCE_PATTERN = re.compile(r"\{\{\s*([^{}\s]+)\s*\}\}")
@@ -46,16 +62,22 @@ VARIABLE_HISTORY = "history"
 START_VARIABLES = frozenset({VARIABLE_QUESTION, VARIABLE_HISTORY})
 OUTPUT_VARIABLE = "text"
 OUTPUT_SUFFIX = f".{OUTPUT_VARIABLE}"
+RAG_OUTPUT_TYPE_VALUE = 1
 ROOT_KEYS = frozenset({"version", "id", "name", "serviceIds", "nodes", "edges"})
 NODE_KEYS = frozenset({"id", "type", "name", "position", "config"})
 EDGE_KEYS = frozenset({"source", "target"})
+EDGE_OPTIONAL_KEYS = frozenset({"sourceHandle"})
 CONFIG_KEYS: Mapping[str, frozenset[str]] = {
     NODE_START: frozenset(),
-    NODE_LLM: frozenset({"prompt", "properties", "outputType", "inheritContext"}),
+    NODE_LLM: frozenset(
+        {"prompt", "properties", "outputType", "inheritContext", "retrieval"}
+    ),
     NODE_TEMPLATE: frozenset({"text"}),
+    NODE_RETRIEVAL: frozenset({"query", "properties"}),
+    NODE_BRANCH: frozenset({"variable", "operator", "value"}),
     NODE_END: frozenset({"output"}),
 }
-# ノードの設定のうち、{{...}} を埋め込めるテンプレートの項目名
+# ノードの設定のうち、{{...}} を埋め込めるテンプレートの項目名（必須のもの）
 TEMPLATE_FIELDS: Mapping[str, str] = {
     NODE_LLM: "prompt",
     NODE_TEMPLATE: "text",
@@ -102,10 +124,13 @@ class FlowEdge:
         出力元のノード ID。
     target : str
         入力先のノード ID。
+    handle : str | None
+        条件分岐の出口（`true`・`false`）。条件分岐以外の線は None。
     """
 
     source: str
     target: str
+    handle: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,20 +182,29 @@ class FlowDefinition:
         """
         return next(node for node in self.nodes if node.type == NODE_START)
 
-    def next_id(self, node_id: str) -> str | None:
+    def next_id(self, node_id: str, handle: str | None = None) -> str | None:
         """ノードから出る線の、入力先のノード ID を返す。
 
         Parameters
         ----------
         node_id : str
             出力元のノード ID。
+        handle : str | None
+            条件分岐の出口（`true`・`false`）。条件分岐以外は None。
 
         Returns
         -------
         str | None
             入力先のノード ID。線がなければ None。
         """
-        return next((e.target for e in self.edges if e.source == node_id), None)
+        return next(
+            (
+                e.target
+                for e in self.edges
+                if e.source == node_id and e.handle == handle
+            ),
+            None,
+        )
 
 
 def render(template: str, variables: Mapping[str, str]) -> str:
@@ -231,6 +265,123 @@ def single_reference(template: str) -> str | None:
     return None if match is None else match.group(1)
 
 
+def _properties_value(raw: Any, where: str) -> dict[str, Any]:
+    """ノードの接続のプロパティ（`config.properties`）を取り出す。
+
+    Parameters
+    ----------
+    raw : Any
+        JSON の `properties`（省略は空）。
+    where : str
+        エラーメッセージに出す場所。
+
+    Returns
+    -------
+    dict[str, Any]
+        プロパティ。
+
+    Raises
+    ------
+    GraphError
+        オブジェクトでないとき。
+    """
+    if not isinstance(raw, dict):
+        raise GraphError(f"{where}: config.properties はオブジェクトにしてください")
+    return raw
+
+
+def _llm_config(raw: dict[str, Any], where: str) -> dict[str, Any]:
+    """生成AI ノードの設定（プロパティ・出力モード・文脈の引き継ぎ・検索の紐づけ）を検証する。
+
+    Parameters
+    ----------
+    raw : dict[str, Any]
+        JSON の `config`。
+    where : str
+        エラーメッセージに出す場所。
+
+    Returns
+    -------
+    dict[str, Any]
+        `properties`・`outputType`・`inheritContext`・`retrieval`。
+
+    Raises
+    ------
+    GraphError
+        設定が不正なとき。
+    """
+    properties = _properties_value(raw.get("properties", {}), where)
+    retrieval = raw.get("retrieval")
+    if retrieval is not None:
+        if (
+            not isinstance(retrieval, str)
+            or NODE_ID_PATTERN.fullmatch(retrieval) is None
+        ):
+            raise GraphError(
+                f"{where}: config.retrieval は、検索ノードの ID にしてください"
+            )
+        if "outputType" in raw:
+            raise GraphError(f"{where}: retrieval があるとき outputType は書けません")
+        output_type = RAG_OUTPUT_TYPE_VALUE
+    else:
+        output_type = raw.get("outputType", NORMAL_CHAT_OUTPUT_TYPE)
+        if isinstance(output_type, bool) or output_type not in (
+            NORMAL_CHAT_OUTPUT_TYPE,
+            PLAIN_ANSWER_OUTPUT_TYPE,
+        ):
+            raise GraphError(f"{where}: config.outputType は 0 か 2 です")
+    inherit_context = raw.get("inheritContext", False)
+    if not isinstance(inherit_context, bool):
+        raise GraphError(f"{where}: config.inheritContext は真偽値にしてください")
+    return {
+        "properties": properties,
+        "outputType": output_type,
+        "inheritContext": inherit_context,
+        "retrieval": retrieval,
+    }
+
+
+def _branch_config(raw: dict[str, Any], where: str) -> dict[str, Any]:
+    """条件分岐ノードの設定（調べる変数・演算子・値）を検証する。
+
+    Parameters
+    ----------
+    raw : dict[str, Any]
+        JSON の `config`。
+    where : str
+        エラーメッセージに出す場所。
+
+    Returns
+    -------
+    dict[str, Any]
+        `variable`・`operator`・`value`。
+
+    Raises
+    ------
+    GraphError
+        設定が不正なとき。
+    """
+    if "variable" not in raw:
+        raise GraphError(f"{where}: config.variable が必要です")
+    variable = text_value(raw["variable"], f"{where}.config.variable", MAX_NAME_LENGTH)
+    # {{judge.text}} のように、波括弧つきで書かれても、変数の名前として読む
+    variable = single_reference(variable) or variable
+    operator = raw.get("operator")
+    if operator not in OPERATORS:
+        raise GraphError(
+            f"{where}: config.operator は {sorted(OPERATORS)} のどれかです"
+        )
+    if operator == OPERATOR_EMPTY:
+        if "value" in raw:
+            raise GraphError(f"{where}: operator が empty のとき value は書けません")
+        value = ""
+    else:
+        if "value" not in raw:
+            raise GraphError(f"{where}: config.value が必要です")
+        value = text_value(raw["value"], f"{where}.config.value", MAX_TEXT_LENGTH)
+    return {"variable": variable, "operator": operator, "value": value}
+
+
 def _config(node_type: str, raw: Any, where: str) -> dict[str, Any]:
     """ノードの設定を検証し、省略した項目に既定値を入れて返す。
 
@@ -267,23 +418,16 @@ def _config(node_type: str, raw: Any, where: str) -> dict[str, Any]:
             raw[template_field], f"{where}.config.{template_field}", MAX_TEXT_LENGTH
         )
     if node_type == NODE_LLM:
-        properties = raw.get("properties", {})
-        if not isinstance(properties, dict):
-            raise GraphError(f"{where}: config.properties はオブジェクトにしてください")
-        output_type = raw.get("outputType", NORMAL_CHAT_OUTPUT_TYPE)
-        if isinstance(output_type, bool) or output_type not in (
-            NORMAL_CHAT_OUTPUT_TYPE,
-            PLAIN_ANSWER_OUTPUT_TYPE,
-        ):
-            raise GraphError(f"{where}: config.outputType は 0 か 2 です")
-        inherit_context = raw.get("inheritContext", False)
-        if not isinstance(inherit_context, bool):
-            raise GraphError(f"{where}: config.inheritContext は真偽値にしてください")
-        config.update(
-            properties=properties,
-            outputType=output_type,
-            inheritContext=inherit_context,
+        config.update(_llm_config(raw, where))
+    elif node_type == NODE_RETRIEVAL:
+        config["query"] = text_value(
+            raw.get("query", DEFAULT_RETRIEVAL_QUERY),
+            f"{where}.config.query",
+            MAX_TEXT_LENGTH,
         )
+        config["properties"] = _properties_value(raw.get("properties", {}), where)
+    elif node_type == NODE_BRANCH:
+        config.update(_branch_config(raw, where))
     return config
 
 
@@ -353,20 +497,29 @@ def _edge(raw: Any, index: int) -> FlowEdge:
         線が不正なとき。
     """
     where = f"edges[{index}]"
-    if not isinstance(raw, dict) or set(raw) != EDGE_KEYS:
+    if (
+        not isinstance(raw, dict)
+        or not EDGE_KEYS <= set(raw)
+        or set(raw) - EDGE_KEYS - EDGE_OPTIONAL_KEYS
+    ):
         raise GraphError(
-            f"{where} は source と target を持つオブジェクトにしてください"
+            f"{where} は source と target（と、あれば sourceHandle）を持つオブジェクトにしてください"
         )
     source, target = raw["source"], raw["target"]
     if not isinstance(source, str) or not isinstance(target, str):
         raise GraphError(f"{where}: source と target は文字列にしてください")
-    return FlowEdge(source, target)
+    handle = raw.get("sourceHandle")
+    if handle is not None and handle not in BRANCH_HANDLES:
+        raise GraphError(
+            f"{where}: sourceHandle は {sorted(BRANCH_HANDLES)} のどちらかです"
+        )
+    return FlowEdge(source, target, handle)
 
 
 def _check_structure(
     nodes: tuple[FlowNode, ...], edges: tuple[FlowEdge, ...]
 ) -> dict[str, list[str]]:
-    """ノードの数と、線のつなぎ方（輪・到達・行き止まり）を確かめる。
+    """ノードの数と、線のつなぎ方（出口・合流・輪・到達・行き止まり）を確かめる。
 
     Parameters
     ----------
@@ -396,8 +549,9 @@ def _check_structure(
     if not any(node.type == NODE_END for node in nodes):
         raise GraphError("end ノードは 1 つ以上必要です")
     known = set(ids)
-    outgoing: dict[str, list[str]] = {node_id: [] for node_id in ids}
     by_id = {node.id: node for node in nodes}
+    edges_from: dict[str, list[FlowEdge]] = {node_id: [] for node_id in ids}
+    incoming: dict[str, int] = {node_id: 0 for node_id in ids}
     for edge in edges:
         if edge.source not in known or edge.target not in known:
             raise GraphError(
@@ -407,12 +561,16 @@ def _check_structure(
             raise GraphError("start ノードへ入る線は引けません")
         if by_id[edge.source].type == NODE_END:
             raise GraphError("end ノードから出る線は引けません")
-        outgoing[edge.source].append(edge.target)
-    for node_id, targets in outgoing.items():
-        if len(targets) > MAX_OUTGOING_EDGES:
+        edges_from[edge.source].append(edge)
+        incoming[edge.target] += 1
+    for node in nodes:
+        _check_outgoing(node, edges_from[node.id])
+    for node_id, count in incoming.items():
+        if count > 1:
             raise GraphError(
-                f"つなぎ方が不正です: ノード「{node_id}」から複数の線は出せません"
+                f"つなぎ方が不正です: ノード「{node_id}」に複数の線が入っています（合流は、まだ作れません）"
             )
+    outgoing = {node_id: [e.target for e in out] for node_id, out in edges_from.items()}
     _check_acyclic(ids, outgoing)
     reachable = _reachable(starts[0].id, outgoing)
     for node in nodes:
@@ -425,6 +583,41 @@ def _check_structure(
                 f"つなぎ方が不正です: ノード「{node.id}」から先に、線がありません（行き止まり）"
             )
     return outgoing
+
+
+def _check_outgoing(node: FlowNode, out: list[FlowEdge]) -> None:
+    """ノードから出る線が、そのノードの種類に合うことを確かめる。
+
+    条件分岐は、「はい」（true）と「いいえ」（false）の線を 1 本ずつ。それ以外は、1 本まで
+    で、出口（sourceHandle）は付けない。
+
+    Parameters
+    ----------
+    node : FlowNode
+        ノード。
+    out : list[FlowEdge]
+        そのノードから出る線。
+
+    Raises
+    ------
+    GraphError
+        線の数・出口が合わないとき。
+    """
+    if node.type == NODE_BRANCH:
+        if sorted(edge.handle or "" for edge in out) != sorted(BRANCH_HANDLES):
+            raise GraphError(
+                f"つなぎ方が不正です: 条件分岐「{node.id}」には、「はい」（true）と"
+                "「いいえ」（false）の線を 1 本ずつ引いてください"
+            )
+        return
+    if len(out) > 1:
+        raise GraphError(
+            f"つなぎ方が不正です: ノード「{node.id}」から複数の線は出せません"
+        )
+    if any(edge.handle is not None for edge in out):
+        raise GraphError(
+            f"つなぎ方が不正です: ノード「{node.id}」は条件分岐ではないため、sourceHandle は書けません"
+        )
 
 
 def _check_acyclic(ids: list[str], outgoing: Mapping[str, list[str]]) -> None:
@@ -525,13 +718,119 @@ def _ancestors(node_id: str, outgoing: Mapping[str, list[str]]) -> set[str]:
     return seen
 
 
+def _node_references(node: FlowNode) -> list[tuple[str, str]]:
+    """ノードの設定の中の、変数の参照を（項目名、参照）の組で返す。
+
+    Parameters
+    ----------
+    node : FlowNode
+        ノード。
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        （項目名、参照）。参照は `question`・`ノードID.text` のような名前。
+    """
+    if node.type == NODE_BRANCH:
+        return [("variable", node.config["variable"])]
+    field_name = TEMPLATE_FIELDS.get(node.type)
+    if node.type == NODE_RETRIEVAL:
+        field_name = "query"
+    if field_name is None:
+        return []
+    return [(field_name, token) for token in references(node.config[field_name])]
+
+
+def _check_token(
+    node: FlowNode,
+    field_name: str,
+    token: str,
+    by_id: Mapping[str, FlowNode],
+    upstream: set[str],
+) -> None:
+    """変数の参照が、使えるものであることを確かめる。
+
+    使えるのは、`question`・`history`、と、そのノードより前に動くノードの出力
+    （生成AI・テンプレートは `ノードID.text`、検索は `ノードID.contexts_text`）。
+
+    Parameters
+    ----------
+    node : FlowNode
+        参照を書いたノード。
+    field_name : str
+        参照を書いた項目の名前。
+    token : str
+        参照（波括弧の中の名前）。
+    by_id : Mapping[str, FlowNode]
+        ノード ID → ノード。
+    upstream : set[str]
+        そのノードより前に動くノードの ID。
+
+    Raises
+    ------
+    GraphError
+        使えない参照のとき（どのノードのどの項目かを含める）。
+    """
+    if token in START_VARIABLES:
+        return
+    where = f"ノード「{node.id}」: {field_name} の {{{{{token}}}}}"
+    source_id, _, variable = token.partition(".")
+    if not variable:
+        raise GraphError(
+            f"{where} は使えません（使えるのは question・history・ノードID.変数名）"
+        )
+    source = by_id.get(source_id)
+    if source is None:
+        raise GraphError(f"{where} の、ノード「{source_id}」がありません")
+    expected = OUTPUT_VARIABLES.get(source.type)
+    if expected is None:
+        raise GraphError(
+            f"{where} は使えません（ノード「{source_id}」は、出力を持たない種類です）"
+        )
+    if variable != expected:
+        raise GraphError(
+            f"{where} は使えません（ノード「{source_id}」の変数は {source_id}.{expected} です）"
+        )
+    if source_id not in upstream:
+        raise GraphError(
+            f"{where} は使えません（ノード「{source_id}」は、このノードより前に動きません）"
+        )
+
+
+def _check_retrieval_link(
+    node: FlowNode, by_id: Mapping[str, FlowNode], upstream: set[str]
+) -> None:
+    """生成AI ノードが引用資料に使う検索ノード（config.retrieval）が、使えることを確かめる。
+
+    Parameters
+    ----------
+    node : FlowNode
+        生成AI ノード。
+    by_id : Mapping[str, FlowNode]
+        ノード ID → ノード。
+    upstream : set[str]
+        そのノードより前に動くノードの ID。
+
+    Raises
+    ------
+    GraphError
+        検索ノードがない・検索ノードでない・このノードより前に動かないとき。
+    """
+    link = node.config.get("retrieval")
+    if link is None:
+        return
+    where = f"ノード「{node.id}」: retrieval「{link}」"
+    source = by_id.get(link)
+    if source is None or source.type != NODE_RETRIEVAL:
+        raise GraphError(f"{where} は、検索ノードではありません")
+    if link not in upstream:
+        raise GraphError(f"{where} は、このノードより前に動きません")
+
+
 def _check_references(
     nodes: tuple[FlowNode, ...], outgoing: Mapping[str, list[str]]
 ) -> None:
-    """テンプレートの `{{...}}` が、使える変数だけであることを確かめる。
-
-    使える変数は、`question`・`history`、と、そのノードより前に実行される
-    `llm`・`template` ノードの `ノードID.text`。
+    """テンプレート・条件分岐の変数の参照と、生成AI の検索の紐づけが、使えることを確かめる。
 
     Parameters
     ----------
@@ -547,30 +846,11 @@ def _check_references(
     """
     by_id = {node.id: node for node in nodes}
     for node in nodes:
-        template_field = TEMPLATE_FIELDS.get(node.type)
-        if template_field is None:
-            continue
         upstream = _ancestors(node.id, outgoing)
-        for token in references(node.config[template_field]):
-            if token in START_VARIABLES:
-                continue
-            where = f"ノード「{node.id}」: {template_field} の {{{{{token}}}}}"
-            if not token.endswith(OUTPUT_SUFFIX):
-                raise GraphError(
-                    f"{where} は使えません（使えるのは question・history・ノードID.text）"
-                )
-            source_id = token[: -len(OUTPUT_SUFFIX)]
-            source = by_id.get(source_id)
-            if source is None:
-                raise GraphError(f"{where} の、ノード「{source_id}」がありません")
-            if source.type not in NODES_WITH_TEXT_OUTPUT:
-                raise GraphError(
-                    f"{where} は使えません（ノード「{source_id}」は、出力を持たない種類です）"
-                )
-            if source_id not in upstream:
-                raise GraphError(
-                    f"{where} は使えません（ノード「{source_id}」は、このノードより前に動きません）"
-                )
+        for field_name, token in _node_references(node):
+            _check_token(node, field_name, token, by_id, upstream)
+        if node.type == NODE_LLM:
+            _check_retrieval_link(node, by_id, upstream)
 
 
 def parse_flow(data: Any) -> FlowDefinition:
@@ -648,7 +928,7 @@ def _check_environment_references(
 def compile_flow(
     flow: FlowDefinition, environ: Mapping[str, str]
 ) -> dict[str, WorkflowDefinition]:
-    """生成AI ノードの接続を検証し、アダプターを動かす定義にする。
+    """生成AI・検索ノードの接続を検証し、アダプターを動かす定義にする。
 
     `${環境変数}` を展開し、アダプターの保存時チェックを通す。
 
@@ -662,7 +942,7 @@ def compile_flow(
     Returns
     -------
     dict[str, WorkflowDefinition]
-        生成AI ノードの ID → アダプターを動かす定義。
+        生成AI・検索ノードの ID → アダプターを動かす定義（検索は、検索アダプターの設定を持つ）。
 
     Raises
     ------
@@ -671,11 +951,21 @@ def compile_flow(
     """
     plans: dict[str, WorkflowDefinition] = {}
     for node in flow.nodes:
-        if node.type != NODE_LLM:
+        if node.type not in (NODE_LLM, NODE_RETRIEVAL):
             continue
         properties = node.config["properties"]
         _check_environment_references(node, properties, environ)
-        raw = {"outputType": node.config["outputType"], "properties": dict(properties)}
+        if node.type == NODE_LLM:
+            raw: dict[str, Any] = {
+                "outputType": node.config["outputType"],
+                "properties": dict(properties),
+            }
+        else:
+            raw = {
+                "outputType": RAG_OUTPUT_TYPE_VALUE,
+                "properties": {},
+                "retrieval": {"properties": dict(properties)},
+            }
         try:
             plans[node.id] = parse_definition(raw, environ, f"ノード「{node.id}」")
         except WorkflowConfigError as e:
