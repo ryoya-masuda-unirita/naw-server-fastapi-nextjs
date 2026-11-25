@@ -2,10 +2,29 @@ server {
     listen 80;
     root /usr/share/nginx/html;
 
+    # Docker の内蔵 DNS。エミュレーターのコンテナが作り直されて IP が変わっても、
+    # 画面を再起動せずに、中継先を引き直すため（変数の proxy_pass は、使うたびに名前を引く）
+    resolver 127.0.0.11 valid=10s;
+
     # 管理用 API だけを、エミュレーターへ中継する。servicerun（/WahaServer/...）は中継しない。
-    # URI をそのまま渡すため、proxy_pass には URI を付けない
+    # 変数で中継先を指定すると、リクエストの URI は、そのまま渡される
     location /admin/ {
-        proxy_pass ${WAHA_UPSTREAM};
+        # 認証のない管理用 API を、別のサイトのページから書き換えられないようにする。
+        # ブラウザは、別のサイトからの POST・PUT・DELETE に Origin を付けるため、
+        # 画面と同じ出どころ（Host と一致）か、Origin がない（curl・同じ出どころの GET）ものだけを通す
+        set $origin_check "$http_origin|http://$http_host";
+        if ($origin_check ~ "^\|") {
+            set $origin_check ok;
+        }
+        if ($origin_check ~ "^(.+)\|\1$") {
+            set $origin_check ok;
+        }
+        if ($origin_check != ok) {
+            return 403;
+        }
+
+        set $upstream "${WAHA_UPSTREAM}";
+        proxy_pass $upstream;
     }
 
     # ハッシュ付きのファイルは、変わらないため、長くキャッシュしてよい

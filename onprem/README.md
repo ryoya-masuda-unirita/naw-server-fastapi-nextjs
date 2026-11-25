@@ -45,7 +45,8 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
 ```
 
 - 保存したワークフローは、名前つきボリューム（`waha-workflows`）に残る。`docker compose down` では残り、`down -v` で消える
-- 画面と管理用 API には、認証がない。ホストの `127.0.0.1` だけに公開している（外からは使えない）
+- 画面と管理用 API には、認証がない。ホストの `127.0.0.1` だけに公開し、別のサイトのページからの書き込み（`Origin` が画面と違うリクエスト）は、画面のサーバー（nginx）が 403 にする。`curl` など `Origin` を付けないものは通る
+- エミュレーターを作り直しても（`docker compose up -d --build waha-emulator` など）、画面の再起動は要らない
 - 設定ファイル（`WAHA_WORKFLOWS_FILE`）と同じサービス ID を保存すると、保存したワークフローが優先される（削除すると、設定ファイルの定義に戻る）。詳細は [waha-emulator の README](../waha-emulator/README.md#ノードと線で組んだワークフロー管理用-api)
 - 画面だけを起動するときは `docker compose up -d --build waha-emulator-ui`（`depends_on` で、エミュレーターも起動する）
 
