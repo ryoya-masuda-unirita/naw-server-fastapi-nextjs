@@ -31,6 +31,7 @@ export function resolveErrorMessageKey(status: number): string {
 /**
  * 共通のエラートーストを出すか。
  * ログイン失敗（401/403）と認証系の 429 は、ログイン画面・パスワードリセット画面が自分で表示するため出さない。
+ * 起動時のセッション確認の 401 は「未ログイン」という正常な状態のため、出さない。
  * 移植元と同じく includes で判定するため、`/auth/login-key` もログインとして扱う。
  */
 export function shouldShowErrorToast({ error, skipGlobalErrorToast }: ApiErrorContext): boolean {
@@ -42,7 +43,9 @@ export function shouldShowErrorToast({ error, skipGlobalErrorToast }: ApiErrorCo
     isLoginPath &&
     (error.status === HTTP_STATUS.UNAUTHORIZED || error.status === HTTP_STATUS.FORBIDDEN);
   const isAuthRateLimited = error.status === HTTP_STATUS.TOO_MANY_REQUESTS && isAuthPath;
-  return !isLoginFailure && !isAuthRateLimited;
+  const isNotLoggedIn =
+    error.path === API_PATHS.AUTH.SESSION && error.status === HTTP_STATUS.UNAUTHORIZED;
+  return !isLoginFailure && !isAuthRateLimited && !isNotLoggedIn;
 }
 
 /**
