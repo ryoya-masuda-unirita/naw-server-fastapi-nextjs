@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MdLockReset } from 'react-icons/md';
@@ -45,6 +46,7 @@ export function PwResetPage() {
   const { completePasswordReset, user } = useAuthStore();
   const mutation = useResetPasswordMutation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
   // 移植元と同じく、ログインID欄は編集できない。値は URL、なければログイン中のユーザーの ID
@@ -103,6 +105,8 @@ export function PwResetPage() {
       });
       useToastStore.getState().success(t('AUTH.PW_RESET.SUCCESS'));
       await completePasswordReset(response);
+      // 同じタブで前に使った別ユーザーのキャッシュを、遷移先で見せないため（移植元の認証成功時の resetQueries）
+      await queryClient.resetQueries();
       // ページを読み込み直すとトーストが消えるため、移植元と同じくルーターで遷移する
       navigate(ROUTES.APP.DASHBOARD);
     } catch (err) {

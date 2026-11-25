@@ -21,10 +21,12 @@ function LocationProbe() {
   return createElement('div', { 'data-testid': 'location' }, location.pathname);
 }
 
-const renderPwReset = (search = '') => {
-  const queryClient = new QueryClient({
+const renderPwReset = (
+  search = '',
+  queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
-  });
+  })
+) => {
   return render(
     createElement(
       QueryClientProvider,
@@ -218,6 +220,26 @@ describe('PwResetPage', () => {
       expect(toasts).toHaveLength(1);
       expect(toasts[0]).toMatchObject({ type: 'success', message: 'AUTH.PW_RESET.SUCCESS' });
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    });
+  });
+
+  describe('キャッシュの破棄', () => {
+    test('成功したとき、前のユーザーのクエリキャッシュを破棄すること', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+      queryClient.setQueryData(['rooms'], ['前のユーザーの部屋']);
+      renderPwReset('?username=testuser', queryClient);
+      const user = userEvent.setup();
+      const inputs = getInputs();
+
+      await user.type(inputs.oldPassword, 'oldpass');
+      await user.type(inputs.newPassword, FIXTURE_NEW_PASSWORD);
+      await user.type(inputs.confirmPassword, FIXTURE_NEW_PASSWORD);
+      await user.click(getSubmitButton());
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location')).toHaveTextContent(ROUTES.APP.DASHBOARD);
+      });
+      expect(queryClient.getQueryData(['rooms'])).toBeUndefined();
     });
   });
 
