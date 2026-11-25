@@ -1,6 +1,6 @@
 ---
 name: naw-explore
-description: naw-server-fastapi-nextjs の移植リサーチ専用。Spring Boot(naw-server)/Angular(secuaigent/client) の参照実装と、FastAPI(backend)/React(frontend) の現状実装を突き合わせて、未移植箇所の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
+description: secuaigent-fastapi-react の移植リサーチ専用。Spring Boot(naw-server)/Angular(secuaigent/client) の参照実装と、FastAPI(backend)/React(frontend) の現状実装を突き合わせて、未移植箇所の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

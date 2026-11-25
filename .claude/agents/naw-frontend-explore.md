@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-explore
-description: naw-server-fastapi-nextjs のフロントエンド移植リサーチ専用。Angular(secuaigent/client) の参照実装と React(client/) の現状実装を突き合わせて、未移植箇所（画面・コンポーネント・API連携）の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
+description: secuaigent-fastapi-react のフロントエンド移植リサーチ専用。Angular(secuaigent/client) の参照実装と React(client/) の現状実装を突き合わせて、未移植箇所（画面・コンポーネント・API連携）の検出・仕様調査・既存Issueとの重複確認を行う。書き込みは一切行わない。
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

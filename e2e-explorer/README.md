@@ -270,7 +270,7 @@ shards/<担当範囲>/
 
 （または「e2e-explorer のレポートを仕分けして」）
 
-スキルは疑いを 1 件ずつ、frontend・backend のコードと移植元に照らして **バグ / 未移植 / 仕様どおり / 誤検知 / 判断できない** に分け、バグと未移植には Issue の文案を作ります。**起票は人が判断します**。起票先は必ず `ryoya-masuda-unirita/naw-server-fastapi-nextjs`（`gh` には `--repo ryoya-masuda-unirita/naw-server-fastapi-nextjs` を付ける）で、移植元には起票しません。誤検知は `explorer.config.json` の `expectedHttp`・`ignoreConsole`・`excludeSelectors` への追加案として返ります。
+スキルは疑いを 1 件ずつ、frontend・backend のコードと移植元に照らして **バグ / 未移植 / 仕様どおり / 誤検知 / 判断できない** に分け、バグと未移植には Issue の文案を作ります。**起票は人が判断します**。起票先は必ず `ryoya-masuda-unirita/secuaigent-fastapi-react`（`gh` には `--repo ryoya-masuda-unirita/secuaigent-fastapi-react` を付ける）で、移植元には起票しません。誤検知は `explorer.config.json` の `expectedHttp`・`ignoreConsole`・`excludeSelectors` への追加案として返ります。
 
 ## ハーネス自体の開発
 

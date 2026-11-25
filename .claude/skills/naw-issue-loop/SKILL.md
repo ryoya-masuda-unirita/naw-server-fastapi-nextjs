@@ -1,6 +1,6 @@
 ---
 name: naw-issue-loop
-description: Use ONLY when the user explicitly invokes /naw-issue-loop or explicitly asks to work through open backend porting Issues one by one end-to-end (branch → docs → implementation → tests → PR) for naw-server-fastapi-nextjs. Repeatedly picks the lowest-numbered GitHub Projects "Todo" issue, runs naw-issue-workflow in full-auto mode (no HITL approval gates, automated tests substitute for browser verification), then naw-pr-workflow to open a PR with code-review.md. Skips an issue (leaving it commented/in-progress) and moves to the next if blocked. Stops when no Todo issues remain. Do not use for interactively working a single issue (use naw-issue-workflow) or for just filing issues (use naw-issue-batch).
+description: Use ONLY when the user explicitly invokes /naw-issue-loop or explicitly asks to work through open backend porting Issues one by one end-to-end (branch → docs → implementation → tests → PR) for secuaigent-fastapi-react. Repeatedly picks the lowest-numbered GitHub Projects "Todo" issue, runs naw-issue-workflow in full-auto mode (no HITL approval gates, automated tests substitute for browser verification), then naw-pr-workflow to open a PR with code-review.md. Skips an issue (leaving it commented/in-progress) and moves to the next if blocked. Stops when no Todo issues remain. Do not use for interactively working a single issue (use naw-issue-workflow) or for just filing issues (use naw-issue-batch).
 ---
 
 # NAW Issue Loop

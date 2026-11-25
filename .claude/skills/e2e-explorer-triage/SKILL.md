@@ -7,7 +7,7 @@ description: Use when the user asks to triage (仕分け) a report produced by e
 
 `e2e-explorer/`（画面操作を再帰的にたどってバグの疑いを検出するハーネス）が出したレポートを読み、疑いごとに「本当にバグか」をコードに照らして判断し、Issue の文案を作る。
 
-**起票はしない。** 文案をユーザーに示し、起票するかは人が判断する。ユーザーに起票を頼まれた場合も、起票先は必ず `--repo ryoya-masuda-unirita/naw-server-fastapi-nextjs` と明記し、移植元（`secuaigent` の GitLab・`visionary-tech-hub/*`）には絶対に起票しない。
+**起票はしない。** 文案をユーザーに示し、起票するかは人が判断する。ユーザーに起票を頼まれた場合も、起票先は必ず `--repo ryoya-masuda-unirita/secuaigent-fastapi-react` と明記し、移植元（`secuaigent` の GitLab・`visionary-tech-hub/*`）には絶対に起票しない。
 
 ## 入力
 
@@ -38,7 +38,7 @@ description: Use when the user asks to triage (仕分け) a report produced by e
    | 誤検知 | ハーネスの判定が合っていない（意図した横スクロールの表、外部のフォント読み込みの失敗など） | 作らない。`explorer.config.json` の `expectedHttp`・`ignoreConsole`・`excludeSelectors` の追加案を示す |
    | 判断できない | 情報が足りない | ユーザーに確認したいことを書く |
 
-   既存の Issue との重複は `gh issue list --repo ryoya-masuda-unirita/naw-server-fastapi-nextjs --search "<キーワード>" --state all` で確かめる（GraphQL の上限に当たったら `gh api` の REST を使う）。
+   既存の Issue との重複は `gh issue list --repo ryoya-masuda-unirita/secuaigent-fastapi-react --search "<キーワード>" --state all` で確かめる（GraphQL の上限に当たったら `gh api` の REST を使う）。
 
 5. 結果をユーザーに返す（ファイルに書くよう頼まれない限りチャットで）
 
@@ -58,7 +58,7 @@ description: Use when the user asks to triage (仕分け) a report produced by e
 ```markdown
 ### 文案 A: <タイトル>
 
-起票先: ryoya-masuda-unirita/naw-server-fastapi-nextjs（frontend の不具合なら `frontend-port` ラベルは付けない。移植の続きなら付ける）
+起票先: ryoya-masuda-unirita/secuaigent-fastapi-react（frontend の不具合なら `frontend-port` ラベルは付けない。移植の続きなら付ける）
 
 ## 概要
 （何をすると何が起きるか。E2E 探索ハーネスで見つかったこと、レポートの出力先と指紋 `<fingerprint>`）

@@ -1,6 +1,6 @@
 ---
 name: naw-frontend-issue-batch
-description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client to React client/) for naw-server-fastapi-nextjs without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
+description: Use ONLY when the user explicitly invokes /naw-frontend-issue-batch or explicitly asks to bulk-create frontend porting Issues (Angular secuaigent/client to React client/) for secuaigent-fastapi-react without implementing them. Repeatedly detects one unported unit (screen or component, AI's judgment) from ~/Documents/unirita-develop-pj/secuaigent-ref/client and creates a GitHub Issue for it, labeled frontend-port — no branch, no docs, no implementation, no PR. Stops after 10 issues per invocation or when candidates run out. Do not use for implementing a specific Issue (use naw-frontend-issue-workflow instead). Do not use for backend porting (use naw-issue-batch instead).
 ---
 
 # NAW Frontend Issue Batch

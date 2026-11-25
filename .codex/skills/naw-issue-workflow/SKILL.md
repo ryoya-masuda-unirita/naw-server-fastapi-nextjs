@@ -1,6 +1,6 @@
 ---
 name: naw-issue-workflow
-description: Use when working on a GitHub Issue in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for naw-server-fastapi-nextjs.
+description: Use when working on a GitHub Issue in this repository, including issue start, branch selection, docs/issue-* generation, HITL checkpoints, or full-auto implementation flow for secuaigent-fastapi-react.
 ---
 
 # NAW Issue Workflow
@@ -55,7 +55,7 @@ gh issue edit {番号} --title "#{番号} issue-{番号} NAW-XXXX 変更概要"
 
 # Step 2: プロジェクトボードに追加（Todo 状態で登録される）
 gh project item-add 3 --owner ryoya-masuda-unirita \
-  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+  --url https://github.com/ryoya-masuda-unirita/secuaigent-fastapi-react/issues/{番号}
 
 # Step 2.5: プロジェクトボードに追加できたか確認する（失敗を静かに見過ごさない）
 gh issue view {番号} --json projectItems --jq '.projectItems | length'

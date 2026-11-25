@@ -1,4 +1,4 @@
-# naw-server-fastapi-nextjs — Claude 向けプロジェクト設定
+# secuaigent-fastapi-react — Claude 向けプロジェクト設定
 
 ## プロジェクト概要
 
@@ -66,7 +66,7 @@ RDS を手動停止すると AWS が7日後に自動で再起動する制約が�
 ## モノレポ構成
 
 ```
-naw-server-fastapi-nextjs/
+secuaigent-fastapi-react/
 ├── client/     # React（Vite + React Router、Angular の移植先）
 ├── server/     # FastAPI（Spring Boot の移植先）
 └── secuaigent-infra/       # Terraform（AWS インフラ定義）
@@ -94,7 +94,7 @@ gh issue create --title "#{番号} issue-{番号} NAW-XXXX 変更概要" --body 
 
 # Step 2: プロジェクトボードに追加（Todo 状態で登録される）
 gh project item-add 3 --owner ryoya-masuda-unirita \
-  --url https://github.com/ryoya-masuda-unirita/naw-server-fastapi-nextjs/issues/{番号}
+  --url https://github.com/ryoya-masuda-unirita/secuaigent-fastapi-react/issues/{番号}
 
 # Step 3: feature ブランチを develop から作成
 git checkout develop && git checkout -b feature/issue-{番号}        # NAW なし
