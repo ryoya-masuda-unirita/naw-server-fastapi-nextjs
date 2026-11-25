@@ -44,7 +44,9 @@ class Settings(BaseSettings):
         gt=0,
     )
 
-    @field_validator("workflows_file", "source_allowed_dir", mode="before")
+    @field_validator(
+        "workflows_file", "source_allowed_dir", "studio_dir", mode="before"
+    )
     @classmethod
     def blank_workflows_file_is_unset(cls, v: object) -> object:
         """空文字列（compose が未設定を空で渡す）は未設定として扱う。
@@ -68,6 +70,10 @@ class Settings(BaseSettings):
     # サービス ID → ワークフロー（生成AIアダプタの設定）の JSON。なければ LLM_PROVIDER
     # から既定のワークフローを作る（waha_emulator/workflow_config.py）
     workflows_file: Path | None = Field(default=None, alias="WAHA_WORKFLOWS_FILE")
+
+    # ノードと線で組んだワークフローの保存先。設定すると管理用 API（/admin/workflows）が
+    # 有効になる。未設定なら管理用 API を載せず、設定ファイルだけで動く
+    studio_dir: Path | None = Field(default=None, alias="WAHA_STUDIO_DIR")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

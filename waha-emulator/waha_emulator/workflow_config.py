@@ -278,6 +278,29 @@ def _expand_env(value: str, environ: Mapping[str, str]) -> str:
     return _ENV_REFERENCE.sub(replace, value)
 
 
+def expand_env(value: str, environ: Mapping[str, str]) -> str:
+    """`${名前}` を環境変数の値に置き換える（ノードごとの確認に使う公開版）。
+
+    Parameters
+    ----------
+    value : str
+        値。
+    environ : Mapping[str, str]
+        環境変数。
+
+    Returns
+    -------
+    str
+        置き換えた値。
+
+    Raises
+    ------
+    WorkflowConfigError
+        環境変数がないとき。
+    """
+    return _expand_env(value, environ)
+
+
 def _vendor_id(value: str) -> str:
     """生成AIアダプタのベンダーの名前を ID にする（ID ならそのまま）。
 
@@ -616,6 +639,33 @@ def _definition(raw: Any, environ: Mapping[str, str], where: str) -> WorkflowDef
             )
         retrieval = _retrieval(raw["retrieval"], environ, where)
     return WorkflowDefinition(output_type, properties, rag_context_json, retrieval)
+
+
+def parse_definition(
+    raw: Any, environ: Mapping[str, str], where: str
+) -> WorkflowDefinition:
+    """1 つの定義を読む（ノードと線で組んだワークフローが、定義を作るのに使う）。
+
+    Parameters
+    ----------
+    raw : Any
+        JSON の定義（設定ファイルの 1 つのサービスと同じ形）。
+    environ : Mapping[str, str]
+        環境変数。
+    where : str
+        エラーメッセージに出す場所。
+
+    Returns
+    -------
+    WorkflowDefinition
+        定義。
+
+    Raises
+    ------
+    WorkflowConfigError
+        定義が不正なとき。
+    """
+    return _definition(raw, environ, where)
 
 
 def _is_template_key(key: str) -> bool:

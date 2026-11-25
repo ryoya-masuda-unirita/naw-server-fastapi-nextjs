@@ -223,3 +223,38 @@ def test_template_workflow_cache_is_bounded() -> None:
 
     assert len(registry._template_workflows) == MAX_TEMPLATE_WORKFLOWS
     assert registry.resolve("kb-learn-n0", {}).name == "learn:n0"  # type: ignore[attr-defined]
+
+
+def test_dynamic_workflow_takes_precedence_over_registered() -> None:
+    """保存したワークフローが、設定ファイルの同じサービス ID の定義より優先されること"""
+    registry = WorkflowRegistry(
+        _NamedWorkflow("default"), {"svc": _NamedWorkflow("config")}
+    )
+    dynamic = _NamedWorkflow("dynamic")
+
+    registry.set_dynamic("svc", dynamic)
+
+    assert registry.resolve("svc", {}) is dynamic
+    assert registry.has_dynamic("svc")
+
+
+def test_removing_dynamic_workflow_restores_registered() -> None:
+    """保存したワークフローを外すと、設定ファイルの定義に戻ること。外していないものを外しても失敗しないこと"""
+    registered = _NamedWorkflow("config")
+    registry = WorkflowRegistry(_NamedWorkflow("default"), {"svc": registered})
+    registry.set_dynamic("svc", _NamedWorkflow("dynamic"))
+
+    registry.remove_dynamic("svc")
+    registry.remove_dynamic("svc")
+
+    assert registry.resolve("svc", {}) is registered
+    assert not registry.has_dynamic("svc")
+
+
+def test_dynamic_workflow_takes_precedence_over_learning_params() -> None:
+    """保存したワークフローが、学習のパラメータによる振り分けより優先されること"""
+    registry = WorkflowRegistry(_NamedWorkflow("default"))
+    dynamic = _NamedWorkflow("dynamic")
+    registry.set_dynamic("svc", dynamic)
+
+    assert registry.resolve("svc", {"splitLength": "100", "filepath": "/x"}) is dynamic
