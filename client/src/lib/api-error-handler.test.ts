@@ -40,6 +40,11 @@ describe('API エラーの共通処理（移植元 errorInterceptor）', () => {
       expect(shouldShowErrorToast(context(500, '/api/rooms'))).toBe(true);
     });
 
+    test('起動時のセッション確認の 401（未ログイン）ではトーストを出さないこと', () => {
+      expect(shouldShowErrorToast(context(401, '/api/auth'))).toBe(false);
+      expect(shouldShowErrorToast(context(500, '/api/auth'))).toBe(true);
+    });
+
     test('呼び出し側がトーストを抑止したら出さないこと', () => {
       expect(
         shouldShowErrorToast(context(500, '/api/rooms', { skipGlobalErrorToast: true }))
