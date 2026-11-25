@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- デモ用データ（docker-compose.demo.yml が server/seed.sql の後に流す）
+-- デモ用データ（ルートの docker-compose.yml の seed サービスが server/seed.sql の後に流す）
 -- 管理画面の 9 画面（ユーザー・チーム・アシスタント・テンプレート・ライブラリ・学習データ・フィードバック・
 -- チャット履歴・ワークスペース）に、見て分かる架空の業務データを入れる。
 -- ID は 'd' + 種別 + 連番の固定値。ON CONFLICT DO NOTHING なので何度流しても増えない。

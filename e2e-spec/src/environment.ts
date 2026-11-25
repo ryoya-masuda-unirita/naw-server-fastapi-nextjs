@@ -6,7 +6,6 @@ import {
   BACKEND_PORT,
   BASE_URL,
   COMPOSE_FILE,
-  COMPOSE_OVERRIDE_FILE,
   COMPOSE_PROJECT_NAME,
   FRONTEND_PORT,
   REPO_ROOT,
@@ -14,8 +13,8 @@ import {
 } from './env.ts';
 
 /**
- * 専用環境（ルートの docker-compose.demo.yml をプロジェクト名 naw-e2e-spec・別ポートで起動したもの）の起動・破棄。
- * 既存の naw-demo・naw-e2e-explorer・開発用のコンテナとは、プロジェクト名・ポート・イメージ名・ボリュームが別で、触れない。
+ * 専用環境（docker/compose.yml をプロジェクト名 naw-e2e-spec・別ポートで起動したもの）の起動・破棄。
+ * 手元の開発環境（naw-fastapi-*）・naw-e2e-explorer とは、プロジェクト名・ポート・イメージ名・ボリュームが別で、触れない。
  */
 
 export class EnvironmentError extends Error {}
@@ -24,12 +23,12 @@ const READY_TIMEOUT_MS = 180_000;
 const READY_POLL_MS = 1_000;
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
-/** compose に渡す環境変数。demo の compose はポートを DEMO_*_PORT で受ける。 */
+/** compose に渡す環境変数。専用環境の compose は、ポートを E2E_SPEC_*_PORT で受ける。 */
 function composeEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    DEMO_FRONTEND_PORT: String(FRONTEND_PORT),
-    DEMO_BACKEND_PORT: String(BACKEND_PORT),
+    E2E_SPEC_FRONTEND_PORT: String(FRONTEND_PORT),
+    E2E_SPEC_BACKEND_PORT: String(BACKEND_PORT),
     E2E_SPEC_BACKEND_IMAGE: BACKEND_IMAGE_NAME,
   };
 }
@@ -43,8 +42,6 @@ function composeArgs(args: string[]): string[] {
     REPO_ROOT,
     '-f',
     COMPOSE_FILE,
-    '-f',
-    COMPOSE_OVERRIDE_FILE,
     ...args,
   ];
 }
