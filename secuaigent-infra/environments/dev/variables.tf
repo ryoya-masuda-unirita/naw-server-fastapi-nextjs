@@ -66,3 +66,9 @@ variable "tfstate_bucket_name" {
   type        = string
   description = "tfstateを置くS3バケット名(secuaigent-infra/bootstrapの出力state_bucket_name)。CIロールにstateへのアクセス権を付けるために使う"
 }
+
+variable "enable_rds_keepalive_schedule" {
+  type        = bool
+  default     = false
+  description = "RDSを毎日09:00に起動・09:10に停止するスケジュールを作る(手動停止の7日後の自動再起動を避ける)。作業中でも09:10に止まるため、既定では作らない"
+}
