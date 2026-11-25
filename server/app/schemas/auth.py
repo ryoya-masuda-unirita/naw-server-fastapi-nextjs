@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -95,7 +95,5 @@ class AuthResponse(BaseModel):
     loginStatus: str | None = None
     reason: str | None = None
 
-    class Config:
-        """Pydantic の設定。ORM オブジェクトからも作れるようにする。"""
-
-        from_attributes = True
+    # ORM オブジェクトからも作れるようにする
+    model_config = ConfigDict(from_attributes=True)

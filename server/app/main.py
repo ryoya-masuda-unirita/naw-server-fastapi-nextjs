@@ -56,7 +56,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         await TikaClient.shutdown()
 
 
-app = FastAPI(title="naw-server FastAPI", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="SecuAiGent server (FastAPI)", version="0.1.0", lifespan=lifespan)
 register_exception_handlers(app)
 
 cors_settings = get_cors_settings()
