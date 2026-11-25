@@ -2,216 +2,40 @@
 
 企業向け AI チャット管理 SaaS「SecuAiGent」（旧称 NAW）を、Spring Boot + Angular から **FastAPI（Python）+ React** へ移植するリポジトリ。移植元は GitLab のモノレポ `secuaigent`。
 
-SecuAiGent は、企業のテナントごとに、社員が使う AI アシスタント（Azure OpenAI などにつなぐチャット、社内文書を検索して答える RAG、社外にデータを出さない SECURE アシスタント）を管理する SaaS。テナント管理者がユーザー・グループ・アシスタント・プロンプトのテンプレート・学習データなどを管理し、一般ユーザーがチャットで使う。
+## まず動かす
 
-## 目的別の入口
+```bash
+docker compose up -d --build   # 初回は数分。DB・デモデータ・画面まで起動する
+```
+
+1. ブラウザで http://localhost:5173 を開く
+2. テナント ID `test-tenant`、ユーザー ID `admin`、パスワード `admin@1234` でログインする
+3. 止めるときは `docker compose down`（データも消すなら `down -v`）
+
+見られる画面・困ったときは [docs/demo.md](./docs/demo.md)。
+
+## 詳しくはここ
 
 | やりたいこと | 見る場所 |
 |---|---|
-| 画面を見る（`docker compose up` だけで、DB・デモデータ・画面まで起動） | 次の「画面を見る（ローカル環境）」 |
-| frontend・backend をホストで直接動かして開発する（ホットリロード） | 下の「ローカル疎通確認」 |
-| 社内（オンプレ）側を起動して SECURE アシスタントを通しで動かす | [onprem/README.md](./onprem/README.md) |
-| 移植元の結合テスト項目書どおりに動くか自動で確かめる | [e2e-spec/README.md](./e2e-spec/README.md) |
-| 画面を自動で巡回してバグの疑いを探す（レポートの仕分けは `.claude/skills/e2e-explorer-triage/SKILL.md`） | [e2e-explorer/README.md](./e2e-explorer/README.md) |
-| 生成AI・検索・埋め込みのアダプタ | [generative-ai-adapter/README.md](./generative-ai-adapter/README.md) |
+| デモ環境の画面一覧・困ったとき | [docs/demo.md](./docs/demo.md) |
+| 画面・backend をホストで直接動かして開発する（ホットリロード） | [docs/local-dev.md](./docs/local-dev.md) |
+| アシスタントの通信経路（SECURE は社内に直接送る）と、部品の担当 | [docs/architecture-routes.md](./docs/architecture-routes.md) |
+| SECURE アシスタントを通しで動かす（社内側をまとめて起動） | [onprem/README.md](./onprem/README.md) |
+| 移植元の結合テスト項目書どおりに動くか確かめる | [e2e-spec/README.md](./e2e-spec/README.md) |
+| 画面を自動で巡回してバグの疑いを探す | [e2e-explorer/README.md](./e2e-explorer/README.md) |
 | AWS のインフラ（Terraform）・デプロイ | [secuaigent-infra/README.md](./secuaigent-infra/README.md) |
-| Waha! の代わりのエミュレーター | [waha-emulator/README.md](./waha-emulator/README.md) |
-| オンプレ用サーバー | [secuaigent-server-local/README.md](./secuaigent-server-local/README.md) |
 
-## 画面を見る（ローカル環境）
-
-| 項目 | 値 |
-|---|---|
-| URL | http://localhost:5173 |
-| テナント ID | `test-tenant` |
-| ユーザー ID・パスワード | `admin` / `admin@1234`（管理者）。一般ユーザーは `tanaka` / `admin@1234` ほか（下記） |
-
-```bash
-docker compose up -d --build   # 起動（初回は数分。マイグレーションとデモデータの投入も自動）
-docker compose down            # 停止（データは残る）。データも消すなら down -v
-```
-
-起動すると、管理者でログインして次の画面を見られる（デモデータは [server/seed-demo.sql](server/seed-demo.sql)、ログイン用のテナント・ユーザーは [server/seed.sql](server/seed.sql)）。
-
-| 画面 | パス | 見られるもの |
-|---|---|---|
-| ユーザー | `/admin/users` | 営業・開発・管理部門の社員 10 名（`tanaka`・`sato`・`suzuki`・`takahashi`・`ito`・`watanabe`・`yamamoto`・`nakamura`・`kobayashi`・`kato`。パスワードは全員 `admin@1234`） |
-| チーム | `/admin/groups` | 営業部・開発部・管理部・全社共通（所属ユーザー・アシスタント・テンプレート付き） |
-| アシスタント | `/admin/assistants` | 社内ヘルプデスク（RAG）・議事録要約・営業メール作成・翻訳・コードレビュー・営業ナレッジ検索（SECURE） |
-| テンプレート | `/admin/templates` | 議事録・営業メール・翻訳・コードレビュー・障害報告書・FAQ |
-| ライブラリ | `/library` | 管理者が保存した資料 4 件（タグ付き） |
-| 学習データ | `/admin/training-data` | クラウド・ローカルの学習先フォルダと、規程・事例のファイル |
-| フィードバック | `/admin/feedback` | 回答の正確・不正確と満足度の評価、追加学習の設定 |
-| チャット履歴 | `/admin/chat-history` | 社員のチャット 12 件（問い合わせ・議事録・メール作成など） |
-| ワークスペース | `/admin/tenant` | プランとクレジットの利用状況・今月の利用履歴 |
-
-**ローカルの学習先フォルダ（「営業ナレッジ（社内サーバー）」）を操作するには、`server-local` を手元で起動する。** ローカルのフォルダのファイルは、クラウドの API ではなく、フォルダの接続先（デモでは `http://localhost:8090`）の `server-local` へ画面から直接送る。起動していないと、このフォルダの一覧は開けずエラーになる。
-
-```bash
-cd secuaigent-server-local
-cp .env.example .env     # SECURITY_SERVER_AUTH_KEY=demo-local-server-key に設定する（デモデータの接続先の API キーと同じ値）
-mkdir -p data/stream-output
-docker compose up -d --build   # 公開ポートは既定の 8090（詳細は secuaigent-server-local/README.md）
-```
-
-ファイルの追加・更新・同期は、`server-local` が Waha! を呼ぶため、Waha! がないと失敗する。Waha! の代わりには `waha-emulator/`（[waha-emulator/README.md](waha-emulator/README.md)）を使う。
-
-チャットの送信先（Azure OpenAI など）はダミーなので、画面からの新しい質問には答えが返らない。SECURE アシスタントのチャットは、`onprem/` をつなぐと試せる。
-
-```bash
-docker compose exec -T postgres psql -U root -d postgres < onprem/cloud-seed.sql   # SECURE アシスタントと接続先を登録
-cd onprem && docker compose up -d --build                                                                      # 社内側を起動（詳細は onprem/README.md）
-```
-
-困ったとき:
-
-- ポートが使われている: `.env` で `FRONTEND_PORT`・`BACKEND_PORT` を変える（`cp .env.example .env`。既定は画面 5173・backend 8001。`.env` がなくても既定値で動く）
-- 起動の状態: `docker compose ps -a`（`migrate`・`seed` は終了済みで正常。`backend`・`frontend` が healthy になれば完了）
-- 失敗したとき: `docker compose logs <サービス名>`。`migrate`・`seed` が失敗すると、backend・画面が起動しないため、まず `docker compose logs migrate seed` を見る
-- デモデータを入れ直す: `down -v` のあと、もう一度 `up -d --build`
-
-## アシスタントの種類ごとの通信経路
-
-アシスタントには、クラウドで処理する普通のアシスタント（`SAAS_CHAT`・`SAAS_RAG`）と、顧客の社内で処理する SECURE アシスタントがある。SECURE アシスタントは、質問や社内文書を社外に出さないためのもので、**質問はクラウドの server を通らず、ブラウザから社内の server-local に直接送られる**。クラウドの server は、送り先（server-local の URL と API キー）をブラウザに教えるだけで、server-local に通信しない。
-
-以下は移植元（`secuaigent` モノレポ）のコードから書き起こした経路。
-
-### SECURE アシスタント
-
-![SECURE アシスタントの通信経路。オレンジの矢印が質問の本文が流れる通信で、クラウドを通らない](docs/images/secure-route.svg)
-
-オレンジの矢印が、質問の本文が流れる通信。青の区画がクラウド、緑の区画が顧客の社内。
-
-- ②: クラウドの server は、テナントに登録された `LOCAL_SERVER` エンドポイントの URL と API キーを返す（移植元 `server` の `GetMessagesViewModel.java`）。SECURE アシスタントの質問を server に送ると 400 になる（`MessageService.java`）
-- ③: ブラウザは受け取った URL に `api/messages/content` を付けて、server-local に直接送る（移植元 `client` の `message-content-endpoint.resolver.ts`・`messages.service.ts` の `prepareSecureStreamContext`）
-- ④: server-local は、Waha! の HTTP API（`WahaServer/servicerun/api`）で入力を渡し、ワークフローを実行して結果を受け取る（`secuaigent-server-local/app/clients/waha_client.py`）
-- ⑥: アダプタは LLM を直接呼ぶ。設定によっては、LLM の代わりにクラウドの server（`/auth/login-key` でログインし `/api/llm/chat`）を呼ぶ（移植元 `generative-ai-adapter` の `SecuAiGentAuthClient.java`・`SecuAiGentTransport.java`）
-- このほか、ライブラリを作るときだけ server-local からクラウドの server を呼ぶ（`NawApiClient`）。クラウドから server-local へ向かう通信はない
-
-### 普通のアシスタント（SAAS_CHAT・SAAS_RAG）
-
-![普通のアシスタントの通信経路。質問がクラウドの server を通って Azure OpenAI に届く](docs/images/saas-route.svg)
-
-### 部品ごとの担当
-
-| 部品 | 置き場所 | 担当 | このリポジトリ |
-|---|---|---|---|
-| server | クラウド | ユーザー・テナント・アシスタントの管理、普通のアシスタントのチャット。SECURE には送り先を教えるだけ | `server/` |
-| server-local | 顧客の社内 | SECURE の窓口。質問・学習ファイルを受け取って Waha! に渡し、結果を返す。会話と学習ファイルの記録を持つ | `secuaigent-server-local/` |
-| Waha! | 顧客の社内 | ユニリタの ETL 製品。LLM に渡すまでのワークフロー（エージェント）を Waha! の中で組み立てて実行する。ワークフローは Waha! 側の設定で、どちらのリポジトリにもない | 製品は対象外。代わりに同じ API を持つ `waha-emulator/` を置く（下記） |
-| アダプタ | 顧客の社内（Waha! に組み込む） | ワークフローの各ステップ。文書の分割・保存（埋め込み）、検索、回答作成（生成AI）。Waha! の `Adapter` インタフェース（`WTAddinAPI.jar`）を実装した Java の部品 | `generative-ai-adapter/` の生成AI・検索・埋め込みの 3 つのアダプタを移植済み（#298・#299・#300。[generative-ai-adapter/README.md](./generative-ai-adapter/README.md)） |
-
-## 社内（オンプレ）側と Waha! エミュレーター
-
-SECURE アシスタントの社内側（server-local・Waha!・アダプタ）は、顧客の社内で動く。Waha! 本体はどちらのリポジトリにもないため、server-local が使う servicerun API（`WahaServer/servicerun/api`）だけを同じ形で持つ `waha-emulator/`（FastAPI）を、Waha! の代わりに置く（#274）。エミュレーターは、移植した生成AI・検索・埋め込みのアダプタ（`generative-ai-adapter/`）を呼ぶ。
-
-- 社内側をまとめて起動する（server-local・エミュレーター・ベクトルDB・ファイルサーバーの代わり。#301）、クラウド側とのつなぎ方: [onprem/README.md](./onprem/README.md)
-- エミュレーターの API・ワークフローの設定・ホストでの動かし方: [waha-emulator/README.md](./waha-emulator/README.md)
-- アダプタの構成・プロバイダ・Tika・Bedrock: [generative-ai-adapter/README.md](./generative-ai-adapter/README.md)
-
-## モノレポ構成
+コードの置き場所:
 
 | ディレクトリ | 内容 |
 |---|---|
-| `server/` | FastAPI（移植元 `server/` の移植先） |
-| `client/` | React（Vite + React Router。移植元 `client/` の移植先） |
-| `secuaigent-server-local/` | FastAPI + SQLite（移植元 `secuaigent-server-local/` の移植先） |
-| `generative-ai-adapter/` | Python（Waha! 向けの生成AI・埋め込み・検索アダプター。移植元 `generative-ai-adapter/` の移植先。uv ワークスペース） |
-| `waha-emulator/` | FastAPI（Waha! の servicerun API のエミュレーター。独立した uv プロジェクト） |
-| `onprem/` | 社内（オンプレ）側をまとめて起動する compose（server-local・Waha! エミュレーター・ベクトルDB など） |
-| `e2e-spec/` | Playwright（TypeScript）。移植元の結合テスト項目書（627 項目）を 1 項目 1 テストにした E2E テスト（移植元にはない独自のもの） |
-| `e2e-explorer/` | Playwright（TypeScript）の E2E 探索ハーネス。画面操作を再帰的にたどり、500・画面の例外・真っ白・表示崩れなどの「バグの疑い」を再現手順付きで一覧にする（移植元にはない独自のもの） |
-| `secuaigent-infra/` | Terraform（AWS インフラ定義） |
-
-## ローカル疎通確認（frontend + backend）
-
-React（`client/`）を起動し、ローカルの FastAPI バックエンドと接続して動作確認する手順。
-backend の動作確認は、自動テスト（`cd server && uv run pytest`）、または React の移植済み画面で行う。
-
-### 前提
-
-
-| 項目      | 値                                                                  |
-| ------- | ------------------------------------------------------------------ |
-| フロントエンド | `http://localhost:5173/`（Vite 開発サーバー）                                  |
-| バックエンド  | `http://localhost:8001`（フロントは `VITE_API_URL` の URL を直接呼ぶ）                 |
-| テナント ID | `test-tenant`（`server/seed.sql` のシードテナント）                              |
-| ログイン    | `admin` / `admin@1234`（`server/seed.sql` のシードユーザー）                     |
-
-
-
-
-
-### 初回セットアップ
-
-```bash
-# 1. DB 起動（画面・backend は、ホストで直接動かすため起動しない）
-docker compose up -d postgres redis localstack
-
-# 2. バックエンドの依存関係・DB マイグレーション
-cd server
-uv sync
-cp .env.example .env   # 未作成の場合
-alembic upgrade head
-
-# 3. シードデータ投入
-docker exec -i naw-fastapi-postgres psql -U root -d postgres < seed.sql
-
-# 4. frontend の依存関係
-cd ../client
-npm install
-```
-
-
-
-### 起動
-
-ターミナルを2つ使う。
-
-```bash
-# ターミナル1: バックエンド（ポート 8001）
-cd server
-uv run uvicorn app.main:app --reload --port 8001
-```
-
-```bash
-# ターミナル2: フロントエンド（ポート 5173）
-# git 管理の client/.env は VITE_API_URL=http://localhost:8000 のため、環境変数で 8001 に上書きする
-cd client
-VITE_API_URL=http://localhost:8001 npm run dev
-```
-
-
-
-### 疎通確認
-
-
-
-#### 1. バックエンド単体（任意）
-
-```bash
-curl -s -i -X POST http://localhost:8001/auth/login \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: test-tenant" \
-  -d '{"username":"admin","password":"admin@1234"}'
-```
-
-`HTTP/1.1 200 OK` と JWT / Cookie が返ればバックエンドは起動できている。
-
-#### 2. ブラウザでフロントエンド経由
-
-1. `http://localhost:5173/` を開く
-2. ログイン画面（`/auth/login`）が表示されることを確認
-3. テナント ID（`test-tenant`）・ユーザー ID・パスワード（`admin` / `admin@1234`）でログインし、管理画面が表示されることを確認
-
-#### トラブルシュート
-
-
-| 症状       | 確認すること                                                                     |
-| -------- | -------------------------------------------------------------------------- |
-| 接続拒否     | バックエンドが **8001** で起動しているか、`VITE_API_URL=http://localhost:8001` を付けて起動したか   |
-| CORS エラー | `server/.env` の `CORS_ALLOWED_ORIGINS` に `http://localhost:5173` が含まれているか |
-| DB エラー   | `docker compose up -d postgres redis localstack` で DB が起動しているか、`alembic upgrade head` 済みか、`seed.sql` が投入済みか |
+| `server/` | FastAPI（クラウドの backend） |
+| `client/` | React（Vite + React Router） |
+| `secuaigent-server-local/` | 顧客の社内のサーバー（FastAPI + SQLite）。[README](./secuaigent-server-local/README.md) |
+| `generative-ai-adapter/` | Waha! 向けの生成AI・埋め込み・検索アダプター。[README](./generative-ai-adapter/README.md) |
+| `waha-emulator/` | Waha! の代わりのエミュレーター。[README](./waha-emulator/README.md) |
+| `onprem/` | 社内側をまとめて起動する compose |
 
 ## Codex 運用
 
