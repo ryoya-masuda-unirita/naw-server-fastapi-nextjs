@@ -1026,7 +1026,10 @@ async def additional_learning(
 
 
 def download_file() -> None:
-    """移植元は未実装（Waha! からの取り出しが TODO）で常に RuntimeException を投げる。
+    """ファイルのダウンロード。移植元も未実装（Waha! からの取り出しが TODO）で、常に RuntimeException を投げる。
+
+    このリポジトリの未実装ではなく、移植元と同じ挙動のまま。応答は 500 の ``RuntimeError``
+    （501 にはしていない）。
 
     Raises
     ------

@@ -260,6 +260,8 @@ PEM_KEY_PATH=~/.ssh/<キーペア名>.pem \
 
 DBの接続文字列とアプリの秘密鍵は、ECSのタスク定義に平文で持たせず、Secrets Managerのシークレット`<プロジェクト名>/backend`に保存する（#386）。ECSは、タスクの起動時に、実行ロールがここから値を取り出して、環境変数（`DATABASE_URL`・`SECRET_KEY`）として注入する。アプリのコード（`server/`）は、これまでどおり環境変数で受け取る。
 
+**Azure の利用料金の取得 API**（`AZURE_APP_*` の 5 つの環境変数が必須。`server/app/core/config.py` の `AzureCostSettings`）は、ECSのタスク定義にこれらを渡していないため、dev・staging では使えない（呼ぶと必須値のエラーになる）。使うときは、Secrets Managerのシークレットに足して、タスク定義の`secrets`に加える。
+
 | キー | 内容 | 使う人 |
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://<ユーザー>:<パスワード>@<ホスト>:5432/<DB名>`（Terraformが組み立てる） | アプリ（ECSが注入） |

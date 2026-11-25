@@ -63,7 +63,7 @@ set_property → connect(出力モード) → set_column_information → set_vie
 - 列は ID（文字）・入力ファイル（FILE）・分割文字数（DECIMAL_NUMBER）の 3 つ。分割は「行を足していき、分割文字数を超えたら区切る」移植元どおり
 - TSV の 1 行は `"入力ファイルのパス"<TAB>"本文"<TAB>"ベクトルDB の行 ID（パート ID）"<TAB>"ファイル ID"`（ファイルごとにアダプタが採番する UUID）
 - 入力ファイルの前処理は core の media（テキスト・画像・PDF・Word・Excel・PowerPoint）。画像説明（プロパティ 32）は core の chat で行う
-- プロパティ番号・名前は `embedding_adapter.constants.PropertyIds`（移植元の `properties.xml` と `App#setProperty` の case と同じ番号）。Python 版だけの追加は、`VENDOR=99`（Echo。キーなしで動く確認用の埋め込みで、文字列から決まる 1536 次元の単位ベクトルを返す）
+- プロパティ番号・名前は `embedding_adapter.constants.PropertyIds`（移植元の `properties.xml` と `App#setProperty` の case と同じ番号）。Python 版だけの追加は、`VENDOR=97`（Bedrock）と `VENDOR=99`（Echo。キーなしで動く確認用の埋め込みで、文字列から決まる 1536 次元の単位ベクトルを返す）
 
 ### 移植元と挙動を変えた点
 
