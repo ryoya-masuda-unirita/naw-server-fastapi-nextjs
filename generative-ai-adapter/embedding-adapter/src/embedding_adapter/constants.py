@@ -1,6 +1,10 @@
 """プロパティ ID・出力モード（移植元 EmbeddingPropertyIds・properties.xml の outMode）。"""
 
-from generative_ai_core.property_ids import PropertyIdsBase
+from generative_ai_core.property_ids import (
+    EMBEDDING_VENDOR_NAMES,
+    VDB_VENDOR_NAMES,
+    PropertyIdsBase,
+)
 
 # 出力モード（properties.xml の outMode。Waha! の connect に渡る）
 OUTPUT_TYPE_TEXT = 0
@@ -51,21 +55,6 @@ class PropertyIds(PropertyIdsBase):
     REJECT_AUDIT_OUTPUT_DIR = 53
 
 
-# エンベディングのベンダー ID → 名前（移植元 App#setProperty の case 30）
-EMBEDDING_VENDOR_MAP = {
-    "0": "OpenAI",
-    "1": "AzureOpenAI",
-    "2": "VertexAI Gemini",
-    "3": "Anthropic",
-    "5": "SecuAiGent",
-    # Python 版だけ（Bedrock の Titan 埋め込み。移植元にない拡張）
-    "97": "Bedrock",  # bedrock-ext
-    # Python 版だけ（キーなしで動く確認用。core の Echo 埋め込み）
-    "99": "Echo",
-}
-
-# ベクトルDB のベンダー ID → 名前（case 31）
-VDB_VENDOR_MAP = {
-    "0": "Azure AI Search",
-    "1": "PostgreSQL(PGVector)",
-}
+# ベンダー ID → 名前の表は、検索アダプタと共通（core）
+EMBEDDING_VENDOR_MAP = EMBEDDING_VENDOR_NAMES
+VDB_VENDOR_MAP = VDB_VENDOR_NAMES
