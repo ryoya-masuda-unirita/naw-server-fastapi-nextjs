@@ -1,5 +1,7 @@
 """プロパティ ID・出力モード（移植元 EmbeddingPropertyIds・properties.xml の outMode）。"""
 
+from generative_ai_core.property_ids import PropertyIdsBase
+
 # 出力モード（properties.xml の outMode。Waha! の connect に渡る）
 OUTPUT_TYPE_TEXT = 0
 OUTPUT_TYPE_VDB_ADD = 1
@@ -7,7 +9,7 @@ OUTPUT_TYPE_VDB_DELETE = 2
 OUTPUT_TYPE_VDB_NEW = 3
 
 
-class PropertyIds:
+class PropertyIds(PropertyIdsBase):
     """Waha! の接続プロパティの ID（移植元 App#setProperty の case 番号・properties.xml）。
 
     移植元の `EmbeddingPropertyIds` にある定数に加え、App の case 文だけにある番号
@@ -47,21 +49,6 @@ class PropertyIds:
     EMBEDDING_DIMENSIONS = 51
     TEXT_DATA_JSON_FILE_PATH = 52
     REJECT_AUDIT_OUTPUT_DIR = 53
-
-    @classmethod
-    def by_name(cls) -> dict[str, int]:
-        """名前から ID への対応を返す（エミュレーターの設定ファイルで名前を使うため）。
-
-        Returns
-        -------
-        dict[str, int]
-            定数名をキー、ID を値とする辞書。
-        """
-        return {
-            name: value
-            for name, value in vars(cls).items()
-            if name.isupper() and isinstance(value, int)
-        }
 
 
 # エンベディングのベンダー ID → 名前（移植元 App#setProperty の case 30）
