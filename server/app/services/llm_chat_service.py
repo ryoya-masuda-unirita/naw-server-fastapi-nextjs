@@ -17,6 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.attachment_media import build_user_content
 from app.core.config import LlmCreditSettings, get_llm_credit_settings
+from app.core.llm_chat_support import (
+    LIBRARY_PROMPT_TYPE,
+    LIBRARY_TITLE_MAX_LENGTH,
+    build_llm_response_format,
+    prepend_json_response_instruction,
+    to_core_tool_configs,
+)
 from app.core.credit_quota import enforce_within_quota
 from app.core.database import get_session_maker
 from app.core.library_stream_router import (
@@ -30,7 +37,6 @@ from app.core.llm_client import (
     ChatMessage,
     cap_max_tokens,
 )
-from app.core.llm_client import ToolConfig as CoreToolConfig
 from app.core.room_access import require_owned_room
 from app.core.shielded import run_shielded
 from app.core.sse import sse_event
@@ -52,98 +58,8 @@ from app.repositories.system_prompt_template_repository import (
 from app.repositories.tenant_endpoint_repository import TenantEndpointRepository
 from app.schemas.attachment import AttachmentFile
 from app.schemas.llm import LlmChatRequest, LlmChatTurn
-from app.schemas.message import ToolConfig as SchemaToolConfig
-from app.schemas.response_format import ResponseFormatRequest
 
 logger = logging.getLogger(__name__)
-
-# responseFormat指定時にメッセージ列の先頭へ前置する固定指示文。移植元Java版
-# `OpenAiLlmChatAdapter`に対応する。OpenAIのJSONモードは、メッセージ内に"json"という
-# 語を含めることが要件のため、この指示文の前置が必須となる。
-_JSON_RESPONSE_INSTRUCTION = "回答は JSON 形式で出力してください。"
-
-# ライブラリ生成用固定システムプロンプトの種別キー(system_prompt_templates.type)。
-_LIBRARY_PROMPT_TYPE = "LIBRARY"
-
-# タイトルの最大長。移植元`LibraryEntity`のカラム定義(255文字)に合わせて切り詰める。
-_LIBRARY_TITLE_MAX_LENGTH = 255
-
-
-def _build_llm_response_format(
-    response_format: ResponseFormatRequest | None,
-) -> dict | None:
-    """responseFormat指定をAzure OpenAI呼び出し用のresponse_format辞書へ変換する。
-
-    移植元同様、typeの値(json_object/json_schema)によらず常にJSONモード
-    (`{"type": "json_object"}`)として扱う。json_schemaによる構造強制は移植元でも
-    未実装のため踏襲しない（`docs/issue-100/01_要件定義.md`参照）。
-
-    Parameters
-    ----------
-    response_format : ResponseFormatRequest | None
-        リクエストのresponseFormat指定。
-
-    Returns
-    -------
-    dict | None
-        Azure OpenAI呼び出し用のresponse_format辞書。未指定の場合はNone。
-    """
-    if response_format is None:
-        return None
-    return {"type": "json_object"}
-
-
-def _prepend_json_response_instruction(
-    messages: list[ChatMessage], response_format: ResponseFormatRequest | None
-) -> list[ChatMessage]:
-    """responseFormat指定時、JSON出力を促すsystemメッセージを先頭に追加する。
-
-    Parameters
-    ----------
-    messages : list[ChatMessage]
-        会話履歴。
-    response_format : ResponseFormatRequest | None
-        リクエストのresponseFormat指定。未指定なら何もしない。
-
-    Returns
-    -------
-    list[ChatMessage]
-        指示文を前置した会話履歴。
-    """
-    if response_format is None:
-        return messages
-    return [ChatMessage(role="system", content=_JSON_RESPONSE_INSTRUCTION), *messages]
-
-
-def _to_core_tool_configs(
-    tools: list[SchemaToolConfig] | None,
-) -> list[CoreToolConfig] | None:
-    """リクエストスキーマの`ToolConfig`をLLM呼び出しクライアント用の`ToolConfig`へ変換する。
-
-    Parameters
-    ----------
-    tools : list[SchemaToolConfig] | None
-        リクエストで指定されたツール設定一覧。
-
-    Returns
-    -------
-    list[CoreToolConfig] | None
-        LLM呼び出しクライアント用のツール設定一覧。`tools`が空またはNoneの場合はNone。
-    """
-    if not tools:
-        return None
-    return [
-        CoreToolConfig(
-            name=tool.name,
-            server_label=tool.server_label,
-            server_url=tool.server_url,
-            require_approval=tool.require_approval,
-            authorization=tool.authorization,
-            headers=tool.headers,
-            allowed_tools=tool.allowed_tools,
-        )
-        for tool in tools
-    ]
 
 
 class LlmChatService:
@@ -239,7 +155,7 @@ class LlmChatService:
             room_id = message.room_id
             message_id_for_usage = message.id
 
-        tools = _to_core_tool_configs(req.tools)
+        tools = to_core_tool_configs(req.tools)
         if ai_model.endpoint_type == AIModelEndpointType.BEDROCK_CHAT:
             # ストリーミング開始後に失敗するとSSEのerrorとしてしか返せないため、
             # Bedrockで扱えないパラメータは開始前に400で拒否する。エンドポイント・
@@ -272,7 +188,7 @@ class LlmChatService:
 
         if req.createLibrary:
             library_prompt = await SystemPromptTemplateRepository.find_by_type(
-                _LIBRARY_PROMPT_TYPE, session
+                LIBRARY_PROMPT_TYPE, session
             )
             if library_prompt is None:
                 raise HTTPException(
@@ -284,10 +200,10 @@ class LlmChatService:
                 *chat_messages,
             ]
 
-        chat_messages = _prepend_json_response_instruction(
+        chat_messages = prepend_json_response_instruction(
             chat_messages, req.responseFormat
         )
-        response_format_param = _build_llm_response_format(req.responseFormat)
+        response_format_param = build_llm_response_format(req.responseFormat)
 
         credit_settings = get_llm_credit_settings()
         endpoint_url = tenant_endpoint.endpoint
@@ -417,7 +333,7 @@ class LlmChatService:
                     # 送出された場合でも、`finally`到達時点でタイトル・本文が確定済みなら
                     # ライブラリが永続化される(message_service.pyの同様の堅牢性方針を踏襲)。
                     library_title = (router.final_title() or DEFAULT_LIBRARY_TITLE)[
-                        :_LIBRARY_TITLE_MAX_LENGTH
+                        :LIBRARY_TITLE_MAX_LENGTH
                     ]
                     library_content = router.final_content()
                     comment = router.final_comment()
