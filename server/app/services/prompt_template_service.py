@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.sort import SortOrder
 from app.models.group import Group
 from app.models.prompt_template import PromptTemplate
-from app.models.user import User, UserRole
+from app.models.user import User, is_tenant_admin
 from app.repositories.group_prompt_template_repository import (
     GroupPromptTemplateRepository,
 )
@@ -23,22 +23,6 @@ from app.schemas.prompt_template import (
 
 class PromptTemplateService:
     """プロンプトテンプレートに関するビジネスロジック。"""
-
-    @staticmethod
-    def _is_tenant_admin(current_user: User) -> bool:
-        """テナント管理者かどうかを判定する。
-
-        Parameters
-        ----------
-        current_user : User
-            判定対象のユーザー。
-
-        Returns
-        -------
-        bool
-            テナント管理者の場合は True。
-        """
-        return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
     async def _to_response(
@@ -187,7 +171,7 @@ class PromptTemplateService:
         PagedPromptTemplateResponse
             ページネーション済みプロンプトテンプレート一覧。
         """
-        admin = PromptTemplateService._is_tenant_admin(current_user)
+        admin = is_tenant_admin(current_user)
         admin_group_ids: list[str] = []
         if not admin:
             admin_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(

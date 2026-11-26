@@ -8,7 +8,7 @@ from app.core.file_storage import FileStorage
 from app.core.sort import SortOrder
 from app.models.file import FileStatus
 from app.models.index import Index, IndexType
-from app.models.user import User, UserRole
+from app.models.user import User, is_tenant_admin
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.file_repository import FileRepository
 from app.repositories.group_assistant_repository import GroupAssistantRepository
@@ -31,22 +31,6 @@ SAAS_INDEX_LIMIT = 15
 
 class IndexService:
     """インデックスに関するビジネスロジック。"""
-
-    @staticmethod
-    def _is_tenant_admin(current_user: User) -> bool:
-        """テナント管理者かどうかを判定する。
-
-        Parameters
-        ----------
-        current_user : User
-            判定対象のユーザー。
-
-        Returns
-        -------
-        bool
-            テナント管理者の場合は True。
-        """
-        return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
     async def _resolve_visibility_scope(
@@ -74,7 +58,7 @@ class IndexService:
         tuple[list[str] | None, list[str] | None]
             (許可インデックスID一覧, 許可グループID一覧) のタプル。絞り込み不要な場合は両方None。
         """
-        if IndexService._is_tenant_admin(current_user):
+        if is_tenant_admin(current_user):
             return None, None
 
         admin_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(
@@ -228,7 +212,7 @@ class IndexService:
             ページネーション済みインデックス一覧。
         """
         if group_id:
-            if not IndexService._is_tenant_admin(current_user):
+            if not is_tenant_admin(current_user):
                 admin_group_ids = (
                     await GroupUserRepository.find_admin_group_ids_for_user(
                         tenant_id, current_user.id, session
@@ -298,7 +282,7 @@ class IndexService:
         HTTPException
             可視範囲外の場合404を返す。
         """
-        if IndexService._is_tenant_admin(current_user):
+        if is_tenant_admin(current_user):
             return
 
         (
