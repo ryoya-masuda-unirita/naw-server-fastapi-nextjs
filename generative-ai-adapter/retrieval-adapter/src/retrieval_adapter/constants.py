@@ -4,8 +4,10 @@
 検索アダプタでは VDB のパスワード。
 """
 
+from generative_ai_core.property_ids import PropertyIdsBase
 
-class RetrievalPropertyIds:
+
+class RetrievalPropertyIds(PropertyIdsBase):
     """Waha! の接続プロパティの ID。"""
 
     URL = 0
@@ -43,21 +45,6 @@ class RetrievalPropertyIds:
     PROVIDER_LLM_RERANK_MODEL = 57
     PROVIDER_LLM_RERANK_TENANT_ID = 58
     PROVIDER_LLM_RERANK_TIMEOUT_SECONDS = 59
-
-    @classmethod
-    def by_name(cls) -> dict[str, int]:
-        """名前から ID への対応を返す（エミュレーターの設定ファイルで名前を使うため）。
-
-        Returns
-        -------
-        dict[str, int]
-            定数名をキー、ID を値とする辞書。
-        """
-        return {
-            name: value
-            for name, value in vars(cls).items()
-            if name.isupper() and isinstance(value, int)
-        }
 
 
 # 出力モード（`connect` の out_mode）

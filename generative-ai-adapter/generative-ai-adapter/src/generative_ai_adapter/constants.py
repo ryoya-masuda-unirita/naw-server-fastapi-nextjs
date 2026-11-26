@@ -2,8 +2,10 @@
 
 from enum import Enum
 
+from generative_ai_core.property_ids import PropertyIdsBase
 
-class PropertyIds:
+
+class PropertyIds(PropertyIdsBase):
     """Waha! の接続プロパティの ID（移植元 PropertyIds・properties.xml）。"""
 
     URL = 0
@@ -39,21 +41,6 @@ class PropertyIds:
     SECUAIGENT_LIBRARY_GENERATION = 49
     CONTEXT_CHECK = 50
     RAG_CONTEXT_JSON_ALLOW_ROOT = 62
-
-    @classmethod
-    def by_name(cls) -> dict[str, int]:
-        """名前から ID への対応を返す（エミュレーターの設定ファイルで名前を使うため）。
-
-        Returns
-        -------
-        dict[str, int]
-            定数名をキー、ID を値とする辞書。
-        """
-        return {
-            name: value
-            for name, value in vars(cls).items()
-            if name.isupper() and isinstance(value, int)
-        }
 
 
 class ImageExplanationMode(Enum):
