@@ -120,6 +120,7 @@ routers/auth.py    ↔  services/auth_service.py
 - 複数の router から共通で使う DB 操作は `repositories/` に切り出す
 - 複数の router から共通で使う純粋な計算ロジック（ハッシュ・トークン生成等）は `core/` に置く
 - `xxx_service.py` が別の `yyy_service.py` を呼ぶ構造は禁止
+  - 例外（既存の 2 件。増やさない）: `group_service.py` が `AssistantService._build_responses` を、`index_service.py` が `FileService.delete_file` を呼ぶ。新しく、サービス間で共通の処理が要るときは、`core/`（例: `core/llm_chat_support.py`）に出す
 
 ### ディレクトリ構造
 
