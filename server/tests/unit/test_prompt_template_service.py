@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.sort import SortOrder, parse_sort
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, is_tenant_admin
 from app.services.prompt_template_service import PromptTemplateService
 from unittest.mock import MagicMock
 
@@ -33,19 +33,19 @@ def _user(role: UserRole) -> User:
 
 
 class TestIsTenantAdmin:
-    """PromptTemplateService._is_tenant_admin のテスト"""
+    """is_tenant_admin のテスト"""
 
     def test_admin_role_is_tenant_admin(self) -> None:
         """ADMINロールは全体管理者と判定されること"""
-        assert PromptTemplateService._is_tenant_admin(_user(UserRole.ADMIN)) is True
+        assert is_tenant_admin(_user(UserRole.ADMIN)) is True
 
     def test_system_role_is_tenant_admin(self) -> None:
         """SYSTEMロールは全体管理者と判定されること"""
-        assert PromptTemplateService._is_tenant_admin(_user(UserRole.SYSTEM)) is True
+        assert is_tenant_admin(_user(UserRole.SYSTEM)) is True
 
     def test_user_role_is_not_tenant_admin(self) -> None:
         """USERロールは全体管理者と判定されないこと"""
-        assert PromptTemplateService._is_tenant_admin(_user(UserRole.USER)) is False
+        assert is_tenant_admin(_user(UserRole.USER)) is False
 
 
 @pytest.mark.asyncio

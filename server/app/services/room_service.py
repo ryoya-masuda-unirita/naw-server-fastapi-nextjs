@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.room_access import require_viewable_room
 from app.models.assistant import Assistant
 from app.models.room import Room, RoomPin, RoomRating
-from app.models.user import User, UserRole
+from app.models.user import User, is_tenant_admin
 from app.repositories.group_assistant_repository import GroupAssistantRepository
 from app.repositories.group_user_repository import GroupUserRepository
 from app.repositories.room_pin_repository import RoomPinRepository
@@ -26,22 +26,6 @@ from app.schemas.room import (
 
 class RoomService:
     """ルームに関するビジネスロジック。"""
-
-    @staticmethod
-    def _is_tenant_admin(current_user: User) -> bool:
-        """テナント管理者かどうかを判定する。
-
-        Parameters
-        ----------
-        current_user : User
-            判定対象のユーザー。
-
-        Returns
-        -------
-        bool
-            テナント管理者の場合は True。
-        """
-        return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
 
     @staticmethod
     def _normalize_name(name: str) -> str:
@@ -268,7 +252,7 @@ class RoomService:
     ) -> PagedAdminRoomHistoryResponse:
         """管理者向けルーム履歴一覧を取得する。"""
         visible_assistant_ids: list[str] | None = None
-        if not RoomService._is_tenant_admin(current_user):
+        if not is_tenant_admin(current_user):
             admin_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(
                 tenant_id, current_user.id, session
             )

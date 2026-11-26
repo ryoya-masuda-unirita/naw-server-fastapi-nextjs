@@ -14,6 +14,22 @@ class UserRole(str, Enum):
     SYSTEM = "SYSTEM"
 
 
+def is_tenant_admin(user: "User") -> bool:
+    """テナント管理者（ADMIN・SYSTEM）かどうかを判定する。
+
+    Parameters
+    ----------
+    user : User
+        判定対象のユーザー。
+
+    Returns
+    -------
+    bool
+        テナント管理者なら True。
+    """
+    return user.role in (UserRole.ADMIN, UserRole.SYSTEM)
+
+
 class User(SQLModel, table=True):
     """ユーザーのテーブル（`users`）。ログインキーはハッシュ値（`login_key_hash`）だけを持つ。"""
 

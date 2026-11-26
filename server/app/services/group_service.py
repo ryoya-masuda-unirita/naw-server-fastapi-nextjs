@@ -12,7 +12,7 @@ from app.core.credit_quota import (
 from app.core.sort import SortOrder
 from app.models.group import Group
 from app.models.assistant import AssistantType
-from app.models.user import User, UserRole
+from app.models.user import User, is_tenant_admin
 from app.repositories.assistant_repository import AssistantRepository
 from app.repositories.group_prompt_template_repository import (
     GroupPromptTemplateRepository,
@@ -44,22 +44,6 @@ class GroupService:
     """グループ管理の業務ロジック。"""
 
     @staticmethod
-    def _is_tenant_admin(current_user: User) -> bool:
-        """テナント管理者（ADMIN・SYSTEM）かどうかを判定する。
-
-        Parameters
-        ----------
-        current_user : User
-            ログイン中のユーザー。
-
-        Returns
-        -------
-        bool
-            テナント管理者なら True。
-        """
-        return current_user.role in (UserRole.ADMIN, UserRole.SYSTEM)
-
-    @staticmethod
     async def _assert_can_manage_group(
         group_id: str, tenant_id: str, current_user: User, session: AsyncSession
     ) -> None:
@@ -81,7 +65,7 @@ class GroupService:
         HTTPException
             いずれの権限も持たない場合 403 を返す。
         """
-        if GroupService._is_tenant_admin(current_user):
+        if is_tenant_admin(current_user):
             return
         if not await GroupUserRepository.is_group_admin(
             group_id, tenant_id, current_user.id, session
@@ -166,10 +150,7 @@ class GroupService:
         HTTPException
             グループ管理者が自分自身を操作しようとした場合 403 を返す。
         """
-        if (
-            not GroupService._is_tenant_admin(current_user)
-            and target_user_id == current_user.id
-        ):
+        if not is_tenant_admin(current_user) and target_user_id == current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify self"
             )
@@ -335,7 +316,7 @@ class GroupService:
             ページネーション済みグループ一覧。
         """
         allowed_group_ids = None
-        if restrict_to_managed and not GroupService._is_tenant_admin(current_user):
+        if restrict_to_managed and not is_tenant_admin(current_user):
             allowed_group_ids = await GroupUserRepository.find_admin_group_ids_for_user(
                 tenant_id, current_user.id, session
             )
