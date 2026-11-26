@@ -5,7 +5,6 @@ Java の getter/setter を属性にしている（`setUrl` → `url`）。
 """
 
 import json
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -19,6 +18,10 @@ from generative_ai_core.network import (
 from generative_ai_core.resource import (
     CoreDerivedResourceNameResolver,
     CoreDerivedResourceTargetKind,
+)
+
+from embedding_adapter.service.vectordb.graph_write_error_sanitizer import (
+    GraphWriteErrorSanitizer,
 )
 
 DEFAULT_TIMEOUT = 180
@@ -38,13 +41,6 @@ _PROVIDER_LEGACY_PGVECTOR = "PGvector"
 _GRAPH_CANDIDATE_PROVIDERS = frozenset({"OpenAI", "AzureOpenAI", "SecuAiGent"})
 _GRAPH_PROVIDER_MESSAGE = "Graph candidate LLM credential requires provider OpenAI, AzureOpenAI, or SecuAiGent."
 
-_JDBC_URL = re.compile(r"jdbc:postgresql://[^\s'\"]+", re.IGNORECASE)
-_HTTP_URL = re.compile(r"https?://[^\s'\"]+", re.IGNORECASE)
-_KEY_VALUE_SECRET = re.compile(
-    r"(?i)(password|passwd|pwd|api[_-]?key|token|proxy(?:Pass|Password)?|user)"
-    r"\s*[:=]\s*[^\s,;]+"
-)
-
 
 def _has_text(value: str | None) -> bool:
     """空白以外の文字を含むか。
@@ -60,29 +56,6 @@ def _has_text(value: str | None) -> bool:
         空白以外の文字があれば True。
     """
     return value is not None and value.strip() != ""
-
-
-def _sanitize_graph_write_message(message: str | None) -> str:
-    """グラフ書き込みの失敗メッセージから資格情報らしい値を伏せる。
-
-    移植元 `GraphWriteErrorSanitizer.sanitize(String)` と同じ置換。循環 import を
-    避けるため domain に持つ。
-
-    Parameters
-    ----------
-    message : str | None
-        失敗メッセージ。
-
-    Returns
-    -------
-    str
-        伏せ字にしたメッセージ。None は空文字列。
-    """
-    if message is None:
-        return ""
-    sanitized = _JDBC_URL.sub("<redacted-jdbc-url>", message)
-    sanitized = _HTTP_URL.sub("<redacted-url>", sanitized)
-    return _KEY_VALUE_SECRET.sub(r"\1=<redacted>", sanitized)
 
 
 @dataclass
@@ -576,7 +549,7 @@ class GraphWriteResult:
             status,
             file_id,
             list(chunk_ids),
-            _sanitize_graph_write_message(message),
+            GraphWriteErrorSanitizer.sanitize(message),
             cause_category,
         )
 
