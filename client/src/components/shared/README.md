@@ -1,18 +1,19 @@
 # 共通 UI 部品（`src/components/shared/`）
 
-移植元 `secuaigent/client` の `src/app/shared/components/*` と `core/services`（toast・confirm・dropdown）を React に移した部品です（Issue #278）。
-画面を移植するときは、移植元のテンプレートにある `<app-xxx>` をここの部品に置き換えてください。見た目（Tailwind クラス・DOM 構造）と挙動は移植元に揃えてあります。
+画面で使う共通 UI 部品（ボタン・ダイアログ・表・フォーム・選択など）の API リファレンスです（Issue #278）。移植元 `secuaigent/client` の `shared/components/*` と `core/services`（toast・dropdown）を移したものです。
+読み手は、画面を移植・実装する人です。移植元テンプレートの `<app-xxx>` を、ここの部品に置き換えてください。
+読み方は、まず「共通の約束事」を 1 回読み、あとは下の目次で部品の節に飛びます。各節は「使い方の例 → props → 注意点」の順です。
 
 ## 目次
 
-見出しの一覧です。部品名は、ブラウザの検索（`Ctrl+F`）か、GitHub の画面の右上のアウトラインで探せます。
+部品名は、ブラウザの検索（`Ctrl+F`）か、GitHub のアウトラインで探せます。
 
 | 節 | 含まれる部品・項目 |
 |---|---|
 | 共通の約束事 | 移植元との対応・文言・アイコン・CSS の置き場所・アプリのルートに置くもの・クラス結合 |
 | ボタン・アイコンボタン | Button・IconButton |
 | チェック・スイッチ | Checkbox・Switch |
-| ダイアログ・通知 | Dialog・Toast（`useToastStore` / `ToastContainer`）・Confirm（`useConfirmStore`）・dropdownService / DropdownBackdrop |
+| ダイアログ・通知 | Dialog・Toast（`useToastStore` / `ToastContainer`）・dropdownService / DropdownBackdrop |
 | 一覧・ページ | Table・TableList / TableListItem・Pagination・Tab・PageHeader・ContextMenu |
 | 選択系（Select ほか） | Select・SelectWithSearch・ChunkSelect・MultiSelect・ComboboxMulti・FormSelect |
 | フォーム部品 | FormInput・FormTextarea・FormSwitch・FormRadio・FormSortInput・FormCombobox・SearchInput |
@@ -37,12 +38,12 @@
 
 ### 文言
 
-`useTranslation()` の `t()` で翻訳します。props の `label`・`header`・`emptyMessage` などに「i18n キー」と書いてあるものはキーを渡します（部品の中で翻訳します）。
-テストでは i18n を初期化しないので、`t()` はキーをそのまま返します（テストはキーで検証してください）。
+`useTranslation()` の `t()` で翻訳する。props の説明に「i18n キー」とあるものは、キーを渡す（部品の中で翻訳する）。
+テストでは i18n を初期化しないので、`t()` はキーをそのまま返す。テストはキーで検証する。
 
 ### アイコン
 
-アイコンは `icons/` にあります（レイアウト側の #277 が作ったものと共通）。
+アイコンは `icons/` にある（レイアウト側の #277 と共通）。
 
 - `MatIcon`（`icons/mat-icon.tsx`）: 移植元テンプレートの `<mat-icon class="...">name</mat-icon>`。`name` と大きさ `size`（px）を渡す。`material-symbols-outlined` フォントのリガチャで描画する。旧名（`expand_more` など）も描画できるので `name` は文字列も受け取る
 - `AppMatIcon`（`icons/app-mat-icon.tsx`）: 移植元の `<app-mat-icon [icon]="...">`。`icon` を渡し、外側の要素の font-size（`text-[20px]!` など）に合わせて 1em で描画する
@@ -63,22 +64,29 @@
 
 ### アプリのルートに置くもの
 
-移植元 `app.ts` と同じく、`src/main.tsx` に次の 2 つを 1 つずつ置いています。画面側で置く必要はありません。
+移植元 `app.ts` と同じく、`src/main.tsx` に次の 2 つを置いてある。画面側で置く必要はない。
 
 - `<ToastContainer />`（トーストの表示先）
-- `<DropdownBackdrop />`（`dropdownService` がモバイル幅で表示する暗幕）
+- `<DropdownBackdrop />`（`dropdownService` がモバイル幅で出す暗幕）
 
 ### クラス結合
 
-`class-names.ts` の `cx(...)` で、移植元の `[class.xxx]` / `[ngClass]` を 1 本の className にまとめています。
-
----
+`class-names.ts` の `cx(...)` で、移植元の `[class.xxx]` / `[ngClass]` を 1 本の className にまとめる。
 
 ## ボタン・アイコンボタン
 
 ### Button
 
 移植元: `shared/components/button`
+
+```tsx
+<Button variant="outline" intent="cancel" size="largePcDefault" heightPx={54} onClick={close}>
+  {t('COMMON.CANCEL')}
+</Button>
+<Button type="submit" fullWidth loading={isPending} iconPosition="left" icon={<MatIcon name="login" size={24} />}>
+  {t('AUTH.LOGIN.SUBMIT')}
+</Button>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -97,18 +105,15 @@
 | `dataTestid` | `string` | - | 内部の `<button>` の data-testid |
 | `onClick` | `(e) => void` | - | |
 
-```tsx
-<Button variant="outline" intent="cancel" size="largePcDefault" heightPx={54} onClick={close}>
-  {t('COMMON.CANCEL')}
-</Button>
-<Button type="submit" fullWidth loading={isPending} iconPosition="left" icon={<MatIcon name="login" size={24} />}>
-  {t('AUTH.LOGIN.SUBMIT')}
-</Button>
-```
-
 ### IconButton
 
 移植元: `shared/components/icon-button`。見た目は `index.css` の `.icon-button*`。
+
+```tsx
+<IconButton variant="tertiary-gray" ariaLabel={t('COMMON.EDIT')} onClick={onEdit}>
+  <SvgIcon name="edit" />
+</IconButton>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -122,17 +127,15 @@
 | `onClick` | `(e) => void` | - | |
 | `onFileChange` | `(files: FileList) => void` | - | `type="file"` で選ばれたとき |
 
-```tsx
-<IconButton variant="tertiary-gray" ariaLabel={t('COMMON.EDIT')} onClick={onEdit}>
-  <SvgIcon name="edit" />
-</IconButton>
-```
-
 ## チェック・スイッチ
 
 ### Checkbox
 
 移植元: `shared/components/checkbox`
+
+```tsx
+<Checkbox checked={isAllSelected} indeterminate={hasSome && !isAllSelected} isHeader onCheckedChange={toggleAll} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -143,13 +146,13 @@
 | `onCheckedChange` | `(checked: boolean) => void` | - | クリックで反転した値 |
 | `className` | `string` | - | |
 
-```tsx
-<Checkbox checked={isAllSelected} indeterminate={hasSome && !isAllSelected} isHeader onCheckedChange={toggleAll} />
-```
-
 ### Switch
 
 移植元: `shared/components/switch`。クリックは親に伝えません（行クリックと両立させるため）。
+
+```tsx
+<Switch checked={enabled} onCheckedChange={setEnabled} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -160,17 +163,34 @@
 | `showIcon` | `boolean` | `true` | つまみのアイコン |
 | `onCheckedChange` | `(checked: boolean) => void` | - | |
 
-```tsx
-<Switch checked={enabled} onCheckedChange={setEnabled} />
-```
-
 ## ダイアログ・通知
 
 ### Dialog
 
 移植元: `shared/components/dialog`（`MatDialog.open(DialogComponent, { data, width, panelClass })` で開いていたもの）。
-`document.body` 直下に Material と同じ DOM（`cdk-overlay-pane.mat-mdc-dialog-panel > mat-mdc-dialog-container > mdc-dialog__surface > .modal-dialog`）で描画します。
-開いたら最初の操作可能な要素にフォーカスし、閉じたら元の要素に戻します。開いている間は背面をスクロールさせません。
+`document.body` 直下に、Material と同じ DOM で描画する（`cdk-overlay-pane.mat-mdc-dialog-panel > mat-mdc-dialog-container > mdc-dialog__surface > .modal-dialog`）。
+開くと最初の操作可能な要素にフォーカスし、閉じると元の要素に戻す。開いている間、背面はスクロールしない。
+
+```tsx
+const [open, setOpen] = useState(false);
+
+<Dialog
+  open={open}
+  title={t('ADMIN.USER_MANAGEMENT.CREATE_NEW_USER')}
+  confirmText={t('COMMON.CREATE')}
+  cancelText={t('COMMON.CANCEL')}
+  showCancel
+  showConfirm
+  buttonAlign="right"
+  confirmMinWidth="min-w-24.5"
+  dialogWidth="800px"
+  confirmLoading={mutation.isPending}
+  onConfirm={handleSubmit}
+  onClose={() => setOpen(false)}
+>
+  <UserForm />
+</Dialog>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -201,27 +221,6 @@
 
 移植元の `DialogData` のうち `showDivider`・`padding`・`borderRadius`・`confirmVariant` はテンプレートで使われていないので持っていません。
 
-```tsx
-const [open, setOpen] = useState(false);
-
-<Dialog
-  open={open}
-  title={t('ADMIN.USER_MANAGEMENT.CREATE_NEW_USER')}
-  confirmText={t('COMMON.CREATE')}
-  cancelText={t('COMMON.CANCEL')}
-  showCancel
-  showConfirm
-  buttonAlign="right"
-  confirmMinWidth="min-w-24.5"
-  dialogWidth="800px"
-  confirmLoading={mutation.isPending}
-  onConfirm={handleSubmit}
-  onClose={() => setOpen(false)}
->
-  <UserForm />
-</Dialog>
-```
-
 削除確認:
 
 ```tsx
@@ -246,11 +245,6 @@ const [open, setOpen] = useState(false);
 移植元: `core/services/toast.service.ts`・`shared/components/toast-container`。右上に積んで表示し、時間が来たら消えます（success 3 秒・error 5 秒・warning 4 秒・info 3 秒。`0` 以下で自動では消えない）。
 `ToastContainer` は `main.tsx` に置いてあるので、画面からは呼ぶだけです。
 
-| 関数 | 説明 |
-|---|---|
-| `success(message, duration?)` / `error(...)` / `warning(...)` / `info(...)` | トーストを出す |
-| `remove(id)` / `clear()` | 消す |
-
 ```tsx
 const toast = useToastStore();
 toast.success(t('ADMIN.USER_MANAGEMENT.CREATED'));
@@ -259,9 +253,10 @@ toast.success(t('ADMIN.USER_MANAGEMENT.CREATED'));
 useToastStore.getState().error(t('COMMON.ERROR'));
 ```
 
-### Confirm（`useConfirmStore`）
-
-移植元: `core/services/confirm.service.ts`。移植元でもこの状態を描画する UI はなく、どの画面からも使われていません（確認は `Dialog` で行っています）。移植元に揃えて状態（`dialog`・`isProcessing`）と操作（`confirm`・`handleConfirm`・`handleCancel`・`close`）だけを持ちます。
+| 関数 | 説明 |
+|---|---|
+| `success(message, duration?)` / `error(...)` / `warning(...)` / `info(...)` | トーストを出す |
+| `remove(id)` / `clear()` | 消す |
 
 ### dropdownService / DropdownBackdrop
 
@@ -288,23 +283,6 @@ const toggle = (event: React.MouseEvent) => {
 
 移植元: `shared/components/table`。モバイル（`md` 未満）は `.table-list-row` のカード、デスクトップは列のある表で表示します（両方を描画して CSS で出し分け）。選択はデータが変わるとクリアされます。
 
-| prop | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `data` | `T[]` | `[]` | 行。`id` があれば key に使う |
-| `columns` | `TableColumn<T>[]` | `[]` | `field`（`'group.name'` のようなドット区切り可）、`header`（i18n キー）、`width`（Tailwind の幅クラス。省略で flex-1）、`sortable`、`render(row)`、`align`、`hasBorder` |
-| `selectable` | `boolean` | `false` | チェックボックスで選択 |
-| `sortable` | `boolean` | `false` | 見出しクリックで 昇順 → 降順 → 解除 |
-| `isLoading` | `boolean` | `false` | |
-| `emptyMessage` | `string` | `'COMMON.NO_DATA'` | i18n キー |
-| `renderActions` | `(row) => ReactNode` | - | 行末の操作（移植元 `actionsTemplate`） |
-| `renderMobileRow` | `(row) => ReactNode` | - | モバイル行の中身（移植元 `mobileRowTemplate`） |
-| `actionsWidth` / `selectionWidth` | `string` | `'w-25'` / `'w-6'` | |
-| `selectedClass` / `hoverClass` | `string` | `'bg-secondary'` / `'hover:bg-bg-brand-weak'` | |
-| `rowTestid` | `string` | - | デスクトップ行の data-testid |
-| `onSortChange` | `(sort: SortEvent) => void` | - | |
-| `onSelectionChange` | `(rows: T[]) => void` | - | |
-| `onRowClick` | `(row: T) => void` | - | |
-
 ```tsx
 const columns: TableColumn<User>[] = [
   { field: 'name', header: 'ADMIN.USER_MANAGEMENT.NAME', sortable: true },
@@ -323,21 +301,26 @@ const columns: TableColumn<User>[] = [
 />
 ```
 
+| prop | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `data` | `T[]` | `[]` | 行。`id` があれば key に使う |
+| `columns` | `TableColumn<T>[]` | `[]` | `field`（`'group.name'` のようなドット区切り可）、`header`（i18n キー）、`width`（Tailwind の幅クラス。省略で flex-1）、`sortable`、`render(row)`、`align`、`hasBorder` |
+| `selectable` | `boolean` | `false` | チェックボックスで選択 |
+| `sortable` | `boolean` | `false` | 見出しクリックで 昇順 → 降順 → 解除 |
+| `isLoading` | `boolean` | `false` | |
+| `emptyMessage` | `string` | `'COMMON.NO_DATA'` | i18n キー |
+| `renderActions` | `(row) => ReactNode` | - | 行末の操作（移植元 `actionsTemplate`） |
+| `renderMobileRow` | `(row) => ReactNode` | - | モバイル行の中身（移植元 `mobileRowTemplate`） |
+| `actionsWidth` / `selectionWidth` | `string` | `'w-25'` / `'w-6'` | |
+| `selectedClass` / `hoverClass` | `string` | `'bg-secondary'` / `'hover:bg-bg-brand-weak'` | |
+| `rowTestid` | `string` | - | デスクトップ行の data-testid |
+| `onSortChange` | `(sort: SortEvent) => void` | - | |
+| `onSelectionChange` | `(rows: T[]) => void` | - | |
+| `onRowClick` | `(row: T) => void` | - | |
+
 ### TableList / TableListItem
 
 移植元: `shared/components/table-list`。一覧の外枠と行。見た目は `index.css` の `.table-list*`。
-
-`TableListItem` の props:
-
-| prop | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `children` | `ReactNode` | - | 行の中身（`.table-list-row-content`） |
-| `actions` | `ReactNode` | - | 右端（移植元の `slot="right"`、`.table-list-actions`） |
-| `isHeader` | `boolean` | `false` | 見出し行 |
-| `showCheckbox` / `checked` / `indeterminate` | `boolean` | `false` | チェックボックス付きのデータ行は行クリックでも切り替わる |
-| `hasActions` | `boolean` | `true` | false で `.table-list-actions` を出さない |
-| `dataTestid` / `className` | `string` | - | |
-| `onCheckedChange` | `(checked: boolean) => void` | - | |
 
 ```tsx
 <TableList>
@@ -358,9 +341,25 @@ const columns: TableColumn<User>[] = [
 </TableList>
 ```
 
+`TableListItem` の props:
+
+| prop | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `children` | `ReactNode` | - | 行の中身（`.table-list-row-content`） |
+| `actions` | `ReactNode` | - | 右端（移植元の `slot="right"`、`.table-list-actions`） |
+| `isHeader` | `boolean` | `false` | 見出し行 |
+| `showCheckbox` / `checked` / `indeterminate` | `boolean` | `false` | チェックボックス付きのデータ行は行クリックでも切り替わる |
+| `hasActions` | `boolean` | `true` | false で `.table-list-actions` を出さない |
+| `dataTestid` / `className` | `string` | - | |
+| `onCheckedChange` | `(checked: boolean) => void` | - | |
+
 ### Pagination
 
 移植元: `shared/components/pagination`。既定ではページと件数を URL のクエリ（`page`・`pageSize`）で持ち、他のクエリは残します（`queryParamsHandling: 'merge'` と同じ）。件数を変えると 1 ページ目に戻します。`useSearchParams` を使うので Router の中に置いてください。
+
+```tsx
+<Pagination totalPages={data.totalPages} countDisplay={`${from}-${to} / ${data.totalElements}`} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -375,13 +374,13 @@ const columns: TableColumn<User>[] = [
 | `defaultPageSize` | `number` | `10` | |
 | `onPageChange` / `onPageSizeChange` | `(n: number) => void` | - | |
 
-```tsx
-<Pagination totalPages={data.totalPages} countDisplay={`${from}-${to} / ${data.totalElements}`} />
-```
-
 ### Tab
 
 移植元: `shared/components/tab`。`activeTabId` がなければ先頭のタブ（無効でなければ）を選択中にします。`route` を持つタブは `<Link>` になります。
+
+```tsx
+<Tab tabs={[{ id: 'assistant', label: 'ADMIN.ASSISTANT.TAB' }, { id: 'category', label: 'ADMIN.CATEGORY.TAB' }]} activeTabId={tab} onTabChange={(t) => setTab(t.id)} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -391,13 +390,17 @@ const columns: TableColumn<User>[] = [
 | `containerClass` / `className` | `string` | - | |
 | `onTabChange` | `(tab: TabItem) => void` | - | |
 
-```tsx
-<Tab tabs={[{ id: 'assistant', label: 'ADMIN.ASSISTANT.TAB' }, { id: 'category', label: 'ADMIN.CATEGORY.TAB' }]} activeTabId={tab} onTabChange={(t) => setTab(t.id)} />
-```
-
 ### PageHeader
 
 移植元: `shared/components/page-header`。サイドバーの開閉は `useUiStore().toggleMobileSidebar`、戻るは `navigate(-1)`、言語切替は `i18n.changeLanguage` + `localStorage('language')` です。
+
+```tsx
+<PageHeader
+  title={t('ADMIN.USER_MANAGEMENT.TITLE')}
+  showActions={false}
+  actions={<Button onClick={openCreate}>{t('COMMON.CREATE')}</Button>}
+/>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -416,30 +419,9 @@ const columns: TableColumn<User>[] = [
 | `actions` | `ReactNode` | - | 右側の末尾（移植元の `[pageHeaderActions]` スロット） |
 | `onBackClick` / `onShareClick` / `onLikeClick` / `onSettingsClick` / `onRenameClick` / `onTabChange` | | - | |
 
-```tsx
-<PageHeader
-  title={t('ADMIN.USER_MANAGEMENT.TITLE')}
-  showActions={false}
-  actions={<Button onClick={openCreate}>{t('COMMON.CREATE')}</Button>}
-/>
-```
-
 ### ContextMenu
 
 移植元: `shared/components/context-menu`。デスクトップはトリガーにつながるドロップダウン（CDK の connected overlay と同じく、候補位置を順に試して画面に収まる位置に出す）、モバイルは下からのドロワーです。
-
-| prop | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `menu` | `ReactNode \| ({ close }) => ReactNode` | - | メニューの中身（移植元 `menuTpl`）。モバイルのドロワーは中身のクリックで閉じないので、項目から閉じるときは関数で受け取った `close` を呼ぶ（移植元の `contextMenu.close()`） |
-| `customTrigger` | `ReactNode` | - | 既定のトリガーボタンの代わり |
-| `triggerIcon` | `string` | - | material-symbols 名。省略すると歯車の SVG |
-| `triggerTestid` | `string` | - | |
-| `menuMinWidth` | `string` | `'min-w-60'` | |
-| `panelClass` | `string` | `'bg-bg-primary flex flex-col gap-1 p-4 rounded-lg shadow-default text-xs font-medium'` | `'dropdown-menu dropdown-menu--bordered w-70'` なども可 |
-| `closeOnContentClick` | `boolean` | `true` | デスクトップで中身をクリックしたら閉じる |
-| `overlayPositions` | `ConnectedPosition[]` | 右下 → 右上 | |
-| `hasPaddingButton` | `boolean` | `true` | |
-| `ref` | `Ref<ContextMenuHandle>` | - | `open()`・`close()`・`toggle()`（移植元の `@ViewChild(ContextMenuComponent)`） |
 
 ```tsx
 <ContextMenu
@@ -456,7 +438,18 @@ const columns: TableColumn<User>[] = [
 />
 ```
 
----
+| prop | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `menu` | `ReactNode \| ({ close }) => ReactNode` | - | メニューの中身（移植元 `menuTpl`）。モバイルのドロワーは中身のクリックで閉じないので、項目から閉じるときは関数で受け取った `close` を呼ぶ（移植元の `contextMenu.close()`） |
+| `customTrigger` | `ReactNode` | - | 既定のトリガーボタンの代わり |
+| `triggerIcon` | `string` | - | material-symbols 名。省略すると歯車の SVG |
+| `triggerTestid` | `string` | - | |
+| `menuMinWidth` | `string` | `'min-w-60'` | |
+| `panelClass` | `string` | `'bg-bg-primary flex flex-col gap-1 p-4 rounded-lg shadow-default text-xs font-medium'` | `'dropdown-menu dropdown-menu--bordered w-70'` なども可 |
+| `closeOnContentClick` | `boolean` | `true` | デスクトップで中身をクリックしたら閉じる |
+| `overlayPositions` | `ConnectedPosition[]` | 右下 → 右上 | |
+| `hasPaddingButton` | `boolean` | `true` | |
+| `ref` | `Ref<ContextMenuHandle>` | - | `open()`・`close()`・`toggle()`（移植元の `@ViewChild(ContextMenuComponent)`） |
 
 ## 選択系（Select ほか）
 
@@ -471,6 +464,11 @@ const columns: TableColumn<User>[] = [
 ### Select
 
 移植元: `shared/components/select/select.component.*`
+
+```tsx
+const [role, setRole] = useState<string | null>(null);
+<Select options={roleOptions} value={role} onValueChange={setRole} placeholder={t('COMMON.SELECT')} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -490,22 +488,9 @@ const columns: TableColumn<User>[] = [
 
 キーボード: Enter/Space で開閉、Esc で閉じる、↓ で開く・次を選ぶ、↑ で前を選ぶ。
 
-```tsx
-const [role, setRole] = useState<string | null>(null);
-<Select options={roleOptions} value={role} onValueChange={setRole} placeholder={t('COMMON.SELECT')} />
-```
-
 ### SelectWithSearch
 
 移植元: `shared/components/select-with-search/select.component.*`（`<app-select-with-search>`）
-
-Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を除く）に加えて:
-
-| prop | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `testidPrefix` | `string \| null` | `null` | `${prefix}-trigger` / `${prefix}-option` の data-testid を付ける |
-
-トリガーが入力欄になっており、入力した文字でラベルまたはカテゴリ（`SelectOption.category`）を部分一致（大文字小文字を区別しない）で絞り込む。移植元はラベルだけで絞り込むが、新規チャットの案内文「アシスタント表示名・カテゴリで検索できます」に合わせて、カテゴリも対象にしている（#396）。カテゴリがない選択肢はラベルだけで判定する。クリアボタンは値と検索語の両方を空にする（`onValueChange(null)`）。
 
 ```tsx
 <SelectWithSearch
@@ -516,11 +501,26 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 />
 ```
 
+Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を除く）に加えて:
+
+| prop | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `testidPrefix` | `string \| null` | `null` | `${prefix}-trigger` / `${prefix}-option` の data-testid を付ける |
+
+トリガーが入力欄になっている。入力した文字で、ラベルまたはカテゴリ（`SelectOption.category`）を絞り込む（部分一致・大文字小文字を区別しない）。
+
+- 移植元はラベルだけが対象。こちらは新規チャットの案内文に合わせてカテゴリも対象にした（#396）。カテゴリがない選択肢は、ラベルだけで判定する
+- クリアボタンは、値と検索語の両方を空にする（`onValueChange(null)`）
+
 ### ChunkSelect
 
 移植元: `shared/components/select/chunk-select/chunk-select.component.*`
 
 チャンク分割（大・中・小）か任意の数値を選ぶ。「数値を指定」を選ぶと、PC は一覧の横に数値入力パネル、モバイルはドロワー内で数値入力に切り替わる。0 以下は確定できない。
+
+```tsx
+<ChunkSelect value={chunk} onValueChange={setChunk} size="lg" error={chunkError} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -535,15 +535,19 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `error` | `string` | `''` | 空文字以外ならエラー枠 |
 | `className` | `string` | - | ホスト要素に足すクラス |
 
-```tsx
-<ChunkSelect value={chunk} onValueChange={setChunk} size="lg" error={chunkError} />
-```
-
 ### MultiSelect
 
 移植元: `shared/components/multi-select/multi-select.component.*`
 
-チェックボックスで複数選択し、「決定」（`COMMON.CONFIRM_SELECTION`）で確定する。キャンセル・外側クリック・Esc では開く前の値に戻す。モバイルのドロワーは背景タップで確定する。チップの × はその場で確定する。
+チェックボックスで複数選択し、「決定」（`COMMON.CONFIRM_SELECTION`）で確定する。
+
+- キャンセル・外側クリック・Esc では、開く前の値に戻す
+- モバイルのドロワーは背景タップで確定する。チップの × はその場で確定する
+
+```tsx
+// 確定した値だけ受け取る（移植元 library-edit-settings-dialog と同じ使い方）。名前で絞り込みたい欄は ComboboxMulti を使う
+<MultiSelect options={userOptions} value={selection} onSelectionChange={setSelection} />
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -558,16 +562,29 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `size` / `width` | - | - | 移植元にあるが描画に使われていない |
 | `className` | `string` | - | ホスト要素に足すクラス |
 
-```tsx
-// 確定した値だけ受け取る（移植元 library-edit-settings-dialog と同じ使い方）。名前で絞り込みたい欄は ComboboxMulti を使う
-<MultiSelect options={userOptions} value={selection} onSelectionChange={setSelection} />
-```
-
 ### ComboboxMulti
 
 移植元: `shared/components/combobox-multi/combobox-multi.component.*`
 
-検索で絞り込みながら複数選択し、「決定」で確定する。開いている間の選択は確定まで仮の値として持ち、キャンセル・外側クリック・Esc で捨てる。「すべて選択」は絞り込み中の選択肢だけが対象。閉じているときは 1 行に収まらないチップを隠して `+N` バッジを出し（毎回 1 つ目のチップの今の位置と比べて判定する）、開くときは隠したチップと入力欄を戻す。見た目は `index.css` の `.combobox-*`。
+検索で絞り込みながら複数選択し、「決定」で確定する。見た目は `index.css` の `.combobox-*`。
+
+- 開いている間の選択は仮の値。キャンセル・外側クリック・Esc で捨てる。「すべて選択」は、絞り込み中の選択肢だけが対象
+- 閉じているとき、1 行に収まらないチップは隠して `+N` バッジを出す（毎回、1 つ目のチップの今の位置と比べて判定する）。開くと、隠したチップと入力欄を戻す
+
+```tsx
+<ComboboxMulti
+  id="assistant-groups"
+  name="groups"
+  label={t('ADMIN.ASSISTANT.BELONGING_TEAM')}
+  badgeText={t('COMMON.OPTIONAL')}
+  placeholder={t('ADMIN.ASSISTANT.SELECT_TEAM')}
+  searchHint={t('ADMIN.ASSISTANT.TEAMS_SEARCH_HINT')}
+  options={groupOptions}
+  value={groupIds}
+  onValueChange={setGroupIds}
+  errorMessage={groupsError}
+/>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -593,26 +610,22 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `required` | `boolean` | - | 移植元にあるが描画に使われていない |
 | `className` | `string` | - | ホスト要素（fieldset）に足すクラス |
 
-```tsx
-<ComboboxMulti
-  id="assistant-groups"
-  name="groups"
-  label={t('ADMIN.ASSISTANT.BELONGING_TEAM')}
-  badgeText={t('COMMON.OPTIONAL')}
-  placeholder={t('ADMIN.ASSISTANT.SELECT_TEAM')}
-  searchHint={t('ADMIN.ASSISTANT.TEAMS_SEARCH_HINT')}
-  options={groupOptions}
-  value={groupIds}
-  onValueChange={setGroupIds}
-  errorMessage={groupsError}
-/>
-```
-
 ### FormSelect
 
 移植元: `shared/components/form/form-select/form-select.component.*`
 
 見出し・補足・警告・エラー付きの Select。エラーがあるとセレクトの背景と枠がエラー色になる。
+
+```tsx
+<FormSelect
+  label={t('ADMIN.USER_MANAGEMENT.ROLE')}
+  options={roleOptions}
+  value={form.role}
+  onValueChange={(role) => setForm({ ...form, role })}
+  onFormBlur={() => setTouched({ ...touched, role: true })}
+  error={touched.role && !form.role ? t('VALIDATION.REQUIRED') : ''}
+/>
+```
 
 | prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -630,19 +643,6 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `inputId` | `string` | - | 移植元にあるが描画に使われていない |
 | `className` | `string` | - | ホスト要素に足すクラス |
 
-```tsx
-<FormSelect
-  label={t('ADMIN.USER_MANAGEMENT.ROLE')}
-  options={roleOptions}
-  value={form.role}
-  onValueChange={(role) => setForm({ ...form, role })}
-  onFormBlur={() => setTouched({ ...touched, role: true })}
-  error={touched.role && !form.role ? t('VALIDATION.REQUIRED') : ''}
-/>
-```
-
----
-
 ## フォーム部品
 
 フォーム系の部品はどれも制御コンポーネント（`value` を親が持ち、`onValueChange` で受け取って戻す）。`label` などの文言は呼び出し側で `t()` 済みの文字列を渡す（移植元も部品の中では翻訳しない）。エラー・警告は文字列を渡すと表示される。
@@ -650,6 +650,19 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 ### FormInput
 
 移植元: `shared/components/form/form-input`（`app-form-input`）
+
+```tsx
+<FormInput
+  inputId="userName"
+  label={t('ADMIN.USER_MANAGEMENT.USER_NAME')}
+  value={name}
+  onValueChange={setName}
+  maxLength={50}
+  error={nameError}
+  dataTestid="admin-users-name-input"
+/>
+<FormInput label={t('AUTH.LOGIN.PASSWORD_LABEL')} type="password" showPasswordToggle value={pw} onValueChange={setPw} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -672,22 +685,13 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onFormBlur` | `() => void` | - | 移植元の formBlur |
 | `className` | `string` | - | ホスト要素に足すクラス |
 
-```tsx
-<FormInput
-  inputId="userName"
-  label={t('ADMIN.USER_MANAGEMENT.USER_NAME')}
-  value={name}
-  onValueChange={setName}
-  maxLength={50}
-  error={nameError}
-  dataTestid="admin-users-name-input"
-/>
-<FormInput label={t('AUTH.LOGIN.PASSWORD_LABEL')} type="password" showPasswordToggle value={pw} onValueChange={setPw} />
-```
-
 ### FormTextarea
 
 移植元: `shared/components/form/form-textarea`（`app-form-textarea`）
+
+```tsx
+<FormTextarea label={t('COMMON.DESCRIPTION')} value={desc} onValueChange={setDesc} rows={6} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -702,13 +706,13 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `textareaClass` | `string` | `''` | textarea に足すクラス |
 | `onValueChange` / `onFormBlur` | | - | |
 
-```tsx
-<FormTextarea label={t('COMMON.DESCRIPTION')} value={desc} onValueChange={setDesc} rows={6} />
-```
-
 ### FormSwitch
 
 移植元: `shared/components/form/form-switch`（`app-form-switch`）。中身は `Switch`。
+
+```tsx
+<FormSwitch label={t('ADMIN.TENANT.ENABLE')} checked={enabled} onCheckedChange={setEnabled} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -724,25 +728,9 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onCheckedChange` | `(checked: boolean) => void` | - | |
 | `onFormBlur` | `() => void` | - | 移植元どおり切り替えのたびに呼ばれる |
 
-```tsx
-<FormSwitch label={t('ADMIN.TENANT.ENABLE')} checked={enabled} onCheckedChange={setEnabled} />
-```
-
 ### FormRadio
 
 移植元: `shared/components/form/form-radio`（`app-form-radio`）
-
-| props | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `options` | `FormRadioOption<T>[]`（`{ label, value, disabled?, testid? }`） | 必須 | `testid` はその選択肢の input の data-testid |
-| `value` | `T \| null` | `null` | |
-| `label` / `badgeText` / `supportText` / `error` / `warning` | `string` | `''` | |
-| `disabled` | `boolean` | `false` | |
-| `layout` | `'horizontal' \| 'vertical'` | `'horizontal'` | |
-| `name` | `string` | 自動 | 省略すると部品ごとに一意な name |
-| `inputClass` | `string` | `''` | 各選択肢の label に足すクラス |
-| `classOption` | `string` | `''` | 選択肢の並びのクラス（gap の上書き） |
-| `onValueChange` / `onFormBlur` | | - | |
 
 ```tsx
 <FormRadio
@@ -756,9 +744,32 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 />
 ```
 
+| props | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `options` | `FormRadioOption<T>[]`（`{ label, value, disabled?, testid? }`） | 必須 | `testid` はその選択肢の input の data-testid |
+| `value` | `T \| null` | `null` | |
+| `label` / `badgeText` / `supportText` / `error` / `warning` | `string` | `''` | |
+| `disabled` | `boolean` | `false` | |
+| `layout` | `'horizontal' \| 'vertical'` | `'horizontal'` | |
+| `name` | `string` | 自動 | 省略すると部品ごとに一意な name |
+| `inputClass` | `string` | `''` | 各選択肢の label に足すクラス |
+| `classOption` | `string` | `''` | 選択肢の並びのクラス（gap の上書き） |
+| `onValueChange` / `onFormBlur` | | - | |
+
 ### FormSortInput
 
 移植元: `shared/components/form/form-sort-input`（`app-form-sort-input`）。並べ替え項目と昇順/降順を選ぶ。デスクトップはトリガー下のメニュー（移植元は mat-menu）、モバイルはボトムドロワー。
+
+```tsx
+<FormSortInput
+  size="sm"
+  fields={SORT_FIELDS}
+  selectedField={sortField}
+  selectedOrder={sortOrder}
+  onFieldChange={setSortField}
+  onOrderChange={setSortOrder}
+/>
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -772,20 +783,13 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onFieldChange` / `onOrderChange` | `(value: string \| null) => void` | - | 値が変わったときだけ呼ばれる。クリア時は null |
 | `onClear` | `() => void` | - | |
 
-```tsx
-<FormSortInput
-  size="sm"
-  fields={SORT_FIELDS}
-  selectedField={sortField}
-  selectedOrder={sortOrder}
-  onFieldChange={setSortField}
-  onOrderChange={setSortOrder}
-/>
-```
-
 ### FormCombobox
 
 移植元: `shared/components/form/form-combobox`（`app-form-combobox`）。チェックボックス付きの複数選択（すべて選択あり）。選択中の項目はトリガーにチップで出て、チップの × で外せる。
+
+```tsx
+<FormCombobox label={t('ADMIN.GROUP')} options={groupOptions} value={groupIds} onValueChange={setGroupIds} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -798,13 +802,18 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onValueChange` | `(value: string[]) => void` | - | |
 | `onFormBlur` | `() => void` | - | ドロップダウンを閉じたとき |
 
-```tsx
-<FormCombobox label={t('ADMIN.GROUP')} options={groupOptions} value={groupIds} onValueChange={setGroupIds} />
-```
-
 ### SearchInput
 
 移植元: `shared/components/input/search-input.component`（`app-search-input`）
+
+```tsx
+<SearchInput
+  size="small"
+  value={keyword}
+  placeholder="COMMON.SEARCH_PLACEHOLDER"
+  onValueChange={setKeyword}
+/>
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -817,17 +826,6 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onValueChange` | `(value: string) => void` | - | クリア時は '' |
 | `onCleared` | `() => void` | - | |
 
-```tsx
-<SearchInput
-  size="small"
-  value={keyword}
-  placeholder="COMMON.SEARCH_PLACEHOLDER"
-  onValueChange={setKeyword}
-/>
-```
-
----
-
 ## フィルター・ファイル・ローディングほか
 
 ### PeriodFilter（期間フィルター）
@@ -835,6 +833,19 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 移植元: `shared/components/filter/period-filter/`（`period-filter.component.*`）→ `period-filter.tsx`
 
 プリセット（全期間・今日・過去7日間・過去30日間）と「期間を指定」（カレンダーで開始日・終了日を選ぶ）を持つフィルター。PC はトリガーの下にパネル、モバイル（幅 768px 未満）はボトムドロワー。外側クリック・Escape で閉じる。
+
+```tsx
+const [period, setPeriod] = useState<string | null>('');
+const [range, setRange] = useState<PeriodRange | null>(null);
+
+<PeriodFilter
+  value={period}
+  range={range}
+  onValueChange={setPeriod}
+  onRangeChange={setRange}
+  testidPrefix="chat-history-period"
+/>;
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -850,19 +861,6 @@ Select と同じ props（`plainStyle`・`showClear`・`classNameInputSelect` を
 | `onRangeChange` | `(range: PeriodRange \| null) => void` | | |
 | `onSelectionChange` | `(change: PeriodChange) => void` | | `{ value, range }` |
 | `className` | `string` | | ホスト要素に足すクラス |
-
-```tsx
-const [period, setPeriod] = useState<string | null>('');
-const [range, setRange] = useState<PeriodRange | null>(null);
-
-<PeriodFilter
-  value={period}
-  range={range}
-  onValueChange={setPeriod}
-  onRangeChange={setRange}
-  testidPrefix="chat-history-period"
-/>;
-```
 
 #### period-filter-utils.ts
 
@@ -882,16 +880,6 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 
 トリガーをクリックすると、body 直下（CDK overlay 相当）に選択肢のパネルと暗い backdrop を出す。backdrop クリックで閉じる。
 
-| props | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `options` | `DropdownOption[]` | （必須） | `{ label, value, icon?(material-symbols 名) }` |
-| `placeholder` | `string` | `''` | 未選択時の文言。空なら先頭の選択肢 |
-| `translateLabels` | `boolean` | `true` | label を i18n キーとして翻訳する |
-| `panelWidth` | `string \| number` | `'auto'` | パネル幅（数値は px） |
-| `value` | `string` | `''` | |
-| `onValueChange` | `(value: string) => void` | | |
-| `className` | `string` | | |
-
 ```tsx
 <DropdownSelect
   options={[
@@ -903,21 +891,21 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 />
 ```
 
+| props | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `options` | `DropdownOption[]` | （必須） | `{ label, value, icon?(material-symbols 名) }` |
+| `placeholder` | `string` | `''` | 未選択時の文言。空なら先頭の選択肢 |
+| `translateLabels` | `boolean` | `true` | label を i18n キーとして翻訳する |
+| `panelWidth` | `string \| number` | `'auto'` | パネル幅（数値は px） |
+| `value` | `string` | `''` | |
+| `onValueChange` | `(value: string) => void` | | |
+| `className` | `string` | | |
+
 ### DateRangeSelect（期間選択・日付入力つき）
 
 移植元: `shared/components/filter/date-range-select/` → `date-range-select.tsx`
 
 プリセットの一覧と、「期間を指定」行にホバーすると右に開く日付入力（`<input type="date">`）のサブメニュー。移植元でも画面からは使われていない。
-
-| props | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `options` | `DateRangeOption[]` | （必須） | `{ label(i18n キー), value }` |
-| `period` | `string` | `'all'` | 選択中のキー。期間指定は `'custom'` |
-| `customRange` | `DateRangeValue \| null` | `null` | `{ start, end }`（`YYYY-MM-DD`） |
-| `onPeriodChange` | `(period: string) => void` | | |
-| `onCustomRangeChange` | `(range: DateRangeValue \| null) => void` | | |
-| `onHandleChange` | `(change: { period; customRange? }) => void` | | 移植元の output `handleChange` |
-| `className` | `string` | | |
 
 ```tsx
 <DateRangeSelect
@@ -929,9 +917,23 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 />
 ```
 
+| props | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `options` | `DateRangeOption[]` | （必須） | `{ label(i18n キー), value }` |
+| `period` | `string` | `'all'` | 選択中のキー。期間指定は `'custom'` |
+| `customRange` | `DateRangeValue \| null` | `null` | `{ start, end }`（`YYYY-MM-DD`） |
+| `onPeriodChange` | `(period: string) => void` | | |
+| `onCustomRangeChange` | `(range: DateRangeValue \| null) => void` | | |
+| `onHandleChange` | `(change: { period; customRange? }) => void` | | 移植元の output `handleChange` |
+| `className` | `string` | | |
+
 ### FileUpload（ファイルのドロップ・選択）
 
 移植元: `shared/components/file/file-upload/` → `file-upload.tsx`
+
+```tsx
+<FileUpload variant="full" onFilesSelected={(files) => addFiles(files)} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -940,15 +942,17 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 | `onFilesSelected` | `(files: File[]) => void` | | ドロップ・選択したファイル |
 | `className` | `string` | | |
 
-```tsx
-<FileUpload variant="full" onFilesSelected={(files) => addFiles(files)} />
-```
-
 ### FileChip（添付ファイルのチップ）
 
 移植元: `shared/components/file/file-chip.component.*` → `file-chip.tsx`
 
 ファイル名と種別ラベル（PDF / DOC / XLS / 画像形式 / 拡張子）を出す。`data-testid="chat-attached-file-item"`。
+
+```tsx
+{files.map((file, i) => (
+  <FileChip key={file.name} file={file} onRemove={() => removeFile(i)} />
+))}
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -956,12 +960,6 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 | `showRemoveBtn` | `boolean` | `true` | |
 | `onRemove` | `() => void` | | 削除ボタン |
 | `className` | `string` | | |
-
-```tsx
-{files.map((file, i) => (
-  <FileChip key={file.name} file={file} onRemove={() => removeFile(i)} />
-))}
-```
 
 ### FileImageChip（添付画像のサムネイル）
 
@@ -977,18 +975,22 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 
 移植元: `shared/components/file-chip-document/` → `file-chip-document.tsx`
 
+```tsx
+<FileChipDocument name={attachment.fileName} />
+```
+
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `name` | `string` | （必須） | ファイル名。拡張子を大文字で添える |
 | `className` | `string` | | |
 
-```tsx
-<FileChipDocument name={attachment.fileName} />
-```
-
 ### CircularProgress（使用量の円グラフ）
 
 移植元: `shared/components/circular-progress/` → `circular-progress.tsx`
+
+```tsx
+<CircularProgress current={usage.used} limit={usage.limit} />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -996,10 +998,6 @@ const params = toDateTimeRange(resolvePeriodRange(period ?? '', range));
 | `limit` | `number` | （必須） | 上限（0 なら 0%） |
 | `label` | `string` | `'今月の使用量'` | 移植元どおり日本語固定 |
 | `className` | `string` | | |
-
-```tsx
-<CircularProgress current={usage.used} limit={usage.limit} />
-```
 
 ### CircularLoading（リングのローディング）
 
@@ -1015,6 +1013,11 @@ props は `className` のみ。
 
 移植元: `shared/components/skeleton/` → `skeleton.tsx`
 
+```tsx
+<Skeleton variant="circle" width="1.25rem" height="1.25rem" />
+<SkeletonBlock length={5} />
+```
+
 Skeleton:
 
 | props | 型 | 既定値 | 説明 |
@@ -1027,14 +1030,13 @@ Skeleton:
 
 SkeletonBlock: `length: number`（行数、必須）、`className`。
 
-```tsx
-<Skeleton variant="circle" width="1.25rem" height="1.25rem" />
-<SkeletonBlock length={5} />
-```
-
 ### Loading（ロゴつきローディング）
 
 移植元: `shared/components/loading/` → `loading.tsx`
+
+```tsx
+{isPending && <Loading />}
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -1044,10 +1046,6 @@ SkeletonBlock: `length: number`（行数、必須）、`className`。
 | `logoSrc` | `string` | `'/logo-min.svg'` | |
 | `padding` | `string` | | 移植元でも未使用（受け取るだけ） |
 | `className` | `string` | | |
-
-```tsx
-{isPending && <Loading />}
-```
 
 ### OptionalLabel（「任意」ラベル）
 
@@ -1066,17 +1064,6 @@ props は `className` のみ。文言は `CHAT.VIEWER.SAVE_LIBRARY_DIALOG.OPTION
 
 移植元: `shared/components/radio/` → `radio.tsx`。見た目は index.css の `.input-radio*`。
 
-| props | 型 | 既定値 | 説明 |
-|---|---|---|---|
-| `name` | `string` | （必須） | |
-| `value` | `string \| number` | （必須） | |
-| `label` | `string` | `''` | 表示文言（翻訳しない。必要なら `t()` を渡す） |
-| `disabled` | `boolean` | `false` | |
-| `checked` | `boolean` | `false` | |
-| `onHandleChange` | `(value: string \| number) => void` | | 選ばれたとき自分の value を通知（移植元の output `handleChange`） |
-| `children` | `ReactNode` | | label の前に出す内容 |
-| `className` | `string` | | |
-
 ```tsx
 {options.map((o) => (
   <Radio
@@ -1090,9 +1077,24 @@ props は `className` のみ。文言は `CHAT.VIEWER.SAVE_LIBRARY_DIALOG.OPTION
 ))}
 ```
 
+| props | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `name` | `string` | （必須） | |
+| `value` | `string \| number` | （必須） | |
+| `label` | `string` | `''` | 表示文言（翻訳しない。必要なら `t()` を渡す） |
+| `disabled` | `boolean` | `false` | |
+| `checked` | `boolean` | `false` | |
+| `onHandleChange` | `(value: string \| number) => void` | | 選ばれたとき自分の value を通知（移植元の output `handleChange`） |
+| `children` | `ReactNode` | | label の前に出す内容 |
+| `className` | `string` | | |
+
 ### MarkdownView（Markdown・チャート・mermaid の描画）
 
 移植元: `<markdown mermaid appChartBlocks [data] [disableSanitizer]="true">`（ngx-markdown）+ `shared/directives/chart-block.directive.ts` → `markdown-view.tsx`。使い方は `src/components/features/chat/README.md`。
+
+```tsx
+<MarkdownView data={message.answer} className="chat-message-bubble" />
+```
 
 | props | 型 | 既定値 | 説明 |
 |---|---|---|---|
@@ -1100,7 +1102,3 @@ props は `className` のみ。文言は `CHAT.VIEWER.SAVE_LIBRARY_DIALOG.OPTION
 | `className` | `string` | | 移植元と同じく `chat-message-bubble`（チャット）・`chat-message-bubble viewer-markdown`（ビューワー）を渡す |
 | `mermaid` | `boolean` | `true` | ` ```mermaid ` を図に描画する |
 | `chartBlocks` | `boolean` | `true` | ` ```chart:line｜bar｜pie ` を ECharts のグラフに描画する |
-
-```tsx
-<MarkdownView data={message.answer} className="chat-message-bubble" />
-```

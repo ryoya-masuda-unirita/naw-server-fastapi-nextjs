@@ -1,8 +1,12 @@
 # onprem
 
-顧客の社内（オンプレ）側の環境を Docker でまとめて立ち上げる（Issue #301）。ローカル検証用で、`.env` がなくても動く（既定値を変えるときだけ `.env.example` を `.env` にコピーする）。
+顧客の社内（オンプレ）側の環境を、Docker でまとめて立ち上げるローカル検証用の compose（Issue #301）。
+server-local・Waha! の代わり（waha-emulator）・ベクトルDB が一度に起動する。`.env` がなくても動く。
 
-## 起動・停止
+- 既定値を変えるときだけ、`.env.example` を `.env` にコピーする
+- ルートの compose（クラウド側）とつなぐと、SECURE アシスタントの経路（backend → server-local → Waha!）を通しで確かめられる
+
+## まず動かす
 
 ```bash
 cd onprem
@@ -11,21 +15,7 @@ docker compose ps              # すべて healthy になれば起動完了
 docker compose down            # 停止（データも消すなら down -v）
 ```
 
-## 立ち上がるもの
-
-| サービス | ホストのポート | 内容 |
-|---|---|---|
-| server-local | 18090 | 社内の SECURE の窓口（`secuaigent-server-local/`）。認証キーは `onprem-local-key` |
-| waha-emulator | 18091 | Waha!（とアダプタ）の代わり（`waha-emulator/`）。LLM は既定で echo |
-| waha-emulator-ui | 18092 | ワークフローエディター（画面。`waha-emulator/ui/`）。ブラウザで http://127.0.0.1:18092 を開き、ノードと線でワークフローを組む。管理用 API（`/admin`）だけを、エミュレーターへ中継する |
-| vector-db | 15432 | アダプタが使うベクトルDB（pgvector + PGroonga + Apache AGE）。DB・ユーザー `onprem_vector`、パスワード `onprem_vector_password` |
-| `file-server/` | - | 顧客のファイルサーバーの代わり（サンプル文書）。エミュレーターの `/mnt/file-server` に読み取り専用で見える（ベクトルDB とともに、アダプタの取り込み後に使う） |
-
-server-local と エミュレーターの接続・ストリームファイルの共有は設定済み。
-
-- 一部だけ起動するときは、サービス名を指定する（`docker compose up -d --build waha-emulator`。エミュレーターだけを起動し、server-local とベクトルDB は起動しない。`docker compose up -d --build server-local` は、`depends_on` でエミュレーターも起動する）。エミュレーター単体用の compose はない（#483 で廃止した）
-- エミュレーターのログは `docker compose logs waha-emulator`
-- エミュレーターには、`file-server/` が `/mnt/file-server`（読み取り専用）に見え、`SOURCE_ALLOWED_DIR` に設定してある（`filepath` で渡されたパスの学習を、この中だけ許す）。`waha-emulator/config/`（ワークフロー定義の例）は `/app/config` に見える。`.env` で `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定して、`assistantId` を `echo-rag` などにすると使える
+質問を送って確かめる。
 
 ```bash
 curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
@@ -33,10 +23,38 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
   http://localhost:18090/api/messages/content
 ```
 
-### 画面で組んだワークフローを、server-local から呼ぶ
+エミュレーターのログは `docker compose logs waha-emulator` で見られる。
 
-1. http://127.0.0.1:18092 を開き、`＋ 新規` で ID・名前・サービス ID（例: `my-chat`）を入れて作成し、`保存` する（検索ノードや、生成AI のプロパティも、画面で編集できる）
-2. server-local の `assistantId` に、そのサービス ID を指定して呼ぶ。保存したワークフローが、再起動なしで、そのサービス ID で動く
+### 立ち上がるもの
+
+| サービス | ホストのポート | 内容 |
+|---|---|---|
+| server-local | 18090 | 社内の SECURE の窓口（`secuaigent-server-local/`）。認証キーは `onprem-local-key` |
+| waha-emulator | 18091 | Waha!（とアダプタ）の代わり（`waha-emulator/`）。LLM は既定で echo |
+| waha-emulator-ui | 18092 | ワークフローエディターの画面（`waha-emulator/ui/`） |
+| vector-db | 15432 | アダプタが使うベクトルDB（pgvector + PGroonga + Apache AGE） |
+
+- vector-db の DB・ユーザーは `onprem_vector`、パスワードは `onprem_vector_password`
+- `file-server/` は、顧客のファイルサーバーの代わりのサンプル文書（コンテナではない）。ベクトルDB とともに、アダプタの取り込み後に使う
+- server-local とエミュレーターの接続、ストリームファイルの共有は設定済み
+
+### 一部だけ起動する
+
+- サービス名を指定する。例: `docker compose up -d --build waha-emulator`（エミュレーターだけ。server-local とベクトルDB は起動しない）
+- `docker compose up -d --build server-local` は、`depends_on` でエミュレーターも起動する
+- 画面だけなら `docker compose up -d --build waha-emulator-ui`（`depends_on` でエミュレーターも起動する）
+- エミュレーター単体用の compose はない（#483 で廃止した）
+
+### エミュレーターから見えるもの
+
+- `file-server/` が `/mnt/file-server`（読み取り専用）に見える。`SOURCE_ALLOWED_DIR` に設定してあり、`filepath` で渡されたパスの学習を、この中だけ許す
+- `waha-emulator/config/`（ワークフロー定義の例）が `/app/config` に見える。`.env` で `WAHA_WORKFLOWS_FILE=/app/config/workflows.example.json` を設定し、`assistantId` を `echo-rag` などにすると使える
+
+## 画面で組んだワークフローを、server-local から呼ぶ
+
+1. http://127.0.0.1:18092 を開く。ノードと線でワークフローを組む画面
+2. `＋ 新規` で ID・名前・サービス ID（例: `my-chat`）を入れて作成し、`保存` する。検索ノードや、生成AI のプロパティも、画面で編集できる
+3. server-local の `assistantId` に、そのサービス ID を指定して呼ぶ。保存したワークフローは、再起動なしで、そのサービス ID で動く
 
 ```bash
 curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
@@ -45,29 +63,36 @@ curl -N -H "X-SERVER-AUTH-KEY: onprem-local-key" \
 ```
 
 - 保存したワークフローは、名前つきボリューム（`waha-workflows`）に残る。`docker compose down` では残り、`down -v` で消える
-- 画面と管理用 API には、認証がない。ホストの `127.0.0.1` だけに公開し、別のサイトのページからの書き込み（`Origin` が画面と違うリクエスト）は、画面のサーバー（nginx）が 403 にする。`curl` など `Origin` を付けないものは通る
+- 設定ファイル（`WAHA_WORKFLOWS_FILE`）と同じサービス ID を保存すると、保存したほうが優先される。削除すると、設定ファイルの定義に戻る。詳細は [waha-emulator の README](../waha-emulator/README.md#ノードと線で組んだワークフロー管理用-api)
 - エミュレーターを作り直しても（`docker compose up -d --build waha-emulator` など）、画面の再起動は要らない
-- 設定ファイル（`WAHA_WORKFLOWS_FILE`）と同じサービス ID を保存すると、保存したワークフローが優先される（削除すると、設定ファイルの定義に戻る）。詳細は [waha-emulator の README](../waha-emulator/README.md#ノードと線で組んだワークフロー管理用-api)
-- 画面だけを起動するときは `docker compose up -d --build waha-emulator-ui`（`depends_on` で、エミュレーターも起動する）
+
+注意: 画面と管理用 API（`/admin`）には、認証がない。
+
+- ホストの `127.0.0.1` だけに公開している。画面は管理用 API だけを、エミュレーターへ中継する
+- 別のサイトのページからの書き込み（`Origin` が画面と違うリクエスト）は、画面のサーバー（nginx）が 403 にする
+- `curl` など `Origin` を付けないものは通る
 
 ## クラウド側とつなぐ
 
-1. ルートの compose（backend は 8001）を起動し、SECURE アシスタントの seed を流す（マイグレーションと `server/seed.sql`・デモデータは、compose が自動で流す）
+1. ルートの compose（backend は 8001）を起動し、SECURE アシスタントの seed を流す。マイグレーションと `server/seed.sql`・デモデータは、compose が自動で流す
 
    ```bash
    docker compose up -d --build              # リポジトリのルートで
    docker exec -i naw-fastapi-postgres psql -U root -d postgres < onprem/cloud-seed.sql
    ```
 
-2. `cloud-seed.sql` で、`test-tenant` に SECURE アシスタント「社内アシスタント（オンプレ）」と LOCAL_SERVER エンドポイント（URL `http://localhost:18090/`、API キー `onprem-local-key`）が登録される。ブラウザはこの URL の server-local に直接質問を送る（`.env` で認証キーを変えたら `cloud-seed.sql` の `api_key` も同じ値にする）
-3. server-local はライブラリのスタブ作成で `http://host.docker.internal:8001`（ルートの compose の backend）を呼ぶ。backend を別のポートで動かすときは `.env` の `NAW_BASE_URL` を変える
+2. `cloud-seed.sql` が、`test-tenant` に次を登録する
+   - SECURE アシスタント「社内アシスタント（オンプレ）」
+   - LOCAL_SERVER エンドポイント（URL `http://localhost:18090/`、API キー `onprem-local-key`）
+   - ブラウザは、この URL の server-local に直接質問を送る。`.env` で認証キーを変えたら、`cloud-seed.sql` の `api_key` も同じ値にする
+3. server-local は、ライブラリのスタブ作成で `http://host.docker.internal:8001`（ルートの compose の backend）を呼ぶ。backend を別のポートで動かすときは、`.env` の `NAW_BASE_URL` を変える
 
 ## Bedrock で動かす（Azure OpenAI の代わり）
 
 waha-emulator の LLM を、AWS Bedrock（Claude）にする。社内側（waha-emulator のアダプタ）から Bedrock を直接呼ぶので、質問はクラウドの server を通らない。
 
 1. Bedrock の API key（Bearer 方式）を用意する。Claude のモデルアクセスが有効なリージョンのもの
-2. ワークフロー定義を作る（接続先のリージョン・モデル名は書き換えてよい）
+2. ワークフロー定義を作る。接続先のリージョン・モデル名は書き換えてよい
 
    ```bash
    cd onprem
@@ -87,13 +112,24 @@ waha-emulator の LLM を、AWS Bedrock（Claude）にする。社内側（waha-
    docker compose up -d --build
    ```
 
-- `config/workflows.json` の `default` は、`workflows.json` に書いていないすべてのサービス ID（`onprem-chat` を含む）に使われる。`.gitignore` 済み（キーは `${BEDROCK_API_KEY}` で環境変数から渡す）
+### Bedrock の設定の注意
+
+- `config/workflows.json` の `default` は、`workflows.json` に書いていないすべてのサービス ID（`onprem-chat` を含む）に使われる。`.gitignore` 済み。キーは `${BEDROCK_API_KEY}` で環境変数から渡す
 - モデル名は、Bedrock で使えるモデル ID（例: `anthropic.claude-haiku-4-5`）。違うと HTTP 400 の失敗になる
-- 回答の生成と埋め込みで、`URL` の**ホストが違う**。回答の生成は Bedrock Mantle（`https://bedrock-mantle.<リージョン>.api.aws/anthropic`）、埋め込みは Bedrock Runtime（`https://bedrock-runtime.<リージョン>.amazonaws.com`）。API キーは同じものを使える
-- 例（`config/workflows.bedrock.example.json`）には、回答の生成（`default`）に加えて、RAG（`bedrock-rag`。検索 → 回答）と、学習・同期・削除（`kb-learn`・`kb-sync`・`kb-delete`）が入っている。埋め込みのモデルは `amazon.titan-embed-text-v1`（1536 次元）。**Titan V2 は次元数が合わず使えない**。Titan G1 は英語向けで、日本語の検索の質は低い可能性がある
-- **この例は、本物の Bedrock では、まだ確認していない**（`docs/issue-439/08_動作確認.md` に確認の手順がある）
-- 埋め込みは、チャンクごとに 1 回ずつ呼ぶ。Bedrock は 1 分あたりの回数で制限するため、大きな文書の学習で 429 が出ることがある（自動のリトライはしない。時間をおいて学習し直す）
-- IAM に `bedrock:InvokeModel` が要り、Bedrock のコンソールでモデル（Titan）の利用を有効にしておく。Bedrock API キーで呼ぶ場合は、`bedrock:CallWithBearerToken` も要る（後者は AWS の第三者の案内で、公式での確認は未了）
+- 回答の生成と埋め込みで、`URL` の**ホストが違う**。API キーは同じものを使える
+  - 回答の生成: Bedrock Mantle（`https://bedrock-mantle.<リージョン>.api.aws/anthropic`）
+  - 埋め込み: Bedrock Runtime（`https://bedrock-runtime.<リージョン>.amazonaws.com`）
+- 例（`config/workflows.bedrock.example.json`）には、次が入っている
+  - 回答の生成（`default`）
+  - RAG（`bedrock-rag`。検索 → 回答）
+  - 学習・同期・削除（`kb-learn`・`kb-sync`・`kb-delete`）
+- 埋め込みのモデルは `amazon.titan-embed-text-v1`（1536 次元）。**Titan V2 は次元数が合わず使えない**。Titan G1 は英語向けで、日本語の検索の質は低い可能性がある
+- 埋め込みは、チャンクごとに 1 回ずつ呼ぶ。Bedrock は 1 分あたりの回数で制限するため、大きな文書の学習で 429 が出ることがある。自動のリトライはしないので、時間をおいて学習し直す
+- IAM に `bedrock:InvokeModel` が要る。Bedrock のコンソールで、モデル（Titan）の利用も有効にしておく
+- Bedrock API キーで呼ぶ場合は、`bedrock:CallWithBearerToken` も要る（後者は AWS の第三者の案内で、公式での確認は未了）
+- **この例は、本物の Bedrock では、まだ確認していない。** 確認の手順は `docs/issue-439/08_動作確認.md`。実機での確認結果は `docs/issue-436/08_動作確認.md` に記録する
+- Bedrock の部品は Python 版だけの独自の拡張で、後から消せる。手順は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md) の「移植元にない拡張」
+
 ### 学習先フォルダごとに検索の対象を分ける
 
 例の設定（`workflows.bedrock.example.json`）には、サービス ID の末尾の名前で保存先を分けるひな形（`kb-learn-*`・`kb-sync-*`・`kb-delete-*`・`bedrock-rag-*`）が入っている。フォルダごとに設定を書き足したり、再起動したりしなくてよい。
@@ -111,6 +147,3 @@ waha-emulator の LLM を、AWS Bedrock（Claude）にする。社内側（waha-
 - 画面では、フォルダとアシスタントの結びつきは見えない（移植元も同じ）。**末尾の名前のそろえ間違いは検知できない**（アシスタントが空の保存先を探して「分かりません」と答える）
 - 名前は、英小文字・数字・`_` の 1〜40 文字。違うと HTTP 400 になる。**ハイフン `-`・大文字・ドットは使えない**（保存先のテーブル名になるため。例: `hr-dept` でなく `hr_dept`）
 - 末尾を付けない `kb-learn` などは、従来どおり 1 つの保存先（`docs`）を使う
-
-- Bedrock の部品は Python 版だけの独自の拡張で、後から消せる。手順は [generative-ai-adapter/README.md](../generative-ai-adapter/README.md) の「移植元にない拡張」
-- 実機（本物の Bedrock）での確認は、`docs/issue-436/08_動作確認.md` に記録する
