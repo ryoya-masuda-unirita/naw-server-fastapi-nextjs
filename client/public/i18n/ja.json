@@ -873,7 +873,9 @@
         "DELETE": {
           "TITLE": "選択したタグを削除します",
           "MESSAGE": "削除したタグは使用できなくなります"
-        }
+        },
+        "CREATE_FAILED": "タグの作成に失敗しました",
+        "UPDATE_FAILED": "タグの更新に失敗しました"
       },
       "CREATED_DATE": "更新日",
       "CREATOR": "更新者",
