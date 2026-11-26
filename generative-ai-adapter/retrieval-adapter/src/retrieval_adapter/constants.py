@@ -4,7 +4,13 @@
 検索アダプタでは VDB のパスワード。
 """
 
-from generative_ai_core.property_ids import PropertyIdsBase
+from generative_ai_core.property_ids import (
+    EMBEDDING_VENDOR_NAMES,
+    PropertyIdsBase,
+)
+from generative_ai_core.property_ids import (
+    VDB_VENDOR_NAMES as CORE_VDB_VENDOR_NAMES,
+)
 
 
 class RetrievalPropertyIds(PropertyIdsBase):
@@ -51,24 +57,9 @@ class RetrievalPropertyIds(PropertyIdsBase):
 OUT_MODE_LEGACY_TSV = 0
 OUT_MODE_RAG_CONTEXT_JSON_V1 = 1
 
-# プロパティ 30（エンベディング サービスプロバイダー）の ID → ベンダー名。
-# 移植元の表のまま（2 が VertexAI Gemini・3 が Anthropic。生成AIアダプタとは番号が違う）。
-# 99 の Echo は Python 版だけ（キーなしの確認用）
-VENDOR_NAMES = {
-    "0": "OpenAI",
-    "1": "AzureOpenAI",
-    "2": "VertexAI Gemini",
-    "3": "Anthropic",
-    "5": "SecuAiGent",
-    "97": "Bedrock",  # bedrock-ext
-    "99": "Echo",
-}
-
-# プロパティ 31（ベクトルDB プロバイダー）の ID → 名前
-VDB_VENDOR_NAMES = {
-    "0": "Azure AI Search",
-    "1": "PostgreSQL(PGVector)",
-}
+# プロパティ 30・31 のベンダー名の表は、埋め込みアダプタと共通（core）
+VENDOR_NAMES = EMBEDDING_VENDOR_NAMES
+VDB_VENDOR_NAMES = CORE_VDB_VENDOR_NAMES
 
 # プロパティ 54（リランクのプロバイダー）の ID → ベンダー名
 RERANK_VENDOR_NAMES = {
