@@ -72,7 +72,13 @@
         "SERVER_ERROR": "A server error occurred. Please try again later",
         "SUPPORT_TEXT": "An error occurred. Please try again."
       }
-    }
+    },
+    "COMPLETE": "Complete",
+    "PLACEHOLDERS": {
+      "ALL_USERS": "All users"
+    },
+    "SELECT_FILE": "Select file",
+    "SELECT_FOLDER": "Select folder"
   },
   "GROUPS": {
     "TITLE": "Groups",
@@ -244,7 +250,8 @@
     "PLACEHOLDER": "Enter name",
     "GROUP_NAME_PLACEHOLDER": "Enter team name",
     "SAVE": "Save",
-    "CANCEL": "Cancel"
+    "CANCEL": "Cancel",
+    "ALL_ROLES": "All roles"
   },
   "USERS": {
     "TITLE": "User List",
@@ -441,7 +448,8 @@
     "MAX_LENGTH": "Please enter no more than {{max}} characters",
     "EMAIL": "Please enter a valid email address",
     "PATTERN": "The input format is incorrect",
-    "PASSWORD_ASCII_ONLY": "Only half-width alphanumeric characters and symbols are allowed"
+    "PASSWORD_ASCII_ONLY": "Only half-width alphanumeric characters and symbols are allowed",
+    "PASSWORD_MISMATCH": "Passwords do not match"
   },
   "ASSISTANT": {
     "ADD_ASSISTANT": "Add",
@@ -772,7 +780,14 @@
     "MENU_DELETE_FOLDER": "Delete learning folder",
     "MENU": {
       "EDIT_SETTINGS": "Edit learning folder settings"
-    }
+    },
+    "DETAIL_TITLE": "Learning data details",
+    "EDIT_DELETE_ID_LABEL": "Service ID for file deletion",
+    "EDIT_DELETE_ID_PLACEHOLDER": "Enter the service ID for file deletion",
+    "EDIT_FETCH_ID_LABEL": "Service ID for file retrieval",
+    "EDIT_FETCH_ID_PLACEHOLDER": "Enter the service ID for file retrieval",
+    "EDIT_LEARN_ID_LABEL": "Service ID for file learning",
+    "EDIT_LEARN_ID_PLACEHOLDER": "Enter the service ID for file learning"
   },
   "CHAT_HISTORY": {
     "TITLE": "Chat History",
@@ -907,7 +922,9 @@
           "NAME_SUPPORT": "This name is shown in the tag list.",
           "DESC_LABEL": "Tag Description",
           "DESC_SUPPORT": "Describe what kind of content this tag is used for.",
-          "OPTIONAL": "Optional"
+          "OPTIONAL": "Optional",
+          "TAG_DESC_PLACEHOLDER": "Enter a tag description",
+          "TAG_NAME_PLACEHOLDER": "Enter a tag name"
         },
         "DELETE": {
           "TITLE": "Delete Selected Tag",
@@ -944,7 +961,9 @@
         "TEAMS_SUPPORT": "You can search by team name.",
         "OPTIONAL": "Optional",
         "SAVE": "Save",
-        "CANCEL": "Cancel"
+        "CANCEL": "Cancel",
+        "TAGS_PLACEHOLDER": "Select tags",
+        "TEAMS_PLACEHOLDER": "Select teams"
       },
       "DETAIL": {
         "TITLE": "Departmental Budget vs Actual Comparison 2025 Q3",
@@ -956,7 +975,8 @@
         "DATE": "Date",
         "SALES_AMOUNT": "Sales Amount",
         "GROWTH": "Growth Rate"
-      }
+      },
+      "SORT_PLACEHOLDER": "Sort by updated time"
     },
     "ASSISTANT": {
       "TAB_ASSISTANT_LIST": "Assistant list",
@@ -1347,7 +1367,8 @@
     "UPDATE_USAGE_LIMIT_SUCCESS": "Usage limits updated",
     "CREATE_ENDPOINT_SUCCESS": "API added",
     "UPDATE_ENDPOINT_SUCCESS": "API updated",
-    "DELETE_ENDPOINT_SUCCESS": "API deleted"
+    "DELETE_ENDPOINT_SUCCESS": "API deleted",
+    "USER_LIMIT_EDIT": "Edit user usage limit"
   },
   "TEAM": {
     "ASSISTANT": {
@@ -1404,5 +1425,8 @@
     "ALERT_DESC": "Once you reach the limit, you won't be able to use chat until your next reset date. Please manage your usage carefully.",
     "ERROR_TITLE": "Credit limit reached. Chat usage is restricted.",
     "ERROR_DESC": "Your usage limit will reset on your next reset date. Please try again after that."
+  },
+  "FILE_UPLOAD": {
+    "DROP_FILE_OR_FOLDER": "Drop files or folders here"
   }
 }
