@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.bedrock_embedding import (  # bedrock-ext
     BEDROCK_EMBEDDING_MODEL_ID,
-    EMBEDDING_DIMENSIONS,
     BedrockEmbeddingError,
     BedrockLlmEmbeddingClient,
 )
 from app.core.config import get_llm_credit_settings
 from app.core.credit_quota import enforce_within_quota
 from app.core.llm_client import AzureLlmEmbeddingClient
+from app.core.vector_store import EMBEDDING_DIMENSIONS
 from app.core.token_usage_credit import embedding_credits, positive_token_weight
 from app.models.ai_model import AIModelEndpointType
 from app.models.tenant_endpoint import EndpointType
